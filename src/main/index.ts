@@ -25,7 +25,8 @@ if (!app.commandLine.getSwitchValue("user-data-dir")) {
 async function runSmoke(): Promise<void> {
   const result = await runAgentSmoke();
   console.log(`SMOKE_RESULT ${JSON.stringify(result)}`);
-  app.exit(result.ok ? 0 : 1);
+  // An exit during the ready event can race Electron's startup threads on Windows.
+  setTimeout(() => app.exit(result.ok ? 0 : 1), 0);
 }
 
 // FR-7.1：仅对打包产物注入 CSP；开发态由 Vite 服务，注入会破坏 HMR
