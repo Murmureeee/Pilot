@@ -1,18 +1,22 @@
 // @env node
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { createHash, X509Certificate } from "node:crypto";
 import { on, once } from "node:events";
 import {
   existsSync,
+  createReadStream,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
-import { basename, join, resolve } from "node:path";
+import { createServer as createHttpsServer } from "node:https";
+import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { stopProcessTree } from "./windows-process.mjs";
 
@@ -25,8 +29,8 @@ const skillBody =
 const sessionTitle = "Legacy installer acceptance";
 const persona = "Installer acceptance preference";
 
-async function waitFor(label, check) {
-  const deadline = performance.now() + 25_000;
+async function waitFor(label, check, timeout = 25_000) {
+  const deadline = performance.now() + timeout;
   do {
     const value = await check();
     if (value) return value;
@@ -83,12 +87,18 @@ async function findPage(port, child) {
   });
 }
 
-async function withApp(directory, profile, useDefaultProfile, verify) {
+async function withApp(directory, profile, verify, installsUpdate = false) {
   const port = await freeLoopbackPort();
-  const args = [`--remote-debugging-port=${port}`, "--remote-debugging-address=127.0.0.1"];
-  if (!useDefaultProfile) args.push(`--user-data-dir=${profile}`);
+  const args = [
+    `--remote-debugging-port=${port}`,
+    "--remote-debugging-address=127.0.0.1",
+    `--user-data-dir=${profile}`,
+    // Only the temporary fixture key is trusted by this test process.
+    `--ignore-certificate-errors-spki-list=${certificatePin}`,
+  ];
   const child = spawn(join(directory, exeName), args, {
     cwd: directory,
+    env: { ...process.env, LOCALAPPDATA: updateCache },
     windowsHide: true,
     stdio: "inherit",
   });
@@ -136,10 +146,12 @@ async function withApp(directory, profile, useDefaultProfile, verify) {
     }
     await waitFor("the application API", () => evaluate(() => Boolean(window.pi)));
     const result = await verify(evaluate);
-    await evaluate(() => {
-      // Let the debugger receive the response before the quit action closes the window.
-      setTimeout(() => void window.pi.menuAction("quit"), 100);
-    });
+    if (!installsUpdate) {
+      await evaluate(() => {
+        // Let the debugger receive the response before the quit action closes the window.
+        setTimeout(() => void window.pi.menuAction("quit"), 100);
+      });
+    }
     await waitFor("the app to quit", () => child.exitCode !== null);
     assert.equal(child.exitCode, 0, "The installed app must quit successfully");
     return result;
@@ -195,6 +207,51 @@ function removeTestDirectory(directory) {
   assert.ok(!existsSync(directory));
 }
 
+function serveUpdateFiles(request, response) {
+  const path = new URL(request.url, updateUrl).pathname;
+  const filename = /^(?:\/releases\/latest\/download|\/assets)\/([a-zA-Z0-9._-]+)$/.exec(path)?.[1];
+  if (
+    !filename ||
+    !/^(?:latest\.yml|pi-desktop-[\w.-]+-x64-setup\.exe(?:\.blockmap)?)$/.test(filename)
+  ) {
+    response.writeHead(404).end();
+    return;
+  }
+  if (path.startsWith(updateUrl.pathname)) {
+    response.writeHead(302, { location: `/assets/${filename}` }).end();
+    return;
+  }
+  const file = join(releaseDirectory, filename);
+  if (!existsSync(file)) {
+    response.writeHead(404).end();
+    return;
+  }
+  updateRequests.add(filename);
+  response.writeHead(200, {
+    "content-length": statSync(file).size,
+    "content-type": "application/octet-stream",
+  });
+  if (request.method === "HEAD") {
+    response.end();
+  } else {
+    const stream = createReadStream(file);
+    response.once("close", () => stream.destroy());
+    stream.on("error", (error) => response.destroy(error)).pipe(response);
+  }
+}
+
+async function waitForUpdate(evaluate, expected, version) {
+  await waitFor(
+    `update status ${expected}`,
+    async () => {
+      const status = await evaluate(() => window.pi.getUpdateStatus());
+      assert.notEqual(status.state, "error", "The application reported an update error");
+      return status.state === expected && (version === undefined || status.version === version);
+    },
+    60_000,
+  );
+}
+
 assert.equal(process.platform, "win32");
 assert.equal(
   process.env.GITHUB_ACTIONS,
@@ -214,11 +271,29 @@ const cleanProfile = join(root, "clean-profile");
 const onboardingProfile = join(root, "onboarding-profile");
 const upgradeInstall = join(root, "upgrade-install");
 const skillFile = join(legacyProfile, "skills", skillId, "SKILL.md");
+const updateCache = join(root, "local-app-data");
+const updateUrl = new URL(process.env.PILOT_UPDATE_TEST_URL);
+const publicKey = new X509Certificate(readFileSync(process.env.PILOT_UPDATE_TEST_CERT)).publicKey;
+const certificatePin = createHash("sha256")
+  .update(publicKey.export({ type: "spki", format: "der" }))
+  .digest("base64");
+let releaseDirectory = dirname(resolve(legacyInstaller));
+const updateRequests = new Set();
+const feed = createHttpsServer(
+  {
+    pfx: readFileSync(process.env.PILOT_UPDATE_TEST_PFX),
+    passphrase: process.env.PILOT_UPDATE_TEST_PASSPHRASE,
+  },
+  serveUpdateFiles,
+);
 
 try {
+  feed.listen(Number(updateUrl.port), "127.0.0.1");
+  await once(feed, "listening");
+  mkdirSync(updateCache);
   mkdirSync(cleanProfile);
   runInstaller(resolve(candidateInstaller), root, ["/S", `/D=${cleanInstall}`]);
-  await withApp(cleanInstall, cleanProfile, false, async (evaluate) => {
+  await withApp(cleanInstall, cleanProfile, async (evaluate) => {
     await verifyApp(evaluate, "Pilot", candidateVersion, cleanProfile);
     assert.deepEqual(await evaluate(async () => (await window.pi.getSnapshot()).sessions), []);
     await sendTurn(evaluate, "Hello from a clean Pilot install");
@@ -229,7 +304,7 @@ try {
     join(onboardingProfile, "settings.json"),
     JSON.stringify({ providers: [], activeProviderId: "" }),
   );
-  await withApp(cleanInstall, onboardingProfile, false, async (evaluate) => {
+  await withApp(cleanInstall, onboardingProfile, async (evaluate) => {
     await click(evaluate, "开始配置");
     await click(evaluate, "下一步");
     await click(evaluate, "下一步");
@@ -247,7 +322,7 @@ try {
   );
 
   runInstaller(resolve(legacyInstaller), root, ["/S", `/D=${upgradeInstall}`]);
-  const original = await withApp(upgradeInstall, legacyProfile, true, async (evaluate) => {
+  const original = await withApp(upgradeInstall, legacyProfile, async (evaluate) => {
     await verifyApp(evaluate, legacyName, legacyVersion, legacyProfile);
     mkdirSync(join(legacyProfile, "skills", skillId), { recursive: true });
     writeFileSync(skillFile, skillBody);
@@ -277,12 +352,57 @@ try {
       sessionTitle,
     );
     assert.ok(transcript.includes("This chat should survive the upgrade"));
+    await waitForUpdate(evaluate, "current");
+    releaseDirectory = dirname(resolve(candidateInstaller));
+    updateRequests.clear();
+    await evaluate(() => {
+      globalThis.pilotUpdateStates = [];
+      window.pi.onUpdateStatus(({ state }) => globalThis.pilotUpdateStates.push(state));
+      void window.pi.checkForUpdates();
+    });
+    await waitForUpdate(evaluate, "ready", candidateVersion);
+    const updateStates = await evaluate(() => globalThis.pilotUpdateStates);
+    for (const state of ["checking", "downloading", "ready"])
+      assert.ok(updateStates.includes(state));
+    assert.ok(updateRequests.has("latest.yml"));
+    assert.ok(updateRequests.has(basename(candidateInstaller)));
     return { sessionId, transcript };
   });
 
-  // An upgrade should discover the original installation directory from the installer record.
-  runInstaller(resolve(candidateInstaller), root);
-  await withApp(upgradeInstall, legacyProfile, true, async (evaluate) => {
+  // Quitting after download should leave the old version installed until the user approves.
+  await withApp(
+    upgradeInstall,
+    legacyProfile,
+    async (evaluate) => {
+      await verifyApp(evaluate, legacyName, legacyVersion, legacyProfile);
+      await waitForUpdate(evaluate, "ready", candidateVersion);
+      await evaluate(() => {
+        setTimeout(() => void window.pi.installUpdate(), 100);
+      });
+    },
+    true,
+  );
+
+  const archive = join("resources", "app.asar");
+  const candidateArchive = join(releaseDirectory, "win-unpacked", archive);
+  const expectedHash = createHash("sha256").update(readFileSync(candidateArchive)).digest("hex");
+  const installedArchive = join(upgradeInstall, archive);
+  await waitFor(
+    "the updater to replace the installed package",
+    () => {
+      try {
+        return (
+          createHash("sha256").update(readFileSync(installedArchive)).digest("hex") === expectedHash
+        );
+      } catch (error) {
+        if (["ENOENT", "EBUSY", "EACCES", "EPERM"].includes(error.code)) return false;
+        throw error;
+      }
+    },
+    60_000,
+  );
+  await delay(1_000);
+  await withApp(upgradeInstall, legacyProfile, async (evaluate) => {
     await verifyApp(evaluate, "Pilot", candidateVersion, legacyProfile);
     const restored = await evaluate(async (id) => {
       const snapshot = await window.pi.sessionLoad(id);
@@ -308,12 +428,16 @@ try {
     assert.equal(readFileSync(skillFile, "utf8"), skillBody);
     const continued = await sendTurn(evaluate, "This is the first turn after upgrading");
     assert.equal(continued.sessionId, original.sessionId);
+    await waitForUpdate(evaluate, "current");
   });
   await uninstall(upgradeInstall);
   console.log(
     `${legacyName} ${legacyVersion} to Pilot ${candidateVersion} in-place upgrade preserved the transcript, settings, language, and enabled skill.`,
   );
+  console.log("HTTPS update passed download, ordinary quit, explicit installation, and restart.");
 } finally {
+  feed.closeAllConnections();
+  await new Promise((closed) => feed.close(closed));
   try {
     await uninstall(upgradeInstall);
     await uninstall(cleanInstall);
