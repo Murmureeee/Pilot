@@ -1,0 +1,11 @@
+node_modules/
+out/
+dist/
+coverage/
+*.log
+.DS_Store
+.knip/
+.zcode/
+.env
+.env.*
+!.env.example

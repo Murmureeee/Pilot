@@ -1,0 +1,23 @@
+appId: dev.pi-desktop.app
+directories:
+  output: dist
+files:
+  - out/**
+extraResources:
+  - from: resources/icon.png
+    to: icon.png
+npmRebuild: false
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/
+win:
+  target: nsis
+  icon: resources/icon.ico
+  # Existing shortcuts and in-place upgrades target this executable.
+  executableName: pi Desktop
+nsis:
+  artifactName: ${name}-${version}-${arch}-setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: false

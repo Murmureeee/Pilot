@@ -1,0 +1,9 @@
+allowBuilds:
+  electron: true
+  esbuild: true
+  '@google/genai': true
+  protobufjs: true
+  electron-winstaller: false
+overrides:
+  # The 26.18.0 downloader reads the cache modes exported by Electron Get v4.
+  'app-builder-lib@26.18.0>@electron/get': 4.0.3

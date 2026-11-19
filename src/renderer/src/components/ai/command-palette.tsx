@@ -1,0 +1,235 @@
+// @env browser
+// 全局命令面板（Codex/ChatGPT 风格）：Ctrl+K 唤起，搜快捷操作与会话，键盘导航执行。
+import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from "react";
+import {
+  EyeIcon,
+  MessageSquareIcon,
+  SearchIcon,
+  SettingsIcon,
+  ShieldCheckIcon,
+  SquarePenIcon,
+  ZapIcon,
+} from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@renderer/components/ui/dialog";
+import {
+  filterEntries,
+  PALETTE_TABS,
+  type PaletteEntry,
+  type PaletteTab,
+} from "@renderer/lib/palette";
+import { relativeTime } from "@renderer/lib/relative-time";
+import { useAgentStore } from "@renderer/stores/agent";
+import { t } from "@renderer/lib/i18n";
+import { cn } from "cn";
+
+function EntryIcon({ entry }: { entry: PaletteEntry }): JSX.Element {
+  if (entry.kind === "chat") return <MessageSquareIcon className="size-4 shrink-0" />;
+  switch (entry.id) {
+    case "new-chat":
+      return <SquarePenIcon className="size-4 shrink-0" />;
+    case "open-settings":
+      return <SettingsIcon className="size-4 shrink-0" />;
+    case "mode-standard":
+      return <ShieldCheckIcon className="size-4 shrink-0" />;
+    case "mode-readonly":
+      return <EyeIcon className="size-4 shrink-0" />;
+    case "mode-full":
+      return <ZapIcon className="size-4 shrink-0" />;
+    default:
+      return <MessageSquareIcon className="size-4 shrink-0" />;
+  }
+}
+
+export function CommandPalette(): JSX.Element | null {
+  const locale = useAgentStore((s) => s.locale);
+  const open = useAgentStore((s) => s.paletteOpen);
+  const setOpen = useAgentStore((s) => s.setPaletteOpen);
+  const sessions = useAgentStore((s) => s.sessions);
+  const settings = useAgentStore((s) => s.settings);
+  const newSession = useAgentStore((s) => s.newSession);
+  const loadSession = useAgentStore((s) => s.loadSession);
+  const setView = useAgentStore((s) => s.setView);
+  const setApprovalMode = useAgentStore((s) => s.setApprovalMode);
+
+  const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<PaletteTab>("all");
+  const [selected, setSelected] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const entries = useMemo<PaletteEntry[]>(() => {
+    const actions: PaletteEntry[] = [
+      { kind: "action", id: "new-chat", label: t("新聊天", locale), detail: "Ctrl+N" },
+      { kind: "action", id: "open-settings", label: t("打开设置", locale) },
+      {
+        kind: "action",
+        id: "mode-standard",
+        label: `${t("权限模式：确认模式", locale)}${
+          settings?.approvalMode === "standard" ? t("（当前）", locale) : ""
+        }`,
+      },
+      {
+        kind: "action",
+        id: "mode-readonly",
+        label: `${t("权限模式：只读", locale)}${
+          settings?.approvalMode === "read-only" ? t("（当前）", locale) : ""
+        }`,
+      },
+      {
+        kind: "action",
+        id: "mode-full",
+        label: `${t("权限模式：完全访问", locale)}${
+          settings?.approvalMode === "full-access" ? t("（当前）", locale) : ""
+        }`,
+      },
+    ];
+    const chats: PaletteEntry[] = sessions.map((s) => ({
+      kind: "chat",
+      id: s.id,
+      label: s.title,
+      detail: relativeTime(s.updatedAt, locale),
+    }));
+    return [...actions, ...chats];
+  }, [locale, sessions, settings?.approvalMode]);
+
+  const filtered = useMemo(() => filterEntries(entries, query, tab), [entries, query, tab]);
+
+  // 查询/标签变化时复位选中项，并保证选中项滚动进可视区
+  useEffect(() => {
+    setSelected(0);
+  }, [query, tab]);
+
+  useEffect(() => {
+    if (!open) return;
+    const el = listRef.current?.querySelector(`[data-index="${selected}"]`);
+    el?.scrollIntoView({ block: "nearest" });
+  }, [selected, open]);
+
+  const runById = (entry: PaletteEntry): void => {
+    setOpen(false);
+    switch (entry.id) {
+      case "new-chat":
+        setView("chat");
+        void newSession();
+        return;
+      case "open-settings":
+        setView("settings");
+        return;
+      case "mode-standard":
+        void setApprovalMode("standard");
+        return;
+      case "mode-readonly":
+        void setApprovalMode("read-only");
+        return;
+      case "mode-full":
+        void setApprovalMode("full-access");
+        return;
+      default: {
+        // 会话条目：id = 会话 id
+        setView("chat");
+        void loadSession(entry.id);
+      }
+    }
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setSelected((i) => Math.min(filtered.length - 1, i + 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setSelected((i) => Math.max(0, i - 1));
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const entry = filtered[selected];
+      if (entry) runById(entry);
+    }
+  };
+
+  if (!open) return null;
+
+  // 渲染分组：连续同类条目归一段（操作在前、聊天在后）
+  let lastKind: PaletteEntry["kind"] | null = null;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => setOpen(o)}>
+      <DialogContent
+        className="top-[18%] max-w-xl translate-y-0 gap-0 overflow-hidden p-0"
+        showCloseButton={false}
+      >
+        <DialogTitle className="sr-only">{t("搜索", locale)}</DialogTitle>
+        <div className="flex items-center gap-2 border-b px-4 py-3">
+          <SearchIcon className="text-muted-foreground size-4 shrink-0" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={onKeyDown}
+            aria-label={t("搜索", locale)}
+            placeholder={t("搜索操作与会话…", locale)}
+            className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+
+        <div ref={listRef} className="max-h-80 min-h-40 overflow-y-auto py-1">
+          {filtered.length === 0 && (
+            <p className="text-muted-foreground px-4 py-6 text-center text-sm">
+              {t("没有匹配的结果", locale)}
+            </p>
+          )}
+          {filtered.map((entry, index) => {
+            const showHeader = entry.kind !== lastKind;
+            lastKind = entry.kind;
+            return (
+              <div key={`${entry.kind}-${entry.id}`}>
+                {showHeader && (
+                  <p className="text-muted-foreground px-4 pb-1 pt-3 text-xs">
+                    {entry.kind === "action" ? t("快捷操作", locale) : t("聊天", locale)}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  data-index={index}
+                  onMouseEnter={() => setSelected(index)}
+                  onClick={() => runById(entry)}
+                  className={cn(
+                    "flex w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors",
+                    index === selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
+                  )}
+                >
+                  <EntryIcon entry={entry} />
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate">{entry.label}</span>
+                    {entry.detail && (
+                      <span className="text-xs text-muted-foreground">{entry.detail}</span>
+                    )}
+                  </span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-1 border-t px-3 py-2">
+          {PALETTE_TABS.map((tabItem) => (
+            <button
+              key={tabItem.value}
+              type="button"
+              onClick={() => setTab(tabItem.value)}
+              className={cn(
+                "rounded-full px-2.5 py-1 text-xs transition-colors",
+                tab === tabItem.value
+                  ? "bg-accent font-medium text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent/60",
+              )}
+            >
+              {t(tabItem.label, locale)}
+            </button>
+          ))}
+          <span className="text-muted-foreground ml-auto text-xs">
+            {t("↑↓ 选择 · Enter 执行", locale)}
+          </span>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

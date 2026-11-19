@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["import", "react", "jsx-a11y", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "settings": {
+    "react": {
+      "jsxRuntime": "react-jsx"
+    }
+  },
+  "rules": {
+    "import/no-unassigned-import": "off",
+    "react/react-in-jsx-scope": "off"
+  },
+  "ignorePatterns": [
+    "out/**",
+    "dist/**",
+    "node_modules/**",
+    "src/renderer/src/components/**",
+    "src/renderer/src/lib/**"
+  ]
+}

@@ -1,0 +1,242 @@
+// @env browser
+// 菜单动作走 IPC 白名单（编辑类为 webContents 原生实现）。
+import { useEffect, useState, type JSX } from "react";
+import { ArrowLeftIcon, ArrowRightIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react";
+import { UpdatePanel } from "@renderer/components/ai/update-panel";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@renderer/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@renderer/components/ui/dropdown-menu";
+import { t } from "@renderer/lib/i18n";
+import { useAgentStore } from "@renderer/stores/agent";
+import { canBack, canForward } from "@renderer/lib/nav";
+import { APP_NAME } from "@shared/constants";
+import type { AppInfo, MenuAction } from "@shared/contract";
+import { cn } from "cn";
+
+function MenuButton({ label }: { label: string }): JSX.Element {
+  return (
+    <DropdownMenuTrigger
+      render={
+        <button
+          type="button"
+          className="app-titlebar-control data-popup-open:bg-sidebar-foreground/8 px-2 text-[13px] whitespace-nowrap"
+        />
+      }
+    >
+      {label}
+    </DropdownMenuTrigger>
+  );
+}
+
+function Item({
+  label,
+  shortcut,
+  onRun,
+  disabled,
+  destructive,
+}: {
+  label: string;
+  shortcut?: string;
+  onRun(): void;
+  disabled?: boolean;
+  destructive?: boolean;
+}): JSX.Element {
+  return (
+    <DropdownMenuItem
+      disabled={disabled}
+      onClick={() => onRun()}
+      className={cn(destructive && "text-destructive data-disabled:text-destructive/50")}
+    >
+      {label}
+      {shortcut && <DropdownMenuShortcut>{shortcut}</DropdownMenuShortcut>}
+    </DropdownMenuItem>
+  );
+}
+
+export function TopBar({
+  collapsed,
+  onToggleSidebar,
+}: {
+  collapsed: boolean;
+  onToggleSidebar(): void;
+}): JSX.Element {
+  const locale = useAgentStore((s) => s.locale);
+  const nav = useAgentStore((s) => s.nav);
+  const navBack = useAgentStore((s) => s.navBack);
+  const navForward = useAgentStore((s) => s.navForward);
+  const newSession = useAgentStore((s) => s.newSession);
+  const setView = useAgentStore((s) => s.setView);
+  const setPaletteOpen = useAgentStore((s) => s.setPaletteOpen);
+  const menuAction = useAgentStore((s) => s.menuAction);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const sidebarLabel = t(collapsed ? "显示侧边栏" : "隐藏侧边栏", locale);
+  const aboutLabel = t("关于 {0}", locale, [APP_NAME]);
+  const SidebarIcon = collapsed ? PanelLeftOpenIcon : PanelLeftCloseIcon;
+
+  useEffect(() => {
+    if (!aboutOpen) return;
+    void window.pi.getAppInfo().then(setAppInfo);
+  }, [aboutOpen]);
+
+  const run = (action: MenuAction): void => {
+    void menuAction(action);
+  };
+
+  return (
+    <>
+      <div className="app-no-drag flex shrink-0 items-center gap-0.5">
+        <button
+          type="button"
+          className="app-titlebar-control w-7"
+          disabled={!canBack(nav)}
+          onClick={() => void navBack()}
+          aria-label={t("后退 (Ctrl+[)", locale)}
+          title={t("后退 (Ctrl+[)", locale)}
+        >
+          <ArrowLeftIcon className="size-4" strokeWidth={1.7} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="app-titlebar-control w-7"
+          disabled={!canForward(nav)}
+          onClick={() => void navForward()}
+          aria-label={t("前进 (Ctrl+])", locale)}
+          title={t("前进 (Ctrl+])", locale)}
+        >
+          <ArrowRightIcon className="size-4" strokeWidth={1.7} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="app-titlebar-control w-7"
+          onClick={onToggleSidebar}
+          aria-label={sidebarLabel}
+          aria-expanded={!collapsed}
+          aria-controls="sidebar-panel"
+          title={sidebarLabel}
+        >
+          <SidebarIcon className="size-4" strokeWidth={1.7} aria-hidden="true" />
+        </button>
+        <span aria-hidden="true" className="bg-sidebar-border mx-1.5 h-3.5 w-px shrink-0" />
+
+        <DropdownMenu>
+          <MenuButton label={t("文件", locale)} />
+          <DropdownMenuContent align="start">
+            <DropdownMenuGroup>
+              <Item
+                label={t("新聊天", locale)}
+                shortcut="Ctrl+N"
+                onRun={() => {
+                  setView("chat");
+                  void newSession();
+                }}
+              />
+              <Item
+                label={t("搜索…", locale)}
+                shortcut="Ctrl+K"
+                onRun={() => setPaletteOpen(true)}
+              />
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <Item label={t("关闭窗口", locale)} shortcut="Ctrl+W" onRun={() => run("close")} />
+              <Item
+                label={t("退出 {0}", locale, [APP_NAME])}
+                shortcut="Ctrl+Q"
+                onRun={() => run("quit")}
+                destructive
+              />
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <MenuButton label={t("编辑", locale)} />
+          <DropdownMenuContent align="start">
+            <DropdownMenuGroup>
+              <Item label={t("撤销", locale)} shortcut="Ctrl+Z" onRun={() => run("undo")} />
+              <Item label={t("重做", locale)} shortcut="Ctrl+Y" onRun={() => run("redo")} />
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <Item label={t("剪切", locale)} shortcut="Ctrl+X" onRun={() => run("cut")} />
+              <Item label={t("复制", locale)} shortcut="Ctrl+C" onRun={() => run("copy")} />
+              <Item label={t("粘贴", locale)} shortcut="Ctrl+V" onRun={() => run("paste")} />
+              <Item label={t("删除", locale)} onRun={() => run("delete")} />
+              <Item label={t("全选", locale)} shortcut="Ctrl+A" onRun={() => run("select-all")} />
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <Item label={t("设置", locale)} shortcut="Ctrl+," onRun={() => setView("settings")} />
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <MenuButton label={t("视图", locale)} />
+          <DropdownMenuContent align="start">
+            <DropdownMenuGroup>
+              <Item label={sidebarLabel} shortcut="Ctrl+Shift+S" onRun={onToggleSidebar} />
+              <Item
+                label={t("放大", locale)}
+                shortcut="Ctrl+Shift+="
+                onRun={() => run("zoom-in")}
+              />
+              <Item label={t("缩小", locale)} shortcut="Ctrl+-" onRun={() => run("zoom-out")} />
+              <Item
+                label={t("实际大小", locale)}
+                shortcut="Ctrl+0"
+                onRun={() => run("zoom-reset")}
+              />
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <Item label={t("重新加载", locale)} shortcut="Ctrl+R" onRun={() => run("reload")} />
+              <Item label={t("切换全屏", locale)} shortcut="F11" onRun={() => run("fullscreen")} />
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <MenuButton label={t("帮助", locale)} />
+          <DropdownMenuContent align="start">
+            <DropdownMenuGroup>
+              <Item label={aboutLabel} onRun={() => setAboutOpen(true)} />
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <Dialog open={aboutOpen} onOpenChange={(o) => setAboutOpen(o)}>
+        <DialogContent closeLabel={t("关闭", locale)} className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{aboutLabel}</DialogTitle>
+            <DialogDescription>
+              {t("基于 pi（earendil-works/pi）构建的桌面 AI Agent 应用。", locale)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="text-muted-foreground font-mono text-xs">
+            <p>
+              {t("版本", locale)} {appInfo?.version ?? "…"}
+            </p>
+            {appInfo?.isDev && <p>{t("开发模式", locale)}</p>}
+          </div>
+          <UpdatePanel locale={locale} />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
