@@ -29,23 +29,24 @@ if ($manifest -notmatch ('(?m)^version: ' + [regex]::Escape($version) + '\s*$') 
 }
 
 function Find-PilotRelease {
-  $pages = (gh api --paginate --slurp "repos/$repo/releases?per_page=100") | ConvertFrom-Json -NoEnumerate
-  foreach ($page in $pages) {
-    foreach ($release in $page) {
-      if ($release.tag_name -eq $tag) { $release }
-    }
+  $query = '.[] | select(.tag_name == "' + $tag + '") | @json'
+  foreach ($line in (gh api --paginate "repos/$repo/releases?per_page=100" --jq $query)) {
+    ConvertFrom-Json -InputObject $line
   }
 }
 
 $draftCandidates = @(Find-PilotRelease)
 if ($draftCandidates.Count -eq 0) {
-  gh release create $tag --repo $repo --draft --target $env:GITHUB_SHA --title "Pilot $version" --generate-notes
-  $draftCandidates = @(Find-PilotRelease)
+  $created = gh api --method POST "repos/$repo/releases" -f "tag_name=$tag" -f "target_commitish=$env:GITHUB_SHA" -f "name=Pilot $version" -F draft=true -F generate_release_notes=true | ConvertFrom-Json
+  $draftCandidates = @($created)
 }
 if ($draftCandidates.Count -ne 1 -or !$draftCandidates[0].draft -or $draftCandidates[0].target_commitish -ne $env:GITHUB_SHA) {
   throw "Release $tag must be a single draft for this commit."
 }
 $release = $draftCandidates[0]
+$uploadUrl = [uri]($release.upload_url -replace '\{.*$', '')
+if ($uploadUrl.Scheme -ne 'https' -or $uploadUrl.Host -ne 'uploads.github.com') { throw 'Unexpected GitHub asset upload URL.' }
+$headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' }
 $uploaded = @{}
 foreach ($asset in $release.assets) {
   $file = $expected[$asset.name]
@@ -55,7 +56,10 @@ foreach ($asset in $release.assets) {
   $uploaded[$asset.name] = $true
 }
 foreach ($file in $files) {
-  if (!$uploaded.ContainsKey($file)) { gh release upload $tag $expected[$file].Path --repo $repo }
+  if (!$uploaded.ContainsKey($file)) {
+    $name = [uri]::EscapeDataString($file)
+    $null = Invoke-RestMethod -Method Post -Uri "$($uploadUrl.AbsoluteUri)?name=$name" -InFile $expected[$file].Path -ContentType 'application/octet-stream' -Headers $headers -TimeoutSec 150
+  }
 }
 
 $verified = gh api "repos/$repo/releases/$($release.id)" | ConvertFrom-Json
