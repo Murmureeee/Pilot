@@ -5,7 +5,7 @@
 
 ## 0. 当前进度
 
-Pilot 已具备日常文本对话、会话恢复、工具审批、Provider 设置、技能管理和按项导入 Codex / Claude Code 的能力。Windows NSIS 已做过本机安装与卸载，自动更新已通过本地更新源验证。Phase 4 已交付按提交追溯的 Windows 云端测试包。下一项是验证最新版本的新装、旧版升级和真实模型连接。
+Pilot 已具备日常文本对话、会话恢复、工具审批、Provider 设置、技能管理和按项导入 Codex / Claude Code 的能力。Windows 云端测试包已通过新装和就地升级验收。自动更新已通过本地更新源验证，接下来验收正式 HTTPS 更新源和真实 Ollama、LM Studio 连接。
 
 开发顺序为 [Windows 预发布](#第一步-windows-预发布)、[界面多语言](#第二步-界面多语言)、[本地定时任务](#第三步-本地定时任务)和[其余待办](#后续工作)。
 
@@ -234,10 +234,12 @@ pi-desktop/
 | 状态 | 工作 | 验收标准 |
 | --- | --- | --- |
 | 已验收 | GitHub Actions 与测试安装包（FR-8.5） | Windows runner 从锁文件安装。推送代码到 `main` 或提交 PR 后执行八步验证。`ad9600e` 通过全部检查并生成 NSIS 测试包，Actions 产物保留 7 天。[Windows CI 构建记录](https://github.com/Murmureeee/Pilot/actions/runs/44525138926) |
-| 待验收 | Pilot 新装与从旧版升级（FR-8.2 / FR-8.3） | 使用独立测试配置验证新装首次引导、一次对话和应用名称。用旧版生成测试会话、设置和技能，再升级并检查恢复。可执行文件名、应用 ID 和数据目录兼容旧版，验收后清理测试副本。 |
+| 已验收 | Pilot 新装与从旧版升级（FR-8.2 / FR-8.3） | Windows runner 验证 Pilot 0.1.1 新装、演示对话、配置向导和卸载。从 `ad9600e` 重建采用 `pi Desktop` 发行标识的 0.1.0 兼容包。0.1.1 自动识别原安装路径，保留会话、审批模式、自定义指令、界面语言和启用的技能，原会话可继续。测试目录已清理。[安装验收记录](https://github.com/Murmureeee/Pilot/actions/runs/44536855149) |
 | 待实施 | 正式 HTTPS 更新源（FR-8.6） | 发布流程能成套提供版本化安装包、blockmap 和 `latest.yml`。两个连续版本走通检查、下载、用户确认安装与重启恢复。 |
 | 待验收 | 真实 Ollama 与 LM Studio | 两个本地服务分别发现模型、通过连接检查、完成一轮流式对话。记录服务版本和模型 ID，连接失败和无模型有明确反馈。 |
 | 待实施 | 本地滚动日志（FR-9.1） | 能从主进程、渲染进程和更新状态定位错误，日志按大小轮转。验证磁盘占用上限与敏感字段脱敏。 |
+
+Windows CI 的手动选项 `verify_installation` 可复验新装和升级。当前清单版本为 0.1.0 时，验收流程将候选安装包临时构建为 0.1.1，确保实际跨版本安装。
 
 #### 第二步 界面多语言
 
@@ -357,7 +359,7 @@ pi-desktop/
 ### FR-8 · 打包与分发（Phase 4）
 
 - [x] FR-8.1 (P0/Ph0) **Node 兼容验证**：✅ Electron 45 内置 Node 24.22.3 ≥ 22.19，pi 冒烟通过，sidecar 方案取消
-- [ ] FR-8.2 (P1/Ph4) Windows x64 NSIS 已通过本机安装验证，最新 Pilot 测试包的新装和旧版升级待验收。macOS DMG 与 Linux AppImage/deb 待构建验收。
+- [ ] FR-8.2 (P1/Ph4) Windows x64 NSIS 已通过自动化新装、旧版升级和卸载验收。macOS DMG 与 Linux AppImage/deb 待构建验收。
 - [x] FR-8.3 (P1/Ph4) Windows 安装版支持自动检查、下载和退出安装。设置 `PI_UPDATE_URL` 后运行 `pnpm package:win` 会在 `dist/release` 生成安装包、blockmap 和 `latest.yml`。正式更新源需要部署这些文件。
 - [ ] FR-8.4 (P2/Ph4) 代码签名（mac notarize / win Authenticode）
 - [x] FR-8.5 (P1/Ph4) 云端 Windows 验证流水线与可按提交下载的 NSIS 测试安装包。
