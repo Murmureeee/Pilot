@@ -130,7 +130,9 @@ describe("bash tool", () => {
       const workingDirectory = realpathSync(workspace.path);
       const tool = createBashTool({ workingDirectory, commandShell: "powershell" });
       const result = await tool.execute("powershell-cwd", { command: "(Get-Location).Path" });
-      expect(textOf(result).trim()).toBe(workingDirectory);
+      expect(realpathSync.native(textOf(result).trim())).toBe(
+        realpathSync.native(workingDirectory),
+      );
     },
     30_000,
   );
