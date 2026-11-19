@@ -5,7 +5,7 @@
 
 ## 0. 当前进度
 
-Pilot 已具备日常文本对话、会话恢复、工具审批、Provider 设置、技能管理和按项导入 Codex / Claude Code 的能力。Windows NSIS 已做过本机安装与卸载，自动更新已通过本地更新源验证。当前进入 Phase 4，先让 GitHub 生成可以按提交追溯的 Windows 测试包，再验证最新版本的安装、升级和真实模型连接。
+Pilot 已具备日常文本对话、会话恢复、工具审批、Provider 设置、技能管理和按项导入 Codex / Claude Code 的能力。Windows NSIS 已做过本机安装与卸载，自动更新已通过本地更新源验证。Phase 4 已交付按提交追溯的 Windows 云端测试包。下一项是验证最新版本的新装、旧版升级和真实模型连接。
 
 开发顺序为 [Windows 预发布](#第一步-windows-预发布)、[界面多语言](#第二步-界面多语言)、[本地定时任务](#第三步-本地定时任务)和[其余待办](#后续工作)。
 
@@ -233,7 +233,7 @@ pi-desktop/
 
 | 状态 | 工作 | 验收标准 |
 | --- | --- | --- |
-| 待验收 | GitHub Actions 与测试安装包（FR-8.5） | Windows runner 从锁文件安装。推送 `main` 或提交 PR 后执行格式、类型、lint、测试、未使用代码检查、构建、Electron 冒烟和开发窗口挂载检查。`main` 的成功运行生成与提交对应的 NSIS 测试包，可在 Actions 中下载。 |
+| 已验收 | GitHub Actions 与测试安装包（FR-8.5） | Windows runner 从锁文件安装。推送代码到 `main` 或提交 PR 后执行八步验证。`ad9600e` 通过全部检查并生成 NSIS 测试包，Actions 产物保留 7 天。[Windows CI 构建记录](https://github.com/Murmureeee/Pilot/actions/runs/44525138926) |
 | 待验收 | Pilot 新装与从旧版升级（FR-8.2 / FR-8.3） | 使用独立测试配置验证新装首次引导、一次对话和应用名称。用旧版生成测试会话、设置和技能，再升级并检查恢复。可执行文件名、应用 ID 和数据目录兼容旧版，验收后清理测试副本。 |
 | 待实施 | 正式 HTTPS 更新源（FR-8.6） | 发布流程能成套提供版本化安装包、blockmap 和 `latest.yml`。两个连续版本走通检查、下载、用户确认安装与重启恢复。 |
 | 待验收 | 真实 Ollama 与 LM Studio | 两个本地服务分别发现模型、通过连接检查、完成一轮流式对话。记录服务版本和模型 ID，连接失败和无模型有明确反馈。 |
@@ -360,7 +360,7 @@ pi-desktop/
 - [ ] FR-8.2 (P1/Ph4) Windows x64 NSIS 已通过本机安装验证，最新 Pilot 测试包的新装和旧版升级待验收。macOS DMG 与 Linux AppImage/deb 待构建验收。
 - [x] FR-8.3 (P1/Ph4) Windows 安装版支持自动检查、下载和退出安装。设置 `PI_UPDATE_URL` 后运行 `pnpm package:win` 会在 `dist/release` 生成安装包、blockmap 和 `latest.yml`。正式更新源需要部署这些文件。
 - [ ] FR-8.4 (P2/Ph4) 代码签名（mac notarize / win Authenticode）
-- [ ] FR-8.5 (P1/Ph4) 云端 Windows 验证流水线与可按提交下载的 NSIS 测试安装包。
+- [x] FR-8.5 (P1/Ph4) 云端 Windows 验证流水线与可按提交下载的 NSIS 测试安装包。
 - [ ] FR-8.6 (P1/Ph4) 正式 HTTPS 更新源与连续版本的升级验证。
 
 ### FR-9 · 可观测性
@@ -381,7 +381,7 @@ pi-desktop/
 - [x] NFR-3 (P1) Windows 安装版的 500 条消息滚动通过，帧间隔 p95 为 18.2 毫秒。
 - [x] NFR-4 (P1) 会话落盘为原子写（临时文件 + rename），崩溃不丢已确认消息
 - [x] NFR-5 (P0) 8 步门禁全绿才可宣布完成：oxfmt / typecheck / oxlint / vitest / knip / build / smoke / dev 挂载
-- [x] NFR-6 (P1) 适配层、权限门、会话存储、工具、技能、设置、模型目录、IPC 校验和 MCP 工具声明共 104 项自动化测试通过。
+- [x] NFR-6 (P1) Windows 云端通过 115 项自动化测试，覆盖适配层、权限门、会话存储、工具、技能、设置、模型目录、IPC 校验和外部导入。
 - [ ] NFR-7 (P1) 三平台关键路径冒烟（Phase 4 出包前）
 - [ ] NFR-8 (P2) 内存：空闲会话 < 300MB；多会话切换不泄漏（Agent 实例随会话销毁）
 
