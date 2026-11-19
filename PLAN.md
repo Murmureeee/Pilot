@@ -5,7 +5,7 @@
 
 ## 0. 当前进度
 
-Pilot 已具备日常文本对话、会话恢复、工具审批、Provider 设置、技能管理和按项导入 Codex / Claude Code 的能力。Windows 云端测试包已通过新装、就地升级和 HTTPS 自动更新验收。v0.1.1 发布草稿已就绪。公开更新地址待发布后验收，真实 Ollama 和 LM Studio 连接也待实测。
+Pilot 已具备日常文本对话、会话恢复、工具审批、Provider 设置、技能管理和按项导入 Codex / Claude Code 的能力。Windows x64 v0.1.1 已在 GitHub Releases 发布，云端新装和公开 HTTPS 更新验收均已通过。下一项是实测 Ollama 和 LM Studio 的连接与流式对话。
 
 开发顺序为 [Windows 预发布](#第一步-windows-预发布)、[界面多语言](#第二步-界面多语言)、[本地定时任务](#第三步-本地定时任务)和[其余待办](#后续工作)。
 
@@ -235,11 +235,11 @@ pi-desktop/
 | --- | --- | --- |
 | 已验收 | GitHub Actions 与测试安装包（FR-8.5） | Windows runner 从锁文件安装。推送代码到 `main` 或提交 PR 后执行八步验证。`ad9600e` 通过全部检查并生成 NSIS 测试包，Actions 产物保留 7 天。[Windows CI 构建记录](https://github.com/Murmureeee/Pilot/actions/runs/44525138926) |
 | 已验收 | Pilot 新装与从旧版升级（FR-8.2 / FR-8.3） | Windows runner 验证 Pilot 0.1.1 新装、演示对话、配置向导和卸载。从 `ad9600e` 重建采用 `pi Desktop` 发行标识的 0.1.0 兼容包。0.1.1 自动识别原安装路径，保留会话、审批模式、自定义指令、界面语言和启用的技能，原会话可继续。测试目录已清理。[安装验收记录](https://github.com/Murmureeee/Pilot/actions/runs/44536855149) |
-| 草稿待发布 | 正式 HTTPS 更新源（FR-8.6） | 隔离 HTTPS 环境验证 0.1.0 检查、下载并经确认安装 0.1.1。下载后普通退出保留旧版，确认安装并重启后恢复会话、设置、语言和技能。v0.1.1 草稿已上传安装包、blockmap 和 `latest.yml`，校验值一致，并通过 GitHub HTTPS 下载核验了清单。发布后验收公开地址 `releases/latest/download/latest.yml`。[发布验收记录](https://github.com/Murmureeee/Pilot/actions/runs/44544967920) |
+| 已验收 | 正式 HTTPS 更新源（FR-8.6） | Windows runner 从公开地址下载 v0.1.1 的清单、安装包和 blockmap，SHA-256 与发布资产一致，安装包的 SHA-512 与清单一致。配置公开更新源的 0.1.0 兼容包下载后普通退出仍保留旧版，经确认安装并重启后进入 0.1.1，原会话、设置、语言和技能均已恢复。测试下载和目录已清理。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.1.1) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/44561428215) |
 | 待验收 | 真实 Ollama 与 LM Studio | 两个本地服务分别发现模型、通过连接检查、完成一轮流式对话。记录服务版本和模型 ID，连接失败和无模型有明确反馈。 |
 | 待实施 | 本地滚动日志（FR-9.1） | 能从主进程、渲染进程和更新状态定位错误，日志按大小轮转。验证磁盘占用上限与敏感字段脱敏。 |
 
-Windows CI 的 `verify_installation` 手动选项复验新装和 HTTPS 跨版本更新。`prepare_release` 通过验收后构建使用 GitHub Releases 地址的安装包并准备发布草稿。测试旧包使用隔离的更新源，实际分发的更新地址随正式安装包交付。
+Windows CI 的 `verify_installation` 使用隔离源复验新装和 HTTPS 升级，`prepare_release` 在验收通过后准备使用 GitHub Releases 的发布草稿。`verify_published_update` 下载公开安装包并验收从兼容包到最新发布版的升级。
 
 #### 第二步 界面多语言
 
@@ -360,10 +360,10 @@ Windows CI 的 `verify_installation` 手动选项复验新装和 HTTPS 跨版本
 
 - [x] FR-8.1 (P0/Ph0) **Node 兼容验证**：✅ Electron 45 内置 Node 24.22.3 ≥ 22.19，pi 冒烟通过，sidecar 方案取消
 - [ ] FR-8.2 (P1/Ph4) Windows x64 NSIS 已通过自动化新装、旧版升级和卸载验收。macOS DMG 与 Linux AppImage/deb 待构建验收。
-- [x] FR-8.3 (P1/Ph4) Windows 安装版支持自动检查、下载和退出安装。设置 `PI_UPDATE_URL` 后运行 `pnpm package:win` 会在 `dist/release` 生成安装包、blockmap 和 `latest.yml`。正式更新源需要部署这些文件。
+- [x] FR-8.3 (P1/Ph4) Windows 安装版支持自动检查、下载和退出安装。设置 `PI_UPDATE_URL` 后运行 `pnpm package:win` 会在 `dist/release` 生成安装包、blockmap 和 `latest.yml`。
 - [ ] FR-8.4 (P2/Ph4) 代码签名（mac notarize / win Authenticode）
 - [x] FR-8.5 (P1/Ph4) 云端 Windows 验证流水线与可按提交下载的 NSIS 测试安装包。
-- [ ] FR-8.6 (P1/Ph4) HTTPS 跨版本升级已验收，GitHub v0.1.1 草稿及三个发布文件已就绪。公开更新源待发布后验收。
+- [x] FR-8.6 (P1/Ph4) GitHub Releases 公开更新源已上线，Windows 0.1.0 → 0.1.1 升级通过验收。
 
 ### FR-9 · 可观测性
 
