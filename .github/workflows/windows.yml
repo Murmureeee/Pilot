@@ -1,0 +1,75 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    env:
+      ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26.13.0'
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: '11.21.0'
+
+      - name: Install locked dependencies
+        run: |
+          Get-Process -Name electron -ErrorAction SilentlyContinue | Stop-Process -Force
+          pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm exec oxfmt --check src tests
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm exec oxlint src tests
+
+      - name: Test
+        run: pnpm exec vitest --run
+
+      - name: Check unused code
+        run: pnpm exec knip
+
+      - name: Build
+        run: pnpm build
+
+      - name: Electron smoke test and development startup
+        run: node scripts/verify-windows.mjs
+
+      - name: Build Windows test installer
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: pnpm package:win
+
+      - name: Upload Windows test installer
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Pilot-windows-x64-${{ github.sha }}
+          path: dist/*-x64-setup.exe
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
