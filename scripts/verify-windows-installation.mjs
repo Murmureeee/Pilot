@@ -93,9 +93,11 @@ async function withApp(directory, profile, verify, installsUpdate = false) {
     `--remote-debugging-port=${port}`,
     "--remote-debugging-address=127.0.0.1",
     `--user-data-dir=${profile}`,
-    // Only the temporary fixture key is trusted by this test process.
-    `--ignore-certificate-errors-spki-list=${certificatePin}`,
   ];
+  if (certificatePin) {
+    // The loopback fixture uses a temporary certificate.
+    args.push(`--ignore-certificate-errors-spki-list=${certificatePin}`);
+  }
   const child = spawn(join(directory, exeName), args, {
     cwd: directory,
     env: { ...process.env, LOCALAPPDATA: updateCache },
@@ -207,6 +209,11 @@ function removeTestDirectory(directory) {
   assert.ok(!existsSync(directory));
 }
 
+function verifyPublishedFeed(directory) {
+  const config = readFileSync(join(directory, "resources", "app-update.yml"), "utf8");
+  assert.ok(config.split(/\r?\n/).includes(`url: ${updateUrl.href}`));
+}
+
 function serveUpdateFiles(request, response) {
   const path = new URL(request.url, updateUrl).pathname;
   const filename = /^(?:\/releases\/latest\/download|\/assets)\/([a-zA-Z0-9._-]+)$/.exec(path)?.[1];
@@ -265,6 +272,30 @@ assert.ok(
 
 const legacyProfile = join(realpathSync.native(process.env.APPDATA), legacyName);
 assert.ok(!existsSync(legacyProfile), "The runner must start with an unused legacy profile");
+const publishedFeed = process.env.PILOT_PUBLISHED_UPDATE_URL;
+const updateUrl = new URL(publishedFeed ?? process.env.PILOT_UPDATE_TEST_URL);
+assert.equal(updateUrl.protocol, "https:");
+const certificatePin = publishedFeed
+  ? undefined
+  : createHash("sha256")
+      .update(
+        new X509Certificate(readFileSync(process.env.PILOT_UPDATE_TEST_CERT)).publicKey.export({
+          type: "spki",
+          format: "der",
+        }),
+      )
+      .digest("base64");
+let releaseDirectory = dirname(resolve(legacyInstaller));
+const updateRequests = new Set();
+const feed = publishedFeed
+  ? undefined
+  : createHttpsServer(
+      {
+        pfx: readFileSync(process.env.PILOT_UPDATE_TEST_PFX),
+        passphrase: process.env.PILOT_UPDATE_TEST_PASSPHRASE,
+      },
+      serveUpdateFiles,
+    );
 const root = mkdtempSync(join(realpathSync.native(process.env.RUNNER_TEMP), "pilot-install-"));
 const cleanInstall = join(root, "clean-install");
 const cleanProfile = join(root, "clean-profile");
@@ -272,27 +303,20 @@ const onboardingProfile = join(root, "onboarding-profile");
 const upgradeInstall = join(root, "upgrade-install");
 const skillFile = join(legacyProfile, "skills", skillId, "SKILL.md");
 const updateCache = join(root, "local-app-data");
-const updateUrl = new URL(process.env.PILOT_UPDATE_TEST_URL);
-const publicKey = new X509Certificate(readFileSync(process.env.PILOT_UPDATE_TEST_CERT)).publicKey;
-const certificatePin = createHash("sha256")
-  .update(publicKey.export({ type: "spki", format: "der" }))
-  .digest("base64");
-let releaseDirectory = dirname(resolve(legacyInstaller));
-const updateRequests = new Set();
-const feed = createHttpsServer(
-  {
-    pfx: readFileSync(process.env.PILOT_UPDATE_TEST_PFX),
-    passphrase: process.env.PILOT_UPDATE_TEST_PASSPHRASE,
-  },
-  serveUpdateFiles,
-);
+const archive = join("resources", "app.asar");
 
 try {
-  feed.listen(Number(updateUrl.port), "127.0.0.1");
-  await once(feed, "listening");
+  if (feed) {
+    feed.listen(Number(updateUrl.port), "127.0.0.1");
+    await once(feed, "listening");
+  }
   mkdirSync(updateCache);
   mkdirSync(cleanProfile);
   runInstaller(resolve(candidateInstaller), root, ["/S", `/D=${cleanInstall}`]);
+  if (publishedFeed) verifyPublishedFeed(cleanInstall);
+  const expectedHash = createHash("sha256")
+    .update(readFileSync(join(cleanInstall, archive)))
+    .digest("hex");
   await withApp(cleanInstall, cleanProfile, async (evaluate) => {
     await verifyApp(evaluate, "Pilot", candidateVersion, cleanProfile);
     assert.deepEqual(await evaluate(async () => (await window.pi.getSnapshot()).sessions), []);
@@ -322,6 +346,7 @@ try {
   );
 
   runInstaller(resolve(legacyInstaller), root, ["/S", `/D=${upgradeInstall}`]);
+  if (publishedFeed) verifyPublishedFeed(upgradeInstall);
   const original = await withApp(upgradeInstall, legacyProfile, async (evaluate) => {
     await verifyApp(evaluate, legacyName, legacyVersion, legacyProfile);
     mkdirSync(join(legacyProfile, "skills", skillId), { recursive: true });
@@ -352,20 +377,24 @@ try {
       sessionTitle,
     );
     assert.ok(transcript.includes("This chat should survive the upgrade"));
-    await waitForUpdate(evaluate, "current");
-    releaseDirectory = dirname(resolve(candidateInstaller));
-    updateRequests.clear();
+    if (feed) {
+      await waitForUpdate(evaluate, "current");
+      releaseDirectory = dirname(resolve(candidateInstaller));
+      updateRequests.clear();
+    }
     await evaluate(() => {
       globalThis.pilotUpdateStates = [];
       window.pi.onUpdateStatus(({ state }) => globalThis.pilotUpdateStates.push(state));
       void window.pi.checkForUpdates();
     });
     await waitForUpdate(evaluate, "ready", candidateVersion);
-    const updateStates = await evaluate(() => globalThis.pilotUpdateStates);
-    for (const state of ["checking", "downloading", "ready"])
-      assert.ok(updateStates.includes(state));
-    assert.ok(updateRequests.has("latest.yml"));
-    assert.ok(updateRequests.has(basename(candidateInstaller)));
+    if (feed) {
+      const updateStates = await evaluate(() => globalThis.pilotUpdateStates);
+      for (const state of ["checking", "downloading", "ready"])
+        assert.ok(updateStates.includes(state));
+      assert.ok(updateRequests.has("latest.yml"));
+      assert.ok(updateRequests.has(basename(candidateInstaller)));
+    }
     return { sessionId, transcript };
   });
 
@@ -383,9 +412,6 @@ try {
     true,
   );
 
-  const archive = join("resources", "app.asar");
-  const candidateArchive = join(releaseDirectory, "win-unpacked", archive);
-  const expectedHash = createHash("sha256").update(readFileSync(candidateArchive)).digest("hex");
   const installedArchive = join(upgradeInstall, archive);
   await waitFor(
     "the updater to replace the installed package",
@@ -435,9 +461,12 @@ try {
     `${legacyName} ${legacyVersion} to Pilot ${candidateVersion} in-place upgrade preserved the transcript, settings, language, and enabled skill.`,
   );
   console.log("HTTPS update passed download, ordinary quit, explicit installation, and restart.");
+  if (publishedFeed) console.log(`Published update feed verified at ${updateUrl.href}`);
 } finally {
-  feed.closeAllConnections();
-  await new Promise((closed) => feed.close(closed));
+  if (feed) {
+    feed.closeAllConnections();
+    await new Promise((closed) => feed.close(closed));
+  }
   try {
     await uninstall(upgradeInstall);
     await uninstall(cleanInstall);

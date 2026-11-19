@@ -16,6 +16,10 @@ on:
         description: Verify the HTTPS update and prepare a GitHub release draft
         type: boolean
         default: false
+      verify_published_update:
+        description: Install and update from the public GitHub release
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -34,7 +38,12 @@ jobs:
     env:
       ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
       PILOT_UPDATE_TEST_URL: https://127.0.0.1:7936/releases/latest/download/
+      PILOT_RELEASE_UPDATE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/latest/download/
     steps:
+      - name: Validate update feed selection
+        if: inputs.verify_published_update && (inputs.verify_installation || inputs.prepare_release)
+        run: throw 'Run published update verification separately from tests using the loopback feed.'
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -53,7 +62,10 @@ jobs:
           pnpm install --frozen-lockfile
 
       - name: Check formatting
-        run: pnpm exec oxfmt --check src tests
+        run: |
+          pnpm exec oxfmt --write src tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git diff --exit-code -- src tests
 
       - name: Type check
         run: pnpm typecheck
@@ -74,11 +86,11 @@ jobs:
         run: node scripts/verify-windows.mjs
 
       - name: Build Windows test installer
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !inputs.verify_installation && !inputs.prepare_release
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !inputs.verify_installation && !inputs.prepare_release && !inputs.verify_published_update
         run: pnpm package:win
 
       - name: Upload Windows test installer
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !inputs.verify_installation && !inputs.prepare_release
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !inputs.verify_installation && !inputs.prepare_release && !inputs.verify_published_update
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Pilot-windows-x64-${{ github.sha }}
@@ -88,7 +100,7 @@ jobs:
           compression-level: 0
 
       - name: Check out the 0.1.0 installer baseline
-        if: inputs.verify_installation || inputs.prepare_release
+        if: inputs.verify_installation || inputs.prepare_release || inputs.verify_published_update
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ad9600ea7dd4b46bb9e6b46585a85d16062c1646
@@ -96,10 +108,10 @@ jobs:
           persist-credentials: false
 
       - name: Build the pi Desktop compatibility installer
-        if: inputs.verify_installation || inputs.prepare_release
+        if: inputs.verify_installation || inputs.prepare_release || inputs.verify_published_update
         working-directory: .pilot-baseline
         env:
-          PI_UPDATE_URL: ${{ env.PILOT_UPDATE_TEST_URL }}
+          PI_UPDATE_URL: ${{ inputs.verify_published_update && env.PILOT_RELEASE_UPDATE_URL || env.PILOT_UPDATE_TEST_URL }}
         run: |
           Get-Process -Name electron -ErrorAction SilentlyContinue | Stop-Process -Force
           pnpm install --frozen-lockfile
@@ -147,11 +159,52 @@ jobs:
             Remove-Item -LiteralPath $certDir
           }
 
+      - name: Verify the published Windows update over HTTPS
+        if: inputs.verify_published_update
+        env:
+          PILOT_PUBLISHED_UPDATE_URL: ${{ env.PILOT_RELEASE_UPDATE_URL }}
+        run: |
+          $downloads = Join-Path $env:RUNNER_TEMP ('pilot-public-update-' + [guid]::NewGuid())
+          New-Item -Path $downloads -ItemType Directory | Out-Null
+          try {
+            $baseUrl = $env:PILOT_PUBLISHED_UPDATE_URL
+            $manifestPath = Join-Path $downloads 'latest.yml'
+            Invoke-WebRequest -Uri "${baseUrl}latest.yml" -OutFile $manifestPath -TimeoutSec 30 -MaximumRetryCount 2
+            $manifest = Get-Content -Raw -LiteralPath $manifestPath
+            $version = [regex]::Match($manifest, '(?m)^version: (?<value>\d+\.\d+\.\d+)\r?$').Groups['value'].Value
+            if (!$version) { throw 'Invalid version in the public update manifest.' }
+            $installerName = "pi-desktop-${version}-x64-setup.exe"
+            if ($manifest -notmatch ('(?m)^path: ' + [regex]::Escape($installerName) + '\r?$')) { throw 'Unexpected installer path in the public update manifest.' }
+            foreach ($asset in @($installerName, "$installerName.blockmap")) {
+              $file = Join-Path $downloads $asset
+              Invoke-WebRequest -Uri "$baseUrl$asset" -OutFile $file -TimeoutSec 150 -MaximumRetryCount 2
+              if ((Get-Item -LiteralPath $file).Length -le 0) { throw "Empty release asset $asset" }
+            }
+            $installer = Join-Path $downloads $installerName
+            $hash = Get-FileHash -LiteralPath $installer -Algorithm SHA512
+            $base64 = [Convert]::ToBase64String([Convert]::FromHexString($hash.Hash))
+            if ($manifest -notmatch ('(?m)^sha512: ' + [regex]::Escape($base64) + '\r?$')) { throw 'Public installer checksum mismatch.' }
+            foreach ($file in (Get-ChildItem -LiteralPath $downloads -File)) {
+              $digest = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              Write-Output "Public asset $($file.Name) SHA-256 $digest"
+            }
+            Write-Output "Public installer SHA-512 matches latest.yml for v$version."
+            node scripts/verify-windows-installation.mjs '.pilot-baseline/dist/release/pi-desktop-0.1.0-x64-setup.exe' $installer $version
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            foreach ($file in (Get-ChildItem -LiteralPath $downloads -File)) {
+              Remove-Item -LiteralPath $file.FullName
+            }
+            Remove-Item -LiteralPath $downloads
+            if (Test-Path -LiteralPath $downloads) { throw 'The public release download directory was not removed.' }
+            Write-Output 'Published release downloads were removed.'
+          }
+
       - name: Build Windows assets for GitHub Releases
         if: github.ref == 'refs/heads/main' && inputs.prepare_release
         id: release_assets
         env:
-          PI_UPDATE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/latest/download/
+          PI_UPDATE_URL: ${{ env.PILOT_RELEASE_UPDATE_URL }}
           PILOT_CANDIDATE_VERSION: ${{ steps.candidate.outputs.version }}
         run: |
           pnpm package:win
