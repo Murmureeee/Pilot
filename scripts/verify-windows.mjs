@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { stopProcessTree } from "./windows-process.mjs";
 
 const require = createRequire(import.meta.url);
 const startupError = /\bUncaught\b|\bUnhandledPromiseRejection\b|\[renderer\] process gone:/i;
@@ -72,19 +73,8 @@ async function verifyDevelopmentStartup(profile) {
     }
     throw new Error("Timed out waiting for the development renderer to mount");
   } finally {
-    if (dev.pid && dev.exitCode === null && dev.signalCode === null) {
-      // electron-vite owns both the dev server and the Electron process tree.
-      const taskkill = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe");
-      const stopped = spawnSync(taskkill, ["/pid", String(dev.pid), "/t", "/f"], {
-        stdio: "inherit",
-        timeout: 10_000,
-        windowsHide: true,
-      });
-      if (stopped.status !== 0) {
-        dev.kill();
-        throw stopped.error ?? new Error("Could not stop the development process tree");
-      }
-    }
+    // electron-vite owns both the dev server and the Electron process tree.
+    stopProcessTree(dev);
   }
 }
 

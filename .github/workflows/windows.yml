@@ -7,6 +7,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      verify_installation:
+        description: Verify a clean Windows install and in-place upgrade
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -61,11 +66,11 @@ jobs:
         run: node scripts/verify-windows.mjs
 
       - name: Build Windows test installer
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !inputs.verify_installation
         run: pnpm package:win
 
       - name: Upload Windows test installer
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !inputs.verify_installation
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Pilot-windows-x64-${{ github.sha }}
@@ -73,3 +78,47 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
+
+      - name: Check out the 0.1.0 installer baseline
+        if: inputs.verify_installation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ad9600ea7dd4b46bb9e6b46585a85d16062c1646
+          path: .pilot-baseline
+          persist-credentials: false
+
+      - name: Build the pi Desktop compatibility installer
+        if: inputs.verify_installation
+        working-directory: .pilot-baseline
+        run: |
+          Get-Process -Name electron -ErrorAction SilentlyContinue | Stop-Process -Force
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $manifest = Get-Content -Raw -LiteralPath 'package.json' | ConvertFrom-Json
+          $manifest.productName = 'pi Desktop'
+          $manifest | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath 'package.json' -Encoding utf8
+          pnpm package:win
+
+      - name: Build the Pilot upgrade candidate
+        if: inputs.verify_installation
+        id: candidate
+        run: |
+          $manifestPath = (Resolve-Path -LiteralPath 'package.json').Path
+          $original = [IO.File]::ReadAllText($manifestPath)
+          $manifest = $original | ConvertFrom-Json
+          if ($manifest.version -eq '0.1.0') { $manifest.version = '0.1.1' }
+          try {
+            $manifest | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $manifestPath -Encoding utf8
+            pnpm package:win
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            "version=$($manifest.version)" >> $env:GITHUB_OUTPUT
+          } finally {
+            [IO.File]::WriteAllText($manifestPath, $original)
+          }
+
+      - name: Verify fresh install, upgrade and uninstall
+        if: inputs.verify_installation
+        env:
+          PILOT_CANDIDATE_VERSION: ${{ steps.candidate.outputs.version }}
+        run: |
+          node scripts/verify-windows-installation.mjs '.pilot-baseline/dist/pi-desktop-0.1.0-x64-setup.exe' "dist/pi-desktop-${env:PILOT_CANDIDATE_VERSION}-x64-setup.exe" $env:PILOT_CANDIDATE_VERSION
