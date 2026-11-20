@@ -1,6 +1,6 @@
 // @env browser
 import { Fragment, useMemo, useRef, useState, type JSX, type RefObject } from "react";
-import { SquareTerminalIcon } from "lucide-react";
+import { ArrowDownIcon, SquareTerminalIcon } from "lucide-react";
 import { AssistantReply } from "@renderer/components/ai/assistant-reply";
 import { Composer } from "@renderer/components/ai/composer";
 import { MessageJump } from "@renderer/components/ai/message-jump";
@@ -9,6 +9,7 @@ import { InlineWorkspaceReference } from "@renderer/components/ai/workspace-refe
 import { Button } from "@renderer/components/ui/button";
 import {
   MessageScroller,
+  MessageScrollerButton,
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
@@ -69,7 +70,7 @@ export function ChatView({
             viewportRef={viewportRef}
             contentRef={contentRef}
           />
-          <MessageScrollerProvider key={sessionId ?? "draft"} autoScroll={busy}>
+          <MessageScrollerProvider key={sessionId ?? "draft"} autoScroll>
             <MessageScroller className="min-h-0 flex-1">
               <MessageScrollerViewport
                 ref={viewportRef}
@@ -92,6 +93,7 @@ export function ChatView({
                       <MessageScrollerItem
                         key={row.id}
                         id={"msg-" + row.id}
+                        messageId={row.id}
                         className={isUser ? "message-scroller-user-item" : undefined}
                       >
                         <Message align={isUser ? "end" : "start"} className="items-start gap-3">
@@ -140,6 +142,14 @@ export function ChatView({
                   })}
                 </MessageScrollerContent>
               </MessageScrollerViewport>
+              <MessageScrollerButton
+                behavior="auto"
+                aria-label={t("回到最新消息", locale)}
+                title={t("回到最新消息", locale)}
+                className="z-10 shadow-sm motion-reduce:transition-none"
+              >
+                <ArrowDownIcon aria-hidden="true" />
+              </MessageScrollerButton>
             </MessageScroller>
           </MessageScrollerProvider>
         </div>
