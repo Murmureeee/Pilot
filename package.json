@@ -4,11 +4,13 @@
   "version": "0.1.1",
   "private": true,
   "description": "Desktop AI agent app built on pi (earendil-works/pi)",
+  "homepage": "https://github.com/Murmureeee/Pilot",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "package:win": "pnpm build && node scripts/package-win.mjs",
+    "package:linux": "pnpm build && node scripts/package-linux.mjs",
     "preview": "electron-vite preview",
     "postinstall": "node scripts/restore-electron.mjs",
     "format": "oxfmt --write src tests",

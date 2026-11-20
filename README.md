@@ -6,9 +6,16 @@ Pilot 是基于 pi 的桌面 AI 工作台。你可以从一次对话开始，让
 
 ## 下载与更新
 
-当前提供 **Windows x64** 安装包。打开[最新正式版](https://github.com/Murmureeee/Pilot/releases/latest)，展开 **Assets** 并下载 `pi-desktop-<版本号>-x64-setup.exe`。每个发布页都附有当版的中文更新说明。
+在最新正式版的 **Assets** 中按平台下载安装包。每个发布页都附有当版的中文更新说明。[最新正式版](https://github.com/Murmureeee/Pilot/releases/latest)
 
-已安装 Pilot 时，可以从 **帮助 → 关于 Pilot** 检查更新。下载完成后，由你确认退出并安装。
+| 平台 | 发行文件 |
+| --- | --- |
+| Windows x64 | `pi-desktop-<版本号>-x64-setup.exe` |
+| Linux x64 | `pilot-<版本号>-linux-x86_64.AppImage` 或 `pilot-<版本号>-linux-amd64.deb` |
+
+Linux 文件随启用该构建流程的正式版提供。AppImage 添加执行权限后运行。Debian、Ubuntu 及其衍生发行版可使用 `sudo apt install ./pilot-<版本号>-linux-amd64.deb` 安装。
+
+Windows 用户可以从 **帮助 → 关于 Pilot** 检查更新并确认安装。Linux 用户通过 Releases 下载新版。
 
 ## 开始使用
 
@@ -19,17 +26,17 @@ Pilot 是基于 pi 的桌面 AI 工作台。你可以从一次对话开始，让
 ## 当前功能
 
 - **会话与任务**。流式对话、Markdown、会话历史和可恢复的任务步骤。
-- **文件与命令**。在选定目录内读取、搜索和编辑文件，使用 PowerShell 或 Git Bash 执行命令，并按权限模式处理审批。
+- **文件与命令**。在选定目录内读取、搜索和编辑文件。Windows 支持 PowerShell 和 Git Bash，Linux 使用 Bash。工具调用按权限模式处理。
 - **技能与 MCP**。管理包含 `SKILL.md` 的本地技能，配置 stdio 或 Streamable HTTP MCP 服务，并导入外部插件中可用的技能和 MCP 配置。
 - **个性化**。切换简体中文和 English、调整主题，设置全局自定义指令或单独修改某个会话的指令。
 
 ## 从源码运行
 
-Windows 开发环境使用 Node.js 26 和 pnpm 11，具体版本见[构建工作流](./.github/workflows/windows.yml)。关闭正在运行的 Electron 开发实例，再在仓库根目录运行以下命令。
+开发环境使用 Node.js 26 和 pnpm 11。关闭正在运行的 Electron 开发实例，再在仓库根目录运行以下命令。[构建工作流](./.github/workflows/windows.yml)
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-构建可运行 `pnpm build`，生成 Windows 安装包可运行 `pnpm package:win`。本地模型验收、多语言和定时任务的进度见[开发计划](./PLAN.md)。
+运行 `pnpm build` 可构建应用。Windows 使用 `pnpm package:win` 制作安装包，Linux x64 使用 `pnpm package:linux` 生成 AppImage 和 `.deb`。[开发计划](./PLAN.md)

@@ -21,3 +21,13 @@ nsis:
   allowElevation: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: false
+linux:
+  executableName: pilot
+  icon: resources/icon.png
+  category: Development
+  artifactName: pilot-${version}-linux-${arch}.${ext}
+  target:
+    - AppImage
+    - deb
+deb:
+  maintainer: Pilot <49786674+Murmureeee@users.noreply.github.com>

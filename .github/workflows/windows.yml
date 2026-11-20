@@ -1,4 +1,4 @@
-name: Windows CI
+name: Desktop CI
 
 on:
   push:
@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
       prepare_release:
-        description: Verify the HTTPS update and prepare a GitHub release draft
+        description: Verify Windows and Linux packages and prepare a GitHub release draft
         type: boolean
         default: false
       verify_published_update:
@@ -226,9 +226,65 @@ jobs:
           retention-days: 1
           compression-level: 0
 
+  linux:
+    if: inputs.prepare_release || (!inputs.verify_installation && !inputs.verify_published_update)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      artifact: ${{ steps.package.outputs.artifact }}
+    env:
+      ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26.13.0'
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: '11.21.0'
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test on Linux
+        run: pnpm exec vitest --run
+
+      - name: Build Linux AppImage and Debian packages
+        id: package
+        run: |
+          pnpm package:linux
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "artifact=Pilot-linux-x64-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+
+      - name: Start both Linux packages in isolated profiles
+        run: |
+          if ! command -v xvfb-run >/dev/null || ! command -v xauth >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb xauth
+          fi
+          bash scripts/verify-linux-package.sh
+
+      - name: Stage verified Linux packages
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.package.outputs.artifact }}
+          path: |
+            dist/pilot-${{ steps.package.outputs.version }}-linux-x86_64.AppImage
+            dist/pilot-${{ steps.package.outputs.version }}-linux-amd64.deb
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
   release-draft:
     if: github.ref == 'refs/heads/main' && inputs.prepare_release
-    needs: windows
+    needs: [windows, linux]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -243,9 +299,20 @@ jobs:
           name: ${{ needs.windows.outputs.release_artifact }}
           path: ${{ runner.temp }}/pilot-release
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.linux.outputs.artifact }}
+          path: ${{ runner.temp }}/pilot-release
+
+      - name: Verify platform versions match
+        env:
+          WINDOWS_VERSION: ${{ needs.windows.outputs.version }}
+          LINUX_VERSION: ${{ needs.linux.outputs.version }}
+        run: test "$WINDOWS_VERSION" = "$LINUX_VERSION"
+
       - name: Prepare and verify the GitHub release draft
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           PILOT_RELEASE_VERSION: ${{ needs.windows.outputs.version }}
-        run: ./scripts/draft-windows-release.ps1
+        run: ./scripts/draft-release.ps1

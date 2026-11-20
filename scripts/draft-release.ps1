@@ -12,7 +12,13 @@ if (!$releaseNotes) { throw "Add Chinese release notes under '## $tag' in CHANGE
 $repo = $env:GITHUB_REPOSITORY
 $directory = Join-Path $env:RUNNER_TEMP 'pilot-release'
 $installer = "pi-desktop-${version}-x64-setup.exe"
-$files = @($installer, "$installer.blockmap", 'latest.yml')
+$files = @(
+  $installer
+  "$installer.blockmap"
+  'latest.yml'
+  "pilot-${version}-linux-x86_64.AppImage"
+  "pilot-${version}-linux-amd64.deb"
+)
 $expected = @{}
 foreach ($file in $files) {
   $item = Get-Item -LiteralPath (Join-Path $directory $file)
