@@ -28,7 +28,8 @@ export function FileChangesCard({
   const show = (changeId?: string, confirmUndo = false): void => {
     if (!sessionId) return;
     useWorkspaceReferenceStore.getState().close();
-    open({ sessionId, replyId, changeId, confirmUndo });
+    const changePath = changes.find((change) => change.id === changeId)?.path;
+    open({ sessionId, replyId, changeId, changePath, confirmUndo });
   };
 
   return (

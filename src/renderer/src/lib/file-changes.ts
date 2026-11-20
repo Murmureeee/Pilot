@@ -1,5 +1,46 @@
 // @env browser
 import type { FileChangeSummary, UiMessage } from "@shared/contract";
+import type { FileChangeNode } from "./types";
+
+function fileLocation(path: string): {
+  name: string;
+  folders: { name: string; path: string }[];
+} {
+  const normalized = /^[a-z]:[\\/]|^\\\\/i.test(path) ? path.replaceAll("\\", "/") : path;
+  const segments = normalized.split("/").filter(Boolean);
+  const name = segments.pop() ?? path;
+  if (normalized.startsWith("/")) segments.unshift(normalized.startsWith("//") ? "//" : "/");
+  let folderPath = "";
+  const folders = segments.map((segment) => {
+    folderPath += (folderPath && !folderPath.endsWith("/") ? "/" : "") + segment;
+    return { name: segment, path: folderPath };
+  });
+  return { name, folders };
+}
+
+export function fileChangeFolderPaths(path: string): string[] {
+  return fileLocation(path).folders.map((folder) => folder.path);
+}
+
+export function fileChangesTree(changes: readonly FileChangeSummary[]): FileChangeNode[] {
+  const root: FileChangeNode[] = [];
+  const folders = new Map<string, Extract<FileChangeNode, { kind: "directory" }>>();
+  for (const change of changes) {
+    const location = fileLocation(change.path);
+    let siblings = root;
+    for (const folder of location.folders) {
+      let entry = folders.get(folder.path);
+      if (!entry) {
+        entry = { kind: "directory", ...folder, children: [] };
+        folders.set(folder.path, entry);
+        siblings.push(entry);
+      }
+      siblings = entry.children;
+    }
+    siblings.push({ kind: "file", name: location.name, change });
+  }
+  return root;
+}
 
 export function changesForReply(
   messages: readonly UiMessage[],

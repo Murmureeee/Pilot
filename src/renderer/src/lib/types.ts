@@ -2,6 +2,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { LucideIcon } from "lucide-react";
 import type {
+  FileChangeSummary,
   PromptMention,
   UiMessage,
   UiPart,
@@ -129,6 +130,7 @@ export interface OpenFileChanges {
   sessionId: string;
   replyId: string;
   changeId?: string;
+  changePath?: string;
   confirmUndo?: boolean;
 }
 
@@ -136,15 +138,21 @@ export interface FileChangesReview {
   sessionId: string;
   replyId: string;
   expanded: string[];
+  collapsedFolders: string[];
   jump: { changeId?: string };
   undoChangeId: string | null;
 }
+
+export type FileChangeNode =
+  | { kind: "directory"; name: string; path: string; children: FileChangeNode[] }
+  | { kind: "file"; name: string; change: FileChangeSummary };
 
 export interface FileChangesStore {
   review: FileChangesReview | null;
   open(request: OpenFileChanges): void;
   close(): void;
   toggleFile(id: string): void;
+  setFolderOpen(path: string, open: boolean): void;
   confirmUndo(id: string): void;
   cancelUndo(id: string): void;
 }

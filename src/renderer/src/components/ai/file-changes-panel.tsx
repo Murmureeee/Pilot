@@ -1,25 +1,24 @@
 // @env browser
 import { useLayoutEffect, useMemo, useRef, type JSX } from "react";
-import { ChevronRightIcon, FileDiffIcon, XIcon } from "lucide-react";
+import { FileDiffIcon, XIcon } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
-import { changesForReply, summarizeChanges } from "@renderer/lib/file-changes";
+import { changesForReply, fileChangesTree, summarizeChanges } from "@renderer/lib/file-changes";
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { FileChangesReview } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
-import { cn } from "cn";
 import { DiffStats } from "./diff-stats";
-import { FileDiffPreview } from "./file-diff-preview";
+import { FileChangesTree } from "./file-changes-tree";
 
 export function FileChangesPanel({ review }: { review: FileChangesReview }): JSX.Element {
   const locale = useLocale();
   const messages = useAgentStore((state) => state.messages);
   const busy = useAgentStore((state) => state.status !== "idle");
   const close = useFileChangesStore((state) => state.close);
-  const toggleFile = useFileChangesStore((state) => state.toggleFile);
   const cancelUndo = useFileChangesStore((state) => state.cancelUndo);
   const { jump, replyId } = review;
   const changes = useMemo(() => changesForReply(messages, replyId), [messages, replyId]);
+  const tree = useMemo(() => fileChangesTree(changes), [changes]);
   const { count, stats } = summarizeChanges(changes);
   const scrollArea = useRef<HTMLDivElement>(null);
   const tab = useRef<HTMLButtonElement>(null);
@@ -110,60 +109,9 @@ export function FileChangesPanel({ review }: { review: FileChangesReview }): JSX
           {changes.length === 0 ? (
             <p className="text-muted-foreground px-3 py-4 text-xs">{t("暂无文件变更", locale)}</p>
           ) : (
-            <ul className="space-y-2 p-2.5">
-              {changes.map((change) => {
-                const expanded = review.expanded.includes(change.id);
-                const headerId = "change-file-" + change.id;
-                const contentId = headerId + "-diff";
-                return (
-                  <li
-                    key={change.id}
-                    className="border-border/80 bg-card min-w-0 overflow-hidden rounded-lg border"
-                  >
-                    <button
-                      id={headerId}
-                      type="button"
-                      aria-expanded={expanded}
-                      aria-controls={expanded ? contentId : undefined}
-                      title={change.path}
-                      onClick={() => toggleFile(change.id)}
-                      className={cn(
-                        "hover:bg-accent/55 focus-visible:ring-ring/45 flex min-h-9 w-full items-center gap-2 px-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset",
-                        expanded && "bg-muted/55",
-                      )}
-                    >
-                      <ChevronRightIcon
-                        aria-hidden="true"
-                        className={cn(
-                          "text-muted-foreground size-3.5 shrink-0 transition-transform motion-reduce:transition-none",
-                          expanded && "rotate-90",
-                        )}
-                      />
-                      <span className="min-w-0 flex-1 truncate font-mono text-xs">
-                        {change.path}
-                      </span>
-                      {change.reverted ? (
-                        <span className="text-muted-foreground shrink-0 text-xs">
-                          {t("已撤销", locale)}
-                        </span>
-                      ) : (
-                        change.stats && <DiffStats stats={change.stats} />
-                      )}
-                    </button>
-                    {expanded && (
-                      <div id={contentId} aria-labelledby={headerId}>
-                        <FileDiffPreview
-                          sessionId={review.sessionId}
-                          change={change}
-                          busy={busy}
-                          confirming={review.undoChangeId === change.id}
-                        />
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="p-2.5">
+              <FileChangesTree entries={tree} review={review} busy={busy} />
+            </div>
           )}
         </div>
       </div>
