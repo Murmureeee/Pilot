@@ -148,6 +148,7 @@ const inputs = {
     z.strictObject({ path: mentionId, workingDirectory: nonBlank.optional() }),
   ]),
   [IPC.agentAbort]: z.tuple([runRef]),
+  [IPC.agentResume]: z.tuple([runRef]),
   [IPC.agentClearQueue]: z.tuple([runRef]),
   [IPC.sessionNew]: none,
   [IPC.sessionSaveDraft]: z.tuple([z.uuid(), composerDraft]),

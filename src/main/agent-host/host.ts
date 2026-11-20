@@ -15,6 +15,7 @@ import type {
   AgentStatus,
   ComposerDraft,
   FileDiff,
+  InterruptedRun,
   PermissionDecision,
   PromptInput,
   RunRef,
@@ -40,13 +41,19 @@ import type { McpManager } from "./mcp";
 import { prepareMentionPrompt } from "./mentions";
 import { resolveModel } from "./models";
 import { PermissionManager } from "./permissions";
+import { actionFingerprint, completeToolResults } from "./recovery";
 import { messageParts, messageText, SessionStore, toUiMessages } from "./session-store";
 import { loadSkillBody, scanSkills, skillSection } from "./skills";
 import { createTools, labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
 import type { ToolEnvironment } from "./tools/types";
-import type { ReferencedUserMessage, RunningTask, TimedAssistantMessage } from "./types";
+import type {
+  ReferencedUserMessage,
+  RunCheckpoint,
+  RunningTask,
+  TimedAssistantMessage,
+} from "./types";
 
 type Broadcast = (event: UiAgentEvent) => void;
 
@@ -155,7 +162,16 @@ export class AgentHost {
   getWorkingDirectory(): string | undefined {
     const active = this.run?.state;
     if (active && active.sessionId === this.sessionId) return active.workingDirectory ?? undefined;
+    const interrupted = this.sessionId && this.deps.store.checkpoint(this.sessionId);
+    if (interrupted) return interrupted.workingDirectory ?? undefined;
     return this.getProjectDirectory() ?? this.deps.getSettings().workingDirectory;
+  }
+
+  private interruptedRunOf(sessionId: string): InterruptedRun | undefined {
+    const checkpoint = this.deps.store.checkpoint(sessionId);
+    if (checkpoint) {
+      return { sessionId, runId: checkpoint.runId, workingDirectory: checkpoint.workingDirectory };
+    }
   }
 
   hasActiveRun(): boolean {
@@ -227,14 +243,13 @@ export class AgentHost {
   }
 
   /** 确保当前会话有 Agent 实例；跨会话或 provider/模型/systemPrompt 变更时重建（转录从落盘恢复） */
-  private ensureAgent(): Agent {
+  private ensureAgent(workingDirectory: string | undefined): Agent {
     const settings = this.deps.getSettings();
     const selection = resolveSessionModel(settings, this.getCurrentSession()?.model);
     const provider = selection && settings.providers.find((p) => p.id === selection.providerId);
     if (!selection || !provider) throw new Error("尚未配置 provider，请先到设置页添加");
     const active = { ...provider, modelId: selection.modelId };
 
-    const workingDirectory = this.getWorkingDirectory();
     if (workingDirectory) createToolPathResolver(workingDirectory)(".");
     const sessionId = this.ensureSession(workingDirectory);
     const systemPrompt = this.buildSystemPrompt(sessionId, settings, workingDirectory);
@@ -247,6 +262,7 @@ export class AgentHost {
     if (
       this.agent &&
       this.agentSessionId === sessionId &&
+      !this.deps.store.checkpoint(sessionId) &&
       this.agentProvider?.id === active.id &&
       this.agentProvider.kind === active.kind &&
       this.agentProvider.modelId === active.modelId &&
@@ -286,12 +302,27 @@ export class AgentHost {
         signal?.throwIfAborted();
         const run = this.run;
         if (!run) throw new Error("工具调用缺少活动运行。");
+        const action = actionFingerprint(toolCall.name, args, workingDirectory);
+        if (action && run.previousActions.has(action)) {
+          return {
+            block: true,
+            reason:
+              "This operation was already started before the interruption. Use its saved result or verify its effects in the workspace.",
+          };
+        }
+        if (run.persistError) throw run.persistError;
         const result = await run.permissions.gate(
           toolCall.name,
           args,
           this.deps.mcp.policyOf(toolCall.name),
         );
         if (!result?.block && !signal?.aborted) {
+          if (action && !run.checkpoint.actions.includes(action)) {
+            this.checkpointRun(run, {
+              ...run.checkpoint,
+              actions: [...run.checkpoint.actions, action],
+            });
+          }
           this.reportTool("tool_start", toolCall.id, toolCall.name, toolCall.arguments);
         }
         return result;
@@ -378,6 +409,14 @@ export class AgentHost {
   }
 
   private onAgentEvent(event: AgentEvent): void {
+    const run = this.run;
+    if (!run) return;
+    if (event.type === "message_end" && event.message.role === "user") {
+      const pending = run.checkpoint.pending.filter((message) => message !== event.message);
+      this.checkpointRun(run, { ...run.checkpoint, pending });
+      return;
+    }
+
     if (event.type === "message_start") {
       const message = event.message;
       if (message.role === "user") {
@@ -432,6 +471,8 @@ export class AgentHost {
         }
         if (Object.keys(this.thinkingDurations).length > 0)
           assistant.pilotThinkingDurations = this.thinkingDurations;
+        // Save the tool calls before pi asks for approval or starts any of them.
+        this.checkpointRun(run);
         this.send({ type: "assistant_end", id: last.id });
       }
       return;
@@ -451,6 +492,19 @@ export class AgentHost {
     }
 
     if (event.type === "tool_execution_end") {
+      // Parallel tools publish completion before pi adds their result messages to the transcript.
+      run.finishedTools.set(event.toolCallId, {
+        role: "toolResult",
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        content: event.result.content ?? [],
+        details: event.result.details,
+        usage: event.result.usage,
+        durationMs: event.durationMs,
+        isError: event.isError,
+        timestamp: Date.now(),
+      });
+      this.checkpointRun(run);
       if (event.toolName === PLAN_TOOL_NAME) {
         const steps = event.isError ? undefined : readPlanSteps(event.result.details);
         if (steps) this.send({ type: "plan", steps });
@@ -469,6 +523,7 @@ export class AgentHost {
     }
 
     if (event.type === "message_end" && event.message.role === "toolResult") {
+      run.finishedTools.delete(event.message.toolCallId);
       const change = readFileChange(event.message.toolName, event.message.details);
       if (change)
         this.send({
@@ -480,6 +535,7 @@ export class AgentHost {
     }
 
     if (event.type === "turn_end") {
+      this.checkpointRun(run);
       const queued = this.agent?.peekQueuedMessages() ?? [];
       this.steerCount = queued.length;
       this.send({ type: "queue", steerCount: this.steerCount });
@@ -487,7 +543,23 @@ export class AgentHost {
     }
   }
 
+  private checkpointRun(run: RunningTask, checkpoint = run.checkpoint): void {
+    try {
+      this.deps.store.writeTranscript(
+        run.state.sessionId,
+        [...(this.agent?.state.messages ?? []), ...run.finishedTools.values()],
+        checkpoint,
+      );
+      run.checkpoint = checkpoint;
+    } catch (error) {
+      run.persistError = error;
+      this.agent?.abort();
+      throw error;
+    }
+  }
+
   private settle(sessionId: string, messages: AgentMessage[]): void {
+    this.deps.store.save(sessionId, messages);
     this.uiMessages = toUiMessages(messages, "s", (name) => this.toolLabel(name));
     this.nextId = this.uiMessages.length;
     this.send({ type: "messages", messages: this.uiMessages });
@@ -495,7 +567,6 @@ export class AgentHost {
     if (last?.role === "assistant" && last.stopReason === "error") {
       this.send({ type: "error", message: last.errorMessage ?? "模型返回错误" });
     }
-    this.deps.store.save(sessionId, messages);
     this.sendSessions();
   }
 
@@ -559,8 +630,7 @@ export class AgentHost {
             (directory) => directory === workingDirectory,
             this.deps.skillsDir,
           );
-    const agent = active && this.agent ? this.agent : this.ensureAgent();
-    if (composerId !== undefined) this.deps.store.saveDraft(composerId, []);
+    const agent = active && this.agent ? this.agent : this.ensureAgent(workingDirectory);
     const message: ReferencedUserMessage = {
       role: "user",
       content: prepared.text,
@@ -570,15 +640,64 @@ export class AgentHost {
     if (prepared.skillInstructions.length) {
       this.promptSkillInstructions.set(message, prepared.skillInstructions);
     }
-    if (active) {
+    if (this.run) {
+      this.checkpointRun(this.run, {
+        ...this.run.checkpoint,
+        pending: [...this.run.checkpoint.pending, message],
+      });
       agent.steer(message);
+      if (composerId !== undefined) this.deps.store.saveDraft(composerId, []);
       const queued = agent.peekQueuedMessages() ?? [];
       this.steerCount = queued.length;
       this.send({ type: "queue", steerCount: this.steerCount });
       return Promise.resolve();
     }
 
+    return this.beginRun(agent, workingDirectory, message, composerId);
+  }
+
+  resume(ref: RunRef): Promise<void> | ActiveRun {
+    const active = this.run?.state;
+    if (active) return active;
+    const checkpoint =
+      this.sessionId === ref.sessionId ? this.deps.store.checkpoint(ref.sessionId) : undefined;
+    if (checkpoint?.runId !== ref.runId) {
+      throw new Error("该任务已更新，请重新打开会话。");
+    }
+    const directory = checkpoint.workingDirectory ?? undefined;
+    const agent = this.ensureAgent(directory);
+    const last = agent.state.messages.at(-1);
+    const message: ReferencedUserMessage | undefined =
+      !last || last.role === "assistant"
+        ? {
+            role: "user",
+            content: "Continue the interrupted task from the saved conversation.",
+            timestamp: Date.now(),
+          }
+        : undefined;
+    return this.beginRun(agent, directory, message);
+  }
+
+  private beginRun(
+    agent: Agent,
+    workingDirectory: string | undefined,
+    message?: ReferencedUserMessage,
+    clearDraftFor?: string,
+  ): Promise<void> {
     const sessionId = this.sessionId!;
+    const previous = this.deps.store.checkpoint(sessionId);
+    const runId = randomUUID();
+    const checkpoint: RunCheckpoint = {
+      type: "pilot_run_checkpoint",
+      runId,
+      workingDirectory: workingDirectory ?? null,
+      startIndex: previous?.startIndex ?? agent.state.messages.length,
+      pending: message ? [message] : [],
+      actions: previous?.actions ?? [],
+    };
+    this.deps.store.save(sessionId, agent.state.messages, checkpoint);
+    if (clearDraftFor !== undefined) this.deps.store.saveDraft(clearDraftFor, []);
+    if (previous) this.restoreSelectedSkills(agent.state.messages.slice(previous.startIndex));
     const settings = this.deps.getSettings();
     const approvalMode =
       this.getCurrentSession()?.approvalMode ?? settings.approvalMode ?? "standard";
@@ -588,11 +707,15 @@ export class AgentHost {
     const run: RunningTask = {
       state: {
         sessionId,
-        runId: randomUUID(),
-        workingDirectory: workingDirectory ?? null,
+        runId,
+        workingDirectory: checkpoint.workingDirectory,
         status: "streaming",
       },
       preparation: new AbortController(),
+      checkpoint,
+      initialMessage: message,
+      finishedTools: new Map(),
+      previousActions: new Set(previous?.actions),
       permissions: new PermissionManager(
         (request) => {
           this.sendStatus("waiting_approval");
@@ -613,24 +736,48 @@ export class AgentHost {
     return this.runningPrompt;
   }
 
+  private restoreSelectedSkills(messages: AgentMessage[]): void {
+    for (const message of messages) {
+      if (message.role !== "user") continue;
+      const sections = new Set<string>();
+      for (const part of (message as ReferencedUserMessage).pilotReference?.parts ?? []) {
+        if (part.type !== "mention" || part.kind !== "skill") continue;
+        const body = loadSkillBody(this.deps.skillsDir, part.id);
+        if (body) sections.add(skillSection(part.label, body));
+      }
+      if (sections.size) this.promptSkillInstructions.set(message, [...sections]);
+    }
+  }
+
   private async runPrompt(
     agent: Agent,
-    message: ReferencedUserMessage,
+    message: ReferencedUserMessage | undefined,
     run: RunningTask,
   ): Promise<void> {
     const { preparation } = run;
     let started = false;
     try {
       this.deps.broadcast({ type: "run_started", run: run.state });
-      const externalTools = await this.deps.mcp.tools(
-        run.state.workingDirectory ?? undefined,
-        preparation.signal,
-      );
-      if (preparation.signal.aborted) return;
+      this.sendSessions();
+      const externalTools = await this.deps.mcp
+        .tools(run.state.workingDirectory ?? undefined, preparation.signal)
+        .catch((error: unknown) => {
+          if (preparation.signal.aborted) return [];
+          throw error;
+        });
+      if (preparation.signal.aborted) {
+        const messages = message ? [...agent.state.messages, message] : agent.state.messages;
+        agent.state.messages = messages;
+        this.settle(run.state.sessionId, messages);
+        return;
+      }
       // pi snapshots tool declarations as it starts the prompt, before preparing the request.
       agent.state.tools = [...this.localTools, ...externalTools];
       started = true;
-      await agent.prompt(message);
+      if (message) await agent.prompt(message);
+      else await agent.continue();
+      if (run.persistError) throw run.persistError;
+      agent.state.messages = completeToolResults(agent.state.messages);
       this.settle(run.state.sessionId, agent.state.messages);
     } catch (error) {
       if (started || !preparation.signal.aborted) {
@@ -647,7 +794,12 @@ export class AgentHost {
       this.run = undefined;
       this.runningPrompt = undefined;
       const { runId, sessionId } = run.state;
-      this.deps.broadcast({ type: "status", status: "idle", run: { runId, sessionId } });
+      this.deps.broadcast({
+        type: "status",
+        status: "idle",
+        run: { runId, sessionId },
+        interruptedRun: this.interruptedRunOf(sessionId),
+      });
     }
   }
 
@@ -673,7 +825,12 @@ export class AgentHost {
 
   /** 清空排队中的插话（steer + followUp），状态行撤回入口 */
   clearQueue(ref: RunRef): void {
-    if (!this.selectedRun(ref)) return;
+    const run = this.selectedRun(ref);
+    if (!run) return;
+    this.checkpointRun(run, {
+      ...run.checkpoint,
+      pending: run.checkpoint.pending.filter((message) => message === run.initialMessage),
+    });
     this.agent?.clearAllQueues();
     this.steerCount = 0;
     this.send({ type: "queue", steerCount: 0 });
@@ -811,9 +968,11 @@ export class AgentHost {
   } {
     if (this.sessionId !== sessionId) throw new Error("会话已切换，请重新打开文件变更。");
     const messages =
-      this.agentSessionId === sessionId && this.agent
+      this.agentSessionId === sessionId &&
+      this.agent &&
+      (this.run?.state.sessionId === sessionId || !this.deps.store.checkpoint(sessionId))
         ? this.agent.state.messages
-        : this.deps.store.load(sessionId);
+        : this.deps.store.read(sessionId).messages;
     for (const [index, message] of messages.entries()) {
       if (message.role !== "toolResult") continue;
       const change = readFileChange(message.toolName, message.details);
@@ -841,7 +1000,7 @@ export class AgentHost {
       ...message,
       details: { pilotFileChange: { ...change, summary: reverted } },
     });
-    this.deps.store.save(sessionId, updated);
+    this.deps.store.save(sessionId, updated, this.deps.store.checkpoint(sessionId));
     const event = { type: "file_change" as const, callId: message.toolCallId, change: reverted };
     if (this.agentSessionId === sessionId && this.agent) {
       this.agent.state.messages = updated;
@@ -862,6 +1021,8 @@ export class AgentHost {
     const activeRun = this.run?.state ?? null;
     const ownRun = activeRun?.sessionId === this.sessionId ? this.run : undefined;
     const hasLiveMessages = this.sessionId !== null && this.sessionId === this.agentSessionId;
+    const interruptedRun =
+      !ownRun && this.sessionId ? this.interruptedRunOf(this.sessionId) : undefined;
     return {
       sessionId: this.sessionId,
       composerId: this.composerId,
@@ -869,13 +1030,15 @@ export class AgentHost {
       draftWorkingDirectory: this.draftWorkingDirectory ?? null,
       sessions,
       recentProjects: this.deps.store.listRecentProjects(sessions),
-      messages: hasLiveMessages
-        ? this.uiMessages
-        : this.sessionId
-          ? toUiMessages(this.deps.store.load(this.sessionId), "s")
-          : [],
+      messages:
+        hasLiveMessages && !interruptedRun
+          ? this.uiMessages
+          : this.sessionId
+            ? toUiMessages(this.deps.store.load(this.sessionId), "s")
+            : [],
       status: ownRun?.state.status ?? "idle",
       activeRun,
+      interruptedRun: interruptedRun ?? null,
       pendingPermissions: ownRun?.permissions.listPending() ?? [],
       error: hasLiveMessages ? this.error : null,
       settings: toPublicSettings(this.deps.getSettings()),

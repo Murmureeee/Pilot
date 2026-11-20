@@ -430,6 +430,15 @@ it("holds the run lock while stopping and ignores stop and queue actions from an
   const first = host.prompt("First", a);
   const previous = host.getSnapshot().activeRun!;
   try {
+    const interrupted = new SessionStore(join(profile.path, "sessions"));
+    expect(interrupted.checkpoint(a)).toMatchObject({
+      runId: previous.runId,
+      workingDirectory: previous.workingDirectory,
+    });
+    expect(interrupted.load(a)).toContainEqual(
+      expect.objectContaining({ role: "user", content: "First" }),
+    );
+    expect(interrupted.loadDraft(a)).toEqual([]);
     host.abort(previous);
     host.loadSession(b);
     expect(host.prompt("Second chat", b)).toMatchObject({ sessionId: a, status: "stopping" });
@@ -440,11 +449,15 @@ it("holds the run lock while stopping and ignores stop and queue actions from an
   }
 
   host.loadSession(a);
+  expect(host.getSnapshot().interruptedRun).toBeNull();
   const second = host.prompt("A new run", a);
   const active = host.getSnapshot().activeRun!;
   try {
     expect(active.runId).not.toBe(previous.runId);
     await host.prompt("Queued in A", a);
+    expect(new SessionStore(join(profile.path, "sessions")).load(a).at(-1)).toMatchObject({
+      content: "Queued in A",
+    });
     host.loadSession(b);
     host.clearQueue(active);
     host.loadSession(a);
@@ -453,6 +466,9 @@ it("holds the run lock while stopping and ignores stop and queue actions from an
     expect(host.getSnapshot()).toMatchObject({ status: "streaming", steerCount: 1 });
     host.clearQueue(active);
     expect(host.getSnapshot().steerCount).toBe(0);
+    expect(new SessionStore(join(profile.path, "sessions")).load(a).at(-1)).toMatchObject({
+      content: "A new run",
+    });
   } finally {
     host.abort(active);
     secondPreparation.resolve([]);

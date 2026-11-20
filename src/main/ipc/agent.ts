@@ -23,6 +23,10 @@ export function registerAgentRoutes({ host }: Pick<IpcContext, "host">): void {
     const result = host.prompt(input, composerId, expectedDirectory);
     return result instanceof Promise ? null : result;
   });
+  handle(IPC.agentResume, (_event, run) => {
+    const result = host.resume(run);
+    return result instanceof Promise ? null : result;
+  });
   handle(IPC.agentAbort, (_event, run) => host.abort(run));
 
   handle(IPC.sessionNew, () => host.newSession());

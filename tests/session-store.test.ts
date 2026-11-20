@@ -72,6 +72,51 @@ describe("SessionStore", () => {
     expect(messageText(loaded[1])).toBe("hi there");
   });
 
+  it("recovers a checkpoint with completed tool results, missing results, and accepted input", () => {
+    const { store, dir } = makeStore();
+    const session = store.create(dir);
+    const messages = [
+      { role: "user", content: "Run the checks", timestamp: 1 },
+      {
+        role: "assistant",
+        content: [
+          { type: "toolCall", id: "saved", name: "bash", arguments: { command: "check" } },
+          { type: "toolCall", id: "unknown", name: "write_file", arguments: { path: "output" } },
+        ],
+        timestamp: 2,
+      },
+      {
+        role: "toolResult",
+        toolName: "bash",
+        toolCallId: "saved",
+        content: [{ type: "text", text: "checked" }],
+        isError: false,
+        timestamp: 3,
+      },
+    ] as AgentMessage[];
+    const queued = { role: "user", content: "Include the results", timestamp: 4 } as const;
+    store.save(session.id, messages, {
+      type: "pilot_run_checkpoint",
+      runId: "interrupted",
+      workingDirectory: dir,
+      startIndex: 0,
+      actions: ["recorded-action"],
+      pending: [queued],
+    });
+    const restarted = new SessionStore(dir);
+    const recovered = restarted.load(session.id);
+    expect(restarted.checkpoint(session.id)?.workingDirectory).toBe(dir);
+    expect(recovered.slice(0, 3)).toEqual(messages);
+    expect(recovered[3]).toMatchObject({
+      role: "toolResult",
+      toolCallId: "unknown",
+      isError: true,
+    });
+    expect(recovered.at(-1)).toEqual(queued);
+    restarted.save(session.id, recovered);
+    expect(new SessionStore(dir).checkpoint(session.id)).toBeUndefined();
+  });
+
   it("derives session title from the first user message", () => {
     const { store } = makeStore();
     const session = store.create();

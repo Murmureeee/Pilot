@@ -60,6 +60,7 @@ interface AgentStore extends AgentUiState {
     workingDirectory: string | null,
     composerId: string,
   ): Promise<boolean | ActiveRun>;
+  resumeRun(run: RunRef): Promise<void>;
   saveDraft(composerId: string, draft: ComposerDraft): Promise<void>;
   updateSessionSettings(input: SessionSettingsInput): Promise<void>;
   abort(run: RunRef): void;
@@ -137,10 +138,12 @@ export function selectProjectDirectory(
 export function selectWorkingDirectory(
   state: Pick<
     AgentStore,
-    "sessionId" | "draftWorkingDirectory" | "sessions" | "settings" | "activeRun"
+    "sessionId" | "draftWorkingDirectory" | "sessions" | "settings" | "activeRun" | "interruptedRun"
   >,
 ): string | null {
   if (state.activeRun?.sessionId === state.sessionId) return state.activeRun.workingDirectory;
+  if (state.interruptedRun?.sessionId === state.sessionId)
+    return state.interruptedRun.workingDirectory;
   return selectProjectDirectory(state) ?? state.settings?.workingDirectory ?? null;
 }
 
@@ -160,6 +163,7 @@ function sessionSnapshot(
     messages: snapshot.messages,
     status: snapshot.status,
     activeRun: snapshot.activeRun,
+    interruptedRun: snapshot.interruptedRun,
     settings: snapshot.settings,
     error: snapshot.error,
     usage: snapshot.usage,
@@ -251,6 +255,16 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     if (get().composerId !== composerId || get().composerDraft !== composerDraft) return false;
     set({ composerDraft: [] });
     return true;
+  },
+
+  resumeRun: async ({ sessionId, runId }) => {
+    try {
+      await window.pi.agentResume({ sessionId, runId });
+    } catch (cause) {
+      if (get().interruptedRun?.runId === runId) {
+        set({ error: cause instanceof Error ? cause.message : String(cause) });
+      }
+    }
   },
 
   saveDraft: async (composerId, draft) => {

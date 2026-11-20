@@ -1,6 +1,6 @@
 // @env browser
 import { Activity, Fragment, useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { ArrowDownIcon, SquareTerminalIcon } from "lucide-react";
+import { ArrowDownIcon, RotateCcwIcon, SquareTerminalIcon } from "lucide-react";
 import { AssistantReply } from "@renderer/components/ai/assistant-reply";
 import { Composer } from "@renderer/components/ai/composer";
 import { MessageJump } from "@renderer/components/ai/message-jump";
@@ -47,6 +47,8 @@ export function ChatView({ workingDirectory }: { workingDirectory: string | null
   const busy = useAgentStore((s) => s.status !== "idle");
   const permission = useAgentStore((s) => s.pendingPermissions[0]);
   const activeRun = useAgentStore((s) => s.activeRun);
+  const interruptedRun = useAgentStore((s) => s.interruptedRun);
+  const resumeRun = useAgentStore((s) => s.resumeRun);
   const error = useAgentStore((s) => s.error);
   const projectError = useAgentStore((s) => s.projectError);
   const settings = useAgentStore((s) => s.settings);
@@ -220,6 +222,25 @@ export function ChatView({ workingDirectory }: { workingDirectory: string | null
             <p className="mt-1 text-xs">
               {t("检查网络连接或模型设置，然后重新发送消息。", locale)}
             </p>
+          </div>
+        )}
+        {interruptedRun && (
+          <div className="bg-muted/60 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2">
+            <output className="min-w-0">
+              <span className="block text-sm font-medium">{t("已中断", locale)}</span>
+              <span className="text-muted-foreground block text-xs">
+                {t("可以从已保存的消息和工具结果继续。", locale)}
+              </span>
+            </output>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={activeRun !== null}
+              onClick={() => void resumeRun(interruptedRun)}
+            >
+              <RotateCcwIcon data-icon="inline-start" />
+              {t("继续任务", locale)}
+            </Button>
           </div>
         )}
         {permission && activeRun && (

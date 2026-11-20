@@ -59,6 +59,7 @@ export function scanSkills(skillsDir: string, enabledIds: readonly string[]): Sk
 
 /** 读取单个技能的正文（host 注入 systemPrompt 用；不存在返回 null） */
 export function loadSkillBody(skillsDir: string, id: string): string | null {
+  if (!id || id === "." || id === ".." || basename(id) !== id) return null;
   const skillFile = join(skillsDir, id, "SKILL.md");
   if (!existsSync(skillFile)) return null;
   try {

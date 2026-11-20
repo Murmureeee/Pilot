@@ -13,6 +13,7 @@ export const IPC = {
   appCheckForUpdates: "app:check-for-updates",
   appInstallUpdate: "app:install-update",
   agentPrompt: "agent:prompt",
+  agentResume: "agent:resume",
   agentSearchWorkspace: "agent:search-workspace",
   agentPreviewWorkspaceReference: "agent:preview-workspace-reference",
   agentAbort: "agent:abort",
@@ -230,6 +231,10 @@ export interface ActiveRun extends RunRef {
   workingDirectory: string | null;
 }
 
+export interface InterruptedRun extends RunRef {
+  workingDirectory: string | null;
+}
+
 export interface PermissionRequest {
   type: "permission_request";
   requestId: string;
@@ -246,7 +251,7 @@ export interface UsageTotals {
 }
 
 export type AgentRunEvent =
-  | { type: "status"; status: AgentStatus }
+  | { type: "status"; status: AgentStatus; interruptedRun?: InterruptedRun }
   | { type: "messages"; messages: UiMessage[] }
   | { type: "user_message"; message: UiMessage }
   | { type: "assistant_start"; id: string }
@@ -430,6 +435,7 @@ export interface Snapshot {
   messages: UiMessage[];
   status: AgentStatus;
   activeRun: ActiveRun | null;
+  interruptedRun: InterruptedRun | null;
   pendingPermissions: PermissionRequest[];
   error: string | null;
   settings: PublicSettings;

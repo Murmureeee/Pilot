@@ -336,4 +336,17 @@ describe("agent-events adapter", () => {
     expect(state.status).toBe("waiting_approval");
     expect(state.error).toBe("boom");
   });
+
+  it("keeps the interrupted checkpoint on its chat and clears it when the task resumes", () => {
+    const checkpoint = { ...run, workingDirectory: "E:/a" };
+    const ended = { type: "status", status: "idle", interruptedRun: checkpoint } as const;
+    const state = initialRunUiState();
+    expect(applyRunEvent({ ...state, sessionId: "b" }, ended).interruptedRun).toBeNull();
+    const interrupted = applyRunEvent(state, ended);
+    expect(interrupted.interruptedRun).toEqual(checkpoint);
+    const next = { ...checkpoint, runId: "resume", status: "streaming" } as const;
+    expect(
+      applyAgentEvent(interrupted, { type: "run_started", run: next }).interruptedRun,
+    ).toBeNull();
+  });
 });

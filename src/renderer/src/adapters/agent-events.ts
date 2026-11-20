@@ -3,6 +3,7 @@
 import type {
   ActiveRun,
   AgentStatus,
+  InterruptedRun,
   PermissionRequest,
   SessionMeta,
   UsageTotals,
@@ -14,6 +15,7 @@ import { applyMessageEvent } from "../../../shared/message-events";
 export interface AgentUiState {
   status: AgentStatus;
   activeRun: ActiveRun | null;
+  interruptedRun: InterruptedRun | null;
   messages: UiMessage[];
   sessionId: string | null;
   error: string | null;
@@ -31,6 +33,7 @@ export function initialAgentUiState(): AgentUiState {
   return {
     status: "idle",
     activeRun: null,
+    interruptedRun: null,
     messages: [],
     sessionId: null,
     error: null,
@@ -50,7 +53,9 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
     return {
       ...state,
       activeRun: event.run,
-      ...(belongsToSelection ? { status: event.run.status, error: null } : {}),
+      ...(belongsToSelection
+        ? { status: event.run.status, error: null, interruptedRun: null }
+        : {}),
     };
   }
 
@@ -65,6 +70,7 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
         ...(belongsToSelection
           ? {
               status: event.status,
+              interruptedRun: event.status === "idle" ? (event.interruptedRun ?? null) : null,
               pendingPermissions:
                 event.status === "waiting_approval" ? state.pendingPermissions : [],
               steerCount: event.status === "idle" ? 0 : state.steerCount,

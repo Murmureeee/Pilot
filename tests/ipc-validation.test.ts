@@ -38,6 +38,7 @@ const valid: Record<IpcChannel, unknown[]> = {
     { path: "src/报告.md", workingDirectory: "E:/projects/Pilot" },
   ],
   [IPC.agentAbort]: [run],
+  [IPC.agentResume]: [run],
   [IPC.agentClearQueue]: [run],
   [IPC.agentGetSnapshot]: [],
   [IPC.sessionNew]: [],
@@ -162,6 +163,7 @@ describe("IPC argument validation", () => {
   it.each([
     [IPC.toolPermissionRespond, [run, sessionId, "later"]],
     [IPC.agentAbort, [{ sessionId }]],
+    [IPC.agentResume, [{ sessionId, runId: "other" }]],
     [IPC.agentClearQueue, [{ ...run, runId: "stale" }]],
     [IPC.sessionLoad, ["not-a-session-id"]],
     [IPC.sessionSelectProject, ["zh", "C:/projects/Pilot"]],

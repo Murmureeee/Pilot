@@ -15,10 +15,17 @@ import { visibleMessageText } from "../../shared/mentions";
 import { applyPlanUpdate } from "../../shared/plan";
 import { readFileChange } from "../workspace/file-changes";
 import { legacyMentionParts } from "./mentions";
+import { completeToolResults } from "./recovery";
 import { labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
-import type { ReferencedUserMessage, SessionIndex, TimedAssistantMessage } from "./types";
+import type {
+  ReferencedUserMessage,
+  RunCheckpoint,
+  SessionIndex,
+  SessionRecord,
+  TimedAssistantMessage,
+} from "./types";
 
 export function messageText(message: AgentMessage): string {
   const content = (message as { content?: unknown }).content;
@@ -146,6 +153,7 @@ export function toUiMessages(
 
 export class SessionStore {
   private index: SessionIndex = { sessions: [] };
+  private readonly checkpoints = new Map<string, RunCheckpoint | null>();
 
   constructor(private readonly dir: string) {
     mkdirSync(dir, { recursive: true });
@@ -350,38 +358,43 @@ export class SessionStore {
     const path = this.filePath(id);
     if (existsSync(path)) rmSync(path, { force: true });
     rmSync(this.draftPath(id), { force: true });
+    this.checkpoints.delete(id);
     this.index.sessions = this.index.sessions.filter((s) => s.id !== id);
     this.writeIndex();
   }
 
   load(id: string): AgentMessage[] {
+    const { messages, checkpoint } = this.read(id);
+    return checkpoint ? [...completeToolResults(messages), ...checkpoint.pending] : messages;
+  }
+
+  checkpoint(id: string): RunCheckpoint | undefined {
+    if (!this.checkpoints.has(id)) return this.read(id).checkpoint;
+    return this.checkpoints.get(id) ?? undefined;
+  }
+
+  read(id: string): SessionRecord {
     const path = this.filePath(id);
-    if (!existsSync(path)) return [];
-    const lines = readFileSync(path, "utf-8")
-      .split("\n")
-      .filter((l) => l.trim().length > 0);
+    const lines = existsSync(path) ? readFileSync(path, "utf-8").split("\n") : [];
     const messages: AgentMessage[] = [];
+    let checkpoint: RunCheckpoint | undefined;
     for (const line of lines) {
+      if (!line.trim()) continue;
       try {
-        messages.push(JSON.parse(line) as AgentMessage);
+        const value = JSON.parse(line) as RunCheckpoint | AgentMessage;
+        if ("role" in value) messages.push(value);
+        else if (value.type === "pilot_run_checkpoint") checkpoint = value;
       } catch {
         console.error(`[session] 跳过损坏行: ${id}`);
       }
     }
-    return messages;
+    this.checkpoints.set(id, checkpoint ?? null);
+    return { messages, checkpoint };
   }
 
-  save(id: string, messages: AgentMessage[]): SessionMeta {
-    // NFR-4：临时文件 + rename 原子重写整个转录（Phase 1 转录小，重写成本可忽略）
-    const tmp = `${this.filePath(id)}.tmp`;
-    writeFileSync(
-      tmp,
-      messages.map((m) => JSON.stringify(m)).join("\n") + (messages.length > 0 ? "\n" : ""),
-      "utf-8",
-    );
-    renameSync(tmp, this.filePath(id));
-
-    const firstUser = messages.find((m) => m.role === "user");
+  save(id: string, messages: AgentMessage[], checkpoint?: RunCheckpoint): SessionMeta {
+    this.writeTranscript(id, messages, checkpoint);
+    const firstUser = messages.find((m) => m.role === "user") ?? checkpoint?.pending[0];
     const title = firstUser
       ? visibleMessageText(messageParts(firstUser)).slice(0, 24) || "新会话"
       : "新会话";
@@ -400,6 +413,17 @@ export class SessionStore {
     }
     this.writeIndex();
     return meta ?? { id, title, createdAt: Date.now(), updatedAt: Date.now() };
+  }
+
+  writeTranscript(id: string, messages: AgentMessage[], checkpoint?: RunCheckpoint): void {
+    // The checkpoint and its transcript commit together, including the transition to a finished run.
+    const records = checkpoint ? [checkpoint, ...messages] : messages;
+    const path = this.filePath(id);
+    const tmp = `${path}.tmp`;
+    const contents = records.map((record) => JSON.stringify(record) + "\n").join("");
+    writeFileSync(tmp, contents, { encoding: "utf-8", flush: true });
+    renameSync(tmp, path);
+    this.checkpoints.set(id, checkpoint ?? null);
   }
 }
 
