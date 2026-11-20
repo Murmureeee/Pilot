@@ -3,11 +3,16 @@ name: Desktop CI
 on:
   push:
     branches: [main]
-    paths-ignore: ['**.md']
+    paths-ignore: ['**/*.md']
   pull_request:
     branches: [main]
+    paths-ignore: ['**/*.md']
   workflow_dispatch:
     inputs:
+      build_test_packages:
+        description: Build Windows and Linux test packages for Actions
+        type: boolean
+        default: false
       verify_installation:
         description: Verify a clean install and HTTPS update on Windows
         type: boolean
@@ -25,8 +30,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: desktop-ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
   windows:
@@ -86,14 +91,14 @@ jobs:
         run: node scripts/verify-windows.mjs
 
       - name: Build Windows test installer
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !inputs.verify_installation && !inputs.prepare_release && !inputs.verify_published_update
+        if: inputs.build_test_packages && !inputs.prepare_release
         run: pnpm package:win
 
       - name: Upload Windows test installer
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !inputs.verify_installation && !inputs.prepare_release && !inputs.verify_published_update
+        if: inputs.build_test_packages && !inputs.prepare_release
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: Pilot-windows-x64-${{ github.sha }}
+          name: Pilot-windows-x64-${{ github.run_id }}-${{ github.run_attempt }}
           path: dist/*-x64-setup.exe
           if-no-files-found: error
           retention-days: 7
@@ -227,7 +232,7 @@ jobs:
           compression-level: 0
 
   linux:
-    if: inputs.prepare_release || (!inputs.verify_installation && !inputs.verify_published_update)
+    if: inputs.build_test_packages || inputs.prepare_release
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
@@ -271,7 +276,6 @@ jobs:
           bash scripts/verify-linux-package.sh
 
       - name: Stage verified Linux packages
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ steps.package.outputs.artifact }}
