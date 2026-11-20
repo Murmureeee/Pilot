@@ -1,395 +1,105 @@
-# Pilot · 开发计划
+# Pilot 开发路线图
 
-> 基于 pi（earendil-works/pi）v1.5.x SDK 构建的桌面 AI Agent 应用。
-> 本文档记录当前实现、开发顺序和验收标准。依赖以 `pnpm-lock.yaml` 为准。
+Pilot 是基于 pi SDK 的本地 AI 编程桌面客户端。面向开发者的核心流程是打开项目、交代任务、审查和验证代码改动，再将选中的改动提交到 Git。桌面界面负责让当前项目、Agent 正在做的事、待审批的操作和验证结果始终可见。
 
-## 0. 当前进度
+## 当前进度
 
-Pilot 已具备日常文本对话、会话恢复、工具审批、Provider 设置、技能管理和按项导入 Codex / Claude Code 的能力。Windows x64 v0.1.1 已在 GitHub Releases 发布，云端新装和公开 HTTPS 更新验收均已通过。本地滚动日志已通过隔离环境验收。Ollama 和 LM Studio 仍待真实推理验收，界面多语言接下来补齐繁体中文。
-
-开发顺序为 [Windows 预发布](#第一步-windows-预发布)、[界面多语言](#第二步-界面多语言)、[本地定时任务](#第三步-本地定时任务)和[其余待办](#后续工作)。
-
----
-
-## 1. 技术栈定稿
-
-### 1.1 核心栈
-
-| 层 | 选型 | 版本 | 说明 |
-|----|------|------|------|
-| 语言 | TypeScript | 7.0.2 | 通过 `src/shared/` 的类型共享 IPC 契约，pi 类型留在主进程 |
-| 构建工具 | Node.js / pnpm | 26.13.0 / 11.21.0 | Windows CI 固定版本，按锁文件安装 |
-| 桌面壳 | Electron | 45.3.3 | 使用内置 Node 运行 Agent，渲染层使用 `contextIsolation` 和 sandbox |
-| 工程脚手架 | electron-vite | 6.0.0 | main/preload/renderer 三段构建一体化，锁 Vite 版本（当前 Vite 8.3.8） |
-| 前端框架 | React | 19.3.1 | AI Elements 要求 React 19 |
-| 样式 | Tailwind CSS | 4.3.5 | shadcn/ui 的硬依赖（CSS Variables 模式） |
-| 组件库 | shadcn/ui + AI Elements | registry | **vendor 进项目**（代码归仓库，非 npm 依赖）；AI Elements 用 shadcn/ui 官方版 |
-| 状态管理 | zustand | 5.1.0 | pi 事件流 → store 单向同步 |
-| Agent 核心 | `@earendil-works/pi-agent-core` | 1.5.2 | Agent 类、事件流、工具执行、steer/followUp |
-| LLM API | `@earendil-works/pi-ai` | 1.5.2 | 30+ provider（含 ZAI/MiniMax/Moonshot/Qwen 国内线 + Ollama 本地）、usage/cost 统计 |
-| 工具 Schema | `@earendil-works/pi-schema` | 1.5.2 | `obj()/str()` 构建 AgentTool 参数并类型化 |
-| MCP | `@earendil-works/pi-mcp` | 1.5.2 | stdio / Streamable HTTP 外部工具 |
-| 会话存储 | JSONL 文件 | — | 每会话一文件，与 pi 官方风格一致；不引入 SQLite（需要查询再说） |
-| 密钥存储 | Electron safeStorage | — | 系统钥匙串加密，密钥永不进渲染层 |
-
-### 1.2 工程质量工具
-
-| 用途 | 选型 | 版本 | 说明 |
-|------|------|------|------|
-| Lint | oxlint | 1.94.0 | TS/React hooks/imports/无障碍规则 |
-| 格式化 | oxfmt | 0.79.0 | pre-1.0，接受格式 churn；不使用 ESLint + Prettier |
-| 单测 | vitest | 5.1.0 | 适配层、会话存储、权限逻辑必须有测试 |
-| 死代码检查 | knip | 6.45.1 | 未用文件/导出/依赖 |
-| 打包 | electron-builder | 26.18.0 | win / mac / linux 三平台 |
-| 自动更新 | electron-updater | 6.8.11 | Windows NSIS |
-| CI 门禁 | `pnpm run ci` / GitHub Actions | — | 本地快速检查与 Windows 八步门禁见 `AGENTS.md` |
-
-### 1.3 代码规范（执行约定）
-
-- 类型一律放 `types.ts` / `types/*.ts`；常量放 `constants.ts`
-- 显式 return type；避免复杂内联类型
-- 显式 import，关闭一切 auto-import
-- 环境相关文件头部标注 `// @env node` / `// @env browser`
-- 注释只写"为什么"，不写"怎么做"
-- 提交前按 `AGENTS.md` 的顺序格式化并验证，记录测试运行与安装包来自哪次提交。
-
-### 1.4 明确不使用 / 按需引入
-
-| 项 | 决策 |
-|----|------|
-| react-markdown + shiki | ❌ 不用，`Response`（内置 Streamdown）完全替代 |
-| ESLint / Prettier | ❌ 不用（oxlint + oxfmt 替代） |
-| virtua 虚拟列表 | ⏸ 按需：仅当需要数千条消息无限滚动时引入（Phase 4 评估） |
-| SQLite / better-sqlite3 | ⏸ 按需 |
-| Next.js / Vercel AI SDK | ❌ 不用（组件只吃 props，不搬模板） |
-| Tauri | ❌ 不用（pi 需 Node 运行时，Electron 零胶水） |
-
----
-
-## 2. 系统架构
-
-```text
-渲染进程 React · Zustand · i18next
-    │ window.pi（preload 的类型化 API）
-    ▼
-主进程 IPC（校验应用窗口、顶层 frame 和参数）
-    │ 窗口 / Agent 与会话 / 设置 / 外部集成
-    ▼
-agent-host · settings · workspace · external-import · updater
-```
-
-渲染层通过 `window.pi` 发起请求，并通过 `UiAgentEvent` 和更新状态事件接收结果。主进程把 pi 的事件转为应用契约，渲染层再把契约拼成可显示的消息。
-
-`ipc/index.ts` 负责注册各组路由。`ipc/transport.ts` 负责窗口来源校验、参数校验和事件投递。持久化配置和加解密属于 `main/settings`，公开配置由 `toPublicSettings` 构造。应用窗口在加载渲染页前注册，销毁后移出事件接收列表。
-
-**pi 事件 → AI Elements 组件映射（适配层职责）**
-
-| pi 侧 | AI Elements 组件 |
-|--------|------------------|
-| `message_update(text_delta)` → 流式正文 | `Response` |
-| thinking 块 | `Reasoning` |
-| `tool_execution_start/update/end` | `Tool` / `Terminal`（bash）/ `Stack Trace`（失败） |
-| `beforeToolCall` 拦截 | `Confirmation` |
-| `steer()` / `followUp()` 队列 | `Queue` |
-| `state.model` + `thinkingLevel` | `Model Selector` |
-| usage / cost / 上下文占用 | `Context` |
-| 任务步骤 | `Plan` / `Task` / `ChainOfThought` |
-| 文件变更 | `File Tree` |
-| 滚动跟随 | `Conversation`（不含虚拟化） |
-| 输入框、附件、发送/停止 | `Prompt Input` |
-| 引用来源 | `Sources` / `Inline Citation` |
-
----
-
-## 3. 项目结构
-
-```text
-Pilot/
-├─ resources/                     # 应用图标
-├─ scripts/                       # 打包、Windows 验证和发布
-├─ src/
-│  ├─ main/
-│  │  ├─ index.ts                 # 应用生命周期、窗口和依赖装配
-│  │  ├─ ipc/                     # transport、validation、按职责注册的路由
-│  │  ├─ settings/                # 私有存储类型、凭据、设置与 MCP 配置
-│  │  ├─ workspace/               # 工作目录校验、引用搜索、命令环境
-│  │  ├─ agent-host/              # pi 生命周期、模型、权限、工具与会话
-│  │  ├─ external-import/         # 来源发现、预览、导入
-│  │  └─ updater.ts               # 更新状态与安装
-│  ├─ preload/index.ts            # contextBridge 暴露 window.pi
-│  ├─ shared/                     # IPC 契约及跨进程可用的纯逻辑
-│  └─ renderer/src/
-│     ├─ stores/agent.ts           # 会话快照、界面状态和 API 调用
-│     ├─ adapters/agent-events.ts  # UiAgentEvent 转为渲染状态
-│     ├─ views/                   # 会话与设置页面
-│     │  └─ settings/             # 常规、提供方、个性化和数据面板
-│     ├─ components/              # 聊天组件与通用 UI
-│     ├─ hooks/                   # 渲染层交互
-│     └─ lib/                     # 界面逻辑、i18n 和语言资源
-└─ tests/                         # 契约、路由、配置、会话和工具的回归测试
-```
-
----
-
-## 4. 开发路线图
-
-### Phase 0 · 工程地基（约 0.5–1 周）
-
-**目标**：空壳可运行，工具链全绿，pi 兼容性验证完成。
-
-- [x] electron-vite 脚手架（React + TS），Electron 45 初始化
-- [x] Tailwind v4 + shadcn/ui 基础积木安装 —— 实际落在 **base-rhea 世代（Base UI 原语 `@base-ui/react`）**，AI Elements 模式文档全部基于此世代；AI Elements 上层组件（chat/tool/confirmation 等）为按 Phase 取用的复制式模式，非一次性安装
-- [x] oxlint + oxfmt + vitest + knip 接入，`ci` 脚本就位
-- [x] `shared/contract.ts` 建立，preload 空通道 ping-pong 打通
-- [x] **验证 pi 在 Electron 主进程 Node 上可运行**：Electron 45 内置 **Node 24.22.3** ≥ 22.19，faux provider 完整跑通一轮（agent_start → … → agent_end，流式文本正确）→ **sidecar 方案取消**
-- [x] 渲染进程 CSP、contextIsolation、sandbox 配置到位
-
-> 运维注记：Electron 二进制下载在国内网络需 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/` 重跑 `node node_modules/electron/install.js`；重装依赖后若 `node_modules/electron/path.txt` 丢失按此恢复。zustand 与 pi-schema 暂未进 package.json（Phase 1/2 用到时再加回，保持 knip 诚实）。
-
-**验收**：`pnpm ci` 全绿；窗口可开；IPC 往返正常；`new Agent()` 在主进程实例化成功并完成一次 `prompt("hi")` 冒烟测试（结果打到日志即可，UI 未接）。
-
-### Phase 1 · 核心链路 MVP（约 1 周）
-
-**目标**：最短路径跑通「输入 → 流式渲染 → 会话恢复」。
-
-- [x] agent-host：`createModels()` + 单 provider（Anthropic + 任一 OpenAI 兼容端）+ API key 从 safeStorage 读 —— 实现走「直连 API 实现模块」路线（pi-ai `api/anthropic-messages` / `api/openai-completions`），绕过 provider 凭据体系；faux 作为开箱默认 provider（60 tok/s 限速流式 + 回显）
-- [x] IPC：prompt / abort / 事件推送（`AGENT_EVENT_CHANNEL` 单向推送 + invoke 请求通道）
-- [x] 渲染层：ChatView + `Response`（Streamdown 流式 Markdown）+ 发送/停止状态切换 + MessageScroller 吸底
-- [x] adapters：`message_update(text_delta)` → zustand store 增量渲染（纯函数 reducer，有单测）+ 光标
-- [x] `agent_end` 时 JSONL 落盘；启动时可载入最近会话（原子写 tmp+rename；agent_end 时以转录为准全量校准 UI）
-
-**验收**：✅ 2026-11-19 人工验收通过——流式渲染、停止中断、重启恢复全部符合预期。附带修复：MessageScroller 需要显式 Provider 包裹（空白屏根因）；渲染层 console 已转发主进程日志（FR-9.1 种子）。
-
-### Phase 2 · 工具系统与权限（约 1 周）
-
-**目标**：Agent 能真正干活，且每一步都在用户掌控下。
-
-- [x] 6 个内置工具：read_file / write_file / edit_file / bash / glob / grep（pi-schema 定义，含 Windows 路径与 shell 适配）—— bash 走 PowerShell（UTF-8 输出）+ 超时/中止 + 流式 stdout；grep/glob 自实现递归扫描（跳过 node_modules/.git）；工具 cwd = 用户主目录（Phase 3 设置项化）
-- [x] `beforeToolCall` 权限门：弹窗 [本次允许 / 本会话总是 / 总是允许 / 拒绝]，规则持久化 —— 读类（read_file/glob/grep）默认放行；规则 = {toolName, pathPrefix?}（会话内存 + settings.toolRules 全局持久化）
-- [x] 工具卡片 UI：Trace 线状态机（排队/运行/完成/失败）+ 可折叠参数/输出详情 + 失败默认展开
-- [x] steer（插话）：运行中输入自动转 `agent.steer()` + 队列计数展示；abort 时权限 pending 全部按拒绝结算（防卡死）
-- [x] 状态栏：token（input+output+cache）/ 费用（usage.cost.total 累计）/ 等待审批状态
-
-**验收**：让 Agent "读取某目录并重写一个文件"——全程工具卡片可见、可审批、可中断；工具抛错时卡片显示失败详情且模型收到 isError。（faux 触发词「演示」→ 脚本化 write_file 工具调用，覆盖弹窗→卡片→收尾全链路；机制层已由 smoke + tools/permissions/adapter 单测验证，交互待人工验收）
-
-### Phase 3 · 完整产品 UI（约 1–2 周）
-
-**设计基准（2026-11-19）**采用 pi 的蓝灰色。历史导航、侧栏开关和菜单集中在顶部左侧，右边留出拖拽区域。原生窗控和左侧图标栏沿用窗口底色。侧栏面板和主区共用一个圆角外框，分隔线从内容区开始。会话标题放在窗口工具栏下方的主区首行，与左栏应用名称同排。空白会话的欢迎标题和输入框居中排列。有消息时输入框固定在底部，和消息共用对话列。设置导航按应用和集成分组，当前条目右侧显示勾选。
-
-**目标**：从"能用的 demo"到"能日常用的应用"。
-
-- [x] 会话侧栏：列表 / 重命名 / 删除 / 新建；自动标题（首条用户消息）—— 重命名走行内输入（titleCustom 保护，自动标题不再覆盖）；删除当前会话回草稿态；搜索由 FR-4.13 命令面板承担
-- [x] 设置页支持多个提供方、API Key、各自的模型列表和可见思考档位。聊天输入框可切换当前提供方的模型和启用的档位。
-- [x] `Reasoning` 思考块流式折叠 —— thinking_start/delta 事件 + 独立 part；流式自动展开、结束自动折叠，转录恢复同样保留思考块
-- [x] 首次启动引导支持选择提供方、输入连接信息和确认模型。内置演示模型无需密钥即可完成。
-- [x] Skills 管理（本地导入 + 启停注入）与个性化（人设 / 自定义指令 / 每会话覆盖）—— ✅ 设置页「个性化」「技能」两分区 + 右键「会话指令」覆盖；注入顺序 = 应用提示词 → 人设（会话覆盖优先）→ 技能 sections
-- [x] 设置「常规」中的外观与语言支持中文和 English 即时切换并在重启后恢复。
-- [x] 模型可用 `update_plan` 维护任务步骤。同一轮更新当前计划，会话重开后恢复。内置演示模型可发送「计划演示」体验。
-- [x] 设置「常规」中的工作环境支持选择工作目录并切换 Windows 的 PowerShell / Git Bash。设置在下一次运行时生效。
-- [x] Markdown 链接拦截 → 默认浏览器打开 —— Phase 0 已实现（setWindowOpenHandler 拒绝新窗 + http(s) 走 shell.openExternal）
-- [x] 空状态、错误态、断网重试提示 —— 空态居中大标题 + 引导卡；错误条回显（含模型请求失败），重发即重试
-
-**验收**：全新机器上安装后，不看任何文档即可完成引导并开始日常使用；切换模型/思考等级对下一轮对话即时生效；启用一个技能后，新会话可观察到行为变化；自定义人设在全局与单会话两种粒度均生效。
-
-**Windows 开发验证（2026-11-19）**：完成八步验证，84 项测试通过。隔离配置中复核了侧栏折叠、窄窗布局、双语切换、首次配置、任务计划恢复和工作目录下的审批写入。
-
-### Phase 4 · 产品化
-
-- [x] Windows x64 NSIS 已通过临时目录安装和卸载。
-- [x] Windows NSIS 自动更新。更新检查和下载状态显示在「帮助 → 关于 Pilot」，用户确认后退出并安装。已用本地更新源完成 0.1.0 → 0.1.1 实际升级。
-- [x] 本地模型接入。Ollama 和 LM Studio 预设支持免密钥配置。已用本地协议桩验证模型目录、连通性测试、端点切换和流式对话，实际模型推理待验收。
-- [x] MCP 接入（`pi-mcp` → AgentTool 桥）和服务配置。Windows 安装版已验证 stdio / Streamable HTTP 工具发现、独立启停、审批拒绝与允许、环境变量加密以及工具卡片恢复。
-- [x] 设置「导入」集中提供技能、MCP 服务和插件组件的导入弹窗。先预览 Codex 和 Claude Code 的用户与项目配置，勾选并确认后导入所选项目。插件预览列出可导入的技能和 MCP 配置。
-- [x] 输入框支持 / 快捷操作和 @ 文件引用。左侧 + 可点选同一工作目录的文件和文件夹。Windows 窄窗口验收覆盖键盘选择、中文搜索、移除引用和会话恢复（FR-4.16–FR-4.18）。
-
-**Windows 安装版验收（2026-11-19）**通过首次引导、工作目录内的拒绝与允许写入、技能启停持久化和重启后会话恢复。独立配置首次启动到可交互约 1.27 秒。500 条消息滚动的帧间隔 P95 为 18.2 毫秒（175 帧），刻度联动与跳转正常。长回复的 120 段文字增量全部渲染，增量到渲染帧的 P95 为 31.8 毫秒，最大 32.3 毫秒。八步验证通过，104 项自动化测试全绿。
-
-#### 第一步 Windows 预发布
-
-| 状态 | 工作 | 验收标准 |
+| 范围 | 已有能力 | 下一步 |
 | --- | --- | --- |
-| 已验收 | GitHub Actions 与测试安装包（FR-8.5） | 推送代码到 `main` 或更新指向 `main` 的 PR 时自动执行 Windows 八步验证。仅修改 Markdown 跳过自动运行。需要安装包时手动运行 `build_test_packages`，产物保留 7 天。[默认检查验证记录](https://github.com/Murmureeee/Pilot/actions/runs/44671592973) |
-| 已验收 | Pilot 新装与从旧版升级（FR-8.2 / FR-8.3） | Windows runner 验证 Pilot 0.1.1 新装、演示对话、配置向导和卸载。从 `ad9600e` 重建采用 `pi Desktop` 发行标识的 0.1.0 兼容包。0.1.1 自动识别原安装路径，保留会话、审批模式、自定义指令、界面语言和启用的技能，原会话可继续。测试目录已清理。[安装验收记录](https://github.com/Murmureeee/Pilot/actions/runs/44536855149) |
-| 已验收 | 正式 HTTPS 更新源（FR-8.6） | Windows runner 从公开地址下载 v0.1.1 的清单、安装包和 blockmap，SHA-256 与发布资产一致，安装包的 SHA-512 与清单一致。配置公开更新源的 0.1.0 兼容包下载后普通退出仍保留旧版，经确认安装并重启后进入 0.1.1，原会话、设置、语言和技能均已恢复。测试下载和目录已清理。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.1.1) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/44561428215) |
-| 待验收 | 真实 Ollama 与 LM Studio | 两个本地服务分别发现模型、通过连接检查、完成一轮流式对话。记录服务版本和模型 ID，连接失败和无模型有明确反馈。 |
-| 已验收 | 本地滚动日志（FR-9.1） | 主进程、渲染层和更新状态写入本地诊断日志，最多保留 3 个 1 MiB 文件。在「设置 → 数据管理」即时改级别、关闭记录或打开日志目录。已验证轮转、错误内容过滤、日志级别在重启后恢复和写盘失败时继续运行。 |
+| 对话与上下文 | 流式 Markdown、思考与工具轨迹、停止和插话、任务计划、JSONL 会话恢复、会话标题搜索、`@` 文件引用和 `/` 快捷命令。 | 绑定项目并保存运行中的任务，补齐全文检索、长会话压缩和图片附件。 |
+| 权限与文件 | 三种权限模式、可撤销的授权规则、输入区审批卡。支持依次处理多个请求，处理后恢复草稿。内置写入和编辑记录文本文件的逐行 diff，支持文件导航与逐文件撤销。 | 将审批与运行关联。用 Git 补齐命令、代码生成、删除和重命名的变更审查。 |
+| 模型与集成 | Anthropic、OpenAI Responses、OpenAI 兼容端点和内置演示模型。已有模型目录、连通性测试、Ollama / LM Studio 预设、本地技能、stdio 和 Streamable HTTP MCP，以及 Codex / Claude Code 技能和 MCP 导入。 | 验收真实本地模型的流式回复和工具调用，补齐模型能力提示与连接错误处理。 |
+| 桌面与发行 | 简体中文和 English、亮色与暗色、本地诊断日志。Windows x64 `v0.1.1` 已发布并通过新装、卸载及公开 HTTPS 更新验收。Linux x64 的 AppImage 和 `.deb` 已成功构建并通过启动与 Agent 冒烟。 | 复验 Linux 桌面安装与升级，交付 macOS 安装包和平台签名。 |
 
-在 Actions 手动运行构建工作流时，`build_test_packages` 生成 Windows 和 Linux 测试包，`verify_installation` 使用隔离源复验 Windows 新装和 HTTPS 升级，`prepare_release` 验收两个平台的同版本产物并准备 GitHub Release 草稿，`verify_published_update` 复验公开 Windows 更新链路。
+- 已在 Windows 隔离实例中验证输入区审批卡的命令展开、键盘允许与拒绝、草稿恢复，以及浅色和 720 px 深色布局。[审批卡实现](./src/renderer/src/components/ai/permission-card.tsx)
+- Windows 发布及升级记录。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.1.1) · [安装验收](https://github.com/Murmureeee/Pilot/actions/runs/44536855149) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/44561428215)
+- Linux `.deb` 的现有启动验收从解包后的程序执行。Ollama 与 LM Studio 的现有验证使用本地协议桩。[Linux 打包验证](https://github.com/Murmureeee/Pilot/actions/runs/44669912414)
 
-#### 第二步 界面多语言
+## 开发顺序
 
-- [x] 渲染层接入 i18next 和 react-i18next。词条随应用加载，缺失时回退到中文原文。语言列表与 IPC 复用同一份定义，继续读取旧的 `zh` / `en` 偏好。
-- [ ] 逐步将文案迁为稳定翻译键。先加繁体中文，验证流程后再加日语和韩语。
-- [ ] “设置 → 常规 → 语言”能即时切换并记住选择。翻译涵盖菜单、首次引导、文件选择框、错误和无障碍标签。日期、计数和数字使用所选语言的格式。
-- [ ] 对照翻译键检查缺项和插值，并验证 IPC 接受全部已注册语言。首次启动、重启、窄窗口和长文案均是验收场景（FR-5.13）。
+P0 为首个日用版的交付条件，P1 为日常效率和发行完善，P2 为扩展能力。表中每项可拆成独立提交，详细验收写在对应里程碑内。
 
-#### 第三步 本地定时任务
+| 顺序 | 里程碑 | 优先级 | 可独立交付的模块 |
+| --- | --- | --- | --- |
+| 1 | [项目与会话恢复](#1-项目与会话恢复) | P0 | 项目入口与迁移、运行归属、在途持久化、项目指令 |
+| 2 | [Git 审查与验证](#2-git-审查与验证) | P0 | Git 变更、差异与撤销、测试结果、暂存与提交 |
+| 3 | [桌面交互与可访问性](#3-桌面交互与可访问性) | P0 | 分列布局、窄窗切换、审批细节、键盘和异常状态 |
+| 4 | [上下文与开发效率](#4-上下文与开发效率) | P1 | 全文搜索、上下文压缩、图片附件、交互式终端、并行工作树 |
+| 5 | [模型验收与跨平台发行](#5-模型验收与跨平台发行) | P1 | 真实模型验收、安装更新、签名、诊断与性能 |
+| 6 | [定时任务与生态扩展](#6-定时任务与生态扩展) | P2 | 本地调度、Pi Packages、模板、多语言、外部资料引用 |
 
-- [ ] 在任务页创建、修改、暂停、删除和立即运行任务。任务包含提示词、模型、工作目录、时区及执行时间，一次性、每天和每周三种频率都能预览下次运行时间（FR-10.1）。
-- [ ] Pilot 运行期间由主进程触发。每次运行使用独立的 Agent 会话和任务目录，首版使用只读模式，通过现有权限门限制工具。任务结果归档到运行记录，可打开相应会话查看（FR-10.2）。
-- [ ] 重启和唤醒时标记错过的执行时间，按下一时段调度，也可手动重跑。重启时在途任务标记为中断。验收时覆盖重复时段、夏令时、暂停、模型不可用和执行失败，确保每个计划时段只触发一次。
-- [ ] 退出后触发作为后续能力评估。Windows 可以接入系统任务计划程序，关机期间执行需要能访问所需数据的持续在线环境。
+先交付里程碑 1 和 2，再以里程碑 3 的标准打磨完整工作流。真实模型验收和打包可以与核心开发并行。工作树并行和定时任务依赖会话与运行的隔离。
 
-#### 后续工作
+### 1. 项目与会话恢复
 
-| 优先级 | 工作 | 验收重点 |
-| --- | --- | --- |
-| P1 | macOS DMG、Linux 安装与升级验收（FR-8.2、NFR-7） | Ubuntu 24.04 runner 已构建 Linux x64 AppImage 和 `.deb`，两种产物均通过启动和 Agent 冒烟测试。`.deb` 从解包后的程序启动。桌面安装、卸载与升级继续验收。[Linux 打包验证](https://github.com/Murmureeee/Pilot/actions/runs/44669912414) |
-| P1 | 图片附件（FR-1.10） | 在支持图像的模型中发送与恢复图文会话。切换模型时明确显示附件能力。 |
-| P2 | Pi Packages、Prompt 模板和可选数据目录（FR-5.6、FR-5.11、FR-5.12） | 扩展包先预览内容再安装，模板能在输入框复用，数据迁移时保全会话及设置。 |
-| P2 | 长会话压缩、工具结果处理和会话导出（FR-1.8、FR-2.6、FR-6.5、FR-6.6） | 保留原始转录，超长会话仍能继续，导出的 Markdown 可读。 |
-| P2 | 文件变更视图、来源引用和会话检查点（FR-4.11、FR-4.12） | 引用可追踪，回退范围明确，回退前可预览。 |
-| P2 | 代码签名、事件查看器、崩溃日志和诊断导出（FR-8.4、FR-9.2、FR-9.3） | 签名由平台验证，用户可查看并导出脱敏的诊断内容。 |
-| P2 | Electron 凭据 API 迁移 | 升级 Electron 46 前切换到异步 safeStorage，验收旧密文读取、密钥服务暂时不可用和并发保存。[Electron 凭据文档](https://www.electronjs.org/docs/latest/api/safe-storage) |
-| P2 | 长列表与多会话内存（NFR-8） | 先测长会话和反复切换会话表现，发现瓶颈再决定虚拟化或内存优化。 |
+目前工具工作目录取自全局设置。Windows 已复现流式回复期间点「新聊天」后，原会话重新打开时只保留上一轮的记录。[AgentHost 实现](./src/main/agent-host/host.ts)
 
----
+- [ ] **项目入口与迁移。** 从首页或侧栏打开本地文件夹，记住最近项目，按项目分组会话。在标题附近显示目录，Git 项目同时显示分支。会话持久化关联工作目录、模型选择、草稿及适用的授权设置。旧会话保留历史内容，缺少目录的会话可手动关联。
+- [ ] **运行归属。** 主进程用会话与运行标识关联流、工具、审批和停止操作。切换视图时原运行继续向自己的会话写入，原会话仍能定位待审批请求。首版支持可靠的单运行生命周期。
+- [ ] **在途保存与恢复。** 在收到用户消息、完成工具步骤和回合结束时保存可恢复状态。重启后恢复原目录、转录和上次已完成的步骤，将未结束的运行显示为中断，用户可从已保存的上下文继续。
+- [ ] **项目指令。** 按工作目录加载项目的 `AGENTS.md`，明确项目指令、会话指令和技能的适用范围。在会话里可查看实际加载的来源。
 
-## 5. 完整开发需求列表
+验收时交替打开两个项目。在流式回复、等待审批和工具运行时切换会话，检查消息、工作目录和请求的归属。停止任务和重启后复查草稿、部分结果与历史数据。
 
-优先级：P0 核心（无此不能发布）· P1 重要 · P2 增强。
-`[ ]` 表示待实现或待验收，`[x]` 表示已完成当前条目定义的范围。正式版本的 P0 需求优先验收。
+### 2. Git 审查与验证
 
-### FR-1 · Agent 运行时（主进程）
+- [ ] **Git 变更。** 记录任务开始时的工作树基线。审查视图覆盖暂存、未暂存、未跟踪、新增、删除和重命名，包含工具和命令产生的改动。保留任务前已有的用户改动，无法区分归属的内容标为混合变更。
+- [ ] **差异与撤销。** 沿用变更卡片和文件导航，新增 Git 状态、按文件和区块选择、编辑器行号跳转，以及任务检查点。撤销前预览范围并校验当前内容，遇到后续改动时提示冲突并保留文件。普通文件夹继续使用已有工具差异与撤销。
+- [ ] **验证入口。** 在项目中运行常用测试、类型检查和构建。显示工作目录、命令、流式输出、退出码与耗时，支持停止和重跑。结果与具体任务和运行绑定，可从历史会话找回。
+- [ ] **暂存与提交。** 展示现有暂存区和即将提交的内容，支持按文件或区块暂存。提交后显示提交号及分支，并更新审查状态。
 
-- [x] FR-1.1 (P0/Ph1) 创建/销毁 Agent 实例；切换会话 = 按持久化 messages 重建
-- [x] FR-1.2 (P0/Ph1) 文本消息从输入框经 IPC 接入 `Agent.prompt`。
-- [x] FR-1.3 (P0/Ph1) `abort()` 立即中断当前流，UI 同步回发送态（stopReason 区分 aborted）
-- [x] FR-1.4 (P1/Ph2) `steer()` 工具运行中插话；`followUp()` 停止前排队；队列可清空（`clearAllQueues`）—— ✅ 收尾补全：composer「清空排队」按钮（agent:clear-queue）整表撤回 steer+followUp
-- [x] FR-1.5 (P1/Ph2) `steeringMode / followUpMode` = one-at-a-time（默认）
-- [x] FR-1.6 (P1/Ph2) 运行时切换 `state.model` 与 `thinkingLevel`，下一轮生效 —— ✅ thinkingLevel 运行时同步；provider/模型变更 → ensureAgent 检测变更重建 Agent（转录从落盘恢复，下一轮请求生效）
-- [x] FR-1.7 (P1/Ph2) 系统提示词可配置（应用人设 + 个性化指令）；技能说明经 systemPrompt sections 注入 —— ✅ buildSystemPrompt 组装 + systemPrompt 指纹变更即重建 Agent（下一轮生效）
-- [ ] FR-1.8 (P2/Ph4) `prepareRequest` 接入上下文压缩；`finishTurn` 自定义续跑策略
-- [x] FR-1.9 (P0/Ph1) 全事件订阅桥接 IPC；`waitForIdle` 支撑批量落盘时机
-- [ ] FR-1.10 (P1/Ph4) 为支持图像输入的模型接入图片附件，支持发送和会话恢复。
+验收时使用同时含暂存、未暂存和未跟踪文件的仓库，通过内置工具与命令分别修改代码。复查 diff，撤销一块任务改动，运行测试并提交选中的内容。原有改动和暂存状态应按本次选择保留。
 
-### FR-2 · 工具系统（主进程）
+### 3. 桌面交互与可访问性
 
-- [x] FR-2.1 (P0/Ph2) 6 个内置工具，pi-schema 类型化参数；工具失败**抛异常**（转 isError 给模型）
-- [x] FR-2.2 (P0/Ph2) `beforeToolCall` 权限门：拒绝时 `block: true` + reason
-- [x] FR-2.3 (P1/Ph2) 权限规则持久化（per 工具 per 路径前缀），会话级与全局级
-- [x] FR-2.4 (P1/Ph2) 工具级 `executionMode`：bash = sequential，其余 parallel
-- [x] FR-2.9 (P1/Ph2) 权限模式三档（composer 徽章切换）：standard（读放行写确认）/ read-only（写类直接拒绝）/ full-access（全放行）；存储于 settings.approvalMode
-- [x] FR-2.5 (P1/Ph2→Ph3) bash 工具支持超时和流式输出。Windows 默认 PowerShell，可在设置切换 Git Bash。命令从工作目录启动，选择自定义目录后文件和搜索工具限定在该目录。
-- [ ] FR-2.6 (P2/Ph4) `afterToolCall` 结果后处理钩子
-- [x] FR-2.7 (P1/Ph4) MCP 服务工具经 AgentTool 桥进入现有权限门。每个服务可独立启停，并选择继承全局权限或要求确认。
-- [x] FR-2.8 (P1/Ph4→Ph3 提前) 技能加载器：发现/解析技能（SKILL.md frontmatter + 正文），按启用状态注入 systemPrompt sections
+- [ ] **工作区布局。** 保留 Pilot 的蓝灰配色和每列独立的顶栏，保持列背景连续。对话与输入区对齐，左栏显示项目和会话，宽窗支持对话与审查并排，窄窗允许对话与审查切换并恢复所选文件和滚动位置。[工程规范](./AGENTS.md)
+- [ ] **状态与反馈。** 首页提供打开项目和配置模型的明确入口。统一运行中、待审批、已停止、失败和完成的显示。模型与命令失败处显示实际原因和可用的下一步，重试关联原任务。
+- [ ] **审批细节。** 在现有输入区审批卡上显示此次运行的工作目录、操作与授权范围。从工具步骤可回看结果，聚焦卡片可使用键盘处理，处理后恢复草稿。窄窗和长命令可查看完整内容。
+- [ ] **键盘与主题。** 用键盘走完打开项目、文件引用、审批、查看 diff、撤销和运行测试。验证焦点提示和还原、滚动可达性、亮色与暗色对比、中文与英文长文案，以及缩放后的布局。
 
-### FR-3 · IPC 契约（shared/）
+验收覆盖 Windows 1100 × 750 和 720 × 480 视口，以亮色、暗色和两种现有语言完成主要流程。
 
-- [x] FR-3.1 (P0/Ph0) `shared/contract.ts` 定义全部通道与类型，主/预加载/渲染三处共用
-- [x] FR-3.2 (P0/Ph0) preload contextBridge 暴露 `window.pi.*` 类型化 API；渲染层禁止其他 IPC 访问
-- [x] FR-3.3 (P0/Ph1) 事件推送通道：pi 事件归并为 `UiAgentEvent` 联合类型推送（渲染层不 import pi 类型）
-- [x] FR-3.4 (P0/Ph2) 所有主进程 invoke 通道通过同一入口做 Zod 校验，覆盖参数个数、枚举、标识符和嵌套设置。回归测试覆盖合法调用和无效入参。
+### 4. 上下文与开发效率
 
-### FR-4 · 主界面 UI（渲染层）
+- [ ] **搜索与导出。** 按项目索引会话全文，可根据消息、文件名或命令找到对应位置。支持 Markdown 导出以及从指定历史消息分叉。
+- [ ] **长会话压缩。** 在接近模型上下文预算时压缩旧上下文，保留原始转录、任务计划、关键文件引用和待解决事项。长工具输出可在界面展开查看，模型使用大小合适的上下文。
+- [ ] **图片附件。** 支持粘贴、拖放和选择图片，模型选择器显示图像能力。重开图文会话能查看附件，切换到文本模型时清楚提示如何处理已选图片。
+- [ ] **交互式终端。** 在任务工作目录打开终端，复用平台 Shell 选择，支持输入、停止、复制输出和会话内查看已运行的命令。
+- [ ] **并行工作树。** 在里程碑 1 和 2 通过后支持每任务使用独立 Git worktree 和分支。限制同时运行的数量，为每个运行独立显示审批、进度和结果，并在归档或移除前提示剩余变更。
 
-- [x] FR-4.1 (P0/Ph1) ChatView：消息流 + `Response` 流式 Markdown + 流式光标
-- [x] FR-4.2 (P0/Ph1) 输入区：多行、发送/停止状态互斥、Enter 发送 Shift+Enter 换行
-- [x] FR-4.3 (P0/Ph2) 工具事件按顺序显示为 `Trace`，可展开查看参数、流式输出和错误。JavaScript 栈帧可打开工作区源码并定位行号。
-- [x] FR-4.4 (P1/Ph2) 权限弹窗显示申请的操作。点击关闭或按 Esc 会拒绝本次请求。危险命令使用红色提示。
-- [x] FR-4.5 (P1/Ph2) 思考块使用 `Trace` 展示流式内容与实测耗时。默认在生成时展开、结束后收起，用户可手动展开或收起。重开会话仍可查看。
-- [x] FR-4.6 (P1/Ph2) `Queue` 展示 steer/followUp 队列；运行中输入自动转为 steer
-- [x] FR-4.7 (P1/Ph2) 运行状态栏显示 token、费用和进度。模型上下文上限随用量快照同步到界面，输入框可查看最近一次请求的占用和百分比，超过 80% 用橙色提示。
-- [x] FR-4.8 (P1/Ph3) 在设置选择当前提供方。Composer 用同一个按钮显示模型和强度，弹窗先显示强度，点模型名进入当前提供方的模型列表，选完返回强度。强度控制显示已启用的档位。
-- [x] FR-4.9 (P1/Ph3) 会话侧栏：列表 / 新建 / 重命名 / 置顶 / 归档 / 标记未读 / 分叉 / 复制全文 / 永久删除（带确认）—— ✅ 右键上下文菜单对齐 ChatGPT 语义 + 悬停浮现「置顶/归档」双按钮 + 侧栏三分区（置顶 / 最近 / 已归档）+ 未读圆点加粗（打开即清）+ 分叉复制转录 + 删除当前会话回草稿态；搜索由 FR-4.13 命令面板承担。取舍不变：项目（分组系统）不做；在新窗口打开（多窗口状态模型）暂缓
-- [x] FR-4.13 (P1/Ph3) 全局命令面板：Ctrl+K 唤起（侧栏搜索按钮入口），搜快捷操作（新聊天/设置/权限模式切换）+ 会话（标题过滤 + 相对时间），底部「全部/操作/聊天」过滤标签，键盘上下选择 + Enter 执行；Ctrl+N 新聊天
-- [x] FR-4.14 (P1/Ph3) 顶部 38px 留给窗口操作，左侧集中放置历史导航、侧栏展开/收起、文件/编辑/视图/帮助菜单，右侧是拖拽区域和原生窗控。主区的会话标题位于工具栏下方。窗口动作通过 IPC 白名单调用原生功能。
-- [x] FR-4.15 (P2/Ph3) 用户发送至少五条消息后，对话列左侧在留白内显示轮次刻度。滚动正文会高亮可见轮次，悬停可预览，点击可跳转。阅读较早的内容时可一键回到最新消息。
-- [x] FR-4.10 (P2/Ph3) `Plan`/`Task` 通过结构化工具调用展示待处理、进行中和已完成的步骤，用转录恢复计划。
-- [ ] FR-4.11 (P2/Ph4) 右侧「变更」标签页提供本轮逐文件差异与可筛选的目录。点击聊天或目录中的文件会定位到差异，支持校验文件内容后的逐文件撤销。来源引用与 RAG 场景待完成。
-- [ ] FR-4.12 (P2/Ph4) `Checkpoint` 会话回退点
-- [x] FR-4.16 (P1/Ph4) 输入 `/` 在光标旁打开紧凑单行菜单，可模糊搜索快捷命令和已安装技能。选择快捷命令立即执行。选择技能插入芯片，发送后为当次运行加载技能指令。菜单支持方向键、Enter、Esc 和失焦关闭。
-- [x] FR-4.17 (P1/Ph4) 输入 `@` 按名称或相对路径查找工作目录中的文件、文件夹与已启用技能。选中后在光标处插入可整体删除的行内芯片。发送时主进程校验结构化提及，Agent 通过现有文件工具和技能配置使用资源。
-- [x] FR-4.18 (P1/Ph4) 输入框左侧 `+` 打开文件和文件夹选择器，选中后在草稿中插入同一种提及芯片。图片附件随 FR-1.10 接入。
+验收时用有长期转录的项目找回历史操作并继续任务，在支持图片的真实模型上恢复图文会话，再让两个独立工作树同时修改各自文件并分别审批、审查。
 
-### FR-5 · 设置（渲染层 + 主进程）
+### 5. 模型验收与跨平台发行
 
-- [x] FR-5.1 (P0/Ph3) Provider + API Key 管理：增删改、掩码显示、连通性测试（最小流式探测，emerald 成功/红 失败行内回显）、自定义 OpenAI 兼容端点（base URL，覆盖 Ollama / LM Studio / 中转站）
-- [x] FR-5.2 (P0/Ph3) 每个提供方可保存多个模型，旧配置的单个模型 ID 自动成为列表首项。Anthropic 使用 Pi 模型目录，OpenAI Responses 和兼容接口通过 GET /models 获取列表。可多选添加、手动添加或移除模型。
-- [x] FR-5.3 (P1/Ph3) thinkingLevel 全局默认 + 会话内临时切换 —— ✅ 已落地：composer 模型菜单内置思考强度滑块（7 档渐变轨道，Codex 截图同款交互），持久化 settings.thinkingLevel + 运行时同步当前 Agent（下一轮请求生效）
-- [x] FR-5.4 (P1/Ph3) 已授权规则管理（撤销入口）—— ✅ 收尾补全：设置页列出 settings.toolRules（工具名 + 路径前缀上下结构）+ 单条撤销（整表提交，下一轮权限门生效）；per-工具总开关随 MCP 一并做
-- [x] FR-5.5 (P1/Ph3) 外观设置支持亮色、暗色和跟随系统，同步原生标题栏配色。中英界面可即时切换并本地保存。
-- [x] FR-5.6 (P2/Ph3) 数据目录展示 + 打开（shell.openPath 白名单目标）—— 自定义目录与导出诊断随 Phase 4
-- [x] FR-5.7 (P0/Ph3) 无可用 Provider 时可从对话空态打开三步配置向导。演示模型可以直接启用，真实提供方可在选择模型后测试连接。
-- [x] FR-5.8 (P1/Ph3) Skills 管理支持从本地选择含 `SKILL.md` 的目录并复制导入，可识别链接目录，重名自动加后缀。启停会保存并在下一轮请求时生效。
-- [x] FR-5.9 (P1/Ph3) 个性化：全局人设与自定义指令（设置页文本域）+ 每会话覆盖（右键「会话指令」，空白清除回落全局）；顺序 = 应用提示词 → 自定义指令 → 技能 sections
-- [x] FR-5.10 (P1/Ph4) 设置「MCP 服务」支持 stdio / Streamable HTTP、command / args / env 编辑、启停、重连、工具清单和连接状态。stdio 环境变量使用系统密钥服务加密。
-- [ ] FR-5.11 (P2/Ph4) Pi Packages：从 npm / git 安装扩展包（skills + prompt templates + 主题），安装前展示包内容清单
-- [ ] FR-5.12 (P2/Ph4) 自定义 Prompt 模板可通过 `/` 命令菜单搜索并填入当前草稿。
-- [ ] FR-5.13 (P1/Ph4) 扩展界面语言，覆盖应用文案、原生对话框及区域格式，兼容已有偏好。
+- [ ] **真实模型验收。** 至少覆盖一个云端提供方，以及 Ollama 和 LM Studio。记录服务版本和模型 ID，实测模型发现、流式文本、工具调用、停止与失败回显。区分网络、凭据、额度和模型能力问题。
+- [ ] **Windows。** 每次发版复验新装、旧版升级、卸载和数据保留，继续使用公开 HTTPS 更新源。完善 Windows 安装包签名。
+- [ ] **Linux 与 macOS。** 在真实桌面环境验证 Linux AppImage 和 `.deb` 的安装或启动、卸载及升级。生成 macOS DMG，验收签名、公证、凭据存储和更新。各平台覆盖 Shell、路径、原生窗控及文件选择。
+- [ ] **诊断与迁移。** 在现有滚动日志上增加可导出的脱敏诊断、事件查看和崩溃记录。升级 Electron 前核对内置 Node 的 pi 兼容性，按需迁移异步 `safeStorage`，验证旧密文可读、密钥服务短暂不可用和并发保存。
+- [ ] **性能与回归。** 用固定夹具复测冷启动、流式响应、500 条消息滚动和反复切换会话的内存。沿用 Windows 冷启动到可交互低于 3 秒、文字增量到渲染低于 100 毫秒的目标。多会话上线前采样空闲内存和退出后的资源释放。
 
-### FR-6 · 会话持久化（主进程）
+Windows 历史安装版抽样记录为冷启动约 1.27 秒、500 条消息滚动帧间隔 P95 为 18.2 毫秒、120 个文字增量最大渲染延迟 32.3 毫秒。发版时按当次提交复测。
 
-- [x] FR-6.1 (P0/Ph1) JSONL：每会话一文件（userData/sessions/），`agent_end` 与 abort 时增量落盘
-- [x] FR-6.2 (P0/Ph1) 启动恢复：读 JSONL → `initialState.messages`
-- [x] FR-6.3 (P1/Ph3) 会话索引（列表/updatedAt 排序/搜索走命令面板）、重命名、删除（含转录文件）
-- [x] FR-6.4 (P1/Ph3) 自动标题：取首条用户消息（titleCustom 手动命名保护）；P2 小模型生成随 Phase 4
-- [ ] FR-6.5 (P2/Ph4) 导出 Markdown；会话回滚（Checkpoint）
-- [ ] FR-6.6 (P2/Ph4) 超长会话压缩（transformContext 摘要旧消息）
+GitHub Actions 在代码推送到 `main` 或更新指向 `main` 的 PR 时执行 Windows 验证。发布相关的手动输入为 `build_test_packages`、`verify_installation`、`prepare_release` 和 `verify_published_update`。[构建与发布工作流](./.github/workflows/windows.yml)
 
-### FR-7 · 安全（主进程 + preload）
+### 6. 定时任务与生态扩展
 
-- [x] FR-7.1 (P0/Ph0) `contextIsolation: true`、`nodeIntegration: false`、sandbox、渲染层 CSP（生产注入）
-- [x] FR-7.2 (P0/Ph1) API Key 仅存主进程 safeStorage 加密文件；渲染层只见 hasKey 标志
-- [x] FR-7.3 (P0/Ph3) Markdown 内链接拦截 → `shell.openExternal`（setWindowOpenHandler 拒新窗 + http/https 白名单）
-- [x] FR-7.4 (P0/Ph2) 工具作用域约束：权限门 pathPrefix 规则 + cwd=用户主目录；bash 超时（≤300s）杀进程
-- [x] FR-7.5 (P1/Ph2) 权限门对 bash 命令做危险模式提示（rm -rf 等，硬编码列表 + 展示原文）
+- [ ] **本地定时任务。** 支持创建、编辑、暂停、删除和立即运行。一次性、每日与每周频率可预览下次执行时间。Pilot 运行期间由主进程在独立任务会话执行，首版采用只读权限，并保留历史结果。
+- [ ] **调度恢复。** 验收重启、唤醒、时区和夏令时变化、重复触发和失败重跑。标记错过的执行时段和中断的运行。退出应用后的系统调度单独评估。
+- [ ] **扩展包与模板。** 预览 npm 或 Git 来源的 Pi Packages 内容，再选择导入技能、提示词模板和主题。模板可通过 `/` 菜单填入草稿。验证更新、停用和自定义数据目录迁移。
+- [ ] **多语言。** 在现有中英界面上优先加入繁体中文，再评估日语和韩语。统一稳定翻译键、日期与数字格式，覆盖原生对话框、错误和无障碍标签。
+- [ ] **外部资料引用。** 先让外部资料的来源可追踪、可点击定位，再评估检索增强生成。
 
-### FR-8 · 打包与分发（Phase 4）
+## 首个日用版验收
 
-- [x] FR-8.1 (P0/Ph0) **Node 兼容验证**：✅ Electron 45 内置 Node 24.22.3 ≥ 22.19，pi 冒烟通过，sidecar 方案取消
-- [ ] FR-8.2 (P1/Ph4) Windows x64 NSIS 已通过自动化新装、旧版升级和卸载验收。Linux x64 构建 AppImage 和 `.deb`，启动验收验证两种产物的冒烟路径。macOS DMG 与 Linux 桌面安装验收按平台继续。
-- [x] FR-8.3 (P1/Ph4) Windows 安装版支持自动检查、下载和退出安装。设置 `PI_UPDATE_URL` 后运行 `pnpm package:win` 会在 `dist/release` 生成安装包、blockmap 和 `latest.yml`。
-- [ ] FR-8.4 (P2/Ph4) 代码签名（mac notarize / win Authenticode）
-- [x] FR-8.5 (P1/Ph4) 云端 Windows 验证流水线与手动生成的 Windows 和 Linux 测试安装包。
-- [x] FR-8.6 (P1/Ph4) GitHub Releases 公开更新源已上线，Windows 0.1.0 → 0.1.1 升级通过验收。
+1. 打开一个已有用户改动的真实 Git 项目，使用真实模型修复导致测试失败的 bug。
+2. 在任务中审批操作，切换到另一个项目再切回来。检查原任务状态、草稿、工具步骤与工作目录。
+3. 审查本轮和原有的变更，按区块撤销一处任务改动，重跑测试并查看退出码与日志。
+4. 暂存并提交选中的改动。重启应用后打开同一项目，确认会话、验证结果和 Git 状态仍对应原任务。
 
-### FR-9 · 可观测性
+## 工程与交付约定
 
-- [x] FR-9.1 (P1/Ph1) 主进程、渲染层和更新状态的本地滚动日志，级别可配置。
-- [ ] FR-9.2 (P1/Ph2) 调试模式：原始事件流查看器（排障利器）
-- [ ] FR-9.3 (P2/Ph4) 崩溃收集 + 脱敏诊断导出
+Agent、pi SDK、工具执行和密钥使用留在 Electron 主进程。渲染层通过预加载层的类型化 IPC 消费 `UiAgentEvent`，权限由 `beforeToolCall` 判定。已启用技能与项目指令由主进程组装，模型调用产生的用量事件仍发送累计快照。
 
-### FR-10 · 定时任务
+会话和历史转录沿用按会话保存的 JSONL。持久化格式变更兼容旧数据，工作区路径校验、审批和撤销以运行绑定的目录为准。依赖版本以 `pnpm-lock.yaml` 和 CI 为准，pi 升级集中在 Agent 主机与适配层。[IPC 契约](./src/shared/contract.ts)
 
-- [ ] FR-10.1 (P1/Ph4) 创建和管理本地任务，支持一次性、每日和每周执行、选择时区及查看运行记录。
-- [ ] FR-10.2 (P1/Ph4) 主进程执行任务，隔离 Agent 会话与权限，并处理重启、唤醒、失败及重复触发。
-
-### NFR · 非功能需求
-
-- [x] NFR-1 (P0) Windows 安装版长回复测试中，120 个文字增量到 `requestAnimationFrame` 回调的最大延迟为 32.3 毫秒，低于 100 毫秒目标。采样的 111 个帧间隔 P95 为 16.8 毫秒。
-- [x] NFR-2 (P1) Windows 安装版首次启动到可交互约 1.27 秒，低于 3 秒目标。
-- [x] NFR-3 (P1) Windows 安装版的 500 条消息滚动通过，帧间隔 p95 为 18.2 毫秒。
-- [x] NFR-4 (P1) 会话落盘为原子写（临时文件 + rename），崩溃不丢已确认消息
-- [x] NFR-5 (P0) 8 步门禁全绿才可宣布完成：oxfmt / typecheck / oxlint / vitest / knip / build / smoke / dev 挂载
-- [x] NFR-6 (P1) Windows 云端通过 115 项自动化测试，覆盖适配层、权限门、会话存储、工具、技能、设置、模型目录、IPC 校验和外部导入。
-- [ ] NFR-7 (P1) 三平台关键路径冒烟（Phase 4 出包前）
-- [ ] NFR-8 (P2) 内存：空闲会话 < 300MB；多会话切换不泄漏（Agent 实例随会话销毁）
-
----
-
-## 6. 风险登记
-
-| 风险 | 影响 | 对策 |
-|------|------|------|
-| Electron 内置 Node < 22.19，pi 不兼容 | 高（架构级） | Phase 0 第一件事验证；备选 sidecar 方案已留架构位 |
-| pi 1.x API 迭代快（仓库刚迁移改名） | 中 | 锁定 1.5.2 版本；适配层集中在 `adapters/` 与 `agent-host/`，升级只动这两处 |
-| oxfmt pre-1.0 格式 churn | 低 | 锁版本，升级单独提交 |
-| Streamdown/CSP 在 Electron 的兼容 | 中 | Phase 0 冒烟；必要时放宽 CSP 限定指令 |
-| Windows 下 bash 工具语义差异 | 中 | FR-2.5 明确默认 shell 与适配；测试覆盖 |
-| AI Elements 官方仍在迁移期（Vercel 版 2026-11 弃用） | 低 | 只用 shadcn/ui 官方 registry；vendor 后代码自主可控 |
-
----
-
-## 7. 附录 · pi API 速查（实施时对照）
-
-**Agent 配置**：`initialState{systemPrompt, model, thinkingLevel, tools, messages}`、`streamFn: models.streamSimple.bind(models)`、`convertToLlm`、`transformContext`、`beforeToolCall/afterToolCall`、`prepareRequest`、`finishTurn`、`sessionId`、`identity`、`getApiKey`
-
-**方法**：`prompt()` / `continue()` / `steer()` / `followUp()` / `abort()` / `waitForIdle()` / `reset()` / `subscribe()`；状态：`agent.state.{model, thinkingLevel, tools, messages, isStreaming, streamingMessage}`；队列：`peekQueuedMessages()` / `clearAllQueues()`
-
-**事件**：`agent_start` → `turn_start` → `message_start/update/end` → (`tool_execution_start/update/end` × N) → `turn_end` → … → `agent_end`
-
-**pi-ai**：`createModels()` / `setProvider(anthropicProvider())` / `getModel(provider, id)`；usage 与 cost 随消息返回；Ollama 等走 OpenAI 兼容 provider
-
-**工具**：`AgentTool<typeof schema>` = `{ name, label, description, parameters, execute(toolCallId, params, signal, onUpdate) }`；错误抛异常；`terminate: true` 提示跳过后续 LLM 调用
+每完成一个独立模块，记录验证结果，提交并推送当前分支。完成路线图中的事项后更新对应状态。代码走工程规范的八步验证，界面模块额外跑对应的桌面场景。发布产物记录所用提交和目标平台。[工程操作规范](./AGENTS.md)
