@@ -22,6 +22,7 @@ describe("IPC contract", () => {
     expect(IPC.sessionRename).toBe("session:rename");
     expect(IPC.sessionDelete).toBe("session:delete");
     expect(IPC.agentClearQueue).toBe("agent:clear-queue");
+    expect(IPC.agentSearchWorkspace).toBe("agent:search-workspace");
     expect(IPC.appOpenPath).toBe("app:open-path");
     expect(IPC.appSetTitlebarTheme).toBe("app:set-titlebar-theme");
     expect(IPC.sessionPin).toBe("session:pin");

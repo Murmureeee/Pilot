@@ -393,6 +393,13 @@ export class AgentHost {
     return this.deps.mcp.policyOf(name)?.label ?? labelOf(name);
   }
 
+  acceptsReferenceDirectory(directory: string): boolean {
+    return (
+      this.deps.getSettings().workingDirectory === directory &&
+      (this.status === "idle" || this.agentToolEnvironment?.workingDirectory === directory)
+    );
+  }
+
   /** 运行中 = 插话（steer），空闲 = 发起新一轮 */
   async prompt(text: string): Promise<void> {
     if (this.status === "streaming" || this.status === "waiting_approval") {

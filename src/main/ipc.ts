@@ -33,6 +33,7 @@ import {
 } from "./agent-host/settings";
 import { importSkill, scanSkills } from "./agent-host/skills";
 import { runAgentSmoke } from "./agent-host/smoke";
+import { searchWorkspace } from "./agent-host/workspace";
 import { TITLE_BAR_OVERLAY_COLORS } from "./constants";
 import {
   importedPlugins,
@@ -147,7 +148,16 @@ export function registerIpc(ctx: IpcContext): void {
   });
 
   handle(IPC.agentGetSnapshot, () => ctx.host.getSnapshot());
-  handle(IPC.agentPrompt, (_event, text) => {
+  handle(IPC.agentSearchWorkspace, (_event, query) =>
+    searchWorkspace(ctx.getSettings().workingDirectory, query),
+  );
+  handle(IPC.agentPrompt, (_event, text, referenceDirectory) => {
+    if (
+      referenceDirectory !== undefined &&
+      !ctx.host.acceptsReferenceDirectory(referenceDirectory)
+    ) {
+      throw new Error("工作目录已变更，请重新选择文件引用。");
+    }
     // 不 await：结果通过事件流推送
     void ctx.host.prompt(text);
   });

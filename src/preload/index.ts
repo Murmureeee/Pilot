@@ -35,7 +35,9 @@ const api: PiApi = {
     return () => ipcRenderer.removeListener(UPDATE_STATUS_CHANNEL, listener);
   },
   getSnapshot: () => ipcRenderer.invoke(IPC.agentGetSnapshot),
-  agentPrompt: (text: string) => ipcRenderer.invoke(IPC.agentPrompt, text),
+  agentPrompt: (text, referenceDirectory) =>
+    ipcRenderer.invoke(IPC.agentPrompt, text, referenceDirectory),
+  searchWorkspace: (query) => ipcRenderer.invoke(IPC.agentSearchWorkspace, query),
   agentAbort: () => ipcRenderer.invoke(IPC.agentAbort),
   clearQueue: () => ipcRenderer.invoke(IPC.agentClearQueue),
   sessionNew: () => ipcRenderer.invoke(IPC.sessionNew),

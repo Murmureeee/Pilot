@@ -14,6 +14,7 @@ export const IPC = {
   appCheckForUpdates: "app:check-for-updates",
   appInstallUpdate: "app:install-update",
   agentPrompt: "agent:prompt",
+  agentSearchWorkspace: "agent:search-workspace",
   agentAbort: "agent:abort",
   agentClearQueue: "agent:clear-queue",
   agentGetSnapshot: "agent:get-snapshot",
@@ -46,6 +47,11 @@ export const IPC = {
   settingsMcpRemove: "settings:mcp-remove",
   toolPermissionRespond: "tool:permission-respond",
 } as const;
+
+export interface WorkspaceEntry {
+  path: string;
+  kind: "file" | "directory";
+}
 
 /** 数据目录（shell.openPath 的白名单目标，防止渲染层打开任意路径） */
 export type OpenPathTarget = "settings" | "sessions" | "skills";

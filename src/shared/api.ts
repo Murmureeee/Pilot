@@ -20,6 +20,7 @@ import type {
   ThemeSetting,
   UiAgentEvent,
   UpdateStatus,
+  WorkspaceEntry,
 } from "./contract";
 import type { McpServerInfo, McpServerInput } from "./mcp";
 import type {
@@ -44,7 +45,8 @@ export interface PiApi {
   installUpdate(): Promise<void>;
   onUpdateStatus(callback: (status: UpdateStatus) => void): () => void;
   getSnapshot(): Promise<Snapshot>;
-  agentPrompt(text: string): Promise<void>;
+  agentPrompt(text: string, referenceDirectory?: string): Promise<void>;
+  searchWorkspace(query: string): Promise<WorkspaceEntry[]>;
   agentAbort(): Promise<void>;
   /** 清空排队中的插话（steer + followUp） */
   clearQueue(): Promise<void>;

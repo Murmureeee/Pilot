@@ -1,5 +1,6 @@
 // @env node
 import { z } from "zod";
+import { WORKSPACE_QUERY_LENGTH } from "../../shared/constants";
 import { IPC } from "../../shared/contract";
 import type { IpcChannel } from "./types";
 
@@ -90,7 +91,8 @@ const inputs = {
     ]),
   ]),
   [IPC.agentGetSnapshot]: none,
-  [IPC.agentPrompt]: z.tuple([nonBlank]),
+  [IPC.agentPrompt]: z.tuple([nonBlank, nonBlank.optional()]),
+  [IPC.agentSearchWorkspace]: z.tuple([z.string().max(WORKSPACE_QUERY_LENGTH)]),
   [IPC.agentAbort]: none,
   [IPC.agentClearQueue]: none,
   [IPC.sessionNew]: none,

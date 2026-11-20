@@ -54,7 +54,7 @@ interface AgentStore extends AgentUiState {
   setSessionPersona(id: string, persona: string | null): Promise<void>;
   init(): Promise<void>;
   setView(view: View): void;
-  prompt(text: string): Promise<void>;
+  prompt(text: string, referenceDirectory?: string): Promise<void>;
   abort(): void;
   newSession(): Promise<void>;
   /** record=false 用于前进/后退（不重复入栈） */
@@ -190,9 +190,9 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   setView: (view) => set({ view }),
 
-  prompt: async (text) => {
+  prompt: async (text, referenceDirectory) => {
     set({ error: null });
-    await window.pi.agentPrompt(text);
+    await window.pi.agentPrompt(text, referenceDirectory);
   },
 
   abort: () => window.pi.agentAbort(),

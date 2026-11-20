@@ -32,6 +32,7 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.appCheckForUpdates]: [],
   [IPC.appInstallUpdate]: [],
   [IPC.agentPrompt]: ["  preserve prompt whitespace  "],
+  [IPC.agentSearchWorkspace]: ["src/报告"],
   [IPC.agentAbort]: [],
   [IPC.agentClearQueue]: [],
   [IPC.agentGetSnapshot]: [],
@@ -95,6 +96,11 @@ describe("IPC argument validation", () => {
     expect(parseIpcArgs(IPC.settingsSave, [input])).toEqual([input]);
   });
 
+  it("accepts the directory the composer used for a referenced prompt", () => {
+    const args = ["review the selected file", "E:/projects/Pilot"];
+    expect(parseIpcArgs(IPC.agentPrompt, args)).toEqual(args);
+  });
+
   it.each([
     [IPC.toolPermissionRespond, [sessionId, "later"]],
     [IPC.sessionLoad, ["not-a-session-id"]],
@@ -102,6 +108,7 @@ describe("IPC argument validation", () => {
     [IPC.appOpenPath, ["other-directory"]],
     [IPC.appSetTitlebarTheme, ["other-theme"]],
     [IPC.agentPrompt, [" \t\n"]],
+    [IPC.agentSearchWorkspace, ["x".repeat(513)]],
     [IPC.skillsImport, ["other-language"]],
     [IPC.settingsPreviewExternalImport, ["unsupported", null]],
     [IPC.settingsImportExternal, ["codex", null]],
