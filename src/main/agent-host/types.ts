@@ -5,6 +5,7 @@ import type {
   ActiveRun,
   PermissionDecision,
   PermissionRequest,
+  SessionInstructionSources,
   SessionMeta,
   UiUserPart,
 } from "@shared/contract";
@@ -33,6 +34,11 @@ export interface RunCheckpoint {
 export interface SessionRecord {
   messages: AgentMessage[];
   checkpoint?: RunCheckpoint;
+}
+
+export interface AgentInstructions {
+  prompt: string;
+  sources: Omit<SessionInstructionSources, "running">;
 }
 
 export interface PendingPermission {

@@ -524,6 +524,93 @@ it("declares the current MCP tools on the first request and refreshes a resumed 
   }
 });
 
+it("loads the selected project's instructions ahead of personalization and skills", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-project-instructions-"));
+  const root = realpathSync(profile.path);
+  const alpha = join(root, "alpha");
+  const beta = join(root, "beta");
+  const skillsDir = join(root, "skills");
+  mkdirSync(alpha);
+  mkdirSync(beta);
+  mkdirSync(join(skillsDir, "review"), { recursive: true });
+  const fileA = join(alpha, "AGENTS.md");
+  const fileB = join(beta, "AGENTS.md");
+  writeFileSync(fileA, "ALPHA_PROJECT_GUIDANCE");
+  writeFileSync(fileB, "BETA_PROJECT_GUIDANCE");
+  writeFileSync(join(skillsDir, "review", "SKILL.md"), "---\nname: Review\n---\nSKILL_GUIDANCE");
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = {
+    providers: [provider],
+    activeProviderId: provider.id,
+    workingDirectory: alpha,
+    persona: "GLOBAL_GUIDANCE",
+    skillsEnabled: ["review"],
+  };
+  const store = new SessionStore(join(root, "sessions"));
+  const a = store.create(alpha);
+  const b = store.create(beta);
+  const unlinked = store.create();
+  store.setPersonaOverride(a.id, "ALPHA_CHAT_GUIDANCE");
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: vi.fn<(value: Settings) => void>(),
+    broadcast: vi.fn<(event: UiAgentEvent) => void>(),
+    store,
+    skillsDir,
+    mcp: new McpManager(() => settings, "0.0.0"),
+  });
+  const model = models.resolveModel(provider, undefined);
+  const prompts: string[] = [];
+  const resolveModel = vi.spyOn(models, "resolveModel").mockReturnValue({
+    model: model.model,
+    streamFn: (m, context, options) => {
+      prompts.push(getCurrentSystemPrompt(context.messages));
+      return model.streamFn(m, context, options);
+    },
+  });
+
+  try {
+    host.loadSession(a.id);
+    const running = host.prompt("Hello from Alpha");
+    expect(host.getInstructionSources(a.id)).toEqual({
+      project: { status: "loaded", path: fileA },
+      personalization: "session",
+      enabledSkills: ["Review"],
+      running: true,
+    });
+    await running;
+    expect(prompts[0]).toMatch(
+      /ALPHA_PROJECT_GUIDANCE[\s\S]*ALPHA_CHAT_GUIDANCE[\s\S]*SKILL_GUIDANCE/,
+    );
+    expect(prompts[0]).not.toMatch(/BETA_PROJECT_GUIDANCE|GLOBAL_GUIDANCE/);
+    expect(JSON.stringify(store.load(a.id))).not.toContain("ALPHA_PROJECT_GUIDANCE");
+
+    host.loadSession(b.id);
+    expect(() => host.getInstructionSources(a.id)).toThrow("会话已切换");
+    expect(host.getInstructionSources(b.id)).toMatchObject({
+      project: { status: "loaded", path: fileB },
+      personalization: "global",
+      running: false,
+    });
+    await host.prompt("Hello from Beta");
+    expect(prompts[1]).toMatch(/BETA_PROJECT_GUIDANCE[\s\S]*GLOBAL_GUIDANCE[\s\S]*SKILL_GUIDANCE/);
+    expect(prompts[1]).not.toContain("ALPHA_PROJECT_GUIDANCE");
+
+    writeFileSync(fileB, "UPDATED_BETA_GUIDANCE");
+    await host.prompt("Read updated instructions");
+    expect(prompts[2]).toContain("UPDATED_BETA_GUIDANCE");
+    expect(prompts[2]).not.toContain("BETA_PROJECT_GUIDANCE");
+
+    host.loadSession(unlinked.id);
+    expect(host.getInstructionSources(unlinked.id).project).toEqual({ status: "unlinked" });
+    await host.prompt("Legacy chat");
+    expect(prompts[3]).not.toContain("ALPHA_PROJECT_GUIDANCE");
+    expect(prompts[3]).toContain("GLOBAL_GUIDANCE");
+  } finally {
+    resolveModel.mockRestore();
+  }
+});
+
 it("applies an installed skill explicitly for one run and keeps its instructions out of history", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-slash-skill-"));
   const skillsDir = join(profile.path, "skills");

@@ -34,6 +34,7 @@ export const IPC = {
   sessionFork: "session:fork",
   sessionCopy: "session:copy",
   sessionPersona: "session:persona",
+  sessionInstructionSources: "session:instruction-sources",
   sessionFileDiff: "session:file-diff",
   sessionUndoFileChange: "session:undo-file-change",
   settingsModelCatalog: "settings:model-catalog",
@@ -318,6 +319,17 @@ export interface SessionSettings {
 export interface SessionSettingsInput {
   model?: SessionModelSelection | null;
   approvalMode?: ApprovalMode | null;
+}
+
+export type ProjectInstructionSource =
+  | { status: "unlinked" }
+  | { status: "loaded" | "missing" | "empty" | "unavailable"; path: string };
+
+export interface SessionInstructionSources {
+  project: ProjectInstructionSource;
+  personalization: "session" | "global" | null;
+  enabledSkills: string[];
+  running: boolean;
 }
 
 export interface SessionMeta extends SessionSettings {

@@ -53,6 +53,7 @@ describe("IPC contract", () => {
     expect(IPC.skillsImport).toBe("skills:import");
     expect(IPC.skillsToggle).toBe("skills:toggle");
     expect(IPC.sessionPersona).toBe("session:persona");
+    expect(IPC.sessionInstructionSources).toBe("session:instruction-sources");
     expect(IPC.sessionFileDiff).toBe("session:file-diff");
     expect(IPC.sessionUndoFileChange).toBe("session:undo-file-change");
   });

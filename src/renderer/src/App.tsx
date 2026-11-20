@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type JSX } from "react";
 import { FolderIcon, MessageSquareIcon } from "lucide-react";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
 import { FileChangesPanel } from "@renderer/components/ai/file-changes-panel";
+import { InstructionSources } from "@renderer/components/ai/instruction-sources";
 import { ProjectBranch, ProjectChooser } from "@renderer/components/ai/project-controls";
 import { TopBar } from "@renderer/components/ai/top-bar";
 import { WorkspaceReferencePanel } from "@renderer/components/ai/workspace-reference-panel";
@@ -29,6 +30,7 @@ export default function App(): JSX.Element {
   const init = useAgentStore((s) => s.init);
   const sessions = useAgentStore((s) => s.sessions);
   const sessionId = useAgentStore((s) => s.sessionId);
+  const composerId = useAgentStore((s) => s.composerId);
   const workingDirectory = useAgentStore(selectWorkingDirectory);
   const projectDirectory = useAgentStore(selectProjectDirectory);
   const locale = useLocale();
@@ -173,6 +175,7 @@ export default function App(): JSX.Element {
                     ) : (
                       <ProjectChooser sessionId={sessionId} />
                     )}
+                    {composerId && <InstructionSources key={composerId} composerId={composerId} />}
                   </header>
                   <ChatView workingDirectory={workingDirectory} />
                 </>

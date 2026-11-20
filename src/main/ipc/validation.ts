@@ -171,6 +171,7 @@ const inputs = {
   [IPC.sessionFork]: session,
   [IPC.sessionCopy]: session,
   [IPC.sessionPersona]: z.tuple([z.uuid(), z.string().nullable()]),
+  [IPC.sessionInstructionSources]: session,
   [IPC.sessionFileDiff]: sessionChange,
   [IPC.sessionUndoFileChange]: sessionChange,
   [IPC.settingsModelCatalog]: providerRef,

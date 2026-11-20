@@ -65,6 +65,7 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.sessionFork]: [sessionId],
   [IPC.sessionCopy]: [sessionId],
   [IPC.sessionPersona]: [sessionId, null],
+  [IPC.sessionInstructionSources]: [sessionId],
   [IPC.sessionFileDiff]: [sessionId, sessionId],
   [IPC.sessionUndoFileChange]: [sessionId, sessionId],
   [IPC.settingsModelCatalog]: [draft],

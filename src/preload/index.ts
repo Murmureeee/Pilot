@@ -67,6 +67,8 @@ const api: PiApi = {
   sessionCopy: (id: string) => ipcRenderer.invoke(IPC.sessionCopy, id) as Promise<string>,
   sessionPersona: (id: string, persona: string | null) =>
     ipcRenderer.invoke(IPC.sessionPersona, id, persona),
+  sessionInstructionSources: (composerId) =>
+    ipcRenderer.invoke(IPC.sessionInstructionSources, composerId),
   sessionFileDiff: (id, changeId) => ipcRenderer.invoke(IPC.sessionFileDiff, id, changeId),
   sessionUndoFileChange: (id, changeId) =>
     ipcRenderer.invoke(IPC.sessionUndoFileChange, id, changeId),

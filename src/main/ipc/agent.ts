@@ -68,6 +68,9 @@ export function registerAgentRoutes({ host }: Pick<IpcContext, "host">): void {
   handle(IPC.sessionFork, (_event, id) => host.forkSession(id));
   handle(IPC.sessionCopy, (_event, id) => host.copySession(id));
   handle(IPC.sessionPersona, (_event, id, persona) => host.setSessionPersona(id, persona));
+  handle(IPC.sessionInstructionSources, (_event, composerId) =>
+    host.getInstructionSources(composerId),
+  );
   handle(IPC.sessionFileDiff, (_event, id, changeId) => host.getFileDiff(id, changeId));
   handle(IPC.sessionUndoFileChange, (_event, id, changeId) => host.undoFileChange(id, changeId));
   handle(IPC.agentClearQueue, (_event, run) => host.clearQueue(run));

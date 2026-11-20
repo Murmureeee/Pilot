@@ -21,6 +21,7 @@ import type {
   PublicSettings,
   RunRef,
   SessionMeta,
+  SessionInstructionSources,
   SessionSettingsInput,
   SettingsInput,
   SkillMeta,
@@ -90,6 +91,7 @@ export interface PiApi {
   sessionCopy(id: string): Promise<string>;
   /** 会话级人设覆盖（null = 清除，回落全局） */
   sessionPersona(id: string, persona: string | null): Promise<void>;
+  sessionInstructionSources(composerId: string): Promise<SessionInstructionSources>;
   sessionFileDiff(id: string, changeId: string): Promise<FileDiff>;
   sessionUndoFileChange(id: string, changeId: string): Promise<void>;
   settingsGet(): Promise<PublicSettings>;

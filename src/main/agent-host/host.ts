@@ -20,6 +20,7 @@ import type {
   PromptInput,
   RunRef,
   SessionMeta,
+  SessionInstructionSources,
   SessionSettings,
   SessionSettingsInput,
   Snapshot,
@@ -41,6 +42,7 @@ import type { McpManager } from "./mcp";
 import { prepareMentionPrompt } from "./mentions";
 import { resolveModel } from "./models";
 import { PermissionManager } from "./permissions";
+import { loadProjectInstructions } from "./project-instructions";
 import { actionFingerprint, completeToolResults } from "./recovery";
 import { messageParts, messageText, SessionStore, toUiMessages } from "./session-store";
 import { loadSkillBody, scanSkills, skillSection } from "./skills";
@@ -49,6 +51,7 @@ import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
 import type { ToolEnvironment } from "./tools/types";
 import type {
+  AgentInstructions,
   ReferencedUserMessage,
   RunCheckpoint,
   RunningTask,
@@ -75,12 +78,13 @@ interface UsageAccumulator {
   costTotal: number;
 }
 
+const BASE_SYSTEM_PROMPT = `You are a helpful assistant running inside ${APP_NAME}.`;
+
 export class AgentHost {
   private agent: Agent | null = null;
   private agentSessionId: string | null = null;
   private agentProvider: ProviderConfig | null = null;
-  /** 创建当前 Agent 实例时的完整 systemPrompt（人设/技能/会话覆盖变更 → 指纹变化即重建） */
-  private agentSystemPrompt: string | null = null;
+  private agentInstructions: AgentInstructions | null = null;
   private agentToolEnvironment: ToolEnvironment | null = null;
   private localTools: AgentTool[] = [];
   private readonly promptSkillInstructions = new Map<AgentMessage, readonly string[]>();
@@ -187,42 +191,68 @@ export class AgentHost {
     return meta.id;
   }
 
-  /**
-   * 组装 systemPrompt（FR-1.7 / FR-5.9，注入顺序固定）：
-   * 应用提示词 → 人设/自定义指令（会话 personaOverride 优先于全局 persona）→ 启用技能 sections。
-   */
-  private buildSystemPrompt(
-    sessionId: string,
+  getInstructionSources(composerId: string): SessionInstructionSources {
+    this.checkComposerId(composerId);
+    if (this.run?.state.sessionId === this.sessionId && this.agentInstructions) {
+      return { ...this.agentInstructions.sources, running: true };
+    }
+    const { sources } = this.loadInstructions(this.deps.getSettings(), this.getWorkingDirectory());
+    return { ...sources, running: false };
+  }
+
+  private loadInstructions(
     settings: Settings,
     workingDirectory: string | undefined,
-  ): string {
-    const sections = [`You are a helpful assistant running inside ${APP_NAME}.`];
+  ): AgentInstructions {
+    const sections = [
+      BASE_SYSTEM_PROMPT,
+      "When instructions supplied by Pilot conflict, give application instructions highest priority, followed by the linked project's AGENTS.md, chat instructions or their global personalization fallback, and finally skills, including skills selected for this request.",
+    ];
     if (workingDirectory) {
       sections.push(
         "When citing a known workspace item in a reply, link to its workspace-relative path in Markdown. Use a trailing / for folders and add #L followed by the line number for files when known. URL-encode spaces and brackets in the link target.",
       );
     }
 
-    const meta = this.deps.store.getMeta(sessionId);
-    const custom = (meta?.personaOverride ?? settings.persona ?? "").trim();
-    if (custom.length > 0) {
-      sections.push(`## 个性化指令\n\n${custom}`);
+    const projectDirectory = this.sessionId ? this.getProjectDirectory() : workingDirectory;
+    const project = loadProjectInstructions(
+      projectDirectory === workingDirectory ? projectDirectory : undefined,
+    );
+    if (project.body) sections.push(`## Project instructions (AGENTS.md)\n\n${project.body}`);
+
+    const chatInstructions = this.getCurrentSession()?.personaOverride?.trim();
+    const custom = chatInstructions || settings.persona?.trim();
+    if (custom) {
+      sections.push(
+        `## ${chatInstructions ? "Chat instructions" : "Global personalization"}\n\n${custom}`,
+      );
     }
 
-    const enabled = new Set(settings.skillsEnabled ?? []);
-    for (const skill of scanSkills(this.deps.skillsDir, [...enabled])) {
+    const enabledSkills: string[] = [];
+    for (const skill of scanSkills(this.deps.skillsDir, settings.skillsEnabled ?? [])) {
       if (!skill.enabled) continue;
       const body = loadSkillBody(this.deps.skillsDir, skill.id);
       if (body && body.length > 0) {
         sections.push(skillSection(skill.name, body));
+        enabledSkills.push(skill.name);
       }
     }
-    return sections.join("\n\n");
+    return {
+      prompt: sections.join("\n\n"),
+      sources: {
+        project: project.source,
+        personalization: chatInstructions ? "session" : custom ? "global" : null,
+        enabledSkills,
+      },
+    };
   }
 
   private prepareRequestMessages(messages: AgentMessage[], systemPrompt: string): AgentMessage[] {
     // Apply explicit skills to the model request without putting their bodies in the transcript.
-    return messages.map((message) => {
+    return messages.map((message, index) => {
+      if (index === 0 && message.role === "system") {
+        return { ...message, content: systemPrompt };
+      }
       if (message.role === "toolResult" && readFileChange(message.toolName, message.details)) {
         return { ...message, details: undefined };
       }
@@ -252,7 +282,7 @@ export class AgentHost {
 
     if (workingDirectory) createToolPathResolver(workingDirectory)(".");
     const sessionId = this.ensureSession(workingDirectory);
-    const systemPrompt = this.buildSystemPrompt(sessionId, settings, workingDirectory);
+    const instructions = this.loadInstructions(settings, workingDirectory);
     const toolEnvironment: ToolEnvironment = {
       workingDirectory,
       commandShell: getCommandShell(settings.commandShell),
@@ -268,10 +298,11 @@ export class AgentHost {
       this.agentProvider.modelId === active.modelId &&
       this.agentProvider.baseUrl === active.baseUrl &&
       this.agentProvider.apiKey === active.apiKey &&
-      this.agentSystemPrompt === systemPrompt &&
+      this.agentInstructions?.prompt === instructions.prompt &&
       this.agentToolEnvironment?.workingDirectory === toolEnvironment.workingDirectory &&
       this.agentToolEnvironment?.commandShell === toolEnvironment.commandShell
     ) {
+      this.agentInstructions = instructions;
       this.agent.state.thinkingLevel = settings.thinkingLevel ?? DEFAULT_THINKING_LEVEL;
       return this.agent;
     }
@@ -284,12 +315,12 @@ export class AgentHost {
 
     this.localTools = createTools(toolEnvironment);
     const messages = this.deps.store.load(sessionId);
-    // When resuming, pi takes the prompt from the leading system message.
+    // Request-time instructions are loaded from their sources instead of copied into history.
     const first = messages[0];
-    if (first?.role === "system") messages[0] = { ...first, content: systemPrompt };
+    if (first?.role === "system") messages[0] = { ...first, content: BASE_SYSTEM_PROMPT };
     const agent = new Agent({
       initialState: {
-        systemPrompt,
+        systemPrompt: BASE_SYSTEM_PROMPT,
         model,
         tools: this.localTools,
         messages,
@@ -297,7 +328,7 @@ export class AgentHost {
       },
       streamFn,
       transformContext: async (contextMessages) =>
-        this.prepareRequestMessages(contextMessages, systemPrompt),
+        this.prepareRequestMessages(contextMessages, instructions.prompt),
       beforeToolCall: async ({ toolCall, args }, signal) => {
         signal?.throwIfAborted();
         const run = this.run;
@@ -334,7 +365,7 @@ export class AgentHost {
     this.agent = agent;
     this.agentSessionId = sessionId;
     this.agentProvider = active;
-    this.agentSystemPrompt = systemPrompt;
+    this.agentInstructions = instructions;
     this.agentToolEnvironment = toolEnvironment;
     this.uiMessages = toUiMessages(agent.state.messages, "s");
     // id 计数只数 UI 可见消息（user/assistant），与事件侧计数保持一致
@@ -943,6 +974,7 @@ export class AgentHost {
     this.unsubscribe = null;
     this.agent = null;
     this.agentSessionId = null;
+    this.agentInstructions = null;
     this.uiMessages = [];
     this.nextId = 0;
     this.usage = { input: 0, output: 0, cacheRead: 0, costTotal: 0 };
