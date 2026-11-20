@@ -4,7 +4,7 @@ Pilot 是基于 pi SDK 的本地 AI 编程桌面客户端。面向开发者的�
 
 ## 当前进度
 
-已完成的模块、对应提交和验收结果收录在开发完成记录中。[开发完成记录](./docs/DEVELOPMENT_HISTORY.md)
+已完成的模块、对应提交和验收结果收录在开发完成记录中。[开发完成记录](./DEVELOPMENT_HISTORY.md)
 
 | 范围 | 已有能力 | 下一步 |
 | --- | --- | --- |
@@ -13,7 +13,7 @@ Pilot 是基于 pi SDK 的本地 AI 编程桌面客户端。面向开发者的�
 | 模型与集成 | Anthropic、OpenAI Responses、OpenAI 兼容端点和内置演示模型。已有模型目录、连通性测试、Ollama / LM Studio 预设、本地技能、stdio 和 Streamable HTTP MCP，以及 Codex / Claude Code 技能和 MCP 导入。 | 验收真实本地模型的流式回复和工具调用，补齐模型能力提示与连接错误处理。 |
 | 桌面与发行 | 简体中文和 English、亮色与暗色、本地诊断日志。Windows x64 `v0.1.1` 已发布并通过新装、卸载及公开 HTTPS 更新验收。Linux x64 的 AppImage 和 `.deb` 已成功构建并通过启动与 Agent 冒烟。 | 复验 Linux 桌面安装与升级，交付 macOS 安装包和平台签名。 |
 
-- 已在 Windows 隔离实例中验证输入区审批卡的命令展开、键盘允许与拒绝、草稿恢复，以及浅色和 720 px 深色布局。[审批卡实现](./src/renderer/src/components/ai/permission-card.tsx)
+- 已在 Windows 隔离实例中验证输入区审批卡的命令展开、键盘允许与拒绝、草稿恢复，以及浅色和 720 px 深色布局。[审批卡实现](../src/renderer/src/components/ai/permission-card.tsx)
 - Windows 发布及升级记录。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.1.1) · [安装验收](https://github.com/Murmureeee/Pilot/actions/runs/44536855149) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/44561428215)
 - Linux `.deb` 的现有启动验收从解包后的程序执行。Ollama 与 LM Studio 的现有验证使用本地协议桩。[Linux 打包验证](https://github.com/Murmureeee/Pilot/actions/runs/44669912414)
 
@@ -34,7 +34,7 @@ P0 为首个日用版的交付条件，P1 为日常效率和发行完善，P2 �
 
 ### 1. 项目与会话恢复
 
-目前工具工作目录取自全局设置。Windows 已复现流式回复期间点「新聊天」后，原会话重新打开时只保留上一轮的记录。[AgentHost 实现](./src/main/agent-host/host.ts)
+目前工具工作目录取自全局设置。Windows 已复现流式回复期间点「新聊天」后，原会话重新打开时只保留上一轮的记录。[AgentHost 实现](../src/main/agent-host/host.ts)
 
 - [ ] **项目入口与迁移。** 从首页或侧栏打开本地文件夹，记住最近项目，按项目分组会话。在标题附近显示目录，Git 项目同时显示分支。会话持久化关联工作目录、模型选择、草稿及适用的授权设置。旧会话保留历史内容，缺少目录的会话可手动关联。
 - [ ] **运行归属。** 主进程用会话与运行标识关联流、工具、审批和停止操作。切换视图时原运行继续向自己的会话写入，原会话仍能定位待审批请求。首版支持可靠的单运行生命周期。
@@ -54,7 +54,7 @@ P0 为首个日用版的交付条件，P1 为日常效率和发行完善，P2 �
 
 ### 3. 桌面交互与可访问性
 
-- [ ] **工作区布局。** 保留 Pilot 的蓝灰配色和每列独立的顶栏，保持列背景连续。对话与输入区对齐，左栏显示项目和会话，宽窗支持对话与审查并排，窄窗允许对话与审查切换并恢复所选文件和滚动位置。[工程规范](./AGENTS.md)
+- [ ] **工作区布局。** 保留 Pilot 的蓝灰配色和每列独立的顶栏，保持列背景连续。对话与输入区对齐，左栏显示项目和会话，宽窗支持对话与审查并排，窄窗允许对话与审查切换并恢复所选文件和滚动位置。[工程规范](../AGENTS.md)
 - [ ] **状态与反馈。** 首页提供打开项目和配置模型的明确入口。统一运行中、待审批、已停止、失败和完成的显示。模型与命令失败处显示实际原因和可用的下一步，重试关联原任务。
 - [ ] **审批细节。** 在现有输入区审批卡上显示此次运行的工作目录、操作与授权范围。从工具步骤可回看结果，聚焦卡片可使用键盘处理，处理后恢复草稿。窄窗和长命令可查看完整内容。
 - [ ] **键盘与主题。** 用键盘走完打开项目、文件引用、审批、查看 diff、撤销和运行测试。验证焦点提示和还原、滚动可达性、亮色与暗色对比、中文与英文长文案，以及缩放后的布局。
@@ -81,7 +81,7 @@ P0 为首个日用版的交付条件，P1 为日常效率和发行完善，P2 �
 
 Windows 历史安装版抽样记录为冷启动约 1.27 秒、500 条消息滚动帧间隔 P95 为 18.2 毫秒、120 个文字增量最大渲染延迟 32.3 毫秒。发版时按当次提交复测。
 
-GitHub Actions 在代码推送到 `main` 或更新指向 `main` 的 PR 时执行 Windows 验证。发布相关的手动输入为 `build_test_packages`、`verify_installation`、`prepare_release` 和 `verify_published_update`。[构建与发布工作流](./.github/workflows/windows.yml)
+GitHub Actions 在代码推送到 `main` 或更新指向 `main` 的 PR 时执行 Windows 验证。发布相关的手动输入为 `build_test_packages`、`verify_installation`、`prepare_release` 和 `verify_published_update`。[构建与发布工作流](../.github/workflows/windows.yml)
 
 ### 6. 定时任务与生态扩展
 
@@ -102,6 +102,6 @@ GitHub Actions 在代码推送到 `main` 或更新指向 `main` 的 PR 时执行
 
 Agent、pi SDK、工具执行和密钥使用留在 Electron 主进程。渲染层通过预加载层的类型化 IPC 消费 `UiAgentEvent`，权限由 `beforeToolCall` 判定。已启用技能与项目指令由主进程组装，模型调用产生的用量事件仍发送累计快照。
 
-会话和历史转录沿用按会话保存的 JSONL。持久化格式变更兼容旧数据，工作区路径校验、审批和撤销以运行绑定的目录为准。依赖版本以 `pnpm-lock.yaml` 和 CI 为准，pi 升级集中在 Agent 主机与适配层。[IPC 契约](./src/shared/contract.ts)
+会话和历史转录沿用按会话保存的 JSONL。持久化格式变更兼容旧数据，工作区路径校验、审批和撤销以运行绑定的目录为准。依赖版本以 `pnpm-lock.yaml` 和 CI 为准，pi 升级集中在 Agent 主机与适配层。[IPC 契约](../src/shared/contract.ts)
 
-每完成一个独立模块，提交并推送当前分支，在开发完成记录中追加日期、交付内容、提交和验收结果。完成路线图中的事项后更新对应状态。代码走工程规范的八步验证，界面模块额外跑对应的桌面场景。发布产物记录所用提交和目标平台。[工程操作规范](./AGENTS.md)
+每完成一个独立模块，提交并推送当前分支，在开发完成记录中追加日期、交付内容、提交和验收结果。完成路线图中的事项后更新对应状态。代码走工程规范的八步验证，界面模块额外跑对应的桌面场景。发布产物记录所用提交和目标平台。[工程操作规范](../AGENTS.md)

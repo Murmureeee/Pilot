@@ -2,7 +2,7 @@
 
 Pilot is a desktop AI workspace built on pi. Start a chat to work with an agent on files and commands in a folder, then pick up where you left off from your conversation history.
 
-[简体中文](./README.md) · [Download the latest release](https://github.com/Murmureeee/Pilot/releases/latest) · [Changelog (Chinese)](./CHANGELOG.md) · [Roadmap (Chinese)](./PLAN.md)
+[简体中文](../README.md) · [Download the latest release](https://github.com/Murmureeee/Pilot/releases/latest) · [Changelog (Chinese)](../CHANGELOG.md) · [Roadmap (Chinese)](./PLAN.md) · [Development history (Chinese)](./DEVELOPMENT_HISTORY.md)
 
 ## Download and update
 
@@ -32,7 +32,7 @@ On Windows, open **Help → About Pilot** to check for updates and confirm insta
 
 ## Run from source
 
-Development uses Node.js 26 and pnpm 11. Close running Electron development instances, then run these commands from the repository root. [Build workflow](./.github/workflows/windows.yml)
+Development uses Node.js 26 and pnpm 11. Close running Electron development instances, then run these commands from the repository root. [Build workflow](../.github/workflows/windows.yml)
 
 ```sh
 pnpm install --frozen-lockfile
