@@ -215,7 +215,8 @@ export class AgentHost {
 
     const apiKey = decryptSecret(active.apiKey);
     const { model, streamFn } = resolveModel(active, apiKey);
-    this.contextWindow = typeof model.contextWindow === "number" ? model.contextWindow : null;
+    const { contextWindow } = model;
+    this.contextWindow = Number.isFinite(contextWindow) && contextWindow > 0 ? contextWindow : null;
 
     this.localTools = createTools(toolEnvironment);
     const messages = this.deps.store.load(sessionId);
@@ -369,6 +370,7 @@ export class AgentHost {
           },
           costTotal: this.usage.costTotal,
           contextTokens: this.contextTokens,
+          contextWindow: this.contextWindow,
         });
       }
       const last = this.uiMessages.at(-1);

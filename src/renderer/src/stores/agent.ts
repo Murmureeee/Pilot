@@ -30,8 +30,6 @@ interface AgentStore extends AgentUiState {
   initialized: boolean;
   paletteOpen: boolean;
   nav: NavState;
-  /** 当前模型的上下文窗口（未知 = null，状态栏不显示占用） */
-  contextWindow: number | null;
   setPaletteOpen(open: boolean): void;
   setSettingsSection(section: SettingsSection): void;
   /** 技能列表刷新（进设置页时拉取） */
@@ -118,7 +116,6 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   initialized: false,
   paletteOpen: false,
   nav: initialNavState(),
-  contextWindow: null,
 
   setPaletteOpen: (open) => set({ paletteOpen: open }),
   setSettingsSection: (section) => set({ settingsSection: section }),

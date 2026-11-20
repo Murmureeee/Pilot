@@ -249,6 +249,7 @@ export type UiAgentEvent =
       costTotal: number;
       /** 最近一轮助手消息的上下文占用（input + cacheRead + cacheWrite + output） */
       contextTokens: number;
+      contextWindow: number | null;
     }
   | { type: "queue"; steerCount: number }
   | {

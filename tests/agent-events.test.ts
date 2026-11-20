@@ -183,17 +183,20 @@ describe("agent-events adapter", () => {
       tokens: { input: 10, output: 5, cacheRead: 2 },
       costTotal: 0.01,
       contextTokens: 17,
+      contextWindow: 128_000,
     });
     state = applyAgentEvent(state, {
       type: "usage",
       tokens: { input: 30, output: 13, cacheRead: 6 },
       costTotal: 0.03,
       contextTokens: 49,
+      contextWindow: 64_000,
     });
     state = applyAgentEvent(state, { type: "queue", steerCount: 2 });
     expect(state.usage).toEqual({ input: 30, output: 13, cacheRead: 6, costTotal: 0.03 });
     // 上下文占用同样是"最近一轮快照"语义：只替换、不累加
     expect(state.contextTokens).toBe(49);
+    expect(state.contextWindow).toBe(64_000);
     expect(state.steerCount).toBe(2);
   });
 

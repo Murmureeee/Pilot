@@ -17,6 +17,7 @@ export interface AgentUiState {
   usage: UsageTotals & { costTotal: number };
   /** 最近一轮的上下文占用 token 数（FR-4.7 状态栏显示占用百分比用） */
   contextTokens: number;
+  contextWindow: number | null;
   steerCount: number;
   sessions: SessionMeta[];
   /** 待确认的权限请求（同一时刻只展示一条） */
@@ -31,6 +32,7 @@ export function initialAgentUiState(): AgentUiState {
     error: null,
     usage: { input: 0, output: 0, cacheRead: 0, costTotal: 0 },
     contextTokens: 0,
+    contextWindow: null,
     steerCount: 0,
     sessions: [],
     pendingPermission: null,
@@ -52,6 +54,7 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
         ...state,
         usage: { ...event.tokens, costTotal: event.costTotal },
         contextTokens: event.contextTokens,
+        contextWindow: event.contextWindow,
       };
     case "queue":
       return { ...state, steerCount: event.steerCount };

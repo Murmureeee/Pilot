@@ -70,6 +70,7 @@ import type { ApprovalMode, PromptMention } from "@shared/contract";
 import { cn } from "cn";
 import { ComposerModelControls } from "./composer-model-controls";
 import { ComposerCaretMenu, ComposerSuggestions } from "./composer-suggestions";
+import { ContextUsage } from "./context-usage";
 
 // 语义色分级（AGENTS.md）：红 = 破坏性动作；amber 橙 = 风险提示（警觉但不吓退）；灰 = 常态
 type ModeTone = "neutral" | "amber";
@@ -112,8 +113,6 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
   const settings = useAgentStore((s) => s.settings);
   const steerCount = useAgentStore((s) => s.steerCount);
   const usage = useAgentStore((s) => s.usage);
-  const contextTokens = useAgentStore((s) => s.contextTokens);
-  const contextWindow = useAgentStore((s) => s.contextWindow);
   const sessionId = useAgentStore((s) => s.sessionId);
   const [draft, setDraft] = useState(() => promptFromDraft(savedDraft.current));
   const [selection, setSelection] = useState<ComposerSelection | null>(null);
@@ -433,10 +432,6 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
 
   const statusLabel =
     status === "waiting_approval" ? t("等待操作审批…", locale) : t("回复中…", locale);
-  const contextPercent =
-    contextWindow && contextWindow > 0 && contextTokens > 0
-      ? Math.min(100, Math.round((contextTokens / contextWindow) * 100))
-      : null;
 
   return (
     <div className="relative flex w-full min-w-0 flex-col gap-2">
@@ -473,25 +468,6 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
               {usage.cacheRead > 0 ? ` (${t("缓存", locale)} ${usage.cacheRead})` : ""}
             </span>
             <span>${usage.costTotal.toFixed(4)}</span>
-            {contextPercent !== null && (
-              <span
-                className={cn(
-                  "flex items-center gap-1.5",
-                  contextPercent > 80 && "text-amber-700 dark:text-amber-400",
-                )}
-              >
-                {t("上下文", locale)} {contextPercent}%
-                <span
-                  aria-hidden="true"
-                  className="bg-border h-1 w-12 overflow-hidden rounded-full"
-                >
-                  <span
-                    className="block h-full rounded-full bg-current"
-                    style={{ width: `${contextPercent}%` }}
-                  />
-                </span>
-              </span>
-            )}
           </div>
         </div>
       )}
@@ -701,6 +677,7 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
           </div>
 
           <div className="ms-auto flex min-w-0 items-center gap-2">
+            <ContextUsage />
             <ComposerModelControls
               menu={toolbarMenu}
               setMenu={setToolbarMenu}

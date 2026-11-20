@@ -22,7 +22,13 @@ export function ConfirmationDialog(): JSX.Element | null {
   if (!pending) return null;
 
   return (
-    <Dialog open>
+    <Dialog
+      open
+      disablePointerDismissal
+      onOpenChange={(open) => {
+        if (!open) respond(pending.requestId, "deny");
+      }}
+    >
       <DialogContent closeLabel={t("关闭", locale)} className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

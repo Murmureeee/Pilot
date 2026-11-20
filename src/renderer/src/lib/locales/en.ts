@@ -189,6 +189,10 @@ export const EN_MESSAGES: Record<string, string> = {
   "等待操作审批…": "Waiting for approval…",
   "插话排队 {0}": "{0} queued",
   上下文: "Context",
+  "上下文占用 {0}": "Context usage {0}",
+  回到最新消息: "Jump to the latest message",
+  最近一次请求: "Most recent request",
+  "已用 {0} / {1} tokens": "{0} of {1} tokens used",
   缓存: "cache",
   请求失败: "Request failed",
   "检查网络连接或模型设置，然后重新发送消息。":
