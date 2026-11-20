@@ -210,19 +210,26 @@ describe("agent-events adapter", () => {
     expect(state.sessionId).toBe("a");
   });
 
-  it("holds the latest permission request and clears on respond", () => {
-    let state = initialAgentUiState();
-    state = applyAgentEvent(state, {
-      type: "permission_request",
+  it("queues permission requests in arrival order and clears them when approval ends", () => {
+    const first = {
+      type: "permission_request" as const,
       requestId: "r1",
       toolName: "bash",
       label: "执行命令",
       inputSummary: "{}",
       danger: true,
+    };
+    const second = { ...first, requestId: "r2", danger: false };
+    let state = applyAgentEvent(initialAgentUiState(), {
+      type: "status",
+      status: "waiting_approval",
     });
-    expect(state.pendingPermission?.requestId).toBe("r1");
-    expect(state.pendingPermission?.danger).toBe(true);
-    // 应答清空由 store 负责（respondPermission），reducer 只负责暂存
+    state = applyAgentEvent(state, first);
+    state = applyAgentEvent(state, second);
+    expect(state.pendingPermissions).toEqual([first, second]);
+    for (const status of ["streaming", "idle"] as const) {
+      expect(applyAgentEvent(state, { type: "status", status }).pendingPermissions).toEqual([]);
+    }
   });
 
   it("transitions status and keeps errors independent", () => {

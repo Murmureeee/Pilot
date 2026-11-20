@@ -127,6 +127,9 @@ export const MESSAGE_JUMP = {
   revealTickOptions: { block: "nearest", container: "nearest" },
 } as const;
 // Leave room for the chat and its review pane after the navigation rail and frame.
+export const COMPOSER_SURFACE_CLASS =
+  "border-border bg-card rounded-[22px] shadow-sm shadow-foreground/10";
+
 export const FILE_REVIEW_MIN_WINDOW_WIDTH = 700;
 export const FILE_CHANGES_MIN_WINDOW_WIDTH = 900;
 export const FILE_CHANGES_TREE_MIN_WIDTH = 500;

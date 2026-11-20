@@ -19,7 +19,7 @@ import {
   TraceTitle,
 } from "@renderer/components/ui/trace";
 import { t, useLocale } from "@renderer/lib/i18n";
-import { parseToolFailure, stackDisplayPath } from "@renderer/lib/tool-trace";
+import { parseToolFailure, stackDisplayPath, toolInput } from "@renderer/lib/tool-trace";
 import type { ToolFailure } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { UiPart } from "@shared/contract";
@@ -33,25 +33,6 @@ const TOOL_ICONS = {
   glob: SearchIcon,
   grep: SearchIcon,
 } satisfies Record<string, typeof TerminalIcon>;
-
-function toolInput(source: string | undefined): { preview: string; details: string } {
-  if (!source || source === "{}") return { preview: "", details: "" };
-  try {
-    const input = JSON.parse(source) as unknown;
-    if (!input || typeof input !== "object") return { preview: source, details: source };
-    const fields = input as Record<string, unknown>;
-    const primary = [fields.command, fields.path, fields.pattern].find(
-      (value): value is string => typeof value === "string" && Boolean(value.trim()),
-    );
-    return {
-      preview: primary ?? source,
-      details:
-        primary && Object.keys(fields).length === 1 ? primary : JSON.stringify(input, null, 2),
-    };
-  } catch {
-    return { preview: source, details: source };
-  }
-}
 
 function ToolOutput({ text }: { text: string }): JSX.Element {
   return (

@@ -56,7 +56,11 @@ import {
   trimPrompt,
 } from "@renderer/lib/composer-shortcuts";
 import type { ComposerSelection } from "@renderer/lib/composer/types";
-import { APPROVAL_MODE_OPTIONS, COMPOSER_COMMANDS } from "@renderer/lib/constants";
+import {
+  APPROVAL_MODE_OPTIONS,
+  COMPOSER_COMMANDS,
+  COMPOSER_SURFACE_CLASS,
+} from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type {
   ComposerCommand,
@@ -490,7 +494,7 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
           {localizeError(sendError, locale)}
         </p>
       )}
-      <InputGroup className="border-border bg-card rounded-[22px] shadow-sm shadow-foreground/10">
+      <InputGroup className={COMPOSER_SURFACE_CLASS}>
         <div
           ref={attachEditor}
           contentEditable

@@ -20,8 +20,7 @@ export interface AgentUiState {
   contextWindow: number | null;
   steerCount: number;
   sessions: SessionMeta[];
-  /** 待确认的权限请求（同一时刻只展示一条） */
-  pendingPermission: Extract<UiAgentEvent, { type: "permission_request" }> | null;
+  pendingPermissions: Extract<UiAgentEvent, { type: "permission_request" }>[];
 }
 
 export function initialAgentUiState(): AgentUiState {
@@ -35,14 +34,18 @@ export function initialAgentUiState(): AgentUiState {
     contextWindow: null,
     steerCount: 0,
     sessions: [],
-    pendingPermission: null,
+    pendingPermissions: [],
   };
 }
 
 export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): AgentUiState {
   switch (event.type) {
     case "status":
-      return { ...state, status: event.status };
+      return {
+        ...state,
+        status: event.status,
+        pendingPermissions: event.status === "waiting_approval" ? state.pendingPermissions : [],
+      };
     case "sessions":
       return {
         ...state,
@@ -59,7 +62,7 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
     case "queue":
       return { ...state, steerCount: event.steerCount };
     case "permission_request":
-      return { ...state, pendingPermission: event };
+      return { ...state, pendingPermissions: [...state.pendingPermissions, event] };
     case "error":
       return { ...state, error: event.message };
     default: {

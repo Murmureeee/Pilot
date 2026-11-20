@@ -1,10 +1,20 @@
 // @env browser
-import { Fragment, useMemo, useRef, useState, type JSX, type RefObject } from "react";
+import {
+  Activity,
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+  type RefObject,
+} from "react";
 import { ArrowDownIcon, SquareTerminalIcon } from "lucide-react";
 import { AssistantReply } from "@renderer/components/ai/assistant-reply";
 import { Composer } from "@renderer/components/ai/composer";
 import { MessageJump } from "@renderer/components/ai/message-jump";
 import { OnboardingDialog } from "@renderer/components/ai/onboarding-dialog";
+import { PermissionCard } from "@renderer/components/ai/permission-card";
 import { InlineWorkspaceReference } from "@renderer/components/ai/workspace-reference";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -47,6 +57,7 @@ export function ChatView({
   const messages = useAgentStore((s) => s.messages);
   const sessionId = useAgentStore((s) => s.sessionId);
   const busy = useAgentStore((s) => s.status !== "idle");
+  const permission = useAgentStore((s) => s.pendingPermissions[0]);
   const error = useAgentStore((s) => s.error);
   const settings = useAgentStore((s) => s.settings);
   const setView = useAgentStore((s) => s.setView);
@@ -59,6 +70,18 @@ export function ChatView({
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const composerColumn = useRef<HTMLDivElement>(null);
+  const wasAwaitingApproval = useRef(false);
+
+  useEffect(() => {
+    const restoreFocus = wasAwaitingApproval.current && !permission;
+    wasAwaitingApproval.current = Boolean(permission);
+    if (restoreFocus && document.activeElement === document.body) {
+      composerColumn.current?.querySelector<HTMLElement>("[contenteditable=true]")?.focus({
+        preventScroll: true,
+      });
+    }
+  }, [permission]);
 
   return (
     <div className={cn("relative flex min-h-0 flex-1 flex-col", isEmpty && "overflow-y-auto")}>
@@ -156,6 +179,7 @@ export function ChatView({
       )}
 
       <div
+        ref={composerColumn}
         className={cn(
           "workspace-column flex shrink-0 flex-col",
           isEmpty ? "my-auto gap-6 pt-7 pb-[clamp(1.5rem,12vh,6rem)]" : "gap-2 pt-1.5 pb-4",
@@ -203,7 +227,10 @@ export function ChatView({
             </p>
           </div>
         )}
-        <Composer savedDraft={composerDraft} />
+        {permission && <PermissionCard key={permission.requestId} request={permission} />}
+        <Activity mode={permission ? "hidden" : "visible"}>
+          <Composer savedDraft={composerDraft} />
+        </Activity>
       </div>
       {isEmpty && (
         <OnboardingDialog open={onboardingOpen} onClose={() => setOnboardingOpen(false)} />

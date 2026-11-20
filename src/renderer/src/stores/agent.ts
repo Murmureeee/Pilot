@@ -70,7 +70,7 @@ interface AgentStore extends AgentUiState {
   saveToolEnvironment(
     input: Pick<SettingsInput, "workingDirectory" | "commandShell">,
   ): Promise<void>;
-  respondPermission(requestId: string, decision: PermissionDecision): void;
+  respondPermission(requestId: string, decision: PermissionDecision): Promise<void>;
   menuAction(action: MenuAction): Promise<void>;
   /** 清空排队中的插话 */
   clearQueue(): void;
@@ -298,18 +298,20 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     set({ settings });
   },
 
-  respondPermission: (requestId, decision) => {
-    set({ pendingPermission: null });
-    void window.pi
-      .permissionRespond(requestId, decision)
-      .then(async () => {
-        if (decision !== "global") return;
+  respondPermission: async (requestId, decision) => {
+    if (get().pendingPermissions[0]?.requestId !== requestId) return;
+    await window.pi.permissionRespond(requestId, decision);
+    set(({ pendingPermissions }) => ({
+      pendingPermissions: pendingPermissions.filter((request) => request.requestId !== requestId),
+    }));
+    if (decision === "global") {
+      try {
         const { toolRules } = await window.pi.settingsGet();
         set(({ settings }) => (settings ? { settings: { ...settings, toolRules } } : {}));
-      })
-      .catch((cause: unknown) =>
-        set({ error: cause instanceof Error ? cause.message : String(cause) }),
-      );
+      } catch (cause) {
+        set({ error: cause instanceof Error ? cause.message : String(cause) });
+      }
+    }
   },
 
   menuAction: (action) => window.pi.menuAction(action),

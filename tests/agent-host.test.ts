@@ -22,6 +22,36 @@ import type { UiAgentEvent } from "../src/shared/contract";
 
 vi.mock("electron", () => ({ safeStorage: {} }));
 
+it("keeps waiting for approval until the last parallel request is answered", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pi-agent-approval-"));
+  const settings: Settings = { providers: [], activeProviderId: "" };
+  const requestIds: string[] = [];
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: vi.fn<(value: Settings) => void>(),
+    broadcast: (event) => {
+      if (event.type === "permission_request") requestIds.push(event.requestId);
+    },
+    store: new SessionStore(join(profile.path, "sessions")),
+    skillsDir: join(profile.path, "skills"),
+    mcp: new McpManager(() => settings, "0.0.0"),
+  });
+  const first = host.permissions.gate("write_file", { path: "first.txt" });
+  const second = host.permissions.gate("write_file", { path: "second.txt" });
+  try {
+    expect(requestIds).toHaveLength(2);
+    host.respondPermission(requestIds[0], "once");
+    await expect(first).resolves.toBeUndefined();
+    expect(host.getSnapshot().status).toBe("waiting_approval");
+    host.respondPermission(requestIds[1], "deny");
+    await expect(second).resolves.toMatchObject({ block: true });
+    expect(host.getSnapshot().status).toBe("streaming");
+  } finally {
+    host.permissions.abortAll();
+    await Promise.all([first, second]);
+  }
+});
+
 it("keeps queued file references in the working directory of the active run", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pi-agent-references-"));
   const original = join(profile.path, "original");

@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { MessageSquareIcon } from "lucide-react";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
-import { ConfirmationDialog } from "@renderer/components/ai/confirmation-dialog";
 import { FileChangesPanel } from "@renderer/components/ai/file-changes-panel";
 import { TopBar } from "@renderer/components/ai/top-bar";
 import { WorkspaceReferencePanel } from "@renderer/components/ai/workspace-reference-panel";
@@ -159,7 +158,6 @@ export default function App(): JSX.Element {
         </div>
       </div>
 
-      <ConfirmationDialog />
       <CommandPalette />
     </div>
   );

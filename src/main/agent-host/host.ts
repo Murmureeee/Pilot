@@ -87,8 +87,9 @@ export class AgentHost {
   constructor(private readonly deps: HostDeps) {
     this.permissions = new PermissionManager(
       (event) => {
-        // 权限请求进入等待审批态，应答后由 respondPermission 拉回 streaming
-        if (event.type === "permission_request") this.sendStatus("waiting_approval");
+        if (event.type === "permission_request" && this.status !== "waiting_approval") {
+          this.sendStatus("waiting_approval");
+        }
         deps.broadcast(event);
       },
       () => deps.getSettings().toolRules ?? [],
@@ -107,7 +108,9 @@ export class AgentHost {
     decision: Parameters<PermissionManager["respond"]>[1],
   ): void {
     this.permissions.respond(requestId, decision);
-    if (this.status === "waiting_approval") this.sendStatus("streaming");
+    if (this.status === "waiting_approval" && !this.permissions.hasPending()) {
+      this.sendStatus("streaming");
+    }
   }
 
   /** 运行时切换思考强度（pi 支持中途修改，下一轮请求生效） */
