@@ -160,37 +160,49 @@ it("uses each project's files and tools after switching and reopening sessions",
   }
 }, 10000);
 
-it("links an old chat without changing its existing transcript", async () => {
+it("reopens a recent project after restart and links an old chat without changing its transcript", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-legacy-session-"));
   const root = realpathSync(profile.path);
   const sessions = join(root, "sessions");
+  const directory = join(root, "recent project");
+  mkdirSync(directory);
   const store = new SessionStore(sessions);
   const { id } = store.create();
   const transcript = join(sessions, id + ".jsonl");
   store.save(id, [{ role: "user", content: "Earlier conversation", timestamp: 1 }]);
   const original = readFileSync(transcript, "utf8");
   const settings: Settings = { providers: [], activeProviderId: "", workingDirectory: root };
-  const host = new AgentHost({
-    getSettings: () => settings,
-    saveSettings: vi.fn<(value: Settings) => void>(),
-    broadcast: vi.fn<(event: UiAgentEvent) => void>(),
-    store: new SessionStore(sessions),
-    skillsDir: join(root, "skills"),
-    mcp: new McpManager(() => settings, "0.0.0"),
+  const createHost = (): AgentHost =>
+    new AgentHost({
+      getSettings: () => settings,
+      saveSettings: vi.fn<(value: Settings) => void>(),
+      broadcast: vi.fn<(event: UiAgentEvent) => void>(),
+      store: new SessionStore(sessions),
+      skillsDir: join(root, "skills"),
+      mcp: new McpManager(() => settings, "0.0.0"),
+    });
+  await createHost().openProject(directory);
+  const host = createHost();
+  expect(host.getSnapshot()).toMatchObject({
+    draftWorkingDirectory: null,
+    recentProjects: [directory],
+    sessions: [{ id }],
   });
+  expect(() => host.useRecentProject(root)).toThrow("找不到该最近项目");
+  expect((await host.useRecentProject(directory)).draftWorkingDirectory).toBe(directory);
   const before = await host.loadSession(id);
   expect(before.sessions.find((session) => session.id === id)?.workingDirectory).toBeUndefined();
   expect(host.getWorkingDirectory()).toBe(root);
   expect(host.copySession(id)).toContain("Earlier conversation");
-  const after = await host.bindProject(id, root);
+  const after = await host.useRecentProject(directory, id);
   expect(after.messages).toEqual(before.messages);
   expect(after.sessionId).toBe(id);
-  expect(new SessionStore(sessions).getMeta(id)?.workingDirectory).toBe(root);
+  expect(new SessionStore(sessions).getMeta(id)?.workingDirectory).toBe(directory);
   expect(readFileSync(transcript, "utf8")).toBe(original);
   await expect(host.bindProject(id, sessions)).rejects.toThrow("该会话已关联项目");
   host.forkSession(id);
   expect(host.getSnapshot().sessions.find((session) => session.id !== id)?.workingDirectory).toBe(
-    root,
+    directory,
   );
 });
 

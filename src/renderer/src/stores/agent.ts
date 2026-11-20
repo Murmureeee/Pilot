@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { applyAgentEvent, initialAgentUiState, type AgentUiState } from "../adapters/agent-events";
 import { currentLocale } from "../lib/i18n";
 import { initialNavState, moveNav, peekNav, pushNav, type NavState } from "../lib/nav";
-import type { SettingsSection } from "../lib/types";
+import type { ProjectSelection, SettingsSection } from "../lib/types";
 import type {
   ApprovalMode,
   LogLevel,
@@ -51,12 +51,12 @@ interface AgentStore extends AgentUiState {
   prompt(input: PromptInput, workingDirectory: string | null): Promise<void>;
   abort(): void;
   newSession(): Promise<void>;
-  selectProject(sessionId?: string, onSelected?: (directory: string) => void): Promise<void>;
+  selectProject(selection?: ProjectSelection): Promise<void>;
   /** record=false 用于前进/后退（不重复入栈） */
   loadSession(id: string, record?: boolean): Promise<void>;
   /** 手动重命名会话（titleCustom 保护，自动标题不再覆盖） */
   renameSession(id: string, title: string): Promise<void>;
-  /** 置顶/取消置顶（侧栏「置顶」分区） */
+  /** 置顶/取消置顶（在当前项目分组内） */
   setSessionPinned(id: string, pinned: boolean): Promise<void>;
   /** 归档/取消归档（归档当前会话回草稿态） */
   setSessionArchived(id: string, archived: boolean): Promise<void>;
@@ -125,6 +125,7 @@ function sessionSnapshot(
     sessionId: snapshot.sessionId,
     draftWorkingDirectory: snapshot.draftWorkingDirectory,
     sessions: snapshot.sessions,
+    recentProjects: snapshot.recentProjects,
     messages: snapshot.messages,
     status: snapshot.status,
     usage: snapshot.usage,
@@ -215,14 +216,16 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     set({ ...sessionSnapshot(snapshot), error: null, projectError: null });
   },
 
-  selectProject: async (sessionId, onSelected) => {
+  selectProject: async ({ sessionId, directory, onSelected } = {}) => {
     if (get().choosingProject) return;
     set({ choosingProject: true, projectError: null });
     try {
-      const snapshot = await window.pi.sessionSelectProject(currentLocale(), sessionId);
+      const snapshot = directory
+        ? await window.pi.sessionUseRecentProject(directory, sessionId)
+        : await window.pi.sessionSelectProject(currentLocale(), sessionId);
       if (!snapshot) return;
-      const directory = selectProjectDirectory(snapshot);
-      if (directory) onSelected?.(directory);
+      const selectedDirectory = selectProjectDirectory(snapshot);
+      if (selectedDirectory) onSelected?.(selectedDirectory);
       set({ ...sessionSnapshot(snapshot), view: "chat", error: null });
     } catch (error) {
       set({ view: "chat", projectError: error instanceof Error ? error.message : String(error) });

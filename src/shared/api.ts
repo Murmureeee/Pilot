@@ -12,6 +12,7 @@ import type {
   PermissionDecision,
   PingRequest,
   PingResponse,
+  ProjectGitHead,
   PromptInput,
   ProviderInput,
   ProviderTestResult,
@@ -61,6 +62,8 @@ export interface PiApi {
   clearQueue(): Promise<void>;
   sessionNew(): Promise<Snapshot>;
   sessionSelectProject(locale: Locale, sessionId?: string): Promise<Snapshot | null>;
+  sessionUseRecentProject(directory: string, sessionId?: string): Promise<Snapshot>;
+  sessionGitHead(directory: string): Promise<ProjectGitHead | null>;
   sessionLoad(id: string): Promise<Snapshot>;
   sessionRename(id: string, title: string): Promise<SessionMeta[]>;
   sessionDelete(id: string): Promise<Snapshot>;

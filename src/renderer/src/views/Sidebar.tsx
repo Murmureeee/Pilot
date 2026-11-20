@@ -1,6 +1,7 @@
 // @env browser
 import {
   useCallback,
+  useMemo,
   useState,
   type JSX,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -16,6 +17,7 @@ import {
   CircleIcon,
   CopyIcon,
   DownloadIcon,
+  FolderIcon,
   FolderOpenIcon,
   GitForkIcon,
   HardDriveIcon,
@@ -36,6 +38,7 @@ import { Button } from "@renderer/components/ui/button";
 import { SETTINGS_SECTION_LABELS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { SettingsSection } from "@renderer/lib/types";
+import { referenceName } from "@renderer/lib/workspace-links";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -43,7 +46,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
-import { useAgentStore } from "@renderer/stores/agent";
+import { selectProjectDirectory, useAgentStore } from "@renderer/stores/agent";
 import {
   Dialog,
   DialogContent,
@@ -220,6 +223,8 @@ export function SidebarPanel({
   const locale = useLocale();
   const sessions = useAgentStore((s) => s.sessions);
   const sessionId = useAgentStore((s) => s.sessionId);
+  const recentProjects = useAgentStore((s) => s.recentProjects);
+  const projectDirectory = useAgentStore(selectProjectDirectory);
   const newSession = useAgentStore((s) => s.newSession);
   const loadSession = useAgentStore((s) => s.loadSession);
   const selectProject = useAgentStore((s) => s.selectProject);
@@ -262,18 +267,25 @@ export function SidebarPanel({
     }
   };
 
-  // 侧栏三分区：置顶（pinned 且未归档）→ 最近 → 已归档（降权显示）
-  const active = sessions.filter((s) => !s.archived);
-  const pinned = active.filter((s) => s.pinned);
-  const recent = active.filter((s) => !s.pinned);
-  const archived = sessions.filter((s) => s.archived);
+  const { active, archived } = useMemo(() => {
+    const activeSessions = sessions
+      .filter((session) => !session.archived)
+      .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
+    return {
+      active: Map.groupBy(activeSessions, (session) => session.workingDirectory ?? null),
+      archived: Map.groupBy(
+        sessions.filter((session) => session.archived),
+        (session) => session.workingDirectory ?? null,
+      ),
+    };
+  }, [sessions]);
+  const unlinked = active.get(null);
 
   const openSession = (id: string): void => {
     setView("chat");
     void loadSession(id);
   };
 
-  /** 会话行：左键切换 + 悬停浮现「置顶/归档」按钮 + 右键上下文菜单（三分区共用） */
   const renderSessionRow = (s: SessionMeta): JSX.Element => (
     <ContextMenu key={s.id}>
       <ContextMenuTrigger
@@ -294,6 +306,12 @@ export function SidebarPanel({
               {/* 未读：圆点 + 加粗标题，打开会话即清除（ChatGPT 同款） */}
               {s.unread && (
                 <span className="bg-sidebar-foreground/80 mr-2 size-1.5 shrink-0 rounded-full" />
+              )}
+              {s.pinned && !s.archived && (
+                <PinIcon
+                  className="text-muted-foreground me-1.5 size-3 shrink-0"
+                  aria-label={t("置顶", locale)}
+                />
               )}
               <span className={cn("truncate", s.unread && "font-semibold")}>{s.title}</span>
             </button>
@@ -482,33 +500,80 @@ export function SidebarPanel({
           </div>
 
           <nav aria-label={t("聊天", locale)} className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-            {pinned.length > 0 && (
-              <section className="pb-3">
+            {recentProjects.length > 0 && (
+              <section className="flex flex-col gap-1 pb-3">
                 <h3 className="text-sidebar-foreground/70 px-2.5 py-1 text-xs">
-                  {t("置顶", locale)}
+                  {t("最近项目", locale)}
                 </h3>
-                {pinned.map((s) => renderSessionRow(s))}
+                {recentProjects.map((directory) => {
+                  const selected = directory === projectDirectory;
+                  const chats = active.get(directory);
+                  return (
+                    <section key={directory} aria-label={directory}>
+                      <Button
+                        variant="ghost"
+                        aria-current={selected ? "location" : undefined}
+                        title={directory}
+                        disabled={choosingProject}
+                        onClick={() => void selectProject({ directory })}
+                        className={cn(
+                          "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-auto w-full min-w-0 items-start justify-start gap-2 rounded-lg px-2.5 py-1.5 text-left font-normal",
+                          selected && "bg-sidebar-accent",
+                        )}
+                      >
+                        <FolderIcon
+                          className="text-muted-foreground mt-0.5"
+                          data-icon="inline-start"
+                        />
+                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="truncate text-[13px] leading-5">
+                            {referenceName(directory)}
+                          </span>
+                          <span className="text-muted-foreground truncate text-xs leading-4 [direction:rtl] text-left">
+                            <bdi dir="ltr">{directory}</bdi>
+                          </span>
+                        </span>
+                        {selected && <CheckIcon className="mt-0.5" aria-hidden="true" />}
+                      </Button>
+                      {chats && (
+                        <div className="border-sidebar-border ms-4 border-s ps-1.5">
+                          {chats.map(renderSessionRow)}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
               </section>
             )}
-            {recent.length > 0 && (
-              <section className="pb-3">
+            {unlinked && (
+              <section className="pb-3" aria-label={t("未关联项目", locale)}>
                 <h3 className="text-sidebar-foreground/70 px-2.5 py-1 text-xs">
-                  {t("最近", locale)}
+                  {t("未关联项目", locale)}
                 </h3>
-                {recent.map((s) => renderSessionRow(s))}
+                {unlinked.map(renderSessionRow)}
               </section>
             )}
-            {sessions.length === 0 && (
+            {sessions.length === 0 && recentProjects.length === 0 && (
               <p className="text-sidebar-foreground/70 px-2.5 py-1 text-xs">
                 {t("暂无会话", locale)}
               </p>
             )}
-            {archived.length > 0 && (
+            {archived.size > 0 && (
               <section>
                 <h3 className="text-sidebar-foreground/70 px-2.5 py-1 text-xs">
                   {t("已归档", locale)}
                 </h3>
-                {archived.map((s) => renderSessionRow(s))}
+                {[...archived].map(([directory, chats]) => (
+                  <section key={directory ?? ""}>
+                    <h4
+                      className="text-muted-foreground truncate px-2.5 py-1 text-xs"
+                      title={directory ?? undefined}
+                    >
+                      {directory ? referenceName(directory) : t("未关联项目", locale)}
+                    </h4>
+                    {chats.map(renderSessionRow)}
+                  </section>
+                ))}
               </section>
             )}
           </nav>

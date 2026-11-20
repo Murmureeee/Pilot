@@ -20,6 +20,8 @@ export const IPC = {
   agentGetSnapshot: "agent:get-snapshot",
   sessionNew: "session:new",
   sessionSelectProject: "session:select-project",
+  sessionUseRecentProject: "session:use-recent-project",
+  sessionGitHead: "session:git-head",
   sessionLoad: "session:load",
   sessionRename: "session:rename",
   sessionDelete: "session:delete",
@@ -231,8 +233,13 @@ export type UiAgentEvent =
   | { type: "thinking_delta"; id: string; blockIndex: number; delta: string }
   | { type: "thinking_end"; id: string; blockIndex: number; text: string; durationMs?: number }
   | { type: "plan"; steps: PlanStep[] }
-  /** 会话元数据全量刷新（自动标题/重命名/删除后推动侧栏更新） */
-  | { type: "sessions"; sessions: SessionMeta[]; activeSessionId?: string }
+  /** 更新侧栏的会话与项目。 */
+  | {
+      type: "sessions";
+      sessions: SessionMeta[];
+      recentProjects: string[];
+      activeSessionId?: string;
+    }
   | (ToolInvocation & { type: "tool_call" | "tool_start"; id?: string })
   | { type: "tool_update"; callId: string; output: string }
   | {
@@ -288,6 +295,8 @@ export interface SessionMeta {
   /** 会话级人设/指令覆盖（空/缺省 = 用全局 persona），右键「会话指令…」编辑 */
   personaOverride?: string;
 }
+
+export type ProjectGitHead = { branch: string } | { detachedAt: string };
 
 /** 主题（FR-5.5）：亮 / 暗 / 跟随系统；渲染层本地存储，切换时同步原生标题栏颜色 */
 export type ThemeSetting = "light" | "dark" | "system";
@@ -378,6 +387,7 @@ export interface Snapshot {
   sessionId: string | null;
   draftWorkingDirectory: string | null;
   sessions: SessionMeta[];
+  recentProjects: string[];
   messages: UiMessage[];
   status: AgentStatus;
   settings: PublicSettings;

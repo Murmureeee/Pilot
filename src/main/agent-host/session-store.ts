@@ -12,11 +12,7 @@ import { legacyMentionParts } from "./mentions";
 import { labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
-import type { ReferencedUserMessage, TimedAssistantMessage } from "./types";
-
-export interface SessionIndex {
-  sessions: SessionMeta[];
-}
+import type { ReferencedUserMessage, SessionIndex, TimedAssistantMessage } from "./types";
 
 export function messageText(message: AgentMessage): string {
   const content = (message as { content?: unknown }).content;
@@ -176,6 +172,27 @@ export class SessionStore {
     return [...this.index.sessions].sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
+  listRecentProjects(sessions = this.list()): string[] {
+    const projects = new Set(this.index.recentProjects);
+    // Older indexes contain only the directories stored on the sessions.
+    for (const { workingDirectory } of sessions) {
+      if (workingDirectory) projects.add(workingDirectory);
+    }
+    return [...projects];
+  }
+
+  private projectOpened(workingDirectory: string): string[] {
+    return [
+      workingDirectory,
+      ...this.listRecentProjects().filter((directory) => directory !== workingDirectory),
+    ];
+  }
+
+  rememberProject(workingDirectory: string): void {
+    if (this.index.recentProjects?.[0] === workingDirectory) return;
+    this.writeIndex({ ...this.index, recentProjects: this.projectOpened(workingDirectory) });
+  }
+
   /** 单个会话元数据（host 组装 systemPrompt 时读会话级人设覆盖） */
   getMeta(id: string): SessionMeta | null {
     return this.index.sessions.find((s) => s.id === id) ?? null;
@@ -202,7 +219,13 @@ export class SessionStore {
       updatedAt: Date.now(),
       workingDirectory,
     };
-    this.writeIndex({ sessions: [...this.index.sessions, meta] });
+    this.writeIndex({
+      ...this.index,
+      sessions: [...this.index.sessions, meta],
+      recentProjects: workingDirectory
+        ? this.projectOpened(workingDirectory)
+        : this.index.recentProjects,
+    });
     return meta;
   }
 
@@ -211,9 +234,11 @@ export class SessionStore {
     if (!meta) throw new Error("找不到该会话。");
     if (meta.workingDirectory) throw new Error("该会话已关联项目。");
     this.writeIndex({
+      ...this.index,
       sessions: this.index.sessions.map((session) =>
         session.id === id ? { ...session, workingDirectory } : session,
       ),
+      recentProjects: this.projectOpened(workingDirectory),
     });
   }
 
@@ -228,7 +253,7 @@ export class SessionStore {
     return meta;
   }
 
-  /** 置顶/取消置顶（侧栏「置顶」分区由渲染层按此字段分组） */
+  /** 置顶/取消置顶（渲染层在同一项目内优先展示） */
   setPinned(id: string, pinned: boolean): SessionMeta | null {
     const meta = this.index.sessions.find((s) => s.id === id);
     if (!meta) return null;

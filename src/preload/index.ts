@@ -46,6 +46,9 @@ const api: PiApi = {
   sessionNew: () => ipcRenderer.invoke(IPC.sessionNew),
   sessionSelectProject: (locale, sessionId) =>
     ipcRenderer.invoke(IPC.sessionSelectProject, locale, sessionId),
+  sessionUseRecentProject: (directory, sessionId) =>
+    ipcRenderer.invoke(IPC.sessionUseRecentProject, directory, sessionId),
+  sessionGitHead: (directory) => ipcRenderer.invoke(IPC.sessionGitHead, directory),
   sessionLoad: (id: string) => ipcRenderer.invoke(IPC.sessionLoad, id),
   sessionRename: (id: string, title: string) =>
     ipcRenderer.invoke(IPC.sessionRename, id, title) as Promise<SessionMeta[]>,

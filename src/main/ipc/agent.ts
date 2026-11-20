@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog } from "electron";
 import { IPC } from "../../shared/contract";
 import { runAgentSmoke } from "../agent-host/smoke";
 import { NATIVE_DIALOG_TITLES } from "../constants";
+import { readProjectGitHead } from "../workspace/git";
 import { previewWorkspaceReference } from "../workspace/reference";
 import { searchWorkspace } from "../workspace/search";
 import { handle } from "./transport";
@@ -42,6 +43,12 @@ export function registerAgentRoutes({ host }: Pick<IpcContext, "host">): void {
     if (!directory) return null;
     return sessionId ? host.bindProject(sessionId, directory) : host.openProject(directory);
   });
+  handle(IPC.sessionUseRecentProject, (_event, directory, sessionId) =>
+    host.useRecentProject(directory, sessionId),
+  );
+  handle(IPC.sessionGitHead, (_event, directory) =>
+    directory === host.getProjectDirectory() ? readProjectGitHead(directory) : null,
+  );
   handle(IPC.sessionLoad, (_event, id) => host.loadSession(id));
   handle(IPC.sessionRename, (_event, id, title) =>
     host.renameSession(id, title.trim().slice(0, 100)),

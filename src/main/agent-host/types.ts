@@ -1,6 +1,11 @@
 // @env node
 import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
-import type { UiUserPart } from "@shared/contract";
+import type { SessionMeta, UiUserPart } from "@shared/contract";
+
+export interface SessionIndex {
+  sessions: SessionMeta[];
+  recentProjects?: string[];
+}
 
 export type TimedAssistantMessage = AssistantMessage & {
   pilotThinkingDurations?: Record<number, number>;

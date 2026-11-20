@@ -17,6 +17,36 @@ function makeStore(): { store: SessionStore; dir: string } {
 }
 
 describe("SessionStore", () => {
+  it("restores recent folders without chats and includes projects from old session indexes", () => {
+    const { dir } = makeStore();
+    const linked = join(dir, "older project");
+    const recent = join(dir, "recent project");
+    writeFileSync(
+      join(dir, "index.json"),
+      JSON.stringify({
+        sessions: [
+          {
+            id: "old-linked",
+            title: "Linked",
+            createdAt: 1,
+            updatedAt: 2,
+            workingDirectory: linked,
+          },
+          { id: "old-unlinked", title: "Unlinked", createdAt: 1, updatedAt: 3 },
+        ],
+      }),
+    );
+    const store = new SessionStore(dir);
+    expect(store.listRecentProjects()).toEqual([linked]);
+    store.rememberProject(recent);
+    store.rememberProject(recent);
+    const restarted = new SessionStore(dir);
+    expect(restarted.listRecentProjects()).toEqual([recent, linked]);
+    expect(restarted.list()).toHaveLength(2);
+    restarted.rememberProject(linked);
+    expect(new SessionStore(dir).listRecentProjects()).toEqual([linked, recent]);
+  });
+
   it("creates sessions and lists them newest-first", async () => {
     const { store } = makeStore();
     const first = store.create();

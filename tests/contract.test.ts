@@ -31,6 +31,8 @@ describe("IPC contract", () => {
     expect(IPC.sessionRename).toBe("session:rename");
     expect(IPC.sessionDelete).toBe("session:delete");
     expect(IPC.sessionSelectProject).toBe("session:select-project");
+    expect(IPC.sessionUseRecentProject).toBe("session:use-recent-project");
+    expect(IPC.sessionGitHead).toBe("session:git-head");
     expect(IPC.agentClearQueue).toBe("agent:clear-queue");
     expect(IPC.agentSearchWorkspace).toBe("agent:search-workspace");
     expect(IPC.agentPreviewWorkspaceReference).toBe("agent:preview-workspace-reference");

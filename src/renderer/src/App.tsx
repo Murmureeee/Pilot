@@ -1,11 +1,11 @@
 // @env browser
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import { FolderIcon, FolderOpenIcon, MessageSquareIcon } from "lucide-react";
+import { FolderIcon, MessageSquareIcon } from "lucide-react";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
 import { FileChangesPanel } from "@renderer/components/ai/file-changes-panel";
+import { ProjectBranch, ProjectChooser } from "@renderer/components/ai/project-controls";
 import { TopBar } from "@renderer/components/ai/top-bar";
 import { WorkspaceReferencePanel } from "@renderer/components/ai/workspace-reference-panel";
-import { Button } from "@renderer/components/ui/button";
 import { AppRail, SidebarPanel } from "@renderer/views/Sidebar";
 import { ChatView } from "@renderer/views/ChatView";
 import { SettingsView } from "@renderer/views/SettingsView";
@@ -32,8 +32,6 @@ export default function App(): JSX.Element {
   const sessionId = useAgentStore((s) => s.sessionId);
   const workingDirectory = useAgentStore(selectWorkingDirectory);
   const projectDirectory = useAgentStore(selectProjectDirectory);
-  const selectProject = useAgentStore((s) => s.selectProject);
-  const choosingProject = useAgentStore((s) => s.choosingProject);
   const locale = useLocale();
   const setPaletteOpen = useAgentStore((s) => s.setPaletteOpen);
   const [sidebarWidth, setSidebarWidth] = useState(262);
@@ -172,16 +170,10 @@ export default function App(): JSX.Element {
                         </div>
                       )}
                     </div>
-                    {!projectDirectory && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={choosingProject}
-                        onClick={() => void selectProject(sessionId ?? undefined)}
-                      >
-                        <FolderOpenIcon data-icon="inline-start" />
-                        {t(sessionId ? "关联项目…" : "打开项目…", locale)}
-                      </Button>
+                    {projectDirectory ? (
+                      <ProjectBranch key={projectDirectory} directory={projectDirectory} />
+                    ) : (
+                      <ProjectChooser sessionId={sessionId} />
                     )}
                   </header>
                   <ChatView composerDrafts={composerDrafts} workingDirectory={workingDirectory} />

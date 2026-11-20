@@ -232,11 +232,14 @@ export function Composer({
   };
 
   const pickDirectory = async (): Promise<void> => {
-    await selectProject(sessionId ?? undefined, (directory) => {
-      const currentDraft = savedDrafts.current.get(workingDirectory);
-      if (!currentDraft?.length || savedDrafts.current.get(directory)?.length) return;
-      savedDrafts.current.set(directory, currentDraft);
-      savedDrafts.current.delete(workingDirectory);
+    await selectProject({
+      sessionId: sessionId ?? undefined,
+      onSelected: (directory) => {
+        const currentDraft = savedDrafts.current.get(workingDirectory);
+        if (!currentDraft?.length || savedDrafts.current.get(directory)?.length) return;
+        savedDrafts.current.set(directory, currentDraft);
+        savedDrafts.current.delete(workingDirectory);
+      },
     });
     (pickerInput.current ?? editor.current)?.focus();
   };

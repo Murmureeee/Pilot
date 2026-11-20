@@ -158,3 +158,8 @@ export interface FileChangesStore {
   confirmUndo(id: string): void;
   cancelUndo(id: string): void;
 }
+export interface ProjectSelection {
+  sessionId?: string;
+  directory?: string;
+  onSelected?: (directory: string) => void;
+}

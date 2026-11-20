@@ -41,6 +41,8 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.agentGetSnapshot]: [],
   [IPC.sessionNew]: [],
   [IPC.sessionSelectProject]: ["zh"],
+  [IPC.sessionUseRecentProject]: ["E:/projects/Pilot"],
+  [IPC.sessionGitHead]: ["E:/projects/Pilot"],
   [IPC.sessionLoad]: [sessionId],
   [IPC.sessionRename]: [sessionId, "标题"],
   [IPC.sessionDelete]: [sessionId],
@@ -114,6 +116,8 @@ describe("IPC argument validation", () => {
 
   it("accepts a session ID when choosing a project for an existing chat", () => {
     expect(parseIpcArgs(IPC.sessionSelectProject, ["en", sessionId])).toEqual(["en", sessionId]);
+    const recent = ["E:/projects/Pilot", sessionId];
+    expect(parseIpcArgs(IPC.sessionUseRecentProject, recent)).toEqual(recent);
   });
 
   it("receives typed mentions and rejects invalid source metadata", () => {
@@ -147,6 +151,8 @@ describe("IPC argument validation", () => {
     [IPC.toolPermissionRespond, [sessionId, "later"]],
     [IPC.sessionLoad, ["not-a-session-id"]],
     [IPC.sessionSelectProject, ["zh", "C:/projects/Pilot"]],
+    [IPC.sessionUseRecentProject, ["E:/projects/Pilot", "another-folder"]],
+    [IPC.sessionGitHead, [" "]],
     [IPC.sessionUndoFileChange, [sessionId, "C:/some/path"]],
     [IPC.sessionPin, [sessionId, "true"]],
     [IPC.appOpenPath, ["other-directory"]],

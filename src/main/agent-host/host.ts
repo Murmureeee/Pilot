@@ -132,7 +132,18 @@ export class AgentHost {
     this.send({ type: "status", status });
   }
 
-  private getProjectDirectory(): string | undefined {
+  private sendSessions(activeSessionId?: string): SessionMeta[] {
+    const sessions = this.deps.store.list();
+    this.send({
+      type: "sessions",
+      sessions,
+      recentProjects: this.deps.store.listRecentProjects(sessions),
+      activeSessionId,
+    });
+    return sessions;
+  }
+
+  getProjectDirectory(): string | undefined {
     return this.sessionId
       ? this.deps.store.getMeta(this.sessionId)?.workingDirectory
       : this.draftWorkingDirectory;
@@ -150,7 +161,7 @@ export class AgentHost {
     const meta = this.deps.store.create(workingDirectory);
     this.sessionId = meta.id;
     this.draftWorkingDirectory = undefined;
-    this.send({ type: "sessions", sessions: this.deps.store.list(), activeSessionId: meta.id });
+    this.sendSessions(meta.id);
     return meta.id;
   }
 
@@ -483,11 +494,7 @@ export class AgentHost {
       }
       this.deps.store.save(this.agentSessionId, this.agent.state.messages);
       // 自动标题可能已变化：推送会话列表刷新侧栏
-      this.send({
-        type: "sessions",
-        sessions: this.deps.store.list(),
-        activeSessionId: this.agentSessionId,
-      });
+      this.sendSessions(this.agentSessionId);
     }
     this.steerCount = 0;
     this.send({ type: "queue", steerCount: 0 });
@@ -599,17 +606,13 @@ export class AgentHost {
   /** 手动重命名；返回刷新后的会话列表 */
   renameSession(id: string, title: string): SessionMeta[] {
     this.deps.store.rename(id, title);
-    const sessions = this.deps.store.list();
-    this.send({ type: "sessions", sessions });
-    return sessions;
+    return this.sendSessions();
   }
 
   /** 置顶/取消置顶 */
   pinSession(id: string, pinned: boolean): SessionMeta[] {
     this.deps.store.setPinned(id, pinned);
-    const sessions = this.deps.store.list();
-    this.send({ type: "sessions", sessions });
-    return sessions;
+    return this.sendSessions();
   }
 
   /** 归档/取消归档；归档当前打开的会话时回到草稿态（数据保留在归档区） */
@@ -618,25 +621,20 @@ export class AgentHost {
     const directory = this.deps.store.getMeta(id)?.workingDirectory;
     this.deps.store.setArchived(id, archived);
     if (archived && this.sessionId === id) this.switchSession(null, [], directory);
-    const sessions = this.deps.store.list();
-    this.send({ type: "sessions", sessions });
+    this.sendSessions();
     return this.getSnapshot();
   }
 
   /** 标记/清除未读 */
   unreadSession(id: string, unread: boolean): SessionMeta[] {
     this.deps.store.setUnread(id, unread);
-    const sessions = this.deps.store.list();
-    this.send({ type: "sessions", sessions });
-    return sessions;
+    return this.sendSessions();
   }
 
   /** 分叉：复制转录为新会话 */
   forkSession(id: string): SessionMeta[] {
     this.deps.store.fork(id);
-    const sessions = this.deps.store.list();
-    this.send({ type: "sessions", sessions });
-    return sessions;
+    return this.sendSessions();
   }
 
   /** 会话全文文本（渲染层写入剪贴板） */
@@ -655,8 +653,7 @@ export class AgentHost {
     const directory = this.deps.store.getMeta(id)?.workingDirectory;
     this.deps.store.remove(id);
     if (this.sessionId === id) this.switchSession(null, [], directory);
-    const sessions = this.deps.store.list();
-    this.send({ type: "sessions", sessions });
+    this.sendSessions();
     return this.getSnapshot();
   }
 
@@ -670,8 +667,16 @@ export class AgentHost {
   async openProject(directory: string): Promise<Snapshot> {
     const workingDirectory = normalizeWorkingDirectory(directory);
     await this.stopBeforeSwitch();
+    this.deps.store.rememberProject(workingDirectory);
     this.switchSession(null, [], workingDirectory);
     return this.getSnapshot();
+  }
+
+  useRecentProject(directory: string, sessionId?: string): Promise<Snapshot> {
+    if (!this.deps.store.listRecentProjects().includes(directory)) {
+      throw new Error("找不到该最近项目。");
+    }
+    return sessionId ? this.bindProject(sessionId, directory) : this.openProject(directory);
   }
 
   async bindProject(id: string, directory: string): Promise<Snapshot> {
@@ -763,10 +768,12 @@ export class AgentHost {
   }
 
   getSnapshot(): Snapshot {
+    const sessions = this.deps.store.list();
     return {
       sessionId: this.sessionId,
       draftWorkingDirectory: this.draftWorkingDirectory ?? null,
-      sessions: this.deps.store.list(),
+      sessions,
+      recentProjects: this.deps.store.listRecentProjects(sessions),
       messages: this.uiMessages,
       status: this.status,
       settings: toPublicSettings(this.deps.getSettings()),

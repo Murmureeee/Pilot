@@ -14,9 +14,15 @@ describe("agent-events adapter", () => {
     const state = applyAgentEvent(initialAgentUiState(), {
       type: "sessions",
       sessions: [session],
+      recentProjects: [session.workingDirectory],
       activeSessionId: session.id,
     });
-    expect(state).toMatchObject({ sessionId: session.id, sessions: [session], messages: [] });
+    expect(state).toMatchObject({
+      sessionId: session.id,
+      sessions: [session],
+      recentProjects: [session.workingDirectory],
+      messages: [],
+    });
   });
 
   it("preserves typed references in a user message event", () => {
@@ -221,8 +227,15 @@ describe("agent-events adapter", () => {
     const sessions = [
       { id: "a", title: "重命名后的标题", createdAt: 1, updatedAt: 2, titleCustom: true },
     ];
-    state = applyAgentEvent(state, { type: "sessions", sessions, activeSessionId: "a" });
+    state.recentProjects = ["E:/projects/previous"];
+    state = applyAgentEvent(state, {
+      type: "sessions",
+      sessions,
+      recentProjects: ["E:/projects/Pilot"],
+      activeSessionId: "a",
+    });
     expect(state.sessions).toEqual(sessions);
+    expect(state.recentProjects).toEqual(["E:/projects/Pilot"]);
     expect(state.sessionId).toBe("a");
   });
 

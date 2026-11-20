@@ -20,6 +20,7 @@ export interface AgentUiState {
   contextWindow: number | null;
   steerCount: number;
   sessions: SessionMeta[];
+  recentProjects: string[];
   pendingPermissions: Extract<UiAgentEvent, { type: "permission_request" }>[];
 }
 
@@ -34,6 +35,7 @@ export function initialAgentUiState(): AgentUiState {
     contextWindow: null,
     steerCount: 0,
     sessions: [],
+    recentProjects: [],
     pendingPermissions: [],
   };
 }
@@ -50,6 +52,7 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
       return {
         ...state,
         sessions: event.sessions,
+        recentProjects: event.recentProjects,
         sessionId: event.activeSessionId ?? state.sessionId,
       };
     case "usage":

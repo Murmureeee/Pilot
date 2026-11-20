@@ -142,6 +142,8 @@ const inputs = {
   [IPC.agentClearQueue]: none,
   [IPC.sessionNew]: none,
   [IPC.sessionSelectProject]: z.tuple([z.enum(SUPPORTED_LOCALES), z.uuid().optional()]),
+  [IPC.sessionUseRecentProject]: z.tuple([nonBlank, z.uuid().optional()]),
+  [IPC.sessionGitHead]: z.tuple([nonBlank]),
   [IPC.sessionLoad]: session,
   [IPC.sessionRename]: z.tuple([z.uuid(), nonBlank]),
   [IPC.sessionDelete]: session,
