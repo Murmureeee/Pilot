@@ -12,10 +12,9 @@ import {
 } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { MESSAGE_JUMP } from "@renderer/lib/constants";
-import { t } from "@renderer/lib/i18n";
+import { t, useLocale } from "@renderer/lib/i18n";
 import { messagePreview, turnPreviews } from "@renderer/lib/message-preview";
 import type { VisibleTurns } from "@renderer/lib/types";
-import { useAgentStore } from "@renderer/stores/agent";
 import { cn } from "cn";
 import type { UiMessage } from "@shared/contract";
 
@@ -58,7 +57,7 @@ export function MessageJump({
   viewportRef: RefObject<HTMLDivElement | null>;
   contentRef: RefObject<HTMLDivElement | null>;
 }): JSX.Element | null {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const rulerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLElement>(null);
   const [layout, setLayout] = useState({ gutter: 0, height: 0, width: 0 });

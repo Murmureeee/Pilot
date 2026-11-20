@@ -6,7 +6,7 @@ import type { BeforeToolCallResult } from "@earendil-works/pi-agent-core";
 import type { ApprovalMode, PermissionDecision, ToolRule, UiAgentEvent } from "@shared/contract";
 import type { McpToolPolicy } from "./mcp/types";
 import { isReadOnly, labelOf, pathOfArgs } from "./tools";
-import { isWithinDirectory } from "./tools/paths";
+import { isWithinDirectory } from "../workspace/paths";
 
 type Broadcast = (event: UiAgentEvent) => void;
 

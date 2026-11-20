@@ -68,30 +68,19 @@ Pilot 已具备日常文本对话、会话恢复、工具审批、Provider 设�
 
 ## 2. 系统架构
 
-```
-┌─────────────────────────────────────────────────────────┐
-│ 渲染进程 React UI（sandbox，无 Node 能力，无密钥）           │
-│  views: Chat / Settings / Onboarding                     │
-│  stores: agentStore / sessionStore / settingsStore        │
-│  adapters: pi 事件 → AI Elements parts  ★唯一胶水          │
-└────────────────────┬────────────────────────────────────┘
-   preload（contextBridge，类型化 API，唯一通道）
-┌────────────────────┴────────────────────────────────────┐
-│ 主进程 Node                                              │
-│  agent-host:                                             │
-│    · models.ts     createModels() + provider 注册          │
-│    · host.ts       new Agent({streamFn}) 生命周期管理       │
-│    · tools/        AgentTool 定义（read/write/edit/bash…） │
-│    · permissions.ts beforeToolCall 权限门 → 弹窗            │
-│    · session-store.ts JSONL 读写                          │
-│  security: safeStorage 密钥 / CSP / IPC 输入校验            │
-└─────────────────────────────────────────────────────────┘
+```text
+渲染进程 React · Zustand · i18next
+    │ window.pi（preload 的类型化 API）
+    ▼
+主进程 IPC（校验应用窗口、顶层 frame 和参数）
+    │ 窗口 / Agent 与会话 / 设置 / 外部集成
+    ▼
+agent-host · settings · workspace · external-import · updater
 ```
 
-**数据流（两条单向通道）**
+渲染层通过 `window.pi` 发起请求，并通过 `UiAgentEvent` 和更新状态事件接收结果。主进程把 pi 的事件转为应用契约，渲染层再把契约拼成可显示的消息。
 
-- UI → 主进程：`prompt / abort / steer / followUp / 切换模型 / 权限应答 / 会话管理 / 设置读写`
-- 主进程 → UI：`agent.subscribe()` 事件透传（`message_update`、`tool_execution_*` 等）+ 权限请求 + 状态推送
+`ipc/index.ts` 负责注册各组路由。`ipc/transport.ts` 负责窗口来源校验、参数校验和事件投递。持久化配置和加解密属于 `main/settings`，公开配置由 `toPublicSettings` 构造。应用窗口在加载渲染页前注册，销毁后移出事件接收列表。
 
 **pi 事件 → AI Elements 组件映射（适配层职责）**
 
@@ -114,45 +103,30 @@ Pilot 已具备日常文本对话、会话恢复、工具审批、Provider 设�
 
 ## 3. 项目结构
 
-```
-pi-desktop/
-├─ electron.vite.config.ts
-├─ electron-builder.yml
-├─ package.json
-├─ resources/                    # 图标等静态资源
+```text
+Pilot/
+├─ resources/                     # 应用图标
+├─ scripts/                       # 打包、Windows 验证和发布
 ├─ src/
-│  ├─ main/                      # 主进程（@env node）
-│  │  ├─ index.ts                # app 生命周期、窗口管理
-│  │  ├─ agent-host/
-│  │  │  ├─ host.ts              # Agent 创建/销毁/事件桥接
-│  │  │  ├─ models.ts            # provider 注册、模型目录、密钥解析
-│  │  │  ├─ permissions.ts       # beforeToolCall 门禁 + 规则持久化
-│  │  │  ├─ tools/
-│  │  │  │  ├─ read-file.ts  write-file.ts  edit-file.ts
-│  │  │  │  ├─ bash.ts           # Windows 适配（PowerShell/Git Bash）
-│  │  │  │  └─ glob.ts  grep.ts
-│  │  │  ├─ skills.ts             # 技能发现/解析/注入（system sections）
-│  │  │  └─ session-store.ts     # JSONL 读写、索引
-│  │  ├─ ipc/                    # 通道注册 + 入参校验（zod）
-│  │  ├─ security/
-│  │  │  └─ keys.ts              # safeStorage 加解密
-│  │  └─ logging.ts
-│  ├─ preload/
-│  │  └─ index.ts                # contextBridge 暴露类型化 API
-│  ├─ shared/                    # ★ 双进程共用契约（无运行时代码）
-│  │  ├─ contract.ts             # 通道名 + 请求/响应/事件类型
-│  │  └─ types.ts
-│  └─ renderer/                  # 渲染进程（@env browser）
-│     ├─ stores/                 # agent / session / settings (zustand)
-│     ├─ adapters/               # pi 事件 → parts 结构  ★
-│     ├─ views/                  # ChatView / SettingsView / OnboardingView
-│     ├─ components/
-│     │  ├─ ai/                  # AI Elements（shadcn CLI 安装）
-│     │  └─ ui/                  # shadcn/ui 基础组件
-│     └─ lib/
-│        ├─ i18n.ts
-│        └─ markdown-links.ts    # 链接拦截 → shell.openExternal
-└─ tests/                        # adapters / permissions / session-store
+│  ├─ main/
+│  │  ├─ index.ts                 # 应用生命周期、窗口和依赖装配
+│  │  ├─ ipc/                     # transport、validation、按职责注册的路由
+│  │  ├─ settings/                # 私有存储类型、凭据、设置与 MCP 配置
+│  │  ├─ workspace/               # 工作目录校验、引用搜索、命令环境
+│  │  ├─ agent-host/              # pi 生命周期、模型、权限、工具与会话
+│  │  ├─ external-import/         # 来源发现、预览、导入
+│  │  └─ updater.ts               # 更新状态与安装
+│  ├─ preload/index.ts            # contextBridge 暴露 window.pi
+│  ├─ shared/                     # IPC 契约及跨进程可用的纯逻辑
+│  └─ renderer/src/
+│     ├─ stores/agent.ts           # 会话快照、界面状态和 API 调用
+│     ├─ adapters/agent-events.ts  # UiAgentEvent 转为渲染状态
+│     ├─ views/                   # 会话与设置页面
+│     │  └─ settings/             # 常规、提供方、个性化和数据面板
+│     ├─ components/              # 聊天组件与通用 UI
+│     ├─ hooks/                   # 渲染层交互
+│     └─ lib/                     # 界面逻辑、i18n 和语言资源
+└─ tests/                         # 契约、路由、配置、会话和工具的回归测试
 ```
 
 ---
@@ -234,17 +208,18 @@ pi-desktop/
 
 | 状态 | 工作 | 验收标准 |
 | --- | --- | --- |
-| 已验收 | GitHub Actions 与测试安装包（FR-8.5） | Windows runner 从锁文件安装。推送代码到 `main` 或提交 PR 后执行八步验证。`ad9600e` 通过全部检查并生成 NSIS 测试包，Actions 产物保留 7 天。[Windows CI 构建记录](https://github.com/Murmureeee/Pilot/actions/runs/44525138926) |
+| 已验收 | GitHub Actions 与测试安装包（FR-8.5） | 推送代码到 `main` 或更新指向 `main` 的 PR 时自动执行 Windows 八步验证。仅修改 Markdown 跳过自动运行。需要安装包时手动运行 `build_test_packages`，产物保留 7 天。[默认检查验证记录](https://github.com/Murmureeee/Pilot/actions/runs/44671592973) |
 | 已验收 | Pilot 新装与从旧版升级（FR-8.2 / FR-8.3） | Windows runner 验证 Pilot 0.1.1 新装、演示对话、配置向导和卸载。从 `ad9600e` 重建采用 `pi Desktop` 发行标识的 0.1.0 兼容包。0.1.1 自动识别原安装路径，保留会话、审批模式、自定义指令、界面语言和启用的技能，原会话可继续。测试目录已清理。[安装验收记录](https://github.com/Murmureeee/Pilot/actions/runs/44536855149) |
 | 已验收 | 正式 HTTPS 更新源（FR-8.6） | Windows runner 从公开地址下载 v0.1.1 的清单、安装包和 blockmap，SHA-256 与发布资产一致，安装包的 SHA-512 与清单一致。配置公开更新源的 0.1.0 兼容包下载后普通退出仍保留旧版，经确认安装并重启后进入 0.1.1，原会话、设置、语言和技能均已恢复。测试下载和目录已清理。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.1.1) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/44561428215) |
 | 待验收 | 真实 Ollama 与 LM Studio | 两个本地服务分别发现模型、通过连接检查、完成一轮流式对话。记录服务版本和模型 ID，连接失败和无模型有明确反馈。 |
 | 待实施 | 本地滚动日志（FR-9.1） | 能从主进程、渲染进程和更新状态定位错误，日志按大小轮转。验证磁盘占用上限与敏感字段脱敏。 |
 
-Windows CI 的 `verify_installation` 使用隔离源复验新装和 HTTPS 升级，`prepare_release` 在验收通过后准备使用 GitHub Releases 的发布草稿。`verify_published_update` 下载公开安装包并验收从兼容包到最新发布版的升级。
+在 Actions 手动运行构建工作流时，`build_test_packages` 生成 Windows 和 Linux 测试包，`verify_installation` 使用隔离源复验 Windows 新装和 HTTPS 升级，`prepare_release` 验收两个平台的同版本产物并准备 GitHub Release 草稿，`verify_published_update` 复验公开 Windows 更新链路。
 
 #### 第二步 界面多语言
 
-- [ ] 统一语言列表、翻译键和回退规则。先加繁体中文，验证流程后再加日语和韩语。旧的 `zh` / `en` 偏好在打开应用时正确映射。
+- [x] 渲染层接入 i18next 和 react-i18next。词条随应用加载，缺失时回退到中文原文。语言列表与 IPC 复用同一份定义，继续读取旧的 `zh` / `en` 偏好。
+- [ ] 逐步将文案迁为稳定翻译键。先加繁体中文，验证流程后再加日语和韩语。
 - [ ] “设置 → 常规 → 语言”能即时切换并记住选择。翻译涵盖菜单、首次引导、文件选择框、错误和无障碍标签。日期、计数和数字使用所选语言的格式。
 - [ ] 对照翻译键检查缺项和插值，并验证 IPC 接受全部已注册语言。首次启动、重启、窄窗口和长文案均是验收场景（FR-5.13）。
 
@@ -259,12 +234,13 @@ Windows CI 的 `verify_installation` 使用隔离源复验新装和 HTTPS 升级
 
 | 优先级 | 工作 | 验收重点 |
 | --- | --- | --- |
-| P1 | macOS DMG、Linux AppImage/deb、三平台关键路径（FR-8.2、NFR-7） | 分平台完成构建、安装、一次对话及升级或更新流程验证。 |
+| P1 | macOS DMG、Linux 安装与升级验收（FR-8.2、NFR-7） | Ubuntu 24.04 runner 已构建 Linux x64 AppImage 和 `.deb`，两种产物均通过启动和 Agent 冒烟测试。`.deb` 从解包后的程序启动。桌面安装、卸载与升级继续验收。[Linux 打包验证](https://github.com/Murmureeee/Pilot/actions/runs/44669912414) |
 | P1 | 图片附件（FR-1.10） | 在支持图像的模型中发送与恢复图文会话。切换模型时明确显示附件能力。 |
 | P2 | Pi Packages、Prompt 模板和可选数据目录（FR-5.6、FR-5.11、FR-5.12） | 扩展包先预览内容再安装，模板能在输入框复用，数据迁移时保全会话及设置。 |
 | P2 | 长会话压缩、工具结果处理和会话导出（FR-1.8、FR-2.6、FR-6.5、FR-6.6） | 保留原始转录，超长会话仍能继续，导出的 Markdown 可读。 |
 | P2 | 文件变更视图、来源引用和会话检查点（FR-4.11、FR-4.12） | 引用可追踪，回退范围明确，回退前可预览。 |
 | P2 | 代码签名、事件查看器、崩溃日志和诊断导出（FR-8.4、FR-9.2、FR-9.3） | 签名由平台验证，用户可查看并导出脱敏的诊断内容。 |
+| P2 | Electron 凭据 API 迁移 | 升级 Electron 46 前切换到异步 safeStorage，验收旧密文读取、密钥服务暂时不可用和并发保存。[Electron 凭据文档](https://www.electronjs.org/docs/latest/api/safe-storage) |
 | P2 | 长列表与多会话内存（NFR-8） | 先测长会话和反复切换会话表现，发现瓶颈再决定虚拟化或内存优化。 |
 
 ---
@@ -363,10 +339,10 @@ Windows CI 的 `verify_installation` 使用隔离源复验新装和 HTTPS 升级
 ### FR-8 · 打包与分发（Phase 4）
 
 - [x] FR-8.1 (P0/Ph0) **Node 兼容验证**：✅ Electron 45 内置 Node 24.22.3 ≥ 22.19，pi 冒烟通过，sidecar 方案取消
-- [ ] FR-8.2 (P1/Ph4) Windows x64 NSIS 已通过自动化新装、旧版升级和卸载验收。macOS DMG 与 Linux AppImage/deb 待构建验收。
+- [ ] FR-8.2 (P1/Ph4) Windows x64 NSIS 已通过自动化新装、旧版升级和卸载验收。Linux x64 构建 AppImage 和 `.deb`，启动验收验证两种产物的冒烟路径。macOS DMG 与 Linux 桌面安装验收按平台继续。
 - [x] FR-8.3 (P1/Ph4) Windows 安装版支持自动检查、下载和退出安装。设置 `PI_UPDATE_URL` 后运行 `pnpm package:win` 会在 `dist/release` 生成安装包、blockmap 和 `latest.yml`。
 - [ ] FR-8.4 (P2/Ph4) 代码签名（mac notarize / win Authenticode）
-- [x] FR-8.5 (P1/Ph4) 云端 Windows 验证流水线与可按提交下载的 NSIS 测试安装包。
+- [x] FR-8.5 (P1/Ph4) 云端 Windows 验证流水线与手动生成的 Windows 和 Linux 测试安装包。
 - [x] FR-8.6 (P1/Ph4) GitHub Releases 公开更新源已上线，Windows 0.1.0 → 0.1.1 升级通过验收。
 
 ### FR-9 · 可观测性

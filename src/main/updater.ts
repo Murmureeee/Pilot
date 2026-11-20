@@ -1,14 +1,14 @@
 // @env node
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { BrowserWindow, app } from "electron";
+import { app } from "electron";
 import { autoUpdater } from "electron-updater";
-import { UPDATE_STATUS_CHANNEL, type UpdateStatus } from "@shared/contract";
+import type { UpdateStatus } from "@shared/contract";
 
 export class DesktopUpdater {
   private status: UpdateStatus = { state: "unavailable" };
 
-  constructor() {
+  constructor(private readonly publish: (status: UpdateStatus) => void) {
     if (
       !app.isPackaged ||
       process.platform !== "win32" ||
@@ -44,9 +44,7 @@ export class DesktopUpdater {
 
   private setStatus(status: UpdateStatus): void {
     this.status = status;
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send(UPDATE_STATUS_CHANNEL, status);
-    }
+    this.publish(status);
   }
 
   getStatus(): UpdateStatus {

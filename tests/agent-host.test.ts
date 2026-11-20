@@ -10,7 +10,8 @@ import { AgentHost } from "../src/main/agent-host/host";
 import { McpManager } from "../src/main/agent-host/mcp";
 import * as models from "../src/main/agent-host/models";
 import { SessionStore } from "../src/main/agent-host/session-store";
-import type { Settings, UiAgentEvent } from "../src/shared/contract";
+import type { Settings } from "../src/main/settings/types";
+import type { UiAgentEvent } from "../src/shared/contract";
 
 vi.mock("electron", () => ({ safeStorage: {} }));
 

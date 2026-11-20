@@ -11,8 +11,7 @@ import {
   TraceLine,
   TraceTitle,
 } from "@renderer/components/ui/trace";
-import { t } from "@renderer/lib/i18n";
-import { useAgentStore } from "@renderer/stores/agent";
+import { t, useLocale } from "@renderer/lib/i18n";
 import type { UiPart } from "@shared/contract";
 
 type ToolPart = Extract<UiPart, { type: "tool" }>;
@@ -31,7 +30,7 @@ function StatusIcon({ state }: { state: ToolPart["state"] }): JSX.Element {
 }
 
 export function ToolCard({ part }: { part: ToolPart }): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const line = (
     <TraceLine
       status={part.state === "running" ? "running" : part.state === "error" ? "error" : undefined}

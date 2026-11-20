@@ -16,12 +16,8 @@ import { streamSimple as anthropicStreamSimple } from "@earendil-works/pi-ai/api
 import { streamSimple as chatCompletionsStreamSimple } from "@earendil-works/pi-ai/api/openai-completions";
 import { streamSimple as responsesStreamSimple } from "@earendil-works/pi-ai/api/openai-responses";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
-import type {
-  ModelCatalogEntry,
-  ProviderConfig,
-  ProviderInput,
-  ProviderTestResult,
-} from "@shared/contract";
+import type { ModelCatalogEntry, ProviderInput, ProviderTestResult } from "@shared/contract";
+import type { ProviderConfig } from "../settings/types";
 import { messageText } from "./session-store";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";

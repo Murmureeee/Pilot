@@ -18,7 +18,7 @@ import {
 } from "@renderer/components/ui/message-scroller";
 import { Message, MessageContent } from "@renderer/components/ui/message";
 import { Bubble, BubbleContent } from "@renderer/components/ui/bubble";
-import { localizeError, t } from "@renderer/lib/i18n";
+import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
 import { cn } from "cn";
 import type { UiPart } from "@shared/contract";
@@ -66,7 +66,7 @@ function AssistantPart({
 }
 
 export function ChatView(): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const messages = useAgentStore((s) => s.messages);
   const sessionId = useAgentStore((s) => s.sessionId);
   const busy = useAgentStore((s) => s.status !== "idle");

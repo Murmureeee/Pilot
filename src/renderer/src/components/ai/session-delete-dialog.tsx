@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@renderer/components/ui/dialog";
-import { t } from "@renderer/lib/i18n";
+import { t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { SessionMeta } from "@shared/contract";
 
@@ -22,7 +22,7 @@ export function SessionDeleteDialog({
   target: SessionMeta | null;
   onClose(): void;
 }): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const deleteSession = useAgentStore((s) => s.deleteSession);
 
   return (

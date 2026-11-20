@@ -4,7 +4,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { createBashTool } from "./bash";
 import { PLAN_TOOL_NAME, TOOL_LABELS } from "./constants";
 import { createEditFileTool, createReadFileTool, createWriteFileTool } from "./file-tools";
-import { createToolPathResolver } from "./paths";
+import { createToolPathResolver } from "../../workspace/paths";
 import { planTool } from "./plan";
 import { createGlobTool, createGrepTool } from "./search-tools";
 import type { ResolveToolPath, ToolEnvironment } from "./types";

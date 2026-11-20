@@ -4,13 +4,13 @@ import { FolderOpenIcon, SearchIcon, TrashIcon } from "lucide-react";
 import { SessionDeleteDialog } from "@renderer/components/ai/session-delete-dialog";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
-import { t } from "@renderer/lib/i18n";
+import { t, useLocale } from "@renderer/lib/i18n";
 import { relativeTime } from "@renderer/lib/relative-time";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { AppInfo, SessionMeta } from "@shared/contract";
 
 export function DataSettings({ appInfo }: { appInfo: AppInfo | null }): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const sessions = useAgentStore((s) => s.sessions);
   const loadSession = useAgentStore((s) => s.loadSession);
   const setSessionArchived = useAgentStore((s) => s.setSessionArchived);

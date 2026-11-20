@@ -6,7 +6,7 @@ import {
   resolveProviderRef,
   testProvider,
 } from "../src/main/agent-host/models";
-import type { ProviderConfig } from "../src/shared/contract";
+import type { ProviderConfig } from "../src/main/settings/types";
 import { LOCAL_OPENAI_PRESETS } from "../src/shared/providers";
 
 const fauxCfg: ProviderConfig = {

@@ -19,7 +19,7 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
-import { t } from "@renderer/lib/i18n";
+import { t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
 import { canBack, canForward } from "@renderer/lib/nav";
 import { APP_NAME } from "@shared/constants";
@@ -73,7 +73,7 @@ export function TopBar({
   collapsed: boolean;
   onToggleSidebar(): void;
 }): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const nav = useAgentStore((s) => s.nav);
   const navBack = useAgentStore((s) => s.navBack);
   const navForward = useAgentStore((s) => s.navForward);

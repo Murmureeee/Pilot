@@ -1,13 +1,12 @@
 // @env node
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, dirname, isAbsolute, join } from "node:path";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { int, obj, opt, str } from "@earendil-works/pi-schema";
-import type { CommandShell } from "@shared/contract";
+import { normalizeWorkingDirectory } from "../../workspace/paths";
+import { findGitBash } from "../../workspace/shell";
 import { TOOL_LABELS } from "./constants";
-import { normalizeWorkingDirectory, truncate } from "./paths";
+import { truncate } from "./output";
 import type { ToolEnvironment } from "./types";
 
 const MAX_OUTPUT = 100_000;
@@ -16,29 +15,6 @@ const bashParams = obj({
   command: str({ description: "Command in the configured shell syntax." }),
   timeoutSec: opt(int({ description: "Timeout in seconds. Default 60, maximum 300." })),
 });
-
-export function getCommandShell(shell?: CommandShell): CommandShell {
-  return process.platform === "win32" && shell !== "bash" ? "powershell" : "bash";
-}
-
-export function findGitBash(): string | undefined {
-  const roots = [
-    process.env.ProgramFiles && join(process.env.ProgramFiles, "Git"),
-    process.env["ProgramFiles(x86)"] && join(process.env["ProgramFiles(x86)"], "Git"),
-    process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, "Programs", "Git"),
-  ];
-  for (const entry of (process.env.PATH ?? "").split(delimiter)) {
-    const path = entry.replace(/^"|"$/g, "");
-    if (isAbsolute(path) && existsSync(join(path, "git.exe"))) roots.push(dirname(path));
-  }
-  // System32 的 bash.exe 可能是 WSL 启动器，必须定位到 Git for Windows。
-  for (const root of roots) {
-    if (!root) continue;
-    const bash = join(root, "bin", "bash.exe");
-    if (existsSync(bash)) return bash;
-  }
-  return undefined;
-}
 
 export function createBashTool({
   workingDirectory,

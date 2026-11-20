@@ -10,9 +10,7 @@ import {
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type {
   AgentStatus,
-  ProviderConfig,
   SessionMeta,
-  Settings,
   Snapshot,
   ToolRule,
   UiAgentEvent,
@@ -20,14 +18,16 @@ import type {
 } from "@shared/contract";
 import { APP_NAME } from "../../shared/constants";
 import { applyPlanUpdate } from "../../shared/plan";
+import { toPublicSettings } from "../settings";
+import { decryptSecret } from "../settings/secrets";
+import type { ProviderConfig, Settings } from "../settings/types";
+import { getCommandShell } from "../workspace/shell";
 import type { McpManager } from "./mcp";
 import { resolveModel } from "./models";
 import { PermissionManager } from "./permissions";
 import { messageText, SessionStore, toUiMessages } from "./session-store";
-import { decryptSecret, toPublicSettings } from "./settings";
 import { loadSkillBody, scanSkills } from "./skills";
 import { createTools, labelOf } from "./tools";
-import { getCommandShell } from "./tools/bash";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
 import type { ToolEnvironment } from "./tools/types";

@@ -11,11 +11,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@renderer/components/ui/dialog";
-import { t } from "@renderer/lib/i18n";
+import { t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
 
 export function ConfirmationDialog(): JSX.Element | null {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const pending = useAgentStore((s) => s.pendingPermission);
   const respond = useAgentStore((s) => s.respondPermission);
 

@@ -19,7 +19,7 @@ import {
 } from "@renderer/lib/palette";
 import { relativeTime } from "@renderer/lib/relative-time";
 import { useAgentStore } from "@renderer/stores/agent";
-import { t } from "@renderer/lib/i18n";
+import { t, useLocale } from "@renderer/lib/i18n";
 import { cn } from "cn";
 
 function EntryIcon({ entry }: { entry: PaletteEntry }): JSX.Element {
@@ -41,7 +41,7 @@ function EntryIcon({ entry }: { entry: PaletteEntry }): JSX.Element {
 }
 
 export function CommandPalette(): JSX.Element | null {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const open = useAgentStore((s) => s.paletteOpen);
   const setOpen = useAgentStore((s) => s.setPaletteOpen);
   const sessions = useAgentStore((s) => s.sessions);

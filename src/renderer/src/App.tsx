@@ -8,15 +8,16 @@ import { AppRail, SidebarPanel } from "@renderer/views/Sidebar";
 import { ChatView } from "@renderer/views/ChatView";
 import { SettingsView } from "@renderer/views/SettingsView";
 import { applyTheme, loadTheme, watchSystemTheme } from "@renderer/lib/theme";
-import { t } from "@renderer/lib/i18n";
+import { t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
+import { LOCALE_DETAILS } from "@shared/constants";
 
 export default function App(): JSX.Element {
   const view = useAgentStore((s) => s.view);
   const init = useAgentStore((s) => s.init);
   const sessions = useAgentStore((s) => s.sessions);
   const sessionId = useAgentStore((s) => s.sessionId);
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const setPaletteOpen = useAgentStore((s) => s.setPaletteOpen);
   const [sidebarWidth, setSidebarWidth] = useState(262);
   const [collapsed, setCollapsed] = useState(false);
@@ -30,7 +31,7 @@ export default function App(): JSX.Element {
   }, [init]);
 
   useEffect(() => {
-    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+    document.documentElement.lang = LOCALE_DETAILS[locale].htmlLang;
   }, [locale]);
 
   // 全局快捷键：Ctrl+K 面板 / Ctrl+N 新聊天 / Ctrl+[ ] 导航 / Ctrl+, 设置 / Ctrl+Shift+S 侧栏

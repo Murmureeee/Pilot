@@ -2,9 +2,9 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { Settings } from "@shared/contract";
 import type { ExternalImportKind, ImportIssue, ImportSource } from "@shared/imports";
 import { parseSkillMarkdown } from "../agent-host/skills";
+import type { Settings } from "../settings/types";
 import { directory, fingerprint } from "./files";
 import { normalizeImportedMcp } from "./mcp";
 import { discoverImport, object } from "./sources";

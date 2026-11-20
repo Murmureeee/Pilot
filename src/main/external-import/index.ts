@@ -2,15 +2,14 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { Settings } from "@shared/contract";
 import type {
   ExternalImportKind,
   ExternalImportPreview,
   ImportedPluginInfo,
   ImportReport,
 } from "@shared/imports";
-import type { McpServerConfig } from "@shared/mcp";
-import { encryptSecret } from "../agent-host/settings";
+import { encryptSecret } from "../settings/secrets";
+import type { McpServerConfig, Settings } from "../settings/types";
 import { collectImportCatalog } from "./catalog";
 import { copyImportedDirectory } from "./files";
 import type { ImportLocations, ServerImport, SkillImport } from "./types";
@@ -132,7 +131,7 @@ export function importExternal(
     }
     let encryptedImport: string;
     try {
-      encryptedImport = encryptSecret(JSON.stringify(connection), true);
+      encryptedImport = encryptSecret(JSON.stringify(connection));
     } catch {
       report.issues.push({ name, reason: "encryption" });
       return undefined;

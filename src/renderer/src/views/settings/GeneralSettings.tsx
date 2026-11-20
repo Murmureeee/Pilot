@@ -16,9 +16,10 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { APPROVAL_MODE_OPTIONS, THEME_LABELS } from "@renderer/lib/constants";
-import { localizeError, t } from "@renderer/lib/i18n";
+import { localizeError, setLocale, t, useLocale } from "@renderer/lib/i18n";
 import { applyTheme, loadTheme } from "@renderer/lib/theme";
 import { useAgentStore } from "@renderer/stores/agent";
+import { LOCALE_DETAILS, SUPPORTED_LOCALES } from "@shared/constants";
 import type {
   ApprovalMode,
   CommandShell,
@@ -29,7 +30,7 @@ import type {
 import { cn } from "cn";
 
 function PermissionSettings({ settings }: { settings: PublicSettings }): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const setApprovalMode = useAgentStore((s) => s.setApprovalMode);
   const removeToolRule = useAgentStore((s) => s.removeToolRule);
   const [saving, setSaving] = useState(false);
@@ -142,7 +143,7 @@ function ToolEnvironmentForm({
   settings: PublicSettings;
   isWindows: boolean;
 }): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const saveToolEnvironment = useAgentStore((s) => s.saveToolEnvironment);
   const [directory, setDirectory] = useState(settings.workingDirectory);
   const [shell, setShell] = useState(settings.commandShell);
@@ -295,8 +296,7 @@ export function GeneralSettings({
   settings: PublicSettings;
   isWindows: boolean;
 }): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
-  const setLocale = useAgentStore((s) => s.setLocale);
+  const locale = useLocale();
   const [theme, setTheme] = useState<ThemeSetting>(loadTheme);
 
   return (
@@ -345,16 +345,15 @@ export function GeneralSettings({
               }}
             >
               <SelectTrigger id="settings-language">
-                <SelectValue>{locale === "zh" ? "中文" : "English"}</SelectValue>
+                <SelectValue>{LOCALE_DETAILS[locale].label}</SelectValue>
               </SelectTrigger>
               <SelectContent align="end" alignItemWithTrigger={false}>
                 <SelectGroup>
-                  <SelectItem value="zh" lang="zh-CN">
-                    中文
-                  </SelectItem>
-                  <SelectItem value="en" lang="en">
-                    English
-                  </SelectItem>
+                  {SUPPORTED_LOCALES.map((value) => (
+                    <SelectItem key={value} value={value} lang={LOCALE_DETAILS[value].htmlLang}>
+                      {LOCALE_DETAILS[value].label}
+                    </SelectItem>
+                  ))}
                 </SelectGroup>
               </SelectContent>
             </Select>

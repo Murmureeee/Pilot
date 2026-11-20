@@ -3,8 +3,7 @@
 // 点击头部可随时展开全文。折叠态摘要用单行截断（muted，次级信息规范）。
 import { useState, type JSX } from "react";
 import { BrainIcon, ChevronDownIcon, LoaderCircleIcon } from "lucide-react";
-import { t } from "@renderer/lib/i18n";
-import { useAgentStore } from "@renderer/stores/agent";
+import { t, useLocale } from "@renderer/lib/i18n";
 import { cn } from "cn";
 
 export function ThinkingBlock({
@@ -15,7 +14,7 @@ export function ThinkingBlock({
   /** 本块仍在接收 thinking_delta（自动展开）；结束后自动折叠 */
   streaming: boolean;
 }): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const expanded = streaming || open;
   const summary = text.trimStart().split("\n")[0] ?? "";

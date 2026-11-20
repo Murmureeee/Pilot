@@ -1,4 +1,6 @@
 // @env node
+import type { Locale } from "../shared/contract";
+
 // Electron derives its default profile path from the app name. Keep existing profiles on rename.
 export const USER_DATA_DIRECTORY = "pi Desktop";
 
@@ -7,3 +9,19 @@ export const TITLE_BAR_OVERLAY_COLORS = {
   light: { color: "#edf2f7", symbolColor: "#243448" },
   dark: { color: "#161e28", symbolColor: "#e4ebf4" },
 } as const;
+
+export const NATIVE_DIALOG_TITLES = {
+  zh: {
+    skill: "选择技能目录（须含 SKILL.md）",
+    importProject: "选择导入来源项目",
+    workingDirectory: "选择工具工作目录",
+  },
+  en: {
+    skill: "Choose a skill folder containing SKILL.md",
+    importProject: "Choose a project to import from",
+    workingDirectory: "Choose the tools’ working directory",
+  },
+} as const satisfies Record<
+  Locale,
+  { skill: string; importProject: string; workingDirectory: string }
+>;

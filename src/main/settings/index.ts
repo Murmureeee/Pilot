@@ -1,12 +1,12 @@
 // @env node
-// 设置存储：providers + API Key（safeStorage 加密）。密钥明文只存在于内存，永不落明文、永不出主进程。
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { safeStorage } from "electron";
-import type { PublicSettings, ProviderConfig, Settings, SettingsInput } from "@shared/contract";
+import type { PublicSettings, SettingsInput } from "@shared/contract";
 import { isOpenAiProvider } from "../../shared/providers";
-import { findGitBash, getCommandShell } from "./tools/bash";
-import { normalizeWorkingDirectory } from "./tools/paths";
+import { normalizeWorkingDirectory } from "../workspace/paths";
+import { findGitBash, getCommandShell } from "../workspace/shell";
+import { encryptSecret } from "./secrets";
+import type { ProviderConfig, Settings } from "./types";
 
 function readJson<T>(path: string): T | undefined {
   try {
@@ -21,27 +21,6 @@ function writeJsonAtomic(path: string, value: unknown): void {
   const tmp = `${path}.tmp`;
   writeFileSync(tmp, JSON.stringify(value, null, 2), "utf-8");
   renameSync(tmp, path);
-}
-
-export function encryptSecret(plain: string, requireEncryption = false): string {
-  if (!plain) return "";
-  if (!safeStorage.isEncryptionAvailable()) {
-    if (requireEncryption) throw new Error("系统密钥服务不可用，无法保存环境变量。");
-    console.warn("[settings] safeStorage 不可用，API key 将以明文存储（开发环境）");
-    return plain;
-  }
-  return safeStorage.encryptString(plain).toString("base64");
-}
-
-export function decryptSecret(stored: string | undefined): string | undefined {
-  if (!stored) return undefined;
-  if (!safeStorage.isEncryptionAvailable()) return stored;
-  try {
-    return safeStorage.decryptString(Buffer.from(stored, "base64"));
-  } catch {
-    console.error("[settings] API key 解密失败（系统用户变更或数据损坏），视为未配置");
-    return undefined;
-  }
 }
 
 /** 首次启动默认配置：内置 faux 测试 provider，开箱即可体验流式对话（真实 provider 在设置页添加） */

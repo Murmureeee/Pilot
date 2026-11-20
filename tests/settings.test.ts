@@ -8,10 +8,10 @@ import {
   saveSettings,
   toPublicSettings,
   validateSettingsInput,
-} from "../src/main/agent-host/settings";
-import type { Settings } from "../src/shared/contract";
+} from "../src/main/settings";
+import type { Settings } from "../src/main/settings/types";
 
-vi.mock("electron", () => ({ safeStorage: {} }));
+vi.mock("electron", () => ({ safeStorage: { isEncryptionAvailable: () => false } }));
 
 describe("tool environment settings", () => {
   it("loads old settings, persists the folder and preserves it on unrelated saves", () => {
@@ -71,5 +71,31 @@ describe("tool environment settings", () => {
         providers: [{ ...provider, baseUrl: "http://127.0.0.1:11434/v1" }],
       }).providers[0].apiKey,
     ).toBeUndefined();
+  });
+
+  it("requires system encryption for new API keys and only exposes credential presence", () => {
+    const previous: Settings = {
+      activeProviderId: "example",
+      providers: [
+        {
+          id: "example",
+          name: "Example",
+          kind: "openai-responses",
+          modelId: "sample",
+          baseUrl: "https://example.test/v1",
+          apiKey: "existing-ciphertext",
+        },
+      ],
+    };
+    const [provider] = previous.providers;
+    expect(() =>
+      mergeSettingsInput(previous, {
+        ...previous,
+        providers: [{ ...provider, apiKey: "new-secret" }],
+      }),
+    ).toThrow("系统密钥服务不可用，无法保存密钥。");
+    expect(previous.providers[0].apiKey).toBe("existing-ciphertext");
+    expect(toPublicSettings(previous).providers[0]).toMatchObject({ hasKey: true });
+    expect(toPublicSettings(previous).providers[0]).not.toHaveProperty("apiKey");
   });
 });

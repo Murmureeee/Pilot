@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { McpManager } from "../src/main/agent-host/mcp";
-import { decryptSecret, mergeSettingsInput } from "../src/main/agent-host/settings";
+import { mergeSettingsInput } from "../src/main/settings";
+import { decryptSecret } from "../src/main/settings/secrets";
 import { scanSkills } from "../src/main/agent-host/skills";
 import {
   importExternal,
@@ -14,7 +15,7 @@ import {
 } from "../src/main/external-import";
 import { resolveImportedMcp } from "../src/main/external-import/mcp";
 import type { ImportedMcpConnection, ImportLocations } from "../src/main/external-import/types";
-import type { Settings } from "../src/shared/contract";
+import type { Settings } from "../src/main/settings/types";
 import type { ExternalImportItem, ExternalImportKind, ImportSource } from "../src/shared/imports";
 
 vi.mock("electron", () => ({

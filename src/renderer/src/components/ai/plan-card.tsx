@@ -12,8 +12,7 @@ import {
   TraceLine,
   TraceTitle,
 } from "@renderer/components/ui/trace";
-import { t } from "@renderer/lib/i18n";
-import { useAgentStore } from "@renderer/stores/agent";
+import { t, useLocale } from "@renderer/lib/i18n";
 import type { PlanStep } from "@shared/contract";
 
 const STATUS = {
@@ -23,7 +22,7 @@ const STATUS = {
 } as const;
 
 export function PlanCard({ steps }: { steps: PlanStep[] }): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const completed = steps.filter((step) => step.status === "completed").length;
   return (
     <Trace>

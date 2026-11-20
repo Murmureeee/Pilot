@@ -16,21 +16,19 @@ export interface ExternalImportPreview {
   groups: { source: ImportSource; items: ExternalImportItem[]; issues: ImportIssue[] }[];
 }
 
-export interface ImportedPlugin {
+export interface ImportedPluginFields {
   id: string;
   source: ImportSource;
   name: string;
   version?: string;
-  skillIds: string[];
-  serverIds: string[];
   partial: boolean;
 }
 
-export type ImportedPluginInfo = Omit<ImportedPlugin, "skillIds" | "serverIds"> & {
+export interface ImportedPluginInfo extends ImportedPluginFields {
   skills: number;
   servers: number;
   enabled: "none" | "some" | "all";
-};
+}
 
 export interface ImportIssue {
   name: string;

@@ -2,7 +2,7 @@
 // 流式 Markdown 渲染：Streamdown（流式安全的增量解析 + 代码高亮内置）。
 import { memo, type JSX } from "react";
 import { Streamdown, type StreamdownTranslations } from "streamdown";
-import { useAgentStore } from "@renderer/stores/agent";
+import { useLocale } from "@renderer/lib/i18n";
 
 const ZH_TRANSLATIONS: Partial<StreamdownTranslations> = {
   close: "关闭",
@@ -36,7 +36,7 @@ const ZH_TRANSLATIONS: Partial<StreamdownTranslations> = {
 };
 
 export const Response = memo(function Response({ content }: { content: string }): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   return (
     <Streamdown translations={locale === "zh" ? ZH_TRANSLATIONS : undefined}>{content}</Streamdown>
   );

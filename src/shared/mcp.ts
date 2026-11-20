@@ -3,31 +3,21 @@ export type McpTransportConfig =
   | { type: "stdio"; command: string; args: string[] }
   | { type: "http"; url: string };
 
-export interface McpServerConfig {
+export interface McpServerFields {
   id: string;
   name: string;
   enabled: boolean;
   policy: "inherit" | "confirm";
-  transport: McpTransportConfig;
-  encryptedEnv?: string;
-  encryptedHeaders?: string;
-  encryptedImport?: string;
-  importKey?: string;
 }
 
-export interface McpServerInput extends Pick<
-  McpServerConfig,
-  "id" | "name" | "enabled" | "policy"
-> {
+export interface McpServerInput extends McpServerFields {
   transport?: McpTransportConfig;
   env?: [string, string][];
   headers?: [string, string][];
 }
 
-export interface McpServerInfo extends Pick<
-  McpServerConfig,
-  "id" | "name" | "enabled" | "policy" | "transport"
-> {
+export interface McpServerInfo extends McpServerFields {
+  transport: McpTransportConfig;
   hasEnv: boolean;
   imported: boolean;
   status: "disabled" | "connected" | "error";

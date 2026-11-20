@@ -5,7 +5,7 @@
 import { useState, type JSX } from "react";
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, LoaderCircleIcon } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
-import { localizeError, t } from "@renderer/lib/i18n";
+import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import {
   Dialog,
   DialogContent,
@@ -50,7 +50,7 @@ export function OnboardingDialog({
   open: boolean;
   onClose(): void;
 }): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const saveSettings = useAgentStore((s) => s.saveSettings);
   const settings = useAgentStore((s) => s.settings);
   const [step, setStep] = useState(1);

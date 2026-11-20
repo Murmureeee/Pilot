@@ -5,7 +5,7 @@ import { extname, join, relative } from "node:path";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { int, obj, opt, str } from "@earendil-works/pi-schema";
 import { TOOL_LABELS } from "./constants";
-import { looksBinary, truncate } from "./paths";
+import { looksBinary, truncate } from "./output";
 import type { ResolveToolPath } from "./types";
 
 const MAX_FILE_BYTES = 512 * 1024;

@@ -1,9 +1,7 @@
 // @env node
-// 工具共用助手。
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { ResolveToolPath } from "./types";
 
 export function normalizeWorkingDirectory(directory: string): string {
   if (isAbsolute(directory)) {
@@ -39,7 +37,7 @@ function resolveExistingParent(path: string): string {
   }
 }
 
-export function createToolPathResolver(workingDirectory?: string): ResolveToolPath {
+export function createToolPathResolver(workingDirectory?: string): (path: string) => string {
   const cwd = workingDirectory ?? homedir();
   return (path) => {
     const target = resolve(cwd, path);
@@ -51,13 +49,4 @@ export function createToolPathResolver(workingDirectory?: string): ResolveToolPa
     if (!isWithinDirectory(root, canonical)) throw new Error(`路径超出工作目录: ${target}`);
     return canonical;
   };
-}
-
-export function truncate(text: string, max: number): string {
-  return text.length <= max ? text : `${text.slice(0, max)}\n…（截断，共 ${text.length} 字符）`;
-}
-
-export function looksBinary(buffer: Buffer): boolean {
-  const slice = buffer.subarray(0, 2048);
-  return slice.includes(0);
 }

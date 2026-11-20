@@ -15,12 +15,12 @@ import {
   type McpTransport,
   type Tool,
 } from "@earendil-works/pi-mcp";
-import type { Settings } from "@shared/contract";
-import type { McpServerConfig, McpServerInfo } from "@shared/mcp";
+import type { McpServerInfo } from "@shared/mcp";
 import { APP_NAME } from "../../../shared/constants";
 import { MissingMcpEnvironment, resolveImportedMcp } from "../../external-import/mcp";
 import type { ImportedMcpConnection } from "../../external-import/types";
-import { decryptSecret } from "../settings";
+import { decryptSecret } from "../../settings/secrets";
+import type { McpServerConfig, Settings } from "../../settings/types";
 import type { McpConnection, McpToolPolicy } from "./types";
 
 function readEncrypted<T>(stored?: string): T | undefined {

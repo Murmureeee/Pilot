@@ -8,7 +8,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { searchWorkspace } from "../src/main/agent-host/workspace";
+import { searchWorkspace } from "../src/main/workspace/search";
 
 describe("workspace reference search", () => {
   it("finds files and folders by name or workspace-relative path", async () => {

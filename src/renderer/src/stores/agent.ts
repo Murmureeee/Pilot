@@ -1,11 +1,11 @@
 // @env browser
 import { create } from "zustand";
 import { applyAgentEvent, initialAgentUiState, type AgentUiState } from "../adapters/agent-events";
+import { currentLocale } from "../lib/i18n";
 import { initialNavState, moveNav, peekNav, pushNav, type NavState } from "../lib/nav";
 import type { SettingsSection } from "../lib/types";
 import type {
   ApprovalMode,
-  Locale,
   MenuAction,
   PermissionDecision,
   PublicSettings,
@@ -18,17 +18,9 @@ import type {
 
 type View = "chat" | "settings";
 
-const LOCALE_KEY = "pi-locale";
-
-function loadLocale(): Locale {
-  return localStorage.getItem(LOCALE_KEY) === "en" ? "en" : "zh";
-}
-
 interface AgentStore extends AgentUiState {
   settings: PublicSettings | null;
   view: View;
-  /** 界面语言（含文案组件订阅它触发重渲染，t() 纯查表） */
-  locale: Locale;
   /** 设置页当前分区（侧栏导航与设置内容共用） */
   settingsSection: SettingsSection;
   /** 技能列表（设置页「技能」分区；主进程扫描结果） */
@@ -40,8 +32,6 @@ interface AgentStore extends AgentUiState {
   contextWindow: number | null;
   setPaletteOpen(open: boolean): void;
   setSettingsSection(section: SettingsSection): void;
-  /** 切换界面语言（持久化 localStorage） */
-  setLocale(locale: Locale): void;
   /** 技能列表刷新（进设置页时拉取） */
   listSkills(): Promise<void>;
   /** 导入技能目录（主进程弹目录选择框；取消 = null 不更新） */
@@ -119,7 +109,6 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   ...initialAgentUiState(),
   settings: null,
   view: "chat",
-  locale: loadLocale(),
   settingsSection: "general",
   skills: [],
   initialized: false,
@@ -129,10 +118,6 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   setPaletteOpen: (open) => set({ paletteOpen: open }),
   setSettingsSection: (section) => set({ settingsSection: section }),
-  setLocale: (locale) => {
-    localStorage.setItem(LOCALE_KEY, locale);
-    set({ locale });
-  },
 
   listSkills: async () => {
     const skills = await window.pi.skillsList();
@@ -140,7 +125,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   },
 
   importSkills: async () => {
-    const skills = await window.pi.skillsImport(get().locale);
+    const skills = await window.pi.skillsImport(currentLocale());
     if (skills !== null) set({ skills });
   },
 

@@ -5,7 +5,7 @@ import { dirname } from "node:path";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { int, bool, obj, opt, str } from "@earendil-works/pi-schema";
 import { TOOL_LABELS } from "./constants";
-import { truncate } from "./paths";
+import { truncate } from "./output";
 import type { ResolveToolPath } from "./types";
 
 const MAX_READ_BYTES = 2 * 1024 * 1024;

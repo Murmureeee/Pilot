@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
 import { SETTINGS_SECTION_LABELS } from "@renderer/lib/constants";
-import { t } from "@renderer/lib/i18n";
+import { t, useLocale } from "@renderer/lib/i18n";
 import type { SettingsSection } from "@renderer/lib/types";
 import {
   ContextMenu,
@@ -96,7 +96,7 @@ export function AppRail({
   collapsed: boolean;
   onExpand(): void;
 }): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const view = useAgentStore((s) => s.view);
   const newSession = useAgentStore((s) => s.newSession);
   const setView = useAgentStore((s) => s.setView);
@@ -216,7 +216,7 @@ export function SidebarPanel({
   onCollapse(): void;
   collapsed: boolean;
 }): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const sessions = useAgentStore((s) => s.sessions);
   const sessionId = useAgentStore((s) => s.sessionId);
   const newSession = useAgentStore((s) => s.newSession);

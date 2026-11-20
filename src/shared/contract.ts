@@ -1,7 +1,6 @@
 // @env all
 // 双进程共用契约：通道名与数据类型。此文件只允许类型与常量，不得引入运行时依赖。
-import type { McpServerConfig } from "./mcp";
-import type { ImportedPlugin } from "./imports";
+import type { SUPPORTED_LOCALES } from "./constants";
 
 export const IPC = {
   ping: "app:ping",
@@ -224,7 +223,7 @@ export interface SessionMeta {
 
 /** 主题（FR-5.5）：亮 / 暗 / 跟随系统；渲染层本地存储，切换时同步原生标题栏颜色 */
 export type ThemeSetting = "light" | "dark" | "system";
-export type Locale = "zh" | "en";
+export type Locale = (typeof SUPPORTED_LOCALES)[number];
 export type CommandShell = "powershell" | "bash";
 
 export type ProviderKind = "anthropic" | "openai-compatible" | "openai-responses" | "faux";
@@ -259,34 +258,16 @@ export interface ProviderTestResult {
   latencyMs: number;
 }
 
-/** 主进程内部存储形态；apiKey 为 safeStorage 加密后的 base64 */
-export interface ProviderConfig {
+export interface ProviderFields {
   id: string;
   kind: ProviderKind;
   name: string;
   baseUrl?: string;
   modelId: string;
-  apiKey?: string;
-}
-
-export interface Settings {
-  providers: ProviderConfig[];
-  activeProviderId: string;
-  toolRules?: ToolRule[];
-  approvalMode?: ApprovalMode;
-  thinkingLevel?: ThinkingLevel;
-  workingDirectory?: string;
-  commandShell?: CommandShell;
-  /** 全局人设/自定义指令（FR-5.9；空 = 仅应用默认提示词；可被会话 personaOverride 覆盖） */
-  persona?: string;
-  /** 启用的技能 id 列表（技能文件在 userData/skills/，启停状态持久化于此） */
-  skillsEnabled?: string[];
-  mcpServers?: McpServerConfig[];
-  importedPlugins?: ImportedPlugin[];
 }
 
 /** 渲染层可见形态：明文/密文 key 永不出主进程，只有 hasKey 标志 */
-type PublicProvider = Omit<ProviderConfig, "apiKey"> & { hasKey: boolean };
+type PublicProvider = ProviderFields & { hasKey: boolean };
 export interface PublicSettings {
   providers: PublicProvider[];
   activeProviderId: string;
@@ -302,7 +283,7 @@ export interface PublicSettings {
 }
 
 /** 渲染层提交形态；apiKey 为明文（仅变更时携带），主进程负责加密落盘 */
-export interface ProviderInput extends Omit<ProviderConfig, "apiKey"> {
+export interface ProviderInput extends ProviderFields {
   apiKey?: string;
 }
 export interface SettingsInput {

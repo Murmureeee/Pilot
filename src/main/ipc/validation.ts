@@ -1,13 +1,13 @@
 // @env node
 import { z } from "zod";
-import { WORKSPACE_QUERY_LENGTH } from "../../shared/constants";
+import { SUPPORTED_LOCALES, WORKSPACE_QUERY_LENGTH } from "../../shared/constants";
 import { IPC } from "../../shared/contract";
 import type { IpcChannel } from "./types";
 
 const none = z.tuple([]);
 const id = z.string().min(1);
 const nonBlank = z.string().refine((value) => value.trim().length > 0);
-const locale = z.tuple([z.enum(["zh", "en"])]);
+const locale = z.tuple([z.enum(SUPPORTED_LOCALES)]);
 const session = z.tuple([z.uuid()]);
 const sessionFlag = z.tuple([z.uuid(), z.boolean()]);
 const provider = z.strictObject({

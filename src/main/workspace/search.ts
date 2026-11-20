@@ -1,7 +1,7 @@
 // @env node
 import { opendir } from "node:fs/promises";
 import type { WorkspaceEntry } from "../../shared/contract";
-import { createToolPathResolver } from "./tools/paths";
+import { createToolPathResolver } from "./paths";
 
 const SKIP_DIRECTORIES = new Set([".git", "node_modules"]);
 const SCAN_LIMIT = 5_000;

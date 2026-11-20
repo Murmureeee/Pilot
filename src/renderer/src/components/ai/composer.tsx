@@ -44,7 +44,7 @@ import { useWorkspaceSearch } from "@renderer/hooks/use-workspace-search";
 import { composerTrigger, promptWithReferences } from "@renderer/lib/composer-shortcuts";
 import { levelAt, levelIndex, levelLabel, THINKING_LEVELS } from "@renderer/lib/thinking-level";
 import { APPROVAL_MODE_OPTIONS } from "@renderer/lib/constants";
-import { displayProviderName, localizeError, t } from "@renderer/lib/i18n";
+import { displayProviderName, localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { ComposerSuggestion } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
 import { APP_NAME, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
@@ -94,7 +94,7 @@ const COMMANDS = [
 ] as const;
 
 export function Composer(): JSX.Element {
-  const locale = useAgentStore((s) => s.locale);
+  const locale = useLocale();
   const status = useAgentStore((s) => s.status);
   const busy = status !== "idle";
   const settings = useAgentStore((s) => s.settings);

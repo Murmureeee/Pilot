@@ -3,11 +3,14 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { BrowserWindow, Menu, app, nativeTheme, session, shell } from "electron";
 import { APP_NAME } from "../shared/constants";
+import { AGENT_EVENT_CHANNEL, UPDATE_STATUS_CHANNEL } from "../shared/contract";
 import { AgentHost } from "./agent-host/host";
 import { McpManager } from "./agent-host/mcp";
 import { SessionStore } from "./agent-host/session-store";
-import { loadSettings, saveSettings } from "./agent-host/settings";
-import { broadcast, registerIpc } from "./ipc";
+import { registerIpc } from "./ipc";
+import { registerRenderer, sendToRenderers } from "./ipc/transport";
+import { loadSettings, saveSettings } from "./settings";
+import type { Settings } from "./settings/types";
 import { runAgentSmoke } from "./agent-host/smoke";
 import { TITLE_BAR_OVERLAY_COLORS, USER_DATA_DIRECTORY } from "./constants";
 import { DesktopUpdater } from "./updater";
@@ -60,6 +63,7 @@ function createWindow(): BrowserWindow {
       webSecurity: true,
     },
   });
+  registerRenderer(win.webContents);
 
   // 渲染层 console 转发到主进程日志（FR-9.1 种子；dev 排障必需）
   win.webContents.on("console-message", (event) => {
@@ -118,12 +122,13 @@ app.whenReady().then(() => {
   const skillsDir = join(userData, "skills");
   const store = new SessionStore(sessionsDir);
   const getSettings = (): ReturnType<typeof loadSettings> => loadSettings(userData);
+  const persistSettings = (settings: Settings): void => saveSettings(userData, settings);
   const mcp = new McpManager(getSettings, app.getVersion());
   const host = new AgentHost({
     store,
     getSettings,
-    saveSettings: (settings) => saveSettings(userData, settings),
-    broadcast,
+    saveSettings: persistSettings,
+    broadcast: (event) => sendToRenderers(AGENT_EVENT_CHANNEL, event),
     skillsDir,
     mcp,
   });
@@ -136,12 +141,13 @@ app.whenReady().then(() => {
     });
   }
 
-  const updater = new DesktopUpdater();
+  const updater = new DesktopUpdater((event) => sendToRenderers(UPDATE_STATUS_CHANNEL, event));
   registerIpc({
     settingsDir: userData,
     sessionsDir,
     skillsDir,
     getSettings,
+    saveSettings: persistSettings,
     host,
     mcp,
     updater,
