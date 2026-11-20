@@ -1,14 +1,5 @@
 // @env browser
-import {
-  Activity,
-  Fragment,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type JSX,
-  type RefObject,
-} from "react";
+import { Activity, Fragment, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import { ArrowDownIcon, SquareTerminalIcon } from "lucide-react";
 import { AssistantReply } from "@renderer/components/ai/assistant-reply";
 import { Composer } from "@renderer/components/ai/composer";
@@ -28,7 +19,7 @@ import {
 import { Message, MessageContent } from "@renderer/components/ui/message";
 import { Bubble, BubbleContent } from "@renderer/components/ui/bubble";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
-import type { ChatRow, ComposerDraft } from "@renderer/lib/types";
+import type { ChatRow } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
 import { cn } from "cn";
 import type { UiMessage } from "@shared/contract";
@@ -48,16 +39,11 @@ function chatRows(messages: UiMessage[]): ChatRow[] {
   return rows;
 }
 
-export function ChatView({
-  composerDrafts,
-  workingDirectory,
-}: {
-  composerDrafts: RefObject<Map<string | null, ComposerDraft>>;
-  workingDirectory: string | null;
-}): JSX.Element {
+export function ChatView({ workingDirectory }: { workingDirectory: string | null }): JSX.Element {
   const locale = useLocale();
   const messages = useAgentStore((s) => s.messages);
   const sessionId = useAgentStore((s) => s.sessionId);
+  const composerId = useAgentStore((s) => s.composerId);
   const busy = useAgentStore((s) => s.status !== "idle");
   const permission = useAgentStore((s) => s.pendingPermissions[0]);
   const error = useAgentStore((s) => s.error);
@@ -237,11 +223,13 @@ export function ChatView({
         )}
         {permission && <PermissionCard key={permission.requestId} request={permission} />}
         <Activity mode={permission ? "hidden" : "visible"}>
-          <Composer
-            key={workingDirectory ?? "unbound"}
-            workingDirectory={workingDirectory}
-            savedDrafts={composerDrafts}
-          />
+          {composerId && (
+            <Composer
+              key={composerId}
+              composerId={composerId}
+              workingDirectory={workingDirectory}
+            />
+          )}
         </Activity>
       </div>
       {isEmpty && (

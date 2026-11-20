@@ -31,7 +31,7 @@ import { cn } from "cn";
 
 function PermissionSettings({ settings }: { settings: PublicSettings }): JSX.Element {
   const locale = useLocale();
-  const setApprovalMode = useAgentStore((s) => s.setApprovalMode);
+  const setDefaultApprovalMode = useAgentStore((s) => s.setDefaultApprovalMode);
   const removeToolRule = useAgentStore((s) => s.removeToolRule);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +59,7 @@ function PermissionSettings({ settings }: { settings: PublicSettings }): JSX.Ele
         <div className="settings-row">
           <div className="min-w-0 flex-1 basis-52">
             <label htmlFor="approval-mode" className="text-sm font-medium">
-              {t("权限模式", locale)}
+              {t("默认权限模式", locale)}
             </label>
             <p id="approval-mode-help" className="text-muted-foreground mt-0.5 text-xs leading-5">
               {t(APPROVAL_MODE_OPTIONS[mode].description, locale)}
@@ -69,7 +69,7 @@ function PermissionSettings({ settings }: { settings: PublicSettings }): JSX.Ele
             value={mode}
             disabled={saving}
             onValueChange={(next: ApprovalMode | null) => {
-              if (next && next !== mode) void update(() => setApprovalMode(next));
+              if (next && next !== mode) void update(() => setDefaultApprovalMode(next));
             }}
           >
             <SelectTrigger

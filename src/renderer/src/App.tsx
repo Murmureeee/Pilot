@@ -1,5 +1,5 @@
 // @env browser
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useState, type JSX } from "react";
 import { FolderIcon, MessageSquareIcon } from "lucide-react";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
 import { FileChangesPanel } from "@renderer/components/ai/file-changes-panel";
@@ -15,7 +15,6 @@ import {
   FILE_REVIEW_MIN_WINDOW_WIDTH,
 } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
-import type { ComposerDraft } from "@renderer/lib/types";
 import {
   selectProjectDirectory,
   selectWorkingDirectory,
@@ -38,7 +37,6 @@ export default function App(): JSX.Element {
   const [collapsed, setCollapsed] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
-  const composerDrafts = useRef(new Map<string | null, ComposerDraft>());
   const review = useFileChangesStore((state) => state.review);
   const closeReview = useFileChangesStore((state) => state.close);
   const visibleReview = view === "chat" && review?.sessionId === sessionId ? review : null;
@@ -176,7 +174,7 @@ export default function App(): JSX.Element {
                       <ProjectChooser sessionId={sessionId} />
                     )}
                   </header>
-                  <ChatView composerDrafts={composerDrafts} workingDirectory={workingDirectory} />
+                  <ChatView workingDirectory={workingDirectory} />
                 </>
               ) : (
                 <SettingsView />

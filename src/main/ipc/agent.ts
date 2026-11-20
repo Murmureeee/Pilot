@@ -19,15 +19,21 @@ export function registerAgentRoutes({ host }: Pick<IpcContext, "host">): void {
   handle(IPC.agentPreviewWorkspaceReference, (_event, reference) =>
     previewWorkspaceReference(host.getWorkingDirectory(), reference),
   );
-  handle(IPC.agentPrompt, (_event, input, expectedDirectory) => {
+  handle(IPC.agentPrompt, (_event, input, expectedDirectory, composerId) => {
     if (expectedDirectory !== undefined) host.checkWorkingDirectory(expectedDirectory);
     const prompt = host.preparePrompt(input);
     // 不 await：结果通过事件流推送
-    void host.prompt(prompt);
+    void host.prompt(prompt, composerId);
   });
   handle(IPC.agentAbort, () => host.abort());
 
   handle(IPC.sessionNew, () => host.newSession());
+  handle(IPC.sessionSaveDraft, (_event, composerId, draft) =>
+    host.saveSessionDraft(composerId, draft),
+  );
+  handle(IPC.sessionUpdateSettings, (_event, composerId, input) =>
+    host.updateSessionSettings(composerId, input),
+  );
   handle(IPC.sessionSelectProject, async (event, locale, sessionId) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     const title = NATIVE_DIALOG_TITLES[locale][sessionId ? "bindProject" : "openProject"];

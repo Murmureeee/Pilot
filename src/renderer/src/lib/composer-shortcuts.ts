@@ -1,7 +1,7 @@
 // @env browser
-import type { PromptInput } from "@shared/contract";
+import type { ComposerDraft, PromptInput } from "@shared/contract";
 import { mentionToken } from "../../../shared/mentions";
-import type { ComposerDraft, ComposerTrigger } from "./types";
+import type { ComposerTrigger } from "./types";
 
 export function composerTrigger(text: string, start: number, end: number): ComposerTrigger | null {
   if (start !== end) return null;

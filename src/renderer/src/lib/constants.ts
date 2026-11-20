@@ -127,6 +127,9 @@ export const MESSAGE_JUMP = {
   revealTickOptions: { block: "nearest", container: "nearest" },
 } as const;
 // Leave room for the chat and its review pane after the navigation rail and frame.
+export const COMPOSER_MODEL_OPTION_CLASS =
+  "hover:bg-accent focus-visible:ring-ring/55 aria-pressed:bg-accent/70 flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset";
+
 export const COMPOSER_SURFACE_CLASS =
   "border-border bg-card rounded-[22px] shadow-sm shadow-foreground/10";
 

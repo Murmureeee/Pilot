@@ -18,8 +18,9 @@ import {
   type PaletteTab,
 } from "@renderer/lib/palette";
 import { relativeTime } from "@renderer/lib/relative-time";
-import { useAgentStore } from "@renderer/stores/agent";
+import { selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
 import { t, useLocale } from "@renderer/lib/i18n";
+import type { ApprovalMode } from "@shared/contract";
 import { cn } from "cn";
 
 function EntryIcon({ entry }: { entry: PaletteEntry }): JSX.Element {
@@ -45,11 +46,11 @@ export function CommandPalette(): JSX.Element | null {
   const open = useAgentStore((s) => s.paletteOpen);
   const setOpen = useAgentStore((s) => s.setPaletteOpen);
   const sessions = useAgentStore((s) => s.sessions);
-  const settings = useAgentStore((s) => s.settings);
+  const approvalMode = useAgentStore(selectApprovalMode);
   const newSession = useAgentStore((s) => s.newSession);
   const loadSession = useAgentStore((s) => s.loadSession);
   const setView = useAgentStore((s) => s.setView);
-  const setApprovalMode = useAgentStore((s) => s.setApprovalMode);
+  const updateSessionSettings = useAgentStore((s) => s.updateSessionSettings);
 
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<PaletteTab>("all");
@@ -64,21 +65,21 @@ export function CommandPalette(): JSX.Element | null {
         kind: "action",
         id: "mode-standard",
         label: `${t("权限模式：确认模式", locale)}${
-          settings?.approvalMode === "standard" ? t("（当前）", locale) : ""
+          approvalMode === "standard" ? t("（当前）", locale) : ""
         }`,
       },
       {
         kind: "action",
         id: "mode-readonly",
         label: `${t("权限模式：只读", locale)}${
-          settings?.approvalMode === "read-only" ? t("（当前）", locale) : ""
+          approvalMode === "read-only" ? t("（当前）", locale) : ""
         }`,
       },
       {
         kind: "action",
         id: "mode-full",
         label: `${t("权限模式：完全访问", locale)}${
-          settings?.approvalMode === "full-access" ? t("（当前）", locale) : ""
+          approvalMode === "full-access" ? t("（当前）", locale) : ""
         }`,
       },
     ];
@@ -89,7 +90,7 @@ export function CommandPalette(): JSX.Element | null {
       detail: relativeTime(s.updatedAt, locale),
     }));
     return [...actions, ...chats];
-  }, [locale, sessions, settings?.approvalMode]);
+  }, [locale, sessions, approvalMode]);
 
   const filtered = useMemo(() => filterEntries(entries, query, tab), [entries, query, tab]);
 
@@ -104,6 +105,13 @@ export function CommandPalette(): JSX.Element | null {
     el?.scrollIntoView({ block: "nearest" });
   }, [selected, open]);
 
+  const changeApprovalMode = (mode: ApprovalMode): void => {
+    setView("chat");
+    void updateSessionSettings({ approvalMode: mode }).catch((error: unknown) =>
+      useAgentStore.setState({ error: error instanceof Error ? error.message : String(error) }),
+    );
+  };
+
   const runById = (entry: PaletteEntry): void => {
     setOpen(false);
     switch (entry.id) {
@@ -115,13 +123,13 @@ export function CommandPalette(): JSX.Element | null {
         setView("settings");
         return;
       case "mode-standard":
-        void setApprovalMode("standard");
+        changeApprovalMode("standard");
         return;
       case "mode-readonly":
-        void setApprovalMode("read-only");
+        changeApprovalMode("read-only");
         return;
       case "mode-full":
-        void setApprovalMode("full-access");
+        changeApprovalMode("full-access");
         return;
       default: {
         // 会话条目：id = 会话 id

@@ -6,11 +6,14 @@ import { initialNavState, moveNav, peekNav, pushNav, type NavState } from "../li
 import type { ProjectSelection, SettingsSection } from "../lib/types";
 import type {
   ApprovalMode,
+  ComposerDraft,
   LogLevel,
   MenuAction,
   PermissionDecision,
   PromptInput,
   PublicSettings,
+  SessionMeta,
+  SessionSettingsInput,
   SettingsInput,
   SkillMeta,
   Snapshot,
@@ -23,6 +26,8 @@ type View = "chat" | "settings";
 
 interface AgentStore extends AgentUiState {
   settings: PublicSettings | null;
+  composerId: string | null;
+  composerDraft: ComposerDraft;
   draftWorkingDirectory: string | null;
   choosingProject: boolean;
   projectError: string | null;
@@ -48,7 +53,9 @@ interface AgentStore extends AgentUiState {
   setSessionPersona(id: string, persona: string | null): Promise<void>;
   init(): Promise<void>;
   setView(view: View): void;
-  prompt(input: PromptInput, workingDirectory: string | null): Promise<void>;
+  prompt(input: PromptInput, workingDirectory: string | null, composerId: string): Promise<boolean>;
+  saveDraft(composerId: string, draft: ComposerDraft): Promise<void>;
+  updateSessionSettings(input: SessionSettingsInput): Promise<void>;
   abort(): void;
   newSession(): Promise<void>;
   selectProject(selection?: ProjectSelection): Promise<void>;
@@ -79,9 +86,8 @@ interface AgentStore extends AgentUiState {
   menuAction(action: MenuAction): Promise<void>;
   /** 清空排队中的插话 */
   clearQueue(): void;
-  setApprovalMode(mode: ApprovalMode): Promise<void>;
+  setDefaultApprovalMode(mode: ApprovalMode): Promise<void>;
   setThinkingLevel(level: ThinkingLevel): Promise<void>;
-  selectModel(providerId: string, modelId: string): Promise<void>;
   removeToolRule(rule: ToolRule): Promise<void>;
 }
 
@@ -101,11 +107,23 @@ function providerSelection(
   };
 }
 
+export function selectActiveSession(
+  state: Pick<AgentStore, "sessionId" | "sessions">,
+): SessionMeta | undefined {
+  return state.sessions.find(({ id }) => id === state.sessionId);
+}
+
+export function selectApprovalMode(
+  state: Pick<AgentStore, "sessionId" | "sessions" | "settings">,
+): ApprovalMode {
+  return selectActiveSession(state)?.approvalMode ?? state.settings?.approvalMode ?? "standard";
+}
+
 export function selectProjectDirectory(
   state: Pick<AgentStore, "sessionId" | "draftWorkingDirectory" | "sessions">,
 ): string | null {
   if (state.sessionId) {
-    return state.sessions.find(({ id }) => id === state.sessionId)?.workingDirectory ?? null;
+    return selectActiveSession(state)?.workingDirectory ?? null;
   }
   return state.draftWorkingDirectory;
 }
@@ -118,11 +136,15 @@ export function selectWorkingDirectory(
 
 function sessionSnapshot(
   snapshot: Snapshot,
+  current: Pick<AgentStore, "composerId" | "composerDraft">,
 ): Omit<AgentUiState, "error" | "pendingPermissions"> &
-  Pick<AgentStore, "draftWorkingDirectory"> &
+  Pick<AgentStore, "draftWorkingDirectory" | "composerId" | "composerDraft"> &
   Partial<Pick<AgentUiState, "pendingPermissions">> {
   return {
     sessionId: snapshot.sessionId,
+    composerId: snapshot.composerId,
+    composerDraft:
+      snapshot.composerId === current.composerId ? current.composerDraft : snapshot.composerDraft,
     draftWorkingDirectory: snapshot.draftWorkingDirectory,
     sessions: snapshot.sessions,
     recentProjects: snapshot.recentProjects,
@@ -139,6 +161,8 @@ function sessionSnapshot(
 export const useAgentStore = create<AgentStore>((set, get) => ({
   ...initialAgentUiState(),
   settings: null,
+  composerId: null,
+  composerDraft: [],
   draftWorkingDirectory: null,
   choosingProject: false,
   projectError: null,
@@ -196,7 +220,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     });
     const snapshot = await window.pi.getSnapshot();
     set({
-      ...sessionSnapshot(snapshot),
+      ...sessionSnapshot(snapshot, get()),
       settings: snapshot.settings,
       nav: snapshot.sessionId ? pushNav(get().nav, snapshot.sessionId) : get().nav,
     });
@@ -204,19 +228,34 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   setView: (view) => set({ view }),
 
-  prompt: async (input, workingDirectory) => {
+  prompt: async (input, workingDirectory, composerId) => {
+    const { composerDraft } = get();
     set({ error: null });
-    await window.pi.agentPrompt(input, workingDirectory);
+    await window.pi.agentPrompt(input, workingDirectory, composerId);
+    if (get().composerId !== composerId || get().composerDraft !== composerDraft) return false;
+    set({ composerDraft: [] });
+    return true;
+  },
+
+  saveDraft: async (composerId, draft) => {
+    if (get().composerId !== composerId) return;
+    set({ composerDraft: draft });
+    await window.pi.sessionSaveDraft(composerId, draft);
+  },
+
+  updateSessionSettings: async (input) => {
+    const { composerId } = get();
+    if (composerId) await window.pi.sessionUpdateSettings(composerId, input);
   },
 
   abort: () => window.pi.agentAbort(),
 
   newSession: async () => {
     const snapshot = await window.pi.sessionNew();
-    set({ ...sessionSnapshot(snapshot), error: null, projectError: null });
+    set({ ...sessionSnapshot(snapshot, get()), error: null, projectError: null });
   },
 
-  selectProject: async ({ sessionId, directory, onSelected } = {}) => {
+  selectProject: async ({ sessionId, directory } = {}) => {
     if (get().choosingProject) return;
     set({ choosingProject: true, projectError: null });
     try {
@@ -224,9 +263,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
         ? await window.pi.sessionUseRecentProject(directory, sessionId)
         : await window.pi.sessionSelectProject(currentLocale(), sessionId);
       if (!snapshot) return;
-      const selectedDirectory = selectProjectDirectory(snapshot);
-      if (selectedDirectory) onSelected?.(selectedDirectory);
-      set({ ...sessionSnapshot(snapshot), view: "chat", error: null });
+      set({ ...sessionSnapshot(snapshot, get()), view: "chat", error: null });
     } catch (error) {
       set({ view: "chat", projectError: error instanceof Error ? error.message : String(error) });
     } finally {
@@ -237,7 +274,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   loadSession: async (id, record = true) => {
     const snapshot = await window.pi.sessionLoad(id);
     set({
-      ...sessionSnapshot(snapshot),
+      ...sessionSnapshot(snapshot, get()),
       error: null,
       projectError: null,
       nav: record && snapshot.sessionId === id ? pushNav(get().nav, id) : get().nav,
@@ -274,7 +311,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     const snapshot = await window.pi.sessionArchive(id, archived);
     const { nav } = get();
     set({
-      ...sessionSnapshot(snapshot),
+      ...sessionSnapshot(snapshot, get()),
       error: null,
       nav: snapshot.sessionId ? nav : initialNavState(),
     });
@@ -300,7 +337,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     const snapshot = await window.pi.sessionDelete(id);
     const { nav } = get();
     set({
-      ...sessionSnapshot(snapshot),
+      ...sessionSnapshot(snapshot, get()),
       error: null,
       // 当前会话被删除 → 前进/后退栈里指向它的历史一并失效（导航重置）
       nav: snapshot.sessionId ? nav : initialNavState(),
@@ -344,19 +381,13 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   menuAction: (action) => window.pi.menuAction(action),
 
-  /** composer 权限徽章切换；providers 原样回传（key 由主进程保留） */
-  setApprovalMode: async (mode) => {
+  setDefaultApprovalMode: async (mode) => {
     const s = get().settings;
     if (!s) return;
     const settings = await window.pi.settingsSave({
       ...providerSelection(s),
       approvalMode: mode,
     });
-    set({ settings });
-  },
-
-  selectModel: async (providerId, modelId) => {
-    const settings = await window.pi.settingsSelectModel(providerId, modelId);
     set({ settings });
   },
 

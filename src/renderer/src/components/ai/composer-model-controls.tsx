@@ -11,12 +11,14 @@ import {
   RotateCcwIcon,
 } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
-import { t, useLocale } from "@renderer/lib/i18n";
+import { COMPOSER_MODEL_OPTION_CLASS } from "@renderer/lib/constants";
+import { displayProviderName, t, useLocale } from "@renderer/lib/i18n";
 import { levelLabel } from "@renderer/lib/thinking-level";
 import type { ComposerModelControlsProps } from "@renderer/lib/types";
-import { useAgentStore } from "@renderer/stores/agent";
+import { selectActiveSession, useAgentStore } from "@renderer/stores/agent";
 import { THINKING_LEVELS } from "@shared/constants";
-import type { ThinkingLevel } from "@shared/contract";
+import type { SessionModelSelection, ThinkingLevel } from "@shared/contract";
+import { hasSavedModel, resolveSessionModel } from "@shared/providers";
 import { selectThinkingLevel } from "@shared/thinking";
 import { cn } from "cn";
 
@@ -27,11 +29,16 @@ export function ComposerModelControls({
 }: ComposerModelControlsProps): JSX.Element {
   const locale = useLocale();
   const settings = useAgentStore((state) => state.settings);
-  const selectModel = useAgentStore((state) => state.selectModel);
+  const updateSessionSettings = useAgentStore((state) => state.updateSessionSettings);
   const setThinkingLevel = useAgentStore((state) => state.setThinkingLevel);
-  const provider = settings?.providers.find(({ id }) => id === settings.activeProviderId);
-  const models = provider?.models ?? [];
-  const activeModel = models.find(({ id }) => id === provider?.modelId);
+  const sessionModel = useAgentStore((state) => selectActiveSession(state)?.model);
+  const selection = settings ? resolveSessionModel(settings, sessionModel) : undefined;
+  const providers = settings?.providers.filter(({ models }) => models.length > 0) ?? [];
+  const provider = providers.find(({ id }) => id === selection?.providerId);
+  const activeModel = provider?.models.find(({ id }) => id === selection?.modelId);
+  const defaultProvider = providers.find(({ id }) => id === settings?.activeProviderId);
+  const defaultModel = defaultProvider?.models.find(({ id }) => id === defaultProvider.modelId);
+  const usingDefault = !sessionModel || !hasSavedModel(providers, sessionModel);
   const levels = settings?.thinkingLevels ?? THINKING_LEVELS;
   const defaultLevel = selectThinkingLevel(levels);
   const savedLevel = settings?.thinkingLevel ?? defaultLevel;
@@ -108,9 +115,12 @@ export function ComposerModelControls({
     setMenu((current) => (current === "model" ? "thinking" : current));
   };
 
-  const commitModel = async (modelId: string): Promise<void> => {
-    if (!provider || saving) return;
-    if (modelId === activeModel?.id || (await save(() => selectModel(provider.id, modelId)))) {
+  const commitModel = async (model: SessionModelSelection | null): Promise<void> => {
+    if (saving) return;
+    const unchanged = model
+      ? model.providerId === sessionModel?.providerId && model.modelId === sessionModel.modelId
+      : sessionModel === undefined;
+    if (unchanged || (await save(() => updateSessionSettings({ model })))) {
       returnToThinking();
     }
   };
@@ -177,40 +187,78 @@ export function ComposerModelControls({
                   }}
                   className="min-h-0 overflow-y-auto overscroll-contain p-1 [scrollbar-gutter:stable] [scrollbar-width:thin]"
                 >
-                  {models.map((model) => {
-                    const current = model.id === activeModel?.id;
-                    return (
-                      <Toolbar.Button
-                        key={model.id}
-                        ref={current ? selectedModelRow : undefined}
-                        type="button"
-                        aria-pressed={current}
-                        disabled={saving}
-                        onClick={() => void commitModel(model.id)}
-                        className="hover:bg-accent focus-visible:ring-ring/55 aria-pressed:bg-accent/70 flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset"
-                      >
-                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span title={model.name} className="truncate text-[13px] leading-5">
-                            {model.name}
-                          </span>
-                          {model.name !== model.id && (
-                            <span
-                              title={model.id}
-                              className="text-muted-foreground truncate text-xs leading-4"
-                            >
-                              {model.id}
-                            </span>
-                          )}
+                  <Toolbar.Button
+                    ref={usingDefault ? selectedModelRow : undefined}
+                    type="button"
+                    aria-pressed={usingDefault}
+                    disabled={saving}
+                    onClick={() => void commitModel(null)}
+                    className={COMPOSER_MODEL_OPTION_CLASS}
+                  >
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate text-[13px] leading-5">
+                        {t("跟随全局默认", locale)}
+                      </span>
+                      {defaultModel && (
+                        <span className="text-muted-foreground truncate text-xs leading-4">
+                          {defaultModel.name}
                         </span>
-                        {current && (
-                          <CheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-                        )}
-                      </Toolbar.Button>
-                    );
-                  })}
-                  {models.length === 0 && (
+                      )}
+                    </span>
+                    {usingDefault && (
+                      <CheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                    )}
+                  </Toolbar.Button>
+                  {providers.map((entry) => (
+                    <div
+                      key={entry.id}
+                      role="group"
+                      aria-label={displayProviderName(entry, locale)}
+                    >
+                      <div className="text-muted-foreground truncate px-2.5 pt-2 pb-0.5 text-xs">
+                        {displayProviderName(entry, locale)}
+                      </div>
+                      {entry.models.map((model) => {
+                        const current =
+                          !usingDefault &&
+                          entry.id === selection?.providerId &&
+                          model.id === selection.modelId;
+                        return (
+                          <Toolbar.Button
+                            key={model.id}
+                            ref={current ? selectedModelRow : undefined}
+                            type="button"
+                            aria-pressed={current}
+                            disabled={saving}
+                            onClick={() =>
+                              void commitModel({ providerId: entry.id, modelId: model.id })
+                            }
+                            className={COMPOSER_MODEL_OPTION_CLASS}
+                          >
+                            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                              <span title={model.name} className="truncate text-[13px] leading-5">
+                                {model.name}
+                              </span>
+                              {model.name !== model.id && (
+                                <span
+                                  title={model.id}
+                                  className="text-muted-foreground truncate text-xs leading-4"
+                                >
+                                  {model.id}
+                                </span>
+                              )}
+                            </span>
+                            {current && (
+                              <CheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                            )}
+                          </Toolbar.Button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                  {providers.length === 0 && (
                     <p className="text-muted-foreground px-2.5 py-2 text-xs">
-                      {t("当前提供方没有已保存的模型", locale)}
+                      {t("暂无已保存的模型", locale)}
                     </p>
                   )}
                 </Toolbar.Root>

@@ -19,6 +19,8 @@ export const IPC = {
   agentClearQueue: "agent:clear-queue",
   agentGetSnapshot: "agent:get-snapshot",
   sessionNew: "session:new",
+  sessionSaveDraft: "session:save-draft",
+  sessionUpdateSettings: "session:update-settings",
   sessionSelectProject: "session:select-project",
   sessionUseRecentProject: "session:use-recent-project",
   sessionGitHead: "session:git-head",
@@ -73,6 +75,8 @@ export type WorkspaceReferencePreview =
 export type PromptMention =
   | { type: WorkspaceEntry["kind"]; id: string; label: string; meta: { workingDirectory: string } }
   | { type: "skill"; id: string; label: string; meta: { description: string } };
+
+export type ComposerDraft = (string | PromptMention)[];
 
 export interface PromptInput {
   text: string;
@@ -278,7 +282,22 @@ export interface ToolRule {
   pathPrefix?: string;
 }
 
-export interface SessionMeta {
+export interface SessionModelSelection {
+  providerId: string;
+  modelId: string;
+}
+
+export interface SessionSettings {
+  model?: SessionModelSelection;
+  approvalMode?: ApprovalMode;
+}
+
+export interface SessionSettingsInput {
+  model?: SessionModelSelection | null;
+  approvalMode?: ApprovalMode | null;
+}
+
+export interface SessionMeta extends SessionSettings {
   id: string;
   title: string;
   createdAt: number;
@@ -385,6 +404,8 @@ export interface SettingsInput {
 
 export interface Snapshot {
   sessionId: string | null;
+  composerId: string;
+  composerDraft: ComposerDraft;
   draftWorkingDirectory: string | null;
   sessions: SessionMeta[];
   recentProjects: string[];

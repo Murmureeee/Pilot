@@ -40,6 +40,17 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.agentClearQueue]: [],
   [IPC.agentGetSnapshot]: [],
   [IPC.sessionNew]: [],
+  [IPC.sessionSaveDraft]: [
+    sessionId,
+    [
+      "Review ",
+      { type: "file", id: "note.md", label: "note.md", meta: { workingDirectory: "E:/project" } },
+    ],
+  ],
+  [IPC.sessionUpdateSettings]: [
+    sessionId,
+    { model: { providerId: "local", modelId: "example" }, approvalMode: null },
+  ],
   [IPC.sessionSelectProject]: ["zh"],
   [IPC.sessionUseRecentProject]: ["E:/projects/Pilot"],
   [IPC.sessionGitHead]: ["E:/projects/Pilot"],
@@ -153,6 +164,9 @@ describe("IPC argument validation", () => {
     [IPC.sessionSelectProject, ["zh", "C:/projects/Pilot"]],
     [IPC.sessionUseRecentProject, ["E:/projects/Pilot", "another-folder"]],
     [IPC.sessionGitHead, [" "]],
+    [IPC.sessionSaveDraft, [sessionId, [{ type: "file", id: "note" }]]],
+    [IPC.sessionUpdateSettings, [sessionId, { model: { providerId: "local", modelId: "" } }]],
+    [IPC.sessionUpdateSettings, [sessionId, { approvalMode: "unknown" }]],
     [IPC.sessionUndoFileChange, [sessionId, "C:/some/path"]],
     [IPC.sessionPin, [sessionId, "true"]],
     [IPC.appOpenPath, ["other-directory"]],

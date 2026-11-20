@@ -35,8 +35,8 @@ const api: PiApi = {
     return () => ipcRenderer.removeListener(UPDATE_STATUS_CHANNEL, listener);
   },
   getSnapshot: () => ipcRenderer.invoke(IPC.agentGetSnapshot),
-  agentPrompt: (input, expectedDirectory) =>
-    ipcRenderer.invoke(IPC.agentPrompt, input, expectedDirectory),
+  agentPrompt: (input, expectedDirectory, composerId) =>
+    ipcRenderer.invoke(IPC.agentPrompt, input, expectedDirectory, composerId),
   searchWorkspace: (query, expectedDirectory) =>
     ipcRenderer.invoke(IPC.agentSearchWorkspace, query, expectedDirectory),
   previewWorkspaceReference: (reference) =>
@@ -44,6 +44,10 @@ const api: PiApi = {
   agentAbort: () => ipcRenderer.invoke(IPC.agentAbort),
   clearQueue: () => ipcRenderer.invoke(IPC.agentClearQueue),
   sessionNew: () => ipcRenderer.invoke(IPC.sessionNew),
+  sessionSaveDraft: (composerId, draft) =>
+    ipcRenderer.invoke(IPC.sessionSaveDraft, composerId, draft),
+  sessionUpdateSettings: (composerId, input) =>
+    ipcRenderer.invoke(IPC.sessionUpdateSettings, composerId, input),
   sessionSelectProject: (locale, sessionId) =>
     ipcRenderer.invoke(IPC.sessionSelectProject, locale, sessionId),
   sessionUseRecentProject: (directory, sessionId) =>

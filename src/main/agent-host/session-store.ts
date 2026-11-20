@@ -4,7 +4,13 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { SessionMeta, UiMessage, UiPart } from "@shared/contract";
+import type {
+  ComposerDraft,
+  SessionMeta,
+  SessionSettings,
+  UiMessage,
+  UiPart,
+} from "@shared/contract";
 import { visibleMessageText } from "../../shared/mentions";
 import { applyPlanUpdate } from "../../shared/plan";
 import { readFileChange } from "../workspace/file-changes";
@@ -168,6 +174,25 @@ export class SessionStore {
     return join(this.dir, `${id}.jsonl`);
   }
 
+  private draftPath(id: string): string {
+    return join(this.dir, `${id}.draft.json`);
+  }
+
+  loadDraft(id: string): ComposerDraft {
+    try {
+      const draft: unknown = JSON.parse(readFileSync(this.draftPath(id), "utf-8"));
+      return Array.isArray(draft) ? (draft as ComposerDraft) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  saveDraft(id: string, draft: ComposerDraft): void {
+    const path = this.draftPath(id);
+    if (draft.length) writeJsonAtomic(path, draft);
+    else rmSync(path, { force: true });
+  }
+
   list(): SessionMeta[] {
     return [...this.index.sessions].sort((a, b) => b.updatedAt - a.updatedAt);
   }
@@ -211,9 +236,14 @@ export class SessionStore {
     return meta;
   }
 
-  create(workingDirectory?: string): SessionMeta {
+  create(
+    workingDirectory?: string,
+    id: string = randomUUID(),
+    settings?: SessionSettings,
+  ): SessionMeta {
     const meta: SessionMeta = {
-      id: randomUUID(),
+      ...settings,
+      id,
       title: "新会话",
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -227,6 +257,15 @@ export class SessionStore {
         : this.index.recentProjects,
     });
     return meta;
+  }
+
+  updateSettings(id: string, changes: SessionSettings): void {
+    this.writeIndex({
+      ...this.index,
+      sessions: this.index.sessions.map((meta) =>
+        meta.id === id ? { ...meta, ...changes } : meta,
+      ),
+    });
   }
 
   bindProject(id: string, workingDirectory: string): void {
@@ -310,6 +349,7 @@ export class SessionStore {
   remove(id: string): void {
     const path = this.filePath(id);
     if (existsSync(path)) rmSync(path, { force: true });
+    rmSync(this.draftPath(id), { force: true });
     this.index.sessions = this.index.sessions.filter((s) => s.id !== id);
     this.writeIndex();
   }

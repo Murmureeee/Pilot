@@ -3,7 +3,6 @@ import type { Dispatch, SetStateAction } from "react";
 import type { LucideIcon } from "lucide-react";
 import type {
   FileChangeSummary,
-  PromptMention,
   UiMessage,
   UiPart,
   WorkspaceEntry,
@@ -17,8 +16,6 @@ export interface ComposerTrigger {
   end: number;
   query: string;
 }
-
-export type ComposerDraft = (string | PromptMention)[];
 
 interface ComposerCommandActions {
   newChat(): Promise<void>;
@@ -161,5 +158,4 @@ export interface FileChangesStore {
 export interface ProjectSelection {
   sessionId?: string;
   directory?: string;
-  onSelected?: (directory: string) => void;
 }

@@ -1,6 +1,7 @@
 // @env node
 // Agent 宿主：Agent 实例生命周期、pi 事件 → UI 事件映射（含工具/用量/队列）、
 // 权限门接线、steer 插话路由、会话恢复与落盘。
+import { randomUUID } from "node:crypto";
 import {
   Agent,
   type AgentEvent,
@@ -10,9 +11,12 @@ import {
 import type { AssistantMessageEvent, ToolResultMessage } from "@earendil-works/pi-ai";
 import type {
   AgentStatus,
+  ComposerDraft,
   FileDiff,
   PromptInput,
   SessionMeta,
+  SessionSettings,
+  SessionSettingsInput,
   Snapshot,
   ToolRule,
   UiAgentEvent,
@@ -20,6 +24,7 @@ import type {
 } from "@shared/contract";
 import { APP_NAME, DEFAULT_THINKING_LEVEL } from "../../shared/constants";
 import { applyMessageEvent } from "../../shared/message-events";
+import { hasSavedModel, resolveSessionModel } from "../../shared/providers";
 import { toPublicSettings } from "../settings";
 import { decryptSecret } from "../settings/secrets";
 import type { ProviderConfig, Settings } from "../settings/types";
@@ -73,6 +78,7 @@ export class AgentHost {
   private preparingPrompt?: AbortController;
   private runningPrompt?: Promise<void>;
   private sessionId: string | null = null;
+  private composerId: string = randomUUID();
   private draftWorkingDirectory?: string;
   private uiMessages: UiMessage[] = [];
   private status: AgentStatus = "idle";
@@ -97,7 +103,7 @@ export class AgentHost {
       },
       () => deps.getSettings().toolRules ?? [],
       (rule) => this.addGlobalRule(rule),
-      () => deps.getSettings().approvalMode ?? "standard",
+      () => this.getCurrentSession()?.approvalMode ?? deps.getSettings().approvalMode ?? "standard",
     );
   }
 
@@ -143,10 +149,12 @@ export class AgentHost {
     return sessions;
   }
 
+  private getCurrentSession(): SessionMeta | null {
+    return this.sessionId ? this.deps.store.getMeta(this.sessionId) : null;
+  }
+
   getProjectDirectory(): string | undefined {
-    return this.sessionId
-      ? this.deps.store.getMeta(this.sessionId)?.workingDirectory
-      : this.draftWorkingDirectory;
+    return this.sessionId ? this.getCurrentSession()?.workingDirectory : this.draftWorkingDirectory;
   }
 
   getWorkingDirectory(): string | undefined {
@@ -156,9 +164,9 @@ export class AgentHost {
     return this.getProjectDirectory() ?? this.deps.getSettings().workingDirectory;
   }
 
-  private ensureSession(workingDirectory: string | undefined): string {
+  private ensureSession(workingDirectory: string | undefined, settings?: SessionSettings): string {
     if (this.sessionId) return this.sessionId;
-    const meta = this.deps.store.create(workingDirectory);
+    const meta = this.deps.store.create(workingDirectory, this.composerId, settings);
     this.sessionId = meta.id;
     this.draftWorkingDirectory = undefined;
     this.sendSessions(meta.id);
@@ -223,8 +231,10 @@ export class AgentHost {
   /** 确保当前会话有 Agent 实例；跨会话或 provider/模型/systemPrompt 变更时重建（转录从落盘恢复） */
   private ensureAgent(): Agent {
     const settings = this.deps.getSettings();
-    const active = settings.providers.find((p) => p.id === settings.activeProviderId);
-    if (!active) throw new Error("尚未配置 provider，请先到设置页添加");
+    const selection = resolveSessionModel(settings, this.getCurrentSession()?.model);
+    const provider = selection && settings.providers.find((p) => p.id === selection.providerId);
+    if (!selection || !provider) throw new Error("尚未配置 provider，请先到设置页添加");
+    const active = { ...provider, modelId: selection.modelId };
 
     const workingDirectory = this.getWorkingDirectory();
     if (workingDirectory) createToolPathResolver(workingDirectory)(".");
@@ -511,6 +521,35 @@ export class AgentHost {
     }
   }
 
+  private checkComposerId(id: string): void {
+    if (id !== this.composerId) throw new Error("会话已切换，请重试。");
+  }
+
+  saveSessionDraft(id: string, draft: ComposerDraft): void {
+    this.checkComposerId(id);
+    if (!this.sessionId && !draft.length) return;
+    const sessionId = this.ensureSession(this.getWorkingDirectory());
+    this.deps.store.saveDraft(sessionId, draft);
+  }
+
+  updateSessionSettings(id: string, input: SessionSettingsInput): void {
+    this.checkComposerId(id);
+    if (input.model && !hasSavedModel(this.deps.getSettings().providers, input.model)) {
+      throw new Error("请从已保存的模型中选择。");
+    }
+    const changes: SessionSettings = {};
+    if (input.model !== undefined) changes.model = input.model ?? undefined;
+    if (input.approvalMode !== undefined) changes.approvalMode = input.approvalMode ?? undefined;
+    if (!this.sessionId) {
+      if (changes.model || changes.approvalMode) {
+        this.ensureSession(this.getWorkingDirectory(), changes);
+      }
+      return;
+    }
+    this.deps.store.updateSettings(this.sessionId, changes);
+    this.sendSessions();
+  }
+
   preparePrompt(input: string | PromptInput): string | PreparedPrompt {
     if (typeof input === "string") return input;
     const workingDirectory = this.getWorkingDirectory();
@@ -522,8 +561,12 @@ export class AgentHost {
   }
 
   /** 运行中 = 插话（steer），空闲 = 发起新一轮 */
-  async prompt(input: string | PreparedPrompt): Promise<void> {
+  prompt(input: string | PreparedPrompt, composerId?: string): Promise<void> {
+    if (composerId !== undefined) this.checkComposerId(composerId);
     const busy = this.status !== "idle";
+    const agent = busy ? this.agent : this.ensureAgent();
+    if (!agent) return Promise.resolve();
+    if (composerId !== undefined) this.deps.store.saveDraft(composerId, []);
     if (!busy) this.promptSkillInstructions.clear();
     const text = typeof input === "string" ? input : input.text;
     const message: ReferencedUserMessage = { role: "user", content: text, timestamp: Date.now() };
@@ -532,28 +575,23 @@ export class AgentHost {
       this.promptSkillInstructions.set(message, input.skillInstructions);
     }
     if (busy) {
-      if (!this.agent) return;
-      this.agent.steer(message);
-      const queued = this.agent.peekQueuedMessages() ?? [];
+      agent.steer(message);
+      const queued = agent.peekQueuedMessages() ?? [];
       this.steerCount = queued.length;
       this.send({ type: "queue", steerCount: this.steerCount });
-      return;
+      return Promise.resolve();
     }
 
-    const running = this.runPrompt(message);
-    this.runningPrompt = running;
-    try {
-      await running;
-    } finally {
+    const running = this.runPrompt(agent, message).finally(() => {
       if (this.runningPrompt === running) this.runningPrompt = undefined;
-    }
+    });
+    this.runningPrompt = running;
+    return running;
   }
 
-  private async runPrompt(message: ReferencedUserMessage): Promise<void> {
+  private async runPrompt(agent: Agent, message: ReferencedUserMessage): Promise<void> {
     const preparation = new AbortController();
-    let agent: Agent | undefined;
     try {
-      agent = this.ensureAgent();
       this.preparingPrompt = preparation;
       this.sendStatus("streaming");
       const externalTools = await this.deps.mcp.tools(
@@ -567,7 +605,7 @@ export class AgentHost {
       this.preparingPrompt = undefined;
       await agent.prompt(message);
     } catch (error) {
-      if (agent && this.agent !== agent) return;
+      if (this.agent !== agent) return;
       if (preparation.signal.aborted) {
         this.clearQueue();
         this.sendStatus("idle");
@@ -657,7 +695,7 @@ export class AgentHost {
     return this.getSnapshot();
   }
 
-  /** 新聊天：仅回到草稿态，不创建会话——首个 prompt 时才由 ensureSession 落盘建会话 */
+  /** 在首次编辑草稿、改会话设置或主动发送时才创建会话记录。 */
   async newSession(): Promise<Snapshot> {
     await this.stopBeforeSwitch();
     this.switchSession(null, [], this.getProjectDirectory());
@@ -713,6 +751,7 @@ export class AgentHost {
   ): void {
     this.resetAgent();
     this.sessionId = id;
+    this.composerId = id ?? randomUUID();
     this.draftWorkingDirectory = draftWorkingDirectory;
     this.uiMessages = messages;
     this.nextId = messages.length;
@@ -771,6 +810,8 @@ export class AgentHost {
     const sessions = this.deps.store.list();
     return {
       sessionId: this.sessionId,
+      composerId: this.composerId,
+      composerDraft: this.sessionId ? this.deps.store.loadDraft(this.sessionId) : [],
       draftWorkingDirectory: this.draftWorkingDirectory ?? null,
       sessions,
       recentProjects: this.deps.store.listRecentProjects(sessions),

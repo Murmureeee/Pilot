@@ -1,8 +1,7 @@
 // @env browser
-import type { PromptMention } from "@shared/contract";
+import type { ComposerDraft, PromptMention } from "@shared/contract";
 import { composerTrigger } from "./composer-shortcuts";
 import type { ComposerSelection } from "./composer/types";
-import type { ComposerDraft } from "./types";
 
 export function mentionKey(mention: PromptMention): string {
   return JSON.stringify([

@@ -7,7 +7,6 @@ import {
   useState,
   type JSX,
   type KeyboardEvent,
-  type RefObject,
 } from "react";
 import {
   ArrowUpIcon,
@@ -62,13 +61,8 @@ import {
   COMPOSER_SURFACE_CLASS,
 } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
-import type {
-  ComposerCommand,
-  ComposerDraft,
-  ComposerSuggestion,
-  ComposerToolbarMenu,
-} from "@renderer/lib/types";
-import { useAgentStore } from "@renderer/stores/agent";
+import type { ComposerCommand, ComposerSuggestion, ComposerToolbarMenu } from "@renderer/lib/types";
+import { selectActiveSession, selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
 import { APP_NAME, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
 import type { ApprovalMode, PromptMention } from "@shared/contract";
 import { cn } from "cn";
@@ -111,10 +105,10 @@ const TONE_BADGE: Record<ModeTone, string> = {
 };
 
 export function Composer({
-  savedDrafts,
+  composerId,
   workingDirectory,
 }: {
-  savedDrafts: RefObject<Map<string | null, ComposerDraft>>;
+  composerId: string;
   workingDirectory: string | null;
 }): JSX.Element {
   const locale = useLocale();
@@ -124,9 +118,7 @@ export function Composer({
   const steerCount = useAgentStore((s) => s.steerCount);
   const usage = useAgentStore((s) => s.usage);
   const sessionId = useAgentStore((s) => s.sessionId);
-  const [draft, setDraft] = useState(() =>
-    promptFromDraft(savedDrafts.current.get(workingDirectory) ?? []),
-  );
+  const [draft, setDraft] = useState(() => promptFromDraft(useAgentStore.getState().composerDraft));
   const [selection, setSelection] = useState<ComposerSelection | null>(null);
   const [focused, setFocused] = useState(false);
   const [composing, setComposing] = useState(false);
@@ -147,9 +139,11 @@ export function Composer({
   const inlineId = useId();
   const pickerId = useId();
   const prompt = useAgentStore((s) => s.prompt);
+  const saveDraft = useAgentStore((s) => s.saveDraft);
   const abort = useAgentStore((s) => s.abort);
   const clearQueue = useAgentStore((s) => s.clearQueue);
-  const setApprovalMode = useAgentStore((s) => s.setApprovalMode);
+  const updateSessionSettings = useAgentStore((s) => s.updateSessionSettings);
+  const savedMode = useAgentStore((s) => selectActiveSession(s)?.approvalMode);
   const newSession = useAgentStore((s) => s.newSession);
   const archiveSession = useAgentStore((s) => s.setSessionArchived);
   const setView = useAgentStore((s) => s.setView);
@@ -160,7 +154,7 @@ export function Composer({
   const skills = useAgentStore((s) => s.skills);
   const listSkills = useAgentStore((s) => s.listSkills);
 
-  const mode = settings?.approvalMode ?? "standard";
+  const mode = useAgentStore(selectApprovalMode);
   const modeMeta = MODE_META[mode];
   const ModeIcon = modeMeta.icon;
   const enabledSkills = settings?.skillsEnabled;
@@ -176,19 +170,12 @@ export function Composer({
   const workspaceQuery = pickerOpen ? pickerQuery : mentionOpen ? trigger.query : null;
   const workspace = useWorkspaceSearch(workingDirectory, workspaceQuery);
 
-  const attachEditor = useCallback(
-    (field: HTMLDivElement | null): void => {
-      editor.current = field;
-      if (field) {
-        restoreComposerDraft(
-          field,
-          savedDrafts.current.get(workingDirectory) ?? [],
-          resources.current,
-        );
-      }
-    },
-    [savedDrafts, workingDirectory],
-  );
+  const attachEditor = useCallback((field: HTMLDivElement | null): void => {
+    editor.current = field;
+    if (field) {
+      restoreComposerDraft(field, useAgentStore.getState().composerDraft, resources.current);
+    }
+  }, []);
 
   const updateSelection = useCallback((): void => {
     const field = editor.current;
@@ -223,23 +210,22 @@ export function Composer({
   const readEditor = (): void => {
     if (!editor.current) return;
     const next = readComposerDraft(editor.current, resources.current);
-    savedDrafts.current.set(workingDirectory, next);
     setDraft(promptFromDraft(next));
     setSendError(null);
+    void saveDraft(composerId, next).catch((error: unknown) => {
+      if (useAgentStore.getState().composerDraft === next) {
+        setSendError(error instanceof Error ? error.message : String(error));
+      }
+    });
     setDismissed(null);
     setHighlighted(null);
     updateSelection();
   };
 
   const pickDirectory = async (): Promise<void> => {
+    const { sessionId: activeId, composerDraft } = useAgentStore.getState();
     await selectProject({
-      sessionId: sessionId ?? undefined,
-      onSelected: (directory) => {
-        const currentDraft = savedDrafts.current.get(workingDirectory);
-        if (!currentDraft?.length || savedDrafts.current.get(directory)?.length) return;
-        savedDrafts.current.set(directory, currentDraft);
-        savedDrafts.current.delete(workingDirectory);
-      },
+      sessionId: activeId ?? (composerDraft.length ? composerId : undefined),
     });
     (pickerInput.current ?? editor.current)?.focus();
   };
@@ -394,13 +380,10 @@ export function Composer({
 
   const send = async (): Promise<void> => {
     if (!canSend || submitting) return;
-    const sentDraft = savedDrafts.current.get(workingDirectory);
     setSubmitting(true);
     setSendError(null);
     try {
-      await prompt(trimPrompt(draft), workingDirectory);
-      if (savedDrafts.current.get(workingDirectory) === sentDraft) {
-        savedDrafts.current.delete(workingDirectory);
+      if (await prompt(trimPrompt(draft), workingDirectory, composerId)) {
         editor.current?.replaceChildren();
         resources.current.clear();
         lastRange.current = null;
@@ -412,6 +395,13 @@ export function Composer({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const changeApprovalMode = (approvalMode: ApprovalMode | null): void => {
+    setSendError(null);
+    void updateSessionSettings({ approvalMode }).catch((error: unknown) =>
+      setSendError(error instanceof Error ? error.message : String(error)),
+    );
   };
 
   const onSuggestionKey = (event: KeyboardEvent<HTMLElement>): boolean => {
@@ -658,19 +648,35 @@ export function Composer({
               >
                 <DropdownMenuGroup>
                   <DropdownMenuLabel className="text-foreground font-medium">
-                    {t("应如何批准 Agent 操作？", locale)}
+                    {t("会话权限模式", locale)}
                   </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    onClick={() => changeApprovalMode(null)}
+                    className="items-start gap-2.5 py-2"
+                  >
+                    <ShieldCheckIcon className="mt-0.5 shrink-0" aria-hidden="true" />
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="text-sm leading-5">{t("跟随全局默认", locale)}</span>
+                      <span className="text-muted-foreground text-xs leading-4">
+                        {t(
+                          APPROVAL_MODE_OPTIONS[settings?.approvalMode ?? "standard"].label,
+                          locale,
+                        )}
+                      </span>
+                    </span>
+                    {!savedMode && <CheckIcon className="mt-0.5 shrink-0" aria-hidden="true" />}
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   {(Object.keys(MODE_META) as ApprovalMode[]).map((m) => {
                     const meta = MODE_META[m];
                     const Icon = meta.icon;
-                    const current = mode === m;
+                    const current = savedMode === m;
                     return (
                       // 规范（AGENTS.md）：主标题 + 上下结构的次级说明行（muted + 小字号）；选中态用右侧 ✓；
                       // 图标带语义色时，标题文字跟随同色（主次一体）
                       <DropdownMenuItem
                         key={m}
-                        onClick={() => void setApprovalMode(m)}
+                        onClick={() => changeApprovalMode(m)}
                         className="items-start gap-2.5 py-2"
                       >
                         <Icon className={cn("mt-0.5 size-4 shrink-0", TONE_TEXT[meta.tone])} />

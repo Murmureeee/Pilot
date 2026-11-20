@@ -3,6 +3,7 @@
 import type {
   AgentSmokeResult,
   AppInfo,
+  ComposerDraft,
   FileDiff,
   Locale,
   LogLevel,
@@ -18,6 +19,7 @@ import type {
   ProviderTestResult,
   PublicSettings,
   SessionMeta,
+  SessionSettingsInput,
   SettingsInput,
   SkillMeta,
   Snapshot,
@@ -52,7 +54,11 @@ export interface PiApi {
   installUpdate(): Promise<void>;
   onUpdateStatus(callback: (status: UpdateStatus) => void): () => void;
   getSnapshot(): Promise<Snapshot>;
-  agentPrompt(input: string | PromptInput, expectedDirectory?: string | null): Promise<void>;
+  agentPrompt(
+    input: string | PromptInput,
+    expectedDirectory?: string | null,
+    composerId?: string,
+  ): Promise<void>;
   searchWorkspace(query: string, expectedDirectory?: string): Promise<WorkspaceEntry[]>;
   previewWorkspaceReference(
     reference: WorkspaceReferenceRequest,
@@ -61,6 +67,8 @@ export interface PiApi {
   /** 清空排队中的插话（steer + followUp） */
   clearQueue(): Promise<void>;
   sessionNew(): Promise<Snapshot>;
+  sessionSaveDraft(composerId: string, draft: ComposerDraft): Promise<void>;
+  sessionUpdateSettings(composerId: string, input: SessionSettingsInput): Promise<void>;
   sessionSelectProject(locale: Locale, sessionId?: string): Promise<Snapshot | null>;
   sessionUseRecentProject(directory: string, sessionId?: string): Promise<Snapshot>;
   sessionGitHead(directory: string): Promise<ProjectGitHead | null>;

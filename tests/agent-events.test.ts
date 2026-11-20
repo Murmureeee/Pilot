@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyAgentEvent, initialAgentUiState } from "../src/renderer/src/adapters/agent-events";
-import type { UiMessage } from "../src/shared/contract";
+import type { SessionMeta, UiMessage } from "../src/shared/contract";
 
 describe("agent-events adapter", () => {
   it("activates a newly created project session before its first message arrives", () => {
@@ -225,8 +225,16 @@ describe("agent-events adapter", () => {
   it("refreshes the sessions list wholesale (自动标题/重命名/删除后)", () => {
     let state = initialAgentUiState();
     const sessions = [
-      { id: "a", title: "重命名后的标题", createdAt: 1, updatedAt: 2, titleCustom: true },
-    ];
+      {
+        id: "a",
+        title: "重命名后的标题",
+        createdAt: 1,
+        updatedAt: 2,
+        titleCustom: true,
+        model: { providerId: "local", modelId: "chat" },
+        approvalMode: "read-only",
+      },
+    ] satisfies SessionMeta[];
     state.recentProjects = ["E:/projects/previous"];
     state = applyAgentEvent(state, {
       type: "sessions",

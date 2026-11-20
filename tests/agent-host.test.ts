@@ -21,9 +21,154 @@ import type { Settings } from "../src/main/settings/types";
 import { previewWorkspaceReference } from "../src/main/workspace/reference";
 import { searchWorkspace } from "../src/main/workspace/search";
 import { MENTION_CONTEXT_HEADING } from "../src/shared/constants";
-import type { UiAgentEvent } from "../src/shared/contract";
+import type { ComposerDraft, UiAgentEvent } from "../src/shared/contract";
 
 vi.mock("electron", () => ({ safeStorage: {} }));
+
+it("restores separate session settings and structured drafts in the same project", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-session-settings-"));
+  const root = realpathSync(profile.path);
+  const sessions = join(root, "sessions");
+  const providers = [
+    { id: "default", kind: "faux", name: "Default", modelId: "general" },
+    { id: "alpha", kind: "faux", name: "Alpha", modelId: "model-a" },
+    { id: "beta", kind: "faux", name: "Beta", modelId: "model-b" },
+  ] as const;
+  const settings: Settings = {
+    providers: [...providers],
+    activeProviderId: "default",
+    approvalMode: "standard",
+  };
+  const permissionRequests: string[] = [];
+  const createHost = (): AgentHost => {
+    const host = new AgentHost({
+      getSettings: () => settings,
+      saveSettings: vi.fn<(value: Settings) => void>(),
+      broadcast: (event) => {
+        if (event.type === "permission_request") {
+          permissionRequests.push(event.requestId);
+          setTimeout(() => host.respondPermission(event.requestId, "deny"), 0);
+        }
+      },
+      store: new SessionStore(sessions),
+      skillsDir: join(root, "skills"),
+      mcp: new McpManager(() => settings, "0.0.0"),
+    });
+    return host;
+  };
+  const host = createHost();
+  const draftA: ComposerDraft = [
+    "ALPHA\n",
+    { type: "file", id: "readme.md", label: "readme.md", meta: { workingDirectory: root } },
+  ];
+  const draftB: ComposerDraft = [" BETA\n "];
+  const modelA = { providerId: "alpha", modelId: "model-a" };
+  const modelB = { providerId: "beta", modelId: "model-b" };
+  const a = (await host.openProject(root)).composerId;
+  host.saveSessionDraft(a, draftA);
+  host.updateSessionSettings(a, { model: modelA, approvalMode: "read-only" });
+
+  const b = (await host.newSession()).composerId;
+  expect(b).not.toBe(a);
+  expect(() => host.saveSessionDraft(a, ["stale"])).toThrow("会话已切换");
+  host.updateSessionSettings(b, { model: modelB, approvalMode: "full-access" });
+  host.saveSessionDraft(b, draftB);
+
+  for (const current of [host, createHost()]) {
+    const alpha = await current.loadSession(a);
+    expect(alpha.composerDraft).toEqual(draftA);
+    expect(alpha.sessions.find(({ id }) => id === a)).toMatchObject({
+      workingDirectory: root,
+      model: modelA,
+      approvalMode: "read-only",
+    });
+    const beta = await current.loadSession(b);
+    expect(beta.composerDraft).toEqual(draftB);
+    expect(beta.sessions.find(({ id }) => id === b)).toMatchObject({
+      workingDirectory: root,
+      model: modelB,
+      approvalMode: "full-access",
+    });
+    expect(beta.settings).toMatchObject({ activeProviderId: "default", approvalMode: "standard" });
+  }
+
+  const restarted = createHost();
+  const resolve = vi.spyOn(models, "resolveModel");
+  try {
+    await restarted.loadSession(a);
+    await expect(
+      restarted.permissions.gate("write_file", { path: "a.txt" }),
+    ).resolves.toMatchObject({
+      block: true,
+      reason: expect.stringContaining("只读"),
+    });
+    await restarted.prompt("Hello from A", a);
+    expect(restarted.getSnapshot().composerDraft).toEqual([]);
+
+    await restarted.loadSession(b);
+    expect(restarted.getSnapshot().composerDraft).toEqual(draftB);
+    await expect(
+      restarted.permissions.gate("write_file", { path: "b.txt" }),
+    ).resolves.toBeUndefined();
+    await restarted.prompt("Hello from B", b);
+    expect(permissionRequests).toEqual([]);
+    expect(resolve.mock.calls.map(([provider]) => [provider.id, provider.modelId])).toEqual([
+      ["alpha", "model-a"],
+      ["beta", "model-b"],
+    ]);
+  } finally {
+    resolve.mockRestore();
+  }
+});
+
+it("uses the global defaults for older chats and after clearing session settings", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-session-defaults-"));
+  const sessions = join(profile.path, "sessions");
+  const store = new SessionStore(sessions);
+  const old = store.create();
+  const primary = { id: "primary", kind: "faux", name: "Primary", modelId: "basic" } as const;
+  const alternate = { id: "alternate", kind: "faux", name: "Alternate", modelId: "alt" } as const;
+  const settings: Settings = {
+    providers: [primary, alternate],
+    activeProviderId: "primary",
+    approvalMode: "read-only",
+  };
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: vi.fn<(value: Settings) => void>(),
+    broadcast: vi.fn<(event: UiAgentEvent) => void>(),
+    store,
+    skillsDir: join(profile.path, "skills"),
+    mcp: new McpManager(() => settings, "0.0.0"),
+  });
+  const resolve = vi.spyOn(models, "resolveModel");
+  try {
+    expect((await host.loadSession(old.id)).composerDraft).toEqual([]);
+    await expect(host.permissions.gate("write_file", { path: "a.txt" })).resolves.toMatchObject({
+      block: true,
+    });
+    await host.prompt("Use the original default");
+    host.updateSessionSettings(old.id, {
+      model: { providerId: "primary", modelId: "basic" },
+      approvalMode: "read-only",
+    });
+    settings.activeProviderId = "alternate";
+    settings.providers = [alternate];
+    settings.approvalMode = "full-access";
+    await host.prompt("Use the default when my previous provider was removed");
+    await expect(host.permissions.gate("write_file", { path: "a.txt" })).resolves.toMatchObject({
+      block: true,
+    });
+    host.updateSessionSettings(old.id, { model: null, approvalMode: null });
+    await expect(host.permissions.gate("write_file", { path: "a.txt" })).resolves.toBeUndefined();
+    expect(resolve.mock.calls.map(([provider]) => provider.modelId)).toEqual(["basic", "alt"]);
+    const saved = new SessionStore(sessions).getMeta(old.id);
+    expect(saved?.model).toBeUndefined();
+    expect(saved?.approvalMode).toBeUndefined();
+  } finally {
+    resolve.mockRestore();
+  }
+});
 
 it("keeps waiting for approval until the last parallel request is answered", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pi-agent-approval-"));

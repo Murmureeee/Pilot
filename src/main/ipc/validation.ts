@@ -14,24 +14,27 @@ const id = z.string().min(1);
 const nonBlank = z.string().refine((value) => value.trim().length > 0);
 const mentionId = id.refine((value) => !value.includes("\0"));
 const mentionOffset = z.number().int().nonnegative().optional();
+const fileMention = z.strictObject({
+  type: z.enum(["file", "directory"]),
+  id: mentionId,
+  label: id,
+  meta: z.strictObject({ workingDirectory: nonBlank }),
+});
+const skillMention = z.strictObject({
+  type: z.literal("skill"),
+  id: mentionId,
+  label: id,
+  meta: z.strictObject({ description: z.string() }),
+});
+const composerDraft = z.array(
+  z.union([z.string(), z.discriminatedUnion("type", [fileMention, skillMention])]),
+);
 const promptInput = z.strictObject({
   text: nonBlank,
   mentions: z.array(
     z.discriminatedUnion("type", [
-      z.strictObject({
-        type: z.enum(["file", "directory"]),
-        id: mentionId,
-        label: id,
-        offset: mentionOffset,
-        meta: z.strictObject({ workingDirectory: nonBlank }),
-      }),
-      z.strictObject({
-        type: z.literal("skill"),
-        id: mentionId,
-        label: id,
-        offset: mentionOffset,
-        meta: z.strictObject({ description: z.string() }),
-      }),
+      fileMention.extend({ offset: mentionOffset }),
+      skillMention.extend({ offset: mentionOffset }),
     ]),
   ),
 });
@@ -39,6 +42,7 @@ const locale = z.tuple([z.enum(SUPPORTED_LOCALES)]);
 const session = z.tuple([z.uuid()]);
 const sessionFlag = z.tuple([z.uuid(), z.boolean()]);
 const sessionChange = z.tuple([z.uuid(), z.uuid()]);
+const approvalMode = z.enum(["standard", "read-only", "full-access"]);
 const provider = z.strictObject({
   id,
   kind: z.enum(["anthropic", "openai-compatible", "openai-responses", "faux"]),
@@ -87,7 +91,7 @@ const mcpServer = z.strictObject({
 const settings = z.strictObject({
   providers: z.array(provider),
   activeProviderId: z.string(),
-  approvalMode: z.enum(["standard", "read-only", "full-access"]).optional(),
+  approvalMode: approvalMode.optional(),
   thinkingLevel: z.enum(THINKING_LEVELS).optional(),
   thinkingLevels: z.array(z.enum(THINKING_LEVELS)).min(1).optional(),
   workingDirectory: z.string().nullable().optional(),
@@ -130,7 +134,11 @@ const inputs = {
     ]),
   ]),
   [IPC.agentGetSnapshot]: none,
-  [IPC.agentPrompt]: z.tuple([z.union([nonBlank, promptInput]), nonBlank.nullable().optional()]),
+  [IPC.agentPrompt]: z.tuple([
+    z.union([nonBlank, promptInput]),
+    nonBlank.nullable().optional(),
+    z.uuid().optional(),
+  ]),
   [IPC.agentSearchWorkspace]: z.tuple([
     z.string().max(WORKSPACE_QUERY_LENGTH),
     nonBlank.optional(),
@@ -141,6 +149,14 @@ const inputs = {
   [IPC.agentAbort]: none,
   [IPC.agentClearQueue]: none,
   [IPC.sessionNew]: none,
+  [IPC.sessionSaveDraft]: z.tuple([z.uuid(), composerDraft]),
+  [IPC.sessionUpdateSettings]: z.tuple([
+    z.uuid(),
+    z.strictObject({
+      model: z.strictObject({ providerId: nonBlank, modelId: nonBlank }).nullable().optional(),
+      approvalMode: approvalMode.nullable().optional(),
+    }),
+  ]),
   [IPC.sessionSelectProject]: z.tuple([z.enum(SUPPORTED_LOCALES), z.uuid().optional()]),
   [IPC.sessionUseRecentProject]: z.tuple([nonBlank, z.uuid().optional()]),
   [IPC.sessionGitHead]: z.tuple([nonBlank]),
