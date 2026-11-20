@@ -4,6 +4,11 @@ $PSNativeCommandUseErrorActionPreference = $true
 $version = $env:PILOT_RELEASE_VERSION
 if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'A stable version is required for the release draft.' }
 $tag = "v$version"
+$changelog = Get-Content -Raw -Encoding utf8 -LiteralPath (Join-Path $PSScriptRoot '../CHANGELOG.md')
+$section = [regex]::Match($changelog, ('(?ms)^## ' + [regex]::Escape($tag) + '[ \t]*\r?\n(?<notes>.*?)(?=^##[ \t]|\z)'))
+$releaseNotes = $section.Groups['notes'].Value.Trim()
+if (!$releaseNotes) { throw "Add Chinese release notes under '## $tag' in CHANGELOG.md before preparing the draft." }
+
 $repo = $env:GITHUB_REPOSITORY
 $directory = Join-Path $env:RUNNER_TEMP 'pilot-release'
 $installer = "pi-desktop-${version}-x64-setup.exe"
@@ -37,7 +42,14 @@ function Find-PilotRelease {
 
 $draftCandidates = @(Find-PilotRelease)
 if ($draftCandidates.Count -eq 0) {
-  $created = gh api --method POST "repos/$repo/releases" -f "tag_name=$tag" -f "target_commitish=$env:GITHUB_SHA" -f "name=Pilot $version" -F draft=true -F generate_release_notes=true | ConvertFrom-Json
+  $payload = @{
+    tag_name = $tag
+    target_commitish = $env:GITHUB_SHA
+    name = "Pilot $version"
+    draft = $true
+    body = $releaseNotes
+  } | ConvertTo-Json -Compress
+  $created = $payload | gh api --method POST "repos/$repo/releases" --input - | ConvertFrom-Json
   $draftCandidates = @($created)
 }
 if ($draftCandidates.Count -ne 1 -or !$draftCandidates[0].draft -or $draftCandidates[0].target_commitish -ne $env:GITHUB_SHA) {
