@@ -49,6 +49,9 @@ pnpm exec electron . --smoke        # 7. 冒烟（期望 SMOKE_RESULT ok:true）
 
 ## UI 适配备忘（本项目是 Base UI / base-rhea 世代，不是 Radix）
 
+- **AI 界面优先参考 shadcn/ui AI Elements。** 新增或修改对话、输入框、模型选择、工具步骤、终端输出、引用等界面时，
+  先核对官方 Base UI 示例，复用 `src/renderer/src/components/ui/` 中已有的组件，例如 `MessageScroller`、`Trace` 和
+  `CodeBlock`，并按 Pilot 的实际事件和交互需求适配。[AI Elements 文档](https://ui.shadcn.com/docs/ai-elements)
 - **没有 `asChild`**：自定义触发器用 `render={<button .../>}`，children 写在组件内。
 - `DropdownMenuLabel`（Menu.GroupLabel）**必须包在 `DropdownMenuGroup` 内**，否则运行时抛
   `MenuGroupContext is missing`。
