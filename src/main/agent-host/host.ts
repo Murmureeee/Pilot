@@ -10,10 +10,14 @@ import {
 } from "@earendil-works/pi-agent-core";
 import type { AssistantMessageEvent, ToolResultMessage } from "@earendil-works/pi-ai";
 import type {
+  ActiveRun,
+  AgentRunEvent,
   AgentStatus,
   ComposerDraft,
   FileDiff,
+  PermissionDecision,
   PromptInput,
+  RunRef,
   SessionMeta,
   SessionSettings,
   SessionSettingsInput,
@@ -42,7 +46,7 @@ import { createTools, labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
 import type { ToolEnvironment } from "./tools/types";
-import type { PreparedPrompt, ReferencedUserMessage, TimedAssistantMessage } from "./types";
+import type { ReferencedUserMessage, RunningTask, TimedAssistantMessage } from "./types";
 
 type Broadcast = (event: UiAgentEvent) => void;
 
@@ -75,13 +79,14 @@ export class AgentHost {
   private readonly promptSkillInstructions = new Map<AgentMessage, readonly string[]>();
   private readonly thinkingStarts = new Map<number, number>();
   private thinkingDurations: Record<number, number> = {};
-  private preparingPrompt?: AbortController;
+  private run?: RunningTask;
   private runningPrompt?: Promise<void>;
+  private readonly sessionRules = new Map<string, ToolRule[]>();
   private sessionId: string | null = null;
   private composerId: string = randomUUID();
   private draftWorkingDirectory?: string;
   private uiMessages: UiMessage[] = [];
-  private status: AgentStatus = "idle";
+  private error: string | null = null;
   private nextId = 0;
   private unsubscribe: (() => void) | null = null;
   private usage: UsageAccumulator = { input: 0, output: 0, cacheRead: 0, costTotal: 0 };
@@ -91,56 +96,46 @@ export class AgentHost {
   private contextWindow: number | null = null;
   private steerCount = 0;
 
-  readonly permissions: PermissionManager;
-
-  constructor(private readonly deps: HostDeps) {
-    this.permissions = new PermissionManager(
-      (event) => {
-        if (event.type === "permission_request" && this.status !== "waiting_approval") {
-          this.sendStatus("waiting_approval");
-        }
-        deps.broadcast(event);
-      },
-      () => deps.getSettings().toolRules ?? [],
-      (rule) => this.addGlobalRule(rule),
-      () => this.getCurrentSession()?.approvalMode ?? deps.getSettings().approvalMode ?? "standard",
-    );
-  }
+  constructor(private readonly deps: HostDeps) {}
 
   private addGlobalRule(rule: ToolRule): void {
     const settings = this.deps.getSettings();
     this.deps.saveSettings({ ...settings, toolRules: [...(settings.toolRules ?? []), rule] });
   }
 
-  respondPermission(
-    requestId: string,
-    decision: Parameters<PermissionManager["respond"]>[1],
-  ): void {
-    this.permissions.respond(requestId, decision);
-    if (this.status === "waiting_approval" && !this.permissions.hasPending()) {
-      this.sendStatus("streaming");
-    }
+  private selectedRun(ref: RunRef): RunningTask | undefined {
+    const run = this.run;
+    return run?.state.runId === ref.runId &&
+      run.state.sessionId === ref.sessionId &&
+      this.sessionId === ref.sessionId
+      ? run
+      : undefined;
   }
 
-  /** 运行时切换思考强度（pi 支持中途修改，下一轮请求生效） */
-  setThinkingLevel(level: Settings["thinkingLevel"]): void {
-    if (!level) return;
-    if (this.agent) this.agent.state.thinkingLevel = level;
+  respondPermission(ref: RunRef, requestId: string, decision: PermissionDecision): void {
+    const run = this.selectedRun(ref);
+    if (!run?.permissions.respond(requestId, decision)) return;
+    this.send({ type: "permission_resolved", requestId });
+    if (!run.permissions.hasPending()) this.sendStatus("streaming");
   }
 
-  private send(event: UiAgentEvent): void {
+  private send(event: AgentRunEvent): void {
+    if (!this.run) return;
     this.uiMessages = applyMessageEvent(this.uiMessages, event);
-    this.deps.broadcast(event);
+    if (event.type === "error") this.error = event.message;
+    const { runId, sessionId } = this.run.state;
+    this.deps.broadcast({ ...event, run: { runId, sessionId } });
   }
 
-  private sendStatus(status: AgentStatus): void {
-    this.status = status;
+  private sendStatus(status: Exclude<AgentStatus, "idle">): void {
+    if (!this.run || this.run.state.status === status) return;
+    this.run.state = { ...this.run.state, status };
     this.send({ type: "status", status });
   }
 
   private sendSessions(activeSessionId?: string): SessionMeta[] {
     const sessions = this.deps.store.list();
-    this.send({
+    this.deps.broadcast({
       type: "sessions",
       sessions,
       recentProjects: this.deps.store.listRecentProjects(sessions),
@@ -158,10 +153,13 @@ export class AgentHost {
   }
 
   getWorkingDirectory(): string | undefined {
-    if (this.status !== "idle" && this.agentToolEnvironment) {
-      return this.agentToolEnvironment.workingDirectory;
-    }
+    const active = this.run?.state;
+    if (active && active.sessionId === this.sessionId) return active.workingDirectory ?? undefined;
     return this.getProjectDirectory() ?? this.deps.getSettings().workingDirectory;
+  }
+
+  hasActiveRun(): boolean {
+    return this.run !== undefined;
   }
 
   private ensureSession(workingDirectory: string | undefined, settings?: SessionSettings): string {
@@ -258,9 +256,11 @@ export class AgentHost {
       this.agentToolEnvironment?.workingDirectory === toolEnvironment.workingDirectory &&
       this.agentToolEnvironment?.commandShell === toolEnvironment.commandShell
     ) {
+      this.agent.state.thinkingLevel = settings.thinkingLevel ?? DEFAULT_THINKING_LEVEL;
       return this.agent;
     }
 
+    if (this.agentSessionId !== sessionId) this.resetAgent();
     const apiKey = decryptSecret(active.apiKey);
     const { model, streamFn } = resolveModel(active, apiKey);
     const { contextWindow } = model;
@@ -283,7 +283,10 @@ export class AgentHost {
       transformContext: async (contextMessages) =>
         this.prepareRequestMessages(contextMessages, systemPrompt),
       beforeToolCall: async ({ toolCall, args }, signal) => {
-        const result = await this.permissions.gate(
+        signal?.throwIfAborted();
+        const run = this.run;
+        if (!run) throw new Error("工具调用缺少活动运行。");
+        const result = await run.permissions.gate(
           toolCall.name,
           args,
           this.deps.mcp.policyOf(toolCall.name),
@@ -482,33 +485,18 @@ export class AgentHost {
       this.send({ type: "queue", steerCount: this.steerCount });
       return;
     }
-
-    if (event.type === "agent_end") {
-      this.settle();
-    }
   }
 
-  /** 一轮运行结束：以 agent 转录为准全量校准 UI，落盘，回 idle */
-  private settle(): void {
-    this.promptSkillInstructions.clear();
-    if (this.agent && this.agentSessionId) {
-      this.uiMessages = toUiMessages(this.agent.state.messages, "s", (name) =>
-        this.toolLabel(name),
-      );
-      this.nextId = this.uiMessages.length;
-      this.send({ type: "messages", messages: this.uiMessages });
-
-      const last = this.agent.state.messages.at(-1);
-      if (last?.role === "assistant" && last.stopReason === "error") {
-        this.send({ type: "error", message: last.errorMessage ?? "模型返回错误" });
-      }
-      this.deps.store.save(this.agentSessionId, this.agent.state.messages);
-      // 自动标题可能已变化：推送会话列表刷新侧栏
-      this.sendSessions(this.agentSessionId);
+  private settle(sessionId: string, messages: AgentMessage[]): void {
+    this.uiMessages = toUiMessages(messages, "s", (name) => this.toolLabel(name));
+    this.nextId = this.uiMessages.length;
+    this.send({ type: "messages", messages: this.uiMessages });
+    const last = messages.at(-1);
+    if (last?.role === "assistant" && last.stopReason === "error") {
+      this.send({ type: "error", message: last.errorMessage ?? "模型返回错误" });
     }
-    this.steerCount = 0;
-    this.send({ type: "queue", steerCount: 0 });
-    this.sendStatus("idle");
+    this.deps.store.save(sessionId, messages);
+    this.sendSessions();
   }
 
   private toolLabel(name: string): string {
@@ -550,31 +538,39 @@ export class AgentHost {
     this.sendSessions();
   }
 
-  preparePrompt(input: string | PromptInput): string | PreparedPrompt {
-    if (typeof input === "string") return input;
-    const workingDirectory = this.getWorkingDirectory();
-    return prepareMentionPrompt(
-      input,
-      (directory) => directory === workingDirectory,
-      this.deps.skillsDir,
-    );
-  }
-
   /** 运行中 = 插话（steer），空闲 = 发起新一轮 */
-  prompt(input: string | PreparedPrompt, composerId?: string): Promise<void> {
+  prompt(
+    input: string | PromptInput,
+    composerId?: string,
+    expectedDirectory?: string | null,
+  ): Promise<void> | ActiveRun {
     if (composerId !== undefined) this.checkComposerId(composerId);
-    const busy = this.status !== "idle";
-    const agent = busy ? this.agent : this.ensureAgent();
-    if (!agent) return Promise.resolve();
-    if (composerId !== undefined) this.deps.store.saveDraft(composerId, []);
-    if (!busy) this.promptSkillInstructions.clear();
-    const text = typeof input === "string" ? input : input.text;
-    const message: ReferencedUserMessage = { role: "user", content: text, timestamp: Date.now() };
-    if (typeof input !== "string" && input.reference) message.pilotReference = input.reference;
-    if (typeof input !== "string" && input.skillInstructions.length > 0) {
-      this.promptSkillInstructions.set(message, input.skillInstructions);
+    const active = this.run?.state;
+    if (active && (active.sessionId !== this.sessionId || active.status === "stopping")) {
+      return active;
     }
-    if (busy) {
+    if (expectedDirectory !== undefined) this.checkWorkingDirectory(expectedDirectory);
+    const workingDirectory = this.getWorkingDirectory();
+    const prepared =
+      typeof input === "string"
+        ? { text: input, skillInstructions: [] }
+        : prepareMentionPrompt(
+            input,
+            (directory) => directory === workingDirectory,
+            this.deps.skillsDir,
+          );
+    const agent = active && this.agent ? this.agent : this.ensureAgent();
+    if (composerId !== undefined) this.deps.store.saveDraft(composerId, []);
+    const message: ReferencedUserMessage = {
+      role: "user",
+      content: prepared.text,
+      timestamp: Date.now(),
+      pilotReference: "reference" in prepared ? prepared.reference : undefined,
+    };
+    if (prepared.skillInstructions.length) {
+      this.promptSkillInstructions.set(message, prepared.skillInstructions);
+    }
+    if (active) {
       agent.steer(message);
       const queued = agent.peekQueuedMessages() ?? [];
       this.steerCount = queued.length;
@@ -582,60 +578,102 @@ export class AgentHost {
       return Promise.resolve();
     }
 
-    const running = this.runPrompt(agent, message).finally(() => {
-      if (this.runningPrompt === running) this.runningPrompt = undefined;
-    });
-    this.runningPrompt = running;
-    return running;
+    const sessionId = this.sessionId!;
+    const settings = this.deps.getSettings();
+    const approvalMode =
+      this.getCurrentSession()?.approvalMode ?? settings.approvalMode ?? "standard";
+    const globalRules = [...(settings.toolRules ?? [])];
+    const sessionRules = this.sessionRules.get(sessionId) ?? [];
+    this.sessionRules.set(sessionId, sessionRules);
+    const run: RunningTask = {
+      state: {
+        sessionId,
+        runId: randomUUID(),
+        workingDirectory: workingDirectory ?? null,
+        status: "streaming",
+      },
+      preparation: new AbortController(),
+      permissions: new PermissionManager(
+        (request) => {
+          this.sendStatus("waiting_approval");
+          this.send(request);
+        },
+        () => globalRules,
+        (rule) => {
+          this.addGlobalRule(rule);
+          globalRules.push(rule);
+        },
+        () => approvalMode,
+        sessionRules,
+      ),
+    };
+    this.error = null;
+    this.run = run;
+    this.runningPrompt = this.runPrompt(agent, message, run);
+    return this.runningPrompt;
   }
 
-  private async runPrompt(agent: Agent, message: ReferencedUserMessage): Promise<void> {
-    const preparation = new AbortController();
+  private async runPrompt(
+    agent: Agent,
+    message: ReferencedUserMessage,
+    run: RunningTask,
+  ): Promise<void> {
+    const { preparation } = run;
+    let started = false;
     try {
-      this.preparingPrompt = preparation;
-      this.sendStatus("streaming");
+      this.deps.broadcast({ type: "run_started", run: run.state });
       const externalTools = await this.deps.mcp.tools(
-        this.getWorkingDirectory(),
+        run.state.workingDirectory ?? undefined,
         preparation.signal,
       );
-      if (this.agent !== agent) return;
-      preparation.signal.throwIfAborted();
+      if (preparation.signal.aborted) return;
       // pi snapshots tool declarations as it starts the prompt, before preparing the request.
       agent.state.tools = [...this.localTools, ...externalTools];
-      this.preparingPrompt = undefined;
+      started = true;
       await agent.prompt(message);
+      this.settle(run.state.sessionId, agent.state.messages);
     } catch (error) {
-      if (this.agent !== agent) return;
-      if (preparation.signal.aborted) {
-        this.clearQueue();
-        this.sendStatus("idle");
-        return;
+      if (started || !preparation.signal.aborted) {
+        this.send({
+          type: "error",
+          message: error instanceof Error ? error.message : String(error),
+        });
       }
-      this.sendStatus("idle");
-      this.send({
-        type: "error",
-        message: error instanceof Error ? error.message : String(error),
-      });
     } finally {
-      if (this.preparingPrompt === preparation) this.preparingPrompt = undefined;
+      run.permissions.abortAll();
+      agent.clearAllQueues();
+      this.promptSkillInstructions.clear();
+      this.steerCount = 0;
+      this.run = undefined;
+      this.runningPrompt = undefined;
+      const { runId, sessionId } = run.state;
+      this.deps.broadcast({ type: "status", status: "idle", run: { runId, sessionId } });
     }
   }
 
-  abort(): void {
-    this.permissions.abortAll();
-    this.preparingPrompt?.abort();
-    this.agent?.abort();
+  abort(ref: RunRef): void {
+    const run = this.selectedRun(ref);
+    if (run) this.stop(run);
   }
 
-  private async stopBeforeSwitch(): Promise<void> {
-    if (!this.runningPrompt) return;
-    // The current run needs its session and event subscription until it has saved the transcript.
-    this.abort();
-    await this.runningPrompt;
+  private stop(run: RunningTask): void {
+    run.preparation.abort();
+    this.agent?.abort();
+    run.permissions.abortAll();
+    this.sendStatus("stopping");
+  }
+
+  private async stopOwnedRun(id: string): Promise<void> {
+    const run = this.run;
+    if (run?.state.sessionId !== id) return;
+    const completion = this.runningPrompt;
+    this.stop(run);
+    await completion;
   }
 
   /** 清空排队中的插话（steer + followUp），状态行撤回入口 */
-  clearQueue(): void {
+  clearQueue(ref: RunRef): void {
+    if (!this.selectedRun(ref)) return;
     this.agent?.clearAllQueues();
     this.steerCount = 0;
     this.send({ type: "queue", steerCount: 0 });
@@ -655,10 +693,13 @@ export class AgentHost {
 
   /** 归档/取消归档；归档当前打开的会话时回到草稿态（数据保留在归档区） */
   async archiveSession(id: string, archived: boolean): Promise<Snapshot> {
-    if (archived && this.sessionId === id) await this.stopBeforeSwitch();
+    if (archived && this.run?.state.sessionId === id) await this.stopOwnedRun(id);
     const directory = this.deps.store.getMeta(id)?.workingDirectory;
     this.deps.store.setArchived(id, archived);
-    if (archived && this.sessionId === id) this.switchSession(null, [], directory);
+    if (archived && this.sessionId === id) {
+      this.switchSession(null, directory);
+      return this.publishSnapshot("reset");
+    }
     this.sendSessions();
     return this.getSnapshot();
   }
@@ -687,30 +728,33 @@ export class AgentHost {
 
   /** 删除会话；删除当前会话时回到草稿态（不新建会话文件） */
   async deleteSession(id: string): Promise<Snapshot> {
-    if (this.sessionId === id) await this.stopBeforeSwitch();
+    if (this.run?.state.sessionId === id) await this.stopOwnedRun(id);
     const directory = this.deps.store.getMeta(id)?.workingDirectory;
     this.deps.store.remove(id);
-    if (this.sessionId === id) this.switchSession(null, [], directory);
+    this.sessionRules.delete(id);
+    if (this.agentSessionId === id) this.resetAgent();
+    if (this.sessionId === id) {
+      this.switchSession(null, directory);
+      return this.publishSnapshot("reset");
+    }
     this.sendSessions();
     return this.getSnapshot();
   }
 
   /** 在首次编辑草稿、改会话设置或主动发送时才创建会话记录。 */
-  async newSession(): Promise<Snapshot> {
-    await this.stopBeforeSwitch();
-    this.switchSession(null, [], this.getProjectDirectory());
-    return this.getSnapshot();
+  newSession(): Snapshot {
+    this.switchSession(null, this.getProjectDirectory());
+    return this.publishSnapshot();
   }
 
-  async openProject(directory: string): Promise<Snapshot> {
+  openProject(directory: string): Snapshot {
     const workingDirectory = normalizeWorkingDirectory(directory);
-    await this.stopBeforeSwitch();
     this.deps.store.rememberProject(workingDirectory);
-    this.switchSession(null, [], workingDirectory);
-    return this.getSnapshot();
+    this.switchSession(null, workingDirectory);
+    return this.publishSnapshot();
   }
 
-  useRecentProject(directory: string, sessionId?: string): Promise<Snapshot> {
+  useRecentProject(directory: string, sessionId?: string): Snapshot | Promise<Snapshot> {
     if (!this.deps.store.listRecentProjects().includes(directory)) {
       throw new Error("找不到该最近项目。");
     }
@@ -720,20 +764,21 @@ export class AgentHost {
   async bindProject(id: string, directory: string): Promise<Snapshot> {
     if (this.sessionId !== id) throw new Error("会话已切换，请重新关联项目。");
     const workingDirectory = normalizeWorkingDirectory(directory);
-    await this.stopBeforeSwitch();
+    if (this.run?.state.sessionId === id) await this.stopOwnedRun(id);
     if (this.sessionId !== id) throw new Error("会话已切换，请重新关联项目。");
     this.deps.store.bindProject(id, workingDirectory);
-    this.resetAgent();
-    return this.getSnapshot();
+    this.sessionRules.delete(id);
+    if (this.agentSessionId === id) this.resetAgent();
+    return this.publishSnapshot();
   }
 
-  async loadSession(id: string): Promise<Snapshot> {
-    if (this.sessionId === id || !this.deps.store.getMeta(id)) return this.getSnapshot();
-    await this.stopBeforeSwitch();
+  loadSession(id: string, record = true): Snapshot {
     if (!this.deps.store.getMeta(id)) return this.getSnapshot();
-    this.deps.store.setUnread(id, false);
-    this.switchSession(id, toUiMessages(this.deps.store.load(id), "s"));
-    return this.getSnapshot();
+    if (this.sessionId !== id) {
+      this.deps.store.setUnread(id, false);
+      this.switchSession(id);
+    }
+    return this.publishSnapshot(record ? "record" : undefined);
   }
 
   private resetAgent(): void {
@@ -741,25 +786,18 @@ export class AgentHost {
     this.unsubscribe = null;
     this.agent = null;
     this.agentSessionId = null;
-    this.permissions.resetSession();
-  }
-
-  private switchSession(
-    id: string | null,
-    messages: UiMessage[],
-    draftWorkingDirectory?: string,
-  ): void {
-    this.resetAgent();
-    this.sessionId = id;
-    this.composerId = id ?? randomUUID();
-    this.draftWorkingDirectory = draftWorkingDirectory;
-    this.uiMessages = messages;
-    this.nextId = messages.length;
+    this.uiMessages = [];
+    this.nextId = 0;
     this.usage = { input: 0, output: 0, cacheRead: 0, costTotal: 0 };
     this.contextTokens = 0;
     this.contextWindow = null;
-    this.steerCount = 0;
-    this.status = "idle";
+    this.error = null;
+  }
+
+  private switchSession(id: string | null, draftWorkingDirectory?: string): void {
+    this.sessionId = id;
+    this.composerId = id ?? randomUUID();
+    this.draftWorkingDirectory = draftWorkingDirectory;
   }
 
   private sessionFileChange(
@@ -791,7 +829,9 @@ export class AgentHost {
   }
 
   undoFileChange(sessionId: string, changeId: string): void {
-    if (this.status !== "idle") throw new Error("请等待当前回复结束后再撤销。");
+    if (this.run?.state.sessionId === sessionId) {
+      throw new Error("请等待当前回复结束后再撤销。");
+    }
     const { messages, index, message, change } = this.sessionFileChange(sessionId, changeId);
     if (change.summary.reverted) return;
     restoreFileChange(change, this.getWorkingDirectory());
@@ -802,12 +842,26 @@ export class AgentHost {
       details: { pilotFileChange: { ...change, summary: reverted } },
     });
     this.deps.store.save(sessionId, updated);
-    if (this.agentSessionId === sessionId && this.agent) this.agent.state.messages = updated;
-    this.send({ type: "file_change", callId: message.toolCallId, change: reverted });
+    const event = { type: "file_change" as const, callId: message.toolCallId, change: reverted };
+    if (this.agentSessionId === sessionId && this.agent) {
+      this.agent.state.messages = updated;
+      this.uiMessages = applyMessageEvent(this.uiMessages, event);
+    }
+    this.deps.broadcast({ ...event, sessionId });
+  }
+
+  publishSnapshot(navigation?: "record" | "reset"): Snapshot {
+    const snapshot = this.getSnapshot();
+    // Selection and run updates share a channel so a live delta cannot overtake its snapshot.
+    this.deps.broadcast({ type: "snapshot", snapshot, navigation });
+    return snapshot;
   }
 
   getSnapshot(): Snapshot {
     const sessions = this.deps.store.list();
+    const activeRun = this.run?.state ?? null;
+    const ownRun = activeRun?.sessionId === this.sessionId ? this.run : undefined;
+    const hasLiveMessages = this.sessionId !== null && this.sessionId === this.agentSessionId;
     return {
       sessionId: this.sessionId,
       composerId: this.composerId,
@@ -815,13 +869,22 @@ export class AgentHost {
       draftWorkingDirectory: this.draftWorkingDirectory ?? null,
       sessions,
       recentProjects: this.deps.store.listRecentProjects(sessions),
-      messages: this.uiMessages,
-      status: this.status,
+      messages: hasLiveMessages
+        ? this.uiMessages
+        : this.sessionId
+          ? toUiMessages(this.deps.store.load(this.sessionId), "s")
+          : [],
+      status: ownRun?.state.status ?? "idle",
+      activeRun,
+      pendingPermissions: ownRun?.permissions.listPending() ?? [],
+      error: hasLiveMessages ? this.error : null,
       settings: toPublicSettings(this.deps.getSettings()),
-      usage: { ...this.usage },
-      contextWindow: this.contextWindow,
-      contextTokens: this.contextTokens,
-      steerCount: this.steerCount,
+      usage: hasLiveMessages
+        ? { ...this.usage }
+        : { input: 0, output: 0, cacheRead: 0, costTotal: 0 },
+      contextWindow: hasLiveMessages ? this.contextWindow : null,
+      contextTokens: hasLiveMessages ? this.contextTokens : 0,
+      steerCount: ownRun ? this.steerCount : 0,
     };
   }
 }

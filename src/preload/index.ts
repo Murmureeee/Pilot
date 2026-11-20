@@ -6,7 +6,6 @@ import type {
   MenuAction,
   ModelCatalogEntry,
   OpenPathTarget,
-  PermissionDecision,
   PingRequest,
   ProviderInput,
   ProviderTestResult,
@@ -41,8 +40,8 @@ const api: PiApi = {
     ipcRenderer.invoke(IPC.agentSearchWorkspace, query, expectedDirectory),
   previewWorkspaceReference: (reference) =>
     ipcRenderer.invoke(IPC.agentPreviewWorkspaceReference, reference),
-  agentAbort: () => ipcRenderer.invoke(IPC.agentAbort),
-  clearQueue: () => ipcRenderer.invoke(IPC.agentClearQueue),
+  agentAbort: (run) => ipcRenderer.invoke(IPC.agentAbort, run),
+  clearQueue: (run) => ipcRenderer.invoke(IPC.agentClearQueue, run),
   sessionNew: () => ipcRenderer.invoke(IPC.sessionNew),
   sessionSaveDraft: (composerId, draft) =>
     ipcRenderer.invoke(IPC.sessionSaveDraft, composerId, draft),
@@ -53,7 +52,7 @@ const api: PiApi = {
   sessionUseRecentProject: (directory, sessionId) =>
     ipcRenderer.invoke(IPC.sessionUseRecentProject, directory, sessionId),
   sessionGitHead: (directory) => ipcRenderer.invoke(IPC.sessionGitHead, directory),
-  sessionLoad: (id: string) => ipcRenderer.invoke(IPC.sessionLoad, id),
+  sessionLoad: (id, record) => ipcRenderer.invoke(IPC.sessionLoad, id, record),
   sessionRename: (id: string, title: string) =>
     ipcRenderer.invoke(IPC.sessionRename, id, title) as Promise<SessionMeta[]>,
   sessionDelete: (id: string) => ipcRenderer.invoke(IPC.sessionDelete, id),
@@ -99,8 +98,8 @@ const api: PiApi = {
     ipcRenderer.invoke(IPC.settingsModelCatalog, ref) as Promise<ModelCatalogEntry[]>,
   testProvider: (ref: string | ProviderInput) =>
     ipcRenderer.invoke(IPC.settingsTestProvider, ref) as Promise<ProviderTestResult>,
-  permissionRespond: (requestId: string, decision: PermissionDecision) =>
-    ipcRenderer.invoke(IPC.toolPermissionRespond, requestId, decision),
+  permissionRespond: (run, requestId, decision) =>
+    ipcRenderer.invoke(IPC.toolPermissionRespond, run, requestId, decision),
   onAgentEvent: (callback: (event: UiAgentEvent) => void) => {
     const listener = (_event: unknown, event: UiAgentEvent): void => callback(event);
     ipcRenderer.on(AGENT_EVENT_CHANNEL, listener);

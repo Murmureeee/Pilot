@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IPC, UPDATE_STATUS_CHANNEL } from "../src/shared/contract";
+import { AGENT_EVENT_CHANNEL, IPC, UPDATE_STATUS_CHANNEL } from "../src/shared/contract";
 
 describe("IPC contract", () => {
   it("uses unique channel names", () => {
@@ -8,7 +8,7 @@ describe("IPC contract", () => {
   });
 
   it("prefixes channels with a domain namespace", () => {
-    for (const name of Object.values(IPC)) {
+    for (const name of [...Object.values(IPC), AGENT_EVENT_CHANNEL]) {
       expect(name).toMatch(/^(app|agent|session|settings|skills|tool):/);
     }
   });

@@ -23,7 +23,7 @@ export function registerIntegrationRoutes(
   const importLocations = (project: string | null): ReturnType<typeof resolveImportLocations> =>
     resolveImportLocations(app.getPath("home"), ctx.settingsDir, ctx.skillsDir, project);
   const listMcp = (reconnectId?: string): ReturnType<IpcContext["mcp"]["list"]> =>
-    ctx.mcp.list(ctx.host.getWorkingDirectory(), reconnectId);
+    ctx.mcp.list(ctx.host.getWorkingDirectory(), reconnectId, ctx.host.hasActiveRun());
   handle(IPC.settingsPreviewExternalImport, (_event, kind, project) =>
     previewExternalImport(kind, ctx.getSettings(), importLocations(project)),
   );

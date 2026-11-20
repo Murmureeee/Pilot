@@ -11,7 +11,7 @@ import { handle } from "./transport";
 import type { IpcContext } from "./types";
 
 export function registerSettingsRoutes(
-  ctx: Pick<IpcContext, "skillsDir" | "getSettings" | "saveSettings" | "host">,
+  ctx: Pick<IpcContext, "skillsDir" | "getSettings" | "saveSettings">,
 ): void {
   handle(IPC.settingsGet, () => toPublicSettings(ctx.getSettings()));
   handle(IPC.settingsSetLogLevel, (_event, logLevel) => {
@@ -28,7 +28,6 @@ export function registerSettingsRoutes(
     if (!thinkingLevels.includes(thinkingLevel)) throw new Error("请从已启用的思考强度中选择。");
     const settings = { ...current, thinkingLevel };
     ctx.saveSettings(settings);
-    ctx.host.setThinkingLevel(thinkingLevel);
     return toPublicSettings(settings);
   });
   const skillList = () => {
@@ -81,9 +80,6 @@ export function registerSettingsRoutes(
     if (invalid) throw new Error(invalid);
     const merged = mergeSettingsInput(ctx.getSettings(), input);
     ctx.saveSettings(merged);
-    // 思考强度运行时同步到当前 Agent（provider/权限模式由各自通道/下次 prompt 生效）
-    if (input.thinkingLevel || input.thinkingLevels)
-      ctx.host.setThinkingLevel(merged.thinkingLevel);
     return toPublicSettings(merged);
   });
 }

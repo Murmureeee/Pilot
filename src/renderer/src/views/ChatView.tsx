@@ -46,6 +46,7 @@ export function ChatView({ workingDirectory }: { workingDirectory: string | null
   const composerId = useAgentStore((s) => s.composerId);
   const busy = useAgentStore((s) => s.status !== "idle");
   const permission = useAgentStore((s) => s.pendingPermissions[0]);
+  const activeRun = useAgentStore((s) => s.activeRun);
   const error = useAgentStore((s) => s.error);
   const projectError = useAgentStore((s) => s.projectError);
   const settings = useAgentStore((s) => s.settings);
@@ -221,7 +222,9 @@ export function ChatView({ workingDirectory }: { workingDirectory: string | null
             </p>
           </div>
         )}
-        {permission && <PermissionCard key={permission.requestId} request={permission} />}
+        {permission && activeRun && (
+          <PermissionCard key={permission.requestId} request={permission} run={activeRun} />
+        )}
         <Activity mode={permission ? "hidden" : "visible"}>
           {composerId && (
             <Composer

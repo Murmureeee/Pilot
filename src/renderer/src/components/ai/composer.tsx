@@ -64,7 +64,7 @@ import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { ComposerCommand, ComposerSuggestion, ComposerToolbarMenu } from "@renderer/lib/types";
 import { selectActiveSession, selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
 import { APP_NAME, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
-import type { ApprovalMode, PromptMention } from "@shared/contract";
+import type { ActiveRun, ApprovalMode, PromptMention } from "@shared/contract";
 import { cn } from "cn";
 import { ComposerModelControls } from "./composer-model-controls";
 import { ComposerCaretMenu, ComposerSuggestions } from "./composer-suggestions";
@@ -118,6 +118,7 @@ export function Composer({
   const steerCount = useAgentStore((s) => s.steerCount);
   const usage = useAgentStore((s) => s.usage);
   const sessionId = useAgentStore((s) => s.sessionId);
+  const activeRun = useAgentStore((s) => s.activeRun);
   const [draft, setDraft] = useState(() => promptFromDraft(useAgentStore.getState().composerDraft));
   const [selection, setSelection] = useState<ComposerSelection | null>(null);
   const [focused, setFocused] = useState(false);
@@ -130,6 +131,7 @@ export function Composer({
   const [skillError, setSkillError] = useState<string | null>(null);
   const [loadingSkills, setLoadingSkills] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [blockedSend, setBlockedSend] = useState<ActiveRun | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const editor = useRef<HTMLDivElement>(null);
   const lastRange = useRef<Range | null>(null);
@@ -142,6 +144,7 @@ export function Composer({
   const saveDraft = useAgentStore((s) => s.saveDraft);
   const abort = useAgentStore((s) => s.abort);
   const clearQueue = useAgentStore((s) => s.clearQueue);
+  const loadSession = useAgentStore((s) => s.loadSession);
   const updateSessionSettings = useAgentStore((s) => s.updateSessionSettings);
   const savedMode = useAgentStore((s) => selectActiveSession(s)?.approvalMode);
   const newSession = useAgentStore((s) => s.newSession);
@@ -153,6 +156,13 @@ export function Composer({
   const projectError = useAgentStore((s) => s.projectError);
   const skills = useAgentStore((s) => s.skills);
   const listSkills = useAgentStore((s) => s.listSkills);
+
+  const ownRun = activeRun?.sessionId === sessionId ? activeRun : null;
+  const otherRun = activeRun && !ownRun ? activeRun : null;
+  const noticeRun = otherRun ?? blockedSend;
+  const runTitle = useAgentStore(
+    (s) => s.sessions.find(({ id }) => id === noticeRun?.sessionId)?.title,
+  );
 
   const mode = useAgentStore(selectApprovalMode);
   const modeMeta = MODE_META[mode];
@@ -212,6 +222,7 @@ export function Composer({
     const next = readComposerDraft(editor.current, resources.current);
     setDraft(promptFromDraft(next));
     setSendError(null);
+    setBlockedSend(null);
     void saveDraft(composerId, next).catch((error: unknown) => {
       if (useAgentStore.getState().composerDraft === next) {
         setSendError(error instanceof Error ? error.message : String(error));
@@ -375,20 +386,25 @@ export function Composer({
   const commandPending =
     rawTrigger?.kind === "command" &&
     (!isDismissed || commands.length > 0 || matchedSkills.length > 0);
-  const canSend = !composing && draft.text.trim().length > 0 && !commandPending;
+  const canSend =
+    status !== "stopping" && !composing && draft.text.trim().length > 0 && !commandPending;
   const placeholder = busy ? t("输入插话消息…", locale) : t("给 {0} 发消息…", locale, [APP_NAME]);
 
   const send = async (): Promise<void> => {
     if (!canSend || submitting) return;
     setSubmitting(true);
     setSendError(null);
+    setBlockedSend(null);
     try {
-      if (await prompt(trimPrompt(draft), workingDirectory, composerId)) {
+      const result = await prompt(trimPrompt(draft), workingDirectory, composerId);
+      if (result === true) {
         editor.current?.replaceChildren();
         resources.current.clear();
         lastRange.current = null;
         setDraft({ text: "", mentions: [] });
         setSelection(null);
+      } else if (result && result.sessionId !== sessionId) {
+        setBlockedSend(result);
       }
     } catch (error) {
       setSendError(error instanceof Error ? error.message : String(error));
@@ -438,11 +454,36 @@ export function Composer({
   };
 
   const statusLabel =
-    status === "waiting_approval" ? t("等待操作审批…", locale) : t("回复中…", locale);
+    status === "stopping"
+      ? "正在停止…"
+      : status === "waiting_approval"
+        ? "等待操作审批…"
+        : "回复中…";
+  const runNotice =
+    otherRun?.status === "waiting_approval"
+      ? "会话「{0}」等待审批"
+      : otherRun?.status === "stopping"
+        ? "会话「{0}」正在停止"
+        : otherRun
+          ? "会话「{0}」正在运行"
+          : "发送时，会话「{0}」有一项运行中的任务。";
 
   return (
     <div className="relative flex w-full min-w-0 flex-col gap-2">
-      {busy && (
+      {noticeRun && (
+        <div className="bg-muted/60 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2">
+          <div role="status" className="min-w-0 text-sm wrap-anywhere">
+            <p>{t(runNotice, locale, [runTitle ?? t("新会话", locale)])}</p>
+            {blockedSend && (
+              <p className="text-muted-foreground text-xs">{t("此消息仍在草稿中。", locale)}</p>
+            )}
+          </div>
+          <Button size="xs" variant="ghost" onClick={() => void loadSession(noticeRun.sessionId)}>
+            {t("返回任务会话", locale)}
+          </Button>
+        </div>
+      )}
+      {ownRun && (
         <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-2 text-xs">
           <div className="flex flex-wrap items-center gap-2">
             <output
@@ -454,14 +495,14 @@ export function Composer({
               )}
             >
               <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
-              {statusLabel}
+              {t(statusLabel, locale)}
             </output>
             {steerCount > 0 && (
               <>
                 <span>{t("插话排队 {0}", locale, [steerCount])}</span>
                 <button
                   type="button"
-                  onClick={clearQueue}
+                  onClick={() => clearQueue(ownRun)}
                   className="hover:text-foreground underline underline-offset-2"
                 >
                   {t("清空排队", locale)}
@@ -705,11 +746,12 @@ export function Composer({
               onError={setSendError}
             />
 
-            {busy ? (
+            {ownRun ? (
               <Button
                 size="icon-lg"
                 className="rounded-full"
-                onClick={abort}
+                onClick={() => abort(ownRun)}
+                disabled={status === "stopping"}
                 aria-label={t("停止", locale)}
                 title={t("停止", locale)}
               >

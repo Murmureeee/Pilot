@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { PermissionManager } from "../src/main/agent-host/permissions";
-import type { UiAgentEvent } from "@shared/contract";
+import type { PermissionRequest } from "@shared/contract";
 
 /** 结算宏任务 */
 const flush = (): Promise<void> => new Promise((resolveP) => setTimeout(resolveP, 0));
 
 function makeManager(globalRules: { toolName: string; pathPrefix?: string }[] = []) {
-  const events: UiAgentEvent[] = [];
+  const events: PermissionRequest[] = [];
   const addedGlobal: { toolName: string; pathPrefix?: string }[] = [];
   // 模拟真实持久化回路：addGlobalRule 落盘 → getGlobalRules 立即可见
   const allRules = [...globalRules];
@@ -89,7 +89,7 @@ describe("PermissionManager", () => {
   });
 
   it("full-access mode bypasses the gate entirely", async () => {
-    const events: UiAgentEvent[] = [];
+    const events: PermissionRequest[] = [];
     const manager = new PermissionManager(
       (event) => events.push(event),
       () => [],
@@ -102,7 +102,7 @@ describe("PermissionManager", () => {
   });
 
   it("read-only mode rejects write tools without asking", async () => {
-    const events: UiAgentEvent[] = [];
+    const events: PermissionRequest[] = [];
     const manager = new PermissionManager(
       (event) => events.push(event),
       () => [],
@@ -115,7 +115,7 @@ describe("PermissionManager", () => {
   });
 
   it("uses a server's confirmation policy even in global full-access mode", async () => {
-    const events: UiAgentEvent[] = [];
+    const events: PermissionRequest[] = [];
     const manager = new PermissionManager(
       (event) => events.push(event),
       () => [],
@@ -136,11 +136,18 @@ describe("PermissionManager", () => {
     expect(await pending).toMatchObject({ block: true });
   });
 
-  it("abortAll denies everything pending", async () => {
-    const { manager } = makeManager();
-    const promise = manager.gate("bash", { command: "whoami" });
+  it("exposes parallel pending requests in order and clears only the answered requests", async () => {
+    const { manager, events } = makeManager();
+    const first = manager.gate("write_file", { path: "first.txt" });
+    const second = manager.gate("write_file", { path: "second.txt" });
     await flush();
+    expect(manager.listPending()).toEqual(events);
+    expect(manager.respond(events[0].requestId, "once")).toBe(true);
+    expect(manager.respond(events[0].requestId, "deny")).toBe(false);
+    expect(manager.listPending()).toEqual([events[1]]);
+    await expect(first).resolves.toBeUndefined();
     manager.abortAll();
-    expect(await promise).toMatchObject({ block: true });
+    expect(manager.listPending()).toEqual([]);
+    await expect(second).resolves.toMatchObject({ block: true });
   });
 });

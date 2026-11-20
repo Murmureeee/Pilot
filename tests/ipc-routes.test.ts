@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registerIpc } from "../src/main/ipc";
 import { handle, registerRenderer, sendToRenderers } from "../src/main/ipc/transport";
 import type { IpcContext } from "../src/main/ipc/types";
-import { AGENT_EVENT_CHANNEL, IPC } from "../src/shared/contract";
+import { AGENT_EVENT_CHANNEL, IPC, type UiAgentEvent } from "../src/shared/contract";
 
 const { ipcHandle } = vi.hoisted(() => ({
   ipcHandle:
@@ -43,6 +43,7 @@ describe("main IPC routes", () => {
     const listener = vi.fn<() => string>(() => "handled");
     const invokeFrom = (contents: object, senderFrame: object | null, args: object): unknown =>
       ipcHandle.mock.calls[0][1]({ sender: contents, senderFrame } as IpcMainInvokeEvent, args);
+    const event: UiAgentEvent = { type: "sessions", sessions: [], recentProjects: [] };
 
     registerRenderer(sender);
     try {
@@ -55,13 +56,12 @@ describe("main IPC routes", () => {
       expect(() => invokeFrom(sender, frame, { payload: 1 })).toThrow(/Invalid IPC arguments/);
       expect(listener).not.toHaveBeenCalled();
       expect(invokeFrom(sender, frame, { payload: "ping" })).toBe("handled");
-      const event = { type: "status", status: "idle" } as const;
       sendToRenderers(AGENT_EVENT_CHANNEL, event);
       expect(renderer.send).toHaveBeenCalledExactlyOnceWith(AGENT_EVENT_CHANNEL, event);
     } finally {
       renderer.emit("destroyed");
     }
-    sendToRenderers(AGENT_EVENT_CHANNEL, { type: "status", status: "idle" });
+    sendToRenderers(AGENT_EVENT_CHANNEL, event);
     expect(renderer.send).toHaveBeenCalledTimes(1);
     expect(() => invokeFrom(sender, frame, { payload: "ping" })).toThrow(/Invalid IPC sender/);
   });

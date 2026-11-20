@@ -92,6 +92,7 @@ function buildTool(client: McpClient, entry: Tool, name: string, serverName: str
 export class McpManager {
   private readonly connections = new Map<string, McpConnection>();
   private readonly closing = new Set<Promise<void>>();
+  private readonly reconnectOnSync = new Set<string>();
   private configs: McpServerConfig[] = [];
 
   constructor(
@@ -105,8 +106,11 @@ export class McpManager {
     const active = mcpServers.filter((config) => config.enabled);
     const enabledIds = new Set(active.map((config) => config.id));
     for (const id of this.connections.keys()) {
-      if (!enabledIds.has(id) || id === reconnectId) this.disconnect(id);
+      if (!enabledIds.has(id) || id === reconnectId || this.reconnectOnSync.has(id)) {
+        this.disconnect(id);
+      }
     }
+    this.reconnectOnSync.clear();
     return active.map((config) => {
       // A changed endpoint or executable gets a new namespace so old approvals do not transfer.
       const signature = JSON.stringify([
@@ -184,11 +188,18 @@ export class McpManager {
     }
   }
 
-  async list(workingDirectory: string | undefined, reconnectId?: string): Promise<McpServerInfo[]> {
-    await Promise.all(
-      this.sync(workingDirectory, reconnectId).map((connection) => connection.ready),
-    );
-    return this.configs.map(
+  async list(
+    workingDirectory: string | undefined,
+    reconnectId?: string,
+    preserveConnections = false,
+  ): Promise<McpServerInfo[]> {
+    // A tool in flight still holds the client created for its run's working directory.
+    if (preserveConnections && reconnectId) this.reconnectOnSync.add(reconnectId);
+    const connections = preserveConnections
+      ? [...this.connections.values()]
+      : this.sync(workingDirectory, reconnectId);
+    await Promise.all(connections.map((connection) => connection.ready));
+    return (this.getSettings().mcpServers ?? []).map(
       ({ id, name, transport, enabled, policy, encryptedEnv, encryptedImport }) => {
         const connection = this.connections.get(id);
         const connected = connection?.client.connectionState === "connected" && !connection.error;

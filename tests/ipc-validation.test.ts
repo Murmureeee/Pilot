@@ -4,6 +4,7 @@ import { parseIpcArgs } from "../src/main/ipc/validation";
 import { IPC, type ProviderInput, type SettingsInput } from "../src/shared/contract";
 
 const sessionId = "48687a06-2cb0-43a1-a627-9752f1621f1b";
+const run = { sessionId, runId: "7a6c4360-bb48-4cbd-ae92-b515fdd9ce8b" };
 const draft: ProviderInput = {
   id: "local",
   kind: "openai-compatible",
@@ -36,8 +37,8 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.agentPreviewWorkspaceReference]: [
     { path: "src/报告.md", workingDirectory: "E:/projects/Pilot" },
   ],
-  [IPC.agentAbort]: [],
-  [IPC.agentClearQueue]: [],
+  [IPC.agentAbort]: [run],
+  [IPC.agentClearQueue]: [run],
   [IPC.agentGetSnapshot]: [],
   [IPC.sessionNew]: [],
   [IPC.sessionSaveDraft]: [
@@ -93,7 +94,7 @@ const valid: Record<IpcChannel, unknown[]> = {
   ],
   [IPC.settingsMcpReconnect]: [sessionId],
   [IPC.settingsMcpRemove]: [sessionId],
-  [IPC.toolPermissionRespond]: [sessionId, "once"],
+  [IPC.toolPermissionRespond]: [run, sessionId, "once"],
 };
 
 describe("IPC argument validation", () => {
@@ -159,7 +160,9 @@ describe("IPC argument validation", () => {
   });
 
   it.each([
-    [IPC.toolPermissionRespond, [sessionId, "later"]],
+    [IPC.toolPermissionRespond, [run, sessionId, "later"]],
+    [IPC.agentAbort, [{ sessionId }]],
+    [IPC.agentClearQueue, [{ ...run, runId: "stale" }]],
     [IPC.sessionLoad, ["not-a-session-id"]],
     [IPC.sessionSelectProject, ["zh", "C:/projects/Pilot"]],
     [IPC.sessionUseRecentProject, ["E:/projects/Pilot", "another-folder"]],

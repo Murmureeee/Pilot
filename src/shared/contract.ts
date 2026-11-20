@@ -218,7 +218,26 @@ export interface UiMessage {
   streaming?: boolean;
 }
 
-export type AgentStatus = "idle" | "streaming" | "waiting_approval";
+export type AgentStatus = "idle" | "streaming" | "waiting_approval" | "stopping";
+
+export interface RunRef {
+  runId: string;
+  sessionId: string;
+}
+
+export interface ActiveRun extends RunRef {
+  status: Exclude<AgentStatus, "idle">;
+  workingDirectory: string | null;
+}
+
+export interface PermissionRequest {
+  type: "permission_request";
+  requestId: string;
+  toolName: string;
+  label: string;
+  inputSummary: string;
+  danger: boolean;
+}
 
 export interface UsageTotals {
   input: number;
@@ -226,7 +245,7 @@ export interface UsageTotals {
   cacheRead: number;
 }
 
-export type UiAgentEvent =
+export type AgentRunEvent =
   | { type: "status"; status: AgentStatus }
   | { type: "messages"; messages: UiMessage[] }
   | { type: "user_message"; message: UiMessage }
@@ -237,13 +256,6 @@ export type UiAgentEvent =
   | { type: "thinking_delta"; id: string; blockIndex: number; delta: string }
   | { type: "thinking_end"; id: string; blockIndex: number; text: string; durationMs?: number }
   | { type: "plan"; steps: PlanStep[] }
-  /** 更新侧栏的会话与项目。 */
-  | {
-      type: "sessions";
-      sessions: SessionMeta[];
-      recentProjects: string[];
-      activeSessionId?: string;
-    }
   | (ToolInvocation & { type: "tool_call" | "tool_start"; id?: string })
   | { type: "tool_update"; callId: string; output: string }
   | {
@@ -264,15 +276,21 @@ export type UiAgentEvent =
       contextWindow: number | null;
     }
   | { type: "queue"; steerCount: number }
-  | {
-      type: "permission_request";
-      requestId: string;
-      toolName: string;
-      label: string;
-      inputSummary: string;
-      danger: boolean;
-    }
+  | PermissionRequest
+  | { type: "permission_resolved"; requestId: string }
   | { type: "error"; message: string };
+
+export type UiAgentEvent =
+  | { type: "snapshot"; snapshot: Snapshot; navigation?: "record" | "reset" }
+  | {
+      type: "sessions";
+      sessions: SessionMeta[];
+      recentProjects: string[];
+      activeSessionId?: string;
+    }
+  | { type: "run_started"; run: ActiveRun }
+  | (AgentRunEvent & { run: RunRef })
+  | (Extract<AgentRunEvent, { type: "file_change" }> & { sessionId: string });
 
 export type PermissionDecision = "once" | "session" | "global" | "deny";
 
@@ -411,6 +429,9 @@ export interface Snapshot {
   recentProjects: string[];
   messages: UiMessage[];
   status: AgentStatus;
+  activeRun: ActiveRun | null;
+  pendingPermissions: PermissionRequest[];
+  error: string | null;
   settings: PublicSettings;
   usage: UsageTotals & { costTotal: number };
   /** 当前模型的上下文窗口大小（未知 = null，状态栏不显示占用） */

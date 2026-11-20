@@ -1,7 +1,9 @@
 // @env browser
 // 事件 → UI 状态的纯函数 reducer（NFR-6：独立测试覆盖）。
 import type {
+  ActiveRun,
   AgentStatus,
+  PermissionRequest,
   SessionMeta,
   UsageTotals,
   UiAgentEvent,
@@ -11,6 +13,7 @@ import { applyMessageEvent } from "../../../shared/message-events";
 
 export interface AgentUiState {
   status: AgentStatus;
+  activeRun: ActiveRun | null;
   messages: UiMessage[];
   sessionId: string | null;
   error: string | null;
@@ -21,12 +24,13 @@ export interface AgentUiState {
   steerCount: number;
   sessions: SessionMeta[];
   recentProjects: string[];
-  pendingPermissions: Extract<UiAgentEvent, { type: "permission_request" }>[];
+  pendingPermissions: PermissionRequest[];
 }
 
 export function initialAgentUiState(): AgentUiState {
   return {
     status: "idle",
+    activeRun: null,
     messages: [],
     sessionId: null,
     error: null,
@@ -41,13 +45,39 @@ export function initialAgentUiState(): AgentUiState {
 }
 
 export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): AgentUiState {
-  switch (event.type) {
-    case "status":
+  if (event.type === "run_started") {
+    const belongsToSelection = event.run.sessionId === state.sessionId;
+    return {
+      ...state,
+      activeRun: event.run,
+      ...(belongsToSelection ? { status: event.run.status, error: null } : {}),
+    };
+  }
+
+  if ("run" in event) {
+    const active = state.activeRun;
+    if (active?.runId !== event.run.runId || active.sessionId !== event.run.sessionId) return state;
+    const belongsToSelection = event.run.sessionId === state.sessionId;
+    if (event.type === "status") {
       return {
         ...state,
-        status: event.status,
-        pendingPermissions: event.status === "waiting_approval" ? state.pendingPermissions : [],
+        activeRun: event.status === "idle" ? null : { ...active, status: event.status },
+        ...(belongsToSelection
+          ? {
+              status: event.status,
+              pendingPermissions:
+                event.status === "waiting_approval" ? state.pendingPermissions : [],
+              steerCount: event.status === "idle" ? 0 : state.steerCount,
+            }
+          : {}),
       };
+    }
+    if (!belongsToSelection) return state;
+  }
+
+  switch (event.type) {
+    case "snapshot":
+      return state;
     case "sessions":
       return {
         ...state,
@@ -64,11 +94,21 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
       };
     case "queue":
       return { ...state, steerCount: event.steerCount };
-    case "permission_request":
-      return { ...state, pendingPermissions: [...state.pendingPermissions, event] };
+    case "permission_request": {
+      const { run: _run, ...request } = event;
+      return { ...state, pendingPermissions: [...state.pendingPermissions, request] };
+    }
+    case "permission_resolved":
+      return {
+        ...state,
+        pendingPermissions: state.pendingPermissions.filter(
+          ({ requestId }) => requestId !== event.requestId,
+        ),
+      };
     case "error":
       return { ...state, error: event.message };
     default: {
+      if ("sessionId" in event && event.sessionId !== state.sessionId) return state;
       const messages = applyMessageEvent(state.messages, event);
       return messages === state.messages ? state : { ...state, messages };
     }

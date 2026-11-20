@@ -5,6 +5,7 @@ import { currentLocale } from "../lib/i18n";
 import { initialNavState, moveNav, peekNav, pushNav, type NavState } from "../lib/nav";
 import type { ProjectSelection, SettingsSection } from "../lib/types";
 import type {
+  ActiveRun,
   ApprovalMode,
   ComposerDraft,
   LogLevel,
@@ -12,6 +13,7 @@ import type {
   PermissionDecision,
   PromptInput,
   PublicSettings,
+  RunRef,
   SessionMeta,
   SessionSettingsInput,
   SettingsInput,
@@ -53,10 +55,14 @@ interface AgentStore extends AgentUiState {
   setSessionPersona(id: string, persona: string | null): Promise<void>;
   init(): Promise<void>;
   setView(view: View): void;
-  prompt(input: PromptInput, workingDirectory: string | null, composerId: string): Promise<boolean>;
+  prompt(
+    input: PromptInput,
+    workingDirectory: string | null,
+    composerId: string,
+  ): Promise<boolean | ActiveRun>;
   saveDraft(composerId: string, draft: ComposerDraft): Promise<void>;
   updateSessionSettings(input: SessionSettingsInput): Promise<void>;
-  abort(): void;
+  abort(run: RunRef): void;
   newSession(): Promise<void>;
   selectProject(selection?: ProjectSelection): Promise<void>;
   /** record=false 用于前进/后退（不重复入栈） */
@@ -82,10 +88,10 @@ interface AgentStore extends AgentUiState {
   saveToolEnvironment(
     input: Pick<SettingsInput, "workingDirectory" | "commandShell">,
   ): Promise<void>;
-  respondPermission(requestId: string, decision: PermissionDecision): Promise<void>;
+  respondPermission(run: RunRef, requestId: string, decision: PermissionDecision): Promise<void>;
   menuAction(action: MenuAction): Promise<void>;
   /** 清空排队中的插话 */
-  clearQueue(): void;
+  clearQueue(run: RunRef): void;
   setDefaultApprovalMode(mode: ApprovalMode): Promise<void>;
   setThinkingLevel(level: ThinkingLevel): Promise<void>;
   removeToolRule(rule: ToolRule): Promise<void>;
@@ -129,17 +135,20 @@ export function selectProjectDirectory(
 }
 
 export function selectWorkingDirectory(
-  state: Pick<AgentStore, "sessionId" | "draftWorkingDirectory" | "sessions" | "settings">,
+  state: Pick<
+    AgentStore,
+    "sessionId" | "draftWorkingDirectory" | "sessions" | "settings" | "activeRun"
+  >,
 ): string | null {
+  if (state.activeRun?.sessionId === state.sessionId) return state.activeRun.workingDirectory;
   return selectProjectDirectory(state) ?? state.settings?.workingDirectory ?? null;
 }
 
 function sessionSnapshot(
   snapshot: Snapshot,
   current: Pick<AgentStore, "composerId" | "composerDraft">,
-): Omit<AgentUiState, "error" | "pendingPermissions"> &
-  Pick<AgentStore, "draftWorkingDirectory" | "composerId" | "composerDraft"> &
-  Partial<Pick<AgentUiState, "pendingPermissions">> {
+): AgentUiState &
+  Pick<AgentStore, "draftWorkingDirectory" | "composerId" | "composerDraft" | "settings"> {
   return {
     sessionId: snapshot.sessionId,
     composerId: snapshot.composerId,
@@ -150,11 +159,14 @@ function sessionSnapshot(
     recentProjects: snapshot.recentProjects,
     messages: snapshot.messages,
     status: snapshot.status,
+    activeRun: snapshot.activeRun,
+    settings: snapshot.settings,
+    error: snapshot.error,
     usage: snapshot.usage,
     contextTokens: snapshot.contextTokens,
     contextWindow: snapshot.contextWindow,
     steerCount: snapshot.steerCount,
-    ...(snapshot.status === "idle" ? { pendingPermissions: [] } : {}),
+    pendingPermissions: snapshot.pendingPermissions,
   };
 }
 
@@ -212,26 +224,30 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     set({ initialized: true });
     window.pi.onAgentEvent((event: UiAgentEvent) => {
       set((state) => {
+        if (event.type === "snapshot") {
+          const { snapshot, navigation } = event;
+          let nav = state.nav;
+          if (navigation === "reset") nav = initialNavState();
+          if (snapshot.sessionId && (navigation === "record" || state.composerId === null)) {
+            nav = pushNav(nav, snapshot.sessionId);
+          }
+          return { ...sessionSnapshot(snapshot, state), nav, projectError: null };
+        }
         const next = applyAgentEvent(state, event);
         return event.type === "sessions" && next.sessionId && next.sessionId !== state.sessionId
           ? { ...next, nav: pushNav(state.nav, next.sessionId) }
           : next;
       });
     });
-    const snapshot = await window.pi.getSnapshot();
-    set({
-      ...sessionSnapshot(snapshot, get()),
-      settings: snapshot.settings,
-      nav: snapshot.sessionId ? pushNav(get().nav, snapshot.sessionId) : get().nav,
-    });
+    await window.pi.getSnapshot();
   },
 
   setView: (view) => set({ view }),
 
   prompt: async (input, workingDirectory, composerId) => {
     const { composerDraft } = get();
-    set({ error: null });
-    await window.pi.agentPrompt(input, workingDirectory, composerId);
+    const blockedBy = await window.pi.agentPrompt(input, workingDirectory, composerId);
+    if (blockedBy) return blockedBy;
     if (get().composerId !== composerId || get().composerDraft !== composerDraft) return false;
     set({ composerDraft: [] });
     return true;
@@ -248,11 +264,10 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     if (composerId) await window.pi.sessionUpdateSettings(composerId, input);
   },
 
-  abort: () => window.pi.agentAbort(),
+  abort: ({ runId, sessionId }) => void window.pi.agentAbort({ runId, sessionId }),
 
   newSession: async () => {
-    const snapshot = await window.pi.sessionNew();
-    set({ ...sessionSnapshot(snapshot, get()), error: null, projectError: null });
+    await window.pi.sessionNew();
   },
 
   selectProject: async ({ sessionId, directory } = {}) => {
@@ -263,7 +278,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
         ? await window.pi.sessionUseRecentProject(directory, sessionId)
         : await window.pi.sessionSelectProject(currentLocale(), sessionId);
       if (!snapshot) return;
-      set({ ...sessionSnapshot(snapshot, get()), view: "chat", error: null });
+      set({ view: "chat" });
     } catch (error) {
       set({ view: "chat", projectError: error instanceof Error ? error.message : String(error) });
     } finally {
@@ -272,13 +287,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   },
 
   loadSession: async (id, record = true) => {
-    const snapshot = await window.pi.sessionLoad(id);
-    set({
-      ...sessionSnapshot(snapshot, get()),
-      error: null,
-      projectError: null,
-      nav: record && snapshot.sessionId === id ? pushNav(get().nav, id) : get().nav,
-    });
+    await window.pi.sessionLoad(id, record);
   },
 
   navBack: async () => {
@@ -308,13 +317,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   },
 
   setSessionArchived: async (id, archived) => {
-    const snapshot = await window.pi.sessionArchive(id, archived);
-    const { nav } = get();
-    set({
-      ...sessionSnapshot(snapshot, get()),
-      error: null,
-      nav: snapshot.sessionId ? nav : initialNavState(),
-    });
+    await window.pi.sessionArchive(id, archived);
   },
 
   setSessionUnread: async (id, unread) => {
@@ -334,17 +337,10 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   },
 
   deleteSession: async (id) => {
-    const snapshot = await window.pi.sessionDelete(id);
-    const { nav } = get();
-    set({
-      ...sessionSnapshot(snapshot, get()),
-      error: null,
-      // 当前会话被删除 → 前进/后退栈里指向它的历史一并失效（导航重置）
-      nav: snapshot.sessionId ? nav : initialNavState(),
-    });
+    await window.pi.sessionDelete(id);
   },
 
-  clearQueue: () => window.pi.clearQueue(),
+  clearQueue: ({ runId, sessionId }) => void window.pi.clearQueue({ runId, sessionId }),
 
   saveSettings: async (input) => {
     const settings = await window.pi.settingsSave(input);
@@ -363,12 +359,9 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     set({ settings });
   },
 
-  respondPermission: async (requestId, decision) => {
+  respondPermission: async ({ runId, sessionId }, requestId, decision) => {
     if (get().pendingPermissions[0]?.requestId !== requestId) return;
-    await window.pi.permissionRespond(requestId, decision);
-    set(({ pendingPermissions }) => ({
-      pendingPermissions: pendingPermissions.filter((request) => request.requestId !== requestId),
-    }));
+    await window.pi.permissionRespond({ runId, sessionId }, requestId, decision);
     if (decision === "global") {
       try {
         const { toolRules } = await window.pi.settingsGet();

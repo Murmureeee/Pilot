@@ -1,6 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { applyAgentEvent, initialAgentUiState } from "../src/renderer/src/adapters/agent-events";
-import type { SessionMeta, UiMessage } from "../src/shared/contract";
+import {
+  applyAgentEvent,
+  initialAgentUiState,
+  type AgentUiState,
+} from "../src/renderer/src/adapters/agent-events";
+import type { AgentRunEvent, SessionMeta, UiMessage } from "../src/shared/contract";
+
+const run = { runId: "running-1", sessionId: "a" };
+
+function initialRunUiState(): AgentUiState {
+  return applyAgentEvent(
+    { ...initialAgentUiState(), sessionId: run.sessionId },
+    { type: "run_started", run: { ...run, status: "streaming", workingDirectory: "E:/a" } },
+  );
+}
+
+function applyRunEvent(state: AgentUiState, event: AgentRunEvent): AgentUiState {
+  return applyAgentEvent(state, { ...event, run });
+}
 
 describe("agent-events adapter", () => {
   it("activates a newly created project session before its first message arrives", () => {
@@ -35,21 +52,21 @@ describe("agent-events adapter", () => {
         { type: "text", text: "." },
       ],
     };
-    const state = applyAgentEvent(initialAgentUiState(), { type: "user_message", message });
+    const state = applyRunEvent(initialRunUiState(), { type: "user_message", message });
     expect(state.messages).toEqual([message]);
   });
 
   it("accumulates streaming deltas into the matching assistant message", () => {
-    let state = initialAgentUiState();
+    let state = initialRunUiState();
     const id = "s-1";
-    state = applyAgentEvent(state, {
+    state = applyRunEvent(state, {
       type: "user_message",
       message: { id: "s-0", role: "user", parts: [{ type: "text", text: "hi" }] },
     });
-    state = applyAgentEvent(state, { type: "assistant_start", id });
-    state = applyAgentEvent(state, { type: "assistant_delta", id, delta: "pon" });
-    state = applyAgentEvent(state, { type: "assistant_delta", id, delta: "g" });
-    state = applyAgentEvent(state, { type: "assistant_end", id });
+    state = applyRunEvent(state, { type: "assistant_start", id });
+    state = applyRunEvent(state, { type: "assistant_delta", id, delta: "pon" });
+    state = applyRunEvent(state, { type: "assistant_delta", id, delta: "g" });
+    state = applyRunEvent(state, { type: "assistant_end", id });
 
     expect(state.messages).toHaveLength(2);
     const assistant = state.messages[1] as UiMessage;
@@ -57,21 +74,21 @@ describe("agent-events adapter", () => {
   });
 
   it("completes thinking on its own event while the assistant is still streaming", () => {
-    let state = initialAgentUiState();
+    let state = initialRunUiState();
     const id = "s-1";
-    state = applyAgentEvent(state, { type: "assistant_start", id });
-    state = applyAgentEvent(state, { type: "thinking_start", id, blockIndex: 0 });
-    state = applyAgentEvent(state, { type: "thinking_delta", id, blockIndex: 0, delta: "let me " });
+    state = applyRunEvent(state, { type: "assistant_start", id });
+    state = applyRunEvent(state, { type: "thinking_start", id, blockIndex: 0 });
+    state = applyRunEvent(state, { type: "thinking_delta", id, blockIndex: 0, delta: "let me " });
     const active = state;
-    state = applyAgentEvent(state, { type: "thinking_delta", id, blockIndex: 0, delta: "think" });
-    state = applyAgentEvent(state, {
+    state = applyRunEvent(state, { type: "thinking_delta", id, blockIndex: 0, delta: "think" });
+    state = applyRunEvent(state, {
       type: "thinking_end",
       id,
       blockIndex: 0,
       text: "let me think",
       durationMs: 3000,
     });
-    state = applyAgentEvent(state, { type: "assistant_delta", id, delta: "answer" });
+    state = applyRunEvent(state, { type: "assistant_delta", id, delta: "answer" });
 
     const assistant = state.messages[0] as UiMessage;
     expect(active.messages[0].parts[0]).toMatchObject({ streaming: true, text: "let me " });
@@ -83,17 +100,17 @@ describe("agent-events adapter", () => {
   });
 
   it("creates and updates tool parts through the tool lifecycle", () => {
-    let state = initialAgentUiState();
-    state = applyAgentEvent(state, { type: "assistant_start", id: "a" });
-    state = applyAgentEvent(state, {
+    let state = initialRunUiState();
+    state = applyRunEvent(state, { type: "assistant_start", id: "a" });
+    state = applyRunEvent(state, {
       type: "tool_start",
       callId: "c1",
       toolName: "write_file",
       label: "写入文件",
       inputSummary: '{"path":"a.txt"}',
     });
-    state = applyAgentEvent(state, { type: "tool_update", callId: "c1", output: "partial" });
-    state = applyAgentEvent(state, {
+    state = applyRunEvent(state, { type: "tool_update", callId: "c1", output: "partial" });
+    state = applyRunEvent(state, {
       type: "tool_end",
       callId: "c1",
       state: "success",
@@ -110,16 +127,16 @@ describe("agent-events adapter", () => {
   });
 
   it("marks tool parts as error with error output", () => {
-    let state = initialAgentUiState();
-    state = applyAgentEvent(state, { type: "assistant_start", id: "a" });
-    state = applyAgentEvent(state, {
+    let state = initialRunUiState();
+    state = applyRunEvent(state, { type: "assistant_start", id: "a" });
+    state = applyRunEvent(state, {
       type: "tool_start",
       callId: "c2",
       toolName: "bash",
       label: "执行命令",
       inputSummary: '{"command":"oops"}',
     });
-    state = applyAgentEvent(state, {
+    state = applyRunEvent(state, {
       type: "tool_end",
       callId: "c2",
       state: "error",
@@ -131,7 +148,7 @@ describe("agent-events adapter", () => {
   });
 
   it("keeps dispatch order and immutable snapshots when tools finish out of order", () => {
-    let state = applyAgentEvent(initialAgentUiState(), { type: "assistant_start", id: "a" });
+    let state = applyRunEvent(initialRunUiState(), { type: "assistant_start", id: "a" });
     const first = {
       id: "a",
       callId: "first",
@@ -140,11 +157,11 @@ describe("agent-events adapter", () => {
       inputSummary: '{"command":"pwd"}',
     };
     const second = { id: "a", callId: "second", toolName: "edit_file", label: "编辑文件" };
-    state = applyAgentEvent(state, { type: "tool_call", ...first });
-    state = applyAgentEvent(state, { type: "tool_call", ...second });
+    state = applyRunEvent(state, { type: "tool_call", ...first });
+    state = applyRunEvent(state, { type: "tool_call", ...second });
     const queued = state;
-    state = applyAgentEvent(state, { type: "tool_start", ...second });
-    state = applyAgentEvent(state, {
+    state = applyRunEvent(state, { type: "tool_start", ...second });
+    state = applyRunEvent(state, {
       type: "tool_end",
       callId: "second",
       state: "success",
@@ -158,9 +175,9 @@ describe("agent-events adapter", () => {
       kind: "modified" as const,
       stats: { added: 2, removed: 1 },
     };
-    state = applyAgentEvent(state, { type: "file_change", callId: "second", change });
-    state = applyAgentEvent(state, { type: "tool_start", ...first });
-    state = applyAgentEvent(state, {
+    state = applyRunEvent(state, { type: "file_change", callId: "second", change });
+    state = applyRunEvent(state, { type: "tool_start", ...first });
+    state = applyRunEvent(state, {
       type: "tool_end",
       callId: "first",
       state: "error",
@@ -175,22 +192,22 @@ describe("agent-events adapter", () => {
   });
 
   it("replaces the plan for the current turn without touching earlier turns", () => {
-    let state = applyAgentEvent(initialAgentUiState(), { type: "assistant_start", id: "a" });
+    let state = applyRunEvent(initialRunUiState(), { type: "assistant_start", id: "a" });
     const firstPlan = [{ title: "First task", status: "completed" as const }];
-    state = applyAgentEvent(state, { type: "plan", steps: firstPlan });
-    state = applyAgentEvent(state, {
+    state = applyRunEvent(state, { type: "plan", steps: firstPlan });
+    state = applyRunEvent(state, {
       type: "user_message",
       message: { id: "u", role: "user", parts: [{ type: "text", text: "second task" }] },
     });
-    state = applyAgentEvent(state, { type: "assistant_start", id: "b" });
-    state = applyAgentEvent(state, {
+    state = applyRunEvent(state, { type: "assistant_start", id: "b" });
+    state = applyRunEvent(state, {
       type: "plan",
       steps: [{ title: "Second task", status: "in_progress" }],
     });
     const previous = state;
-    state = applyAgentEvent(state, { type: "assistant_start", id: "c" });
+    state = applyRunEvent(state, { type: "assistant_start", id: "c" });
     const completed = [{ title: "Second task", status: "completed" as const }];
-    state = applyAgentEvent(state, { type: "plan", steps: completed });
+    state = applyRunEvent(state, { type: "plan", steps: completed });
 
     expect(state.messages[0].parts).toEqual([{ type: "plan", steps: firstPlan }]);
     expect(state.messages[2].parts).toEqual([{ type: "plan", steps: completed }]);
@@ -199,22 +216,22 @@ describe("agent-events adapter", () => {
   });
 
   it("adopts the latest usage totals (主进程累计后发总量，reducer 只替换) and queue counts", () => {
-    let state = initialAgentUiState();
-    state = applyAgentEvent(state, {
+    let state = initialRunUiState();
+    state = applyRunEvent(state, {
       type: "usage",
       tokens: { input: 10, output: 5, cacheRead: 2 },
       costTotal: 0.01,
       contextTokens: 17,
       contextWindow: 128_000,
     });
-    state = applyAgentEvent(state, {
+    state = applyRunEvent(state, {
       type: "usage",
       tokens: { input: 30, output: 13, cacheRead: 6 },
       costTotal: 0.03,
       contextTokens: 49,
       contextWindow: 64_000,
     });
-    state = applyAgentEvent(state, { type: "queue", steerCount: 2 });
+    state = applyRunEvent(state, { type: "queue", steerCount: 2 });
     expect(state.usage).toEqual({ input: 30, output: 13, cacheRead: 6, costTotal: 0.03 });
     // 上下文占用同样是"最近一轮快照"语义：只替换、不累加
     expect(state.contextTokens).toBe(49);
@@ -257,22 +274,65 @@ describe("agent-events adapter", () => {
       danger: true,
     };
     const second = { ...first, requestId: "r2", danger: false };
-    let state = applyAgentEvent(initialAgentUiState(), {
+    let state = applyRunEvent(initialRunUiState(), {
       type: "status",
       status: "waiting_approval",
     });
-    state = applyAgentEvent(state, first);
-    state = applyAgentEvent(state, second);
+    state = applyRunEvent(state, first);
+    state = applyRunEvent(state, second);
     expect(state.pendingPermissions).toEqual([first, second]);
-    for (const status of ["streaming", "idle"] as const) {
-      expect(applyAgentEvent(state, { type: "status", status }).pendingPermissions).toEqual([]);
+    state = applyRunEvent(state, { type: "permission_resolved", requestId: first.requestId });
+    expect(state.pendingPermissions).toEqual([second]);
+    expect(state.status).toBe("waiting_approval");
+    for (const status of ["streaming", "stopping", "idle"] as const) {
+      expect(applyRunEvent(state, { type: "status", status }).pendingPermissions).toEqual([]);
     }
   });
 
+  it("updates the background run notice while ignoring its messages, queue, errors, and stale completion", () => {
+    const state = {
+      ...initialRunUiState(),
+      sessionId: "b",
+      status: "idle" as const,
+      messages: [
+        { id: "s-0", role: "assistant", parts: [{ type: "text", text: "B" }] },
+      ] satisfies UiMessage[],
+    };
+    const waiting = applyRunEvent(state, { type: "status", status: "waiting_approval" });
+    expect(waiting.status).toBe("idle");
+    expect(waiting.activeRun?.status).toBe("waiting_approval");
+    const background: AgentRunEvent[] = [
+      { type: "assistant_delta", id: "s-0", delta: "A only" },
+      { type: "queue", steerCount: 1 },
+      { type: "error", message: "A failed" },
+      {
+        type: "permission_request",
+        requestId: "a1",
+        toolName: "bash",
+        label: "Bash",
+        inputSummary: "{}",
+        danger: false,
+      },
+    ];
+    for (const event of background) expect(applyRunEvent(waiting, event)).toBe(waiting);
+    expect(
+      applyAgentEvent(waiting, {
+        type: "status",
+        status: "idle",
+        run: { ...run, runId: "older-run" },
+      }),
+    ).toBe(waiting);
+    expect(applyRunEvent(waiting, { type: "status", status: "idle" })).toMatchObject({
+      sessionId: "b",
+      messages: state.messages,
+      activeRun: null,
+    });
+  });
+
   it("transitions status and keeps errors independent", () => {
-    let state = initialAgentUiState();
-    state = applyAgentEvent(state, { type: "status", status: "waiting_approval" });
-    state = applyAgentEvent(state, { type: "error", message: "boom" });
+    let state = initialRunUiState();
+    state = applyRunEvent(state, { type: "status", status: "waiting_approval" });
+    state = applyRunEvent(state, { type: "error", message: "boom" });
     expect(state.status).toBe("waiting_approval");
     expect(state.error).toBe("boom");
   });

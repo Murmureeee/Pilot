@@ -1,6 +1,24 @@
 // @env node
 import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
-import type { SessionMeta, UiUserPart } from "@shared/contract";
+import type {
+  ActiveRun,
+  PermissionDecision,
+  PermissionRequest,
+  SessionMeta,
+  UiUserPart,
+} from "@shared/contract";
+import type { PermissionManager } from "./permissions";
+
+export interface RunningTask {
+  state: ActiveRun;
+  preparation: AbortController;
+  permissions: PermissionManager;
+}
+
+export interface PendingPermission {
+  request: PermissionRequest;
+  resolve: (decision: PermissionDecision) => void;
+}
 
 export interface SessionIndex {
   sessions: SessionMeta[];

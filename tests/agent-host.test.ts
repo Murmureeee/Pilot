@@ -47,7 +47,7 @@ it("restores separate session settings and structured drafts in the same project
       broadcast: (event) => {
         if (event.type === "permission_request") {
           permissionRequests.push(event.requestId);
-          setTimeout(() => host.respondPermission(event.requestId, "deny"), 0);
+          setTimeout(() => host.respondPermission(event.run, event.requestId, "deny"), 0);
         }
       },
       store: new SessionStore(sessions),
@@ -96,21 +96,15 @@ it("restores separate session settings and structured drafts in the same project
   const resolve = vi.spyOn(models, "resolveModel");
   try {
     await restarted.loadSession(a);
-    await expect(
-      restarted.permissions.gate("write_file", { path: "a.txt" }),
-    ).resolves.toMatchObject({
-      block: true,
-      reason: expect.stringContaining("只读"),
-    });
-    await restarted.prompt("Hello from A", a);
+    await restarted.prompt("A 演示", a);
+    const file = join(root, "pi-desktop-demo.txt");
+    expect(existsSync(file)).toBe(false);
     expect(restarted.getSnapshot().composerDraft).toEqual([]);
 
     await restarted.loadSession(b);
     expect(restarted.getSnapshot().composerDraft).toEqual(draftB);
-    await expect(
-      restarted.permissions.gate("write_file", { path: "b.txt" }),
-    ).resolves.toBeUndefined();
-    await restarted.prompt("Hello from B", b);
+    await restarted.prompt("B 演示", b);
+    expect(existsSync(file)).toBe(true);
     expect(permissionRequests).toEqual([]);
     expect(resolve.mock.calls.map(([provider]) => [provider.id, provider.modelId])).toEqual([
       ["alpha", "model-a"],
@@ -132,6 +126,7 @@ it("uses the global defaults for older chats and after clearing session settings
     providers: [primary, alternate],
     activeProviderId: "primary",
     approvalMode: "read-only",
+    workingDirectory: realpathSync(profile.path),
   };
   const host = new AgentHost({
     getSettings: () => settings,
@@ -144,10 +139,9 @@ it("uses the global defaults for older chats and after clearing session settings
   const resolve = vi.spyOn(models, "resolveModel");
   try {
     expect((await host.loadSession(old.id)).composerDraft).toEqual([]);
-    await expect(host.permissions.gate("write_file", { path: "a.txt" })).resolves.toMatchObject({
-      block: true,
-    });
-    await host.prompt("Use the original default");
+    await host.prompt("Use the original default: 演示");
+    const file = join(profile.path, "pi-desktop-demo.txt");
+    expect(existsSync(file)).toBe(false);
     host.updateSessionSettings(old.id, {
       model: { providerId: "primary", modelId: "basic" },
       approvalMode: "read-only",
@@ -155,48 +149,17 @@ it("uses the global defaults for older chats and after clearing session settings
     settings.activeProviderId = "alternate";
     settings.providers = [alternate];
     settings.approvalMode = "full-access";
-    await host.prompt("Use the default when my previous provider was removed");
-    await expect(host.permissions.gate("write_file", { path: "a.txt" })).resolves.toMatchObject({
-      block: true,
-    });
+    await host.prompt("Use the default model when the previous provider was removed: 演示");
+    expect(existsSync(file)).toBe(false);
     host.updateSessionSettings(old.id, { model: null, approvalMode: null });
-    await expect(host.permissions.gate("write_file", { path: "a.txt" })).resolves.toBeUndefined();
+    await host.prompt("Use both defaults: 演示");
+    expect(existsSync(file)).toBe(true);
     expect(resolve.mock.calls.map(([provider]) => provider.modelId)).toEqual(["basic", "alt"]);
     const saved = new SessionStore(sessions).getMeta(old.id);
     expect(saved?.model).toBeUndefined();
     expect(saved?.approvalMode).toBeUndefined();
   } finally {
     resolve.mockRestore();
-  }
-});
-
-it("keeps waiting for approval until the last parallel request is answered", async () => {
-  using profile = mkdtempDisposableSync(join(tmpdir(), "pi-agent-approval-"));
-  const settings: Settings = { providers: [], activeProviderId: "" };
-  const requestIds: string[] = [];
-  const host = new AgentHost({
-    getSettings: () => settings,
-    saveSettings: vi.fn<(value: Settings) => void>(),
-    broadcast: (event) => {
-      if (event.type === "permission_request") requestIds.push(event.requestId);
-    },
-    store: new SessionStore(join(profile.path, "sessions")),
-    skillsDir: join(profile.path, "skills"),
-    mcp: new McpManager(() => settings, "0.0.0"),
-  });
-  const first = host.permissions.gate("write_file", { path: "first.txt" });
-  const second = host.permissions.gate("write_file", { path: "second.txt" });
-  try {
-    expect(requestIds).toHaveLength(2);
-    host.respondPermission(requestIds[0], "once");
-    await expect(first).resolves.toBeUndefined();
-    expect(host.getSnapshot().status).toBe("waiting_approval");
-    host.respondPermission(requestIds[1], "deny");
-    await expect(second).resolves.toMatchObject({ block: true });
-    expect(host.getSnapshot().status).toBe("streaming");
-  } finally {
-    host.permissions.abortAll();
-    await Promise.all([first, second]);
   }
 });
 
@@ -351,43 +314,149 @@ it("reopens a recent project after restart and links an old chat without changin
   );
 });
 
-it("saves the old turn and clears its pending approval before opening another project", async () => {
+it("keeps the original run, approval, and transcript while another project is selected", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-project-switch-"));
   const original = realpathSync(profile.path);
   const next = join(original, "next");
   mkdirSync(next);
   const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
   const settings: Settings = { providers: [provider], activeProviderId: provider.id };
-  const requested = Promise.withResolvers<void>();
+  const requested = Promise.withResolvers<Extract<UiAgentEvent, { type: "permission_request" }>>();
   const store = new SessionStore(join(original, "sessions"));
+  const broadcast = vi.fn<(event: UiAgentEvent) => void>((event) => {
+    if (event.type === "permission_request") requested.resolve(event);
+  });
+  const mcp = new McpManager(() => settings, "0.0.0");
+  const tools = vi.spyOn(mcp, "tools");
   const host = new AgentHost({
     getSettings: () => settings,
     saveSettings: vi.fn<(value: Settings) => void>(),
-    broadcast: (event) => {
-      if (event.type === "permission_request") requested.resolve();
-    },
+    broadcast,
     store,
     skillsDir: join(original, "skills"),
-    mcp: new McpManager(() => settings, "0.0.0"),
+    mcp,
   });
-  await host.openProject(original);
-  const running = host.prompt("Original 演示");
+  const a = host.openProject(original).composerId;
+  host.saveSessionDraft(a, ["Original 演示"]);
+  host.renameSession(a, "A");
+  const b = host.openProject(next).composerId;
+  host.updateSessionSettings(b, { approvalMode: "full-access" });
+  host.saveSessionDraft(b, ["B draft"]);
+  host.loadSession(a);
+
+  const running = host.prompt("Original 演示", a);
+  const ref = host.getSnapshot().activeRun!;
+  const invalid = { sessionId: a, runId: b };
   try {
-    await requested.promise;
-    const id = host.getSnapshot().sessionId!;
-    const snapshot = await host.openProject(next);
-    expect(snapshot).toMatchObject({
+    expect(tools).toHaveBeenCalledWith(original, expect.any(AbortSignal));
+    expect(host.loadSession(b)).toMatchObject({
       status: "idle",
-      sessionId: null,
-      draftWorkingDirectory: next,
+      sessionId: b,
+      composerDraft: ["B draft"],
       messages: [],
+      pendingPermissions: [],
+      activeRun: ref,
     });
-    expect(store.load(id)).toContainEqual(expect.objectContaining({ content: "Original 演示" }));
-    expect(host.permissions.hasPending()).toBe(false);
-    expect(existsSync(join(original, "pi-desktop-demo.txt"))).toBe(false);
-  } finally {
-    host.abort();
+    expect(host.getWorkingDirectory()).toBe(next);
+    settings.approvalMode = "read-only";
+    const request = await requested.promise;
+    expect(host.prompt("Blocked send", b)).toMatchObject({
+      sessionId: a,
+      status: "waiting_approval",
+    });
+    expect(store.loadDraft(b)).toEqual(["B draft"]);
+    expect(host.getSnapshot().pendingPermissions).toEqual([]);
+    host.respondPermission(ref, request.requestId, "once");
+    host.abort(ref);
+
+    const restored = host.loadSession(a);
+    expect(restored.status).toBe("waiting_approval");
+    expect(restored.pendingPermissions).toMatchObject([{ requestId: request.requestId }]);
+    expect(restored.messages[0].parts).toEqual([{ type: "text", text: "Original 演示" }]);
+    host.respondPermission(invalid, request.requestId, "deny");
+    host.abort(invalid);
+    expect(host.getSnapshot().pendingPermissions).toHaveLength(1);
+    host.respondPermission(ref, request.requestId, "once");
+    expect(host.getSnapshot()).toMatchObject({ status: "streaming", pendingPermissions: [] });
+
+    host.loadSession(b);
     await running;
+    expect(host.getSnapshot()).toMatchObject({
+      sessionId: b,
+      activeRun: null,
+      messages: [],
+      composerDraft: ["B draft"],
+    });
+    expect(existsSync(join(original, "pi-desktop-demo.txt"))).toBe(true);
+    expect(existsSync(join(next, "pi-desktop-demo.txt"))).toBe(false);
+    expect(store.load(b)).toEqual([]);
+    expect(store.load(a)).toContainEqual(
+      expect.objectContaining({ role: "toolResult", isError: false }),
+    );
+    const scoped = broadcast.mock.calls.map(([event]) => event).filter((event) => "run" in event);
+    expect(scoped.length).toBeGreaterThan(0);
+    for (const { run } of scoped) expect(run).toMatchObject({ sessionId: a, runId: ref.runId });
+  } finally {
+    host.loadSession(a);
+    host.abort(ref);
+    await running;
+  }
+});
+
+it("holds the run lock while stopping and ignores stop and queue actions from an earlier run", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-run-stop-"));
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = { providers: [provider], activeProviderId: provider.id };
+  const mcp = new McpManager(() => settings, "0.0.0");
+  const firstPreparation = Promise.withResolvers<AgentTool[]>();
+  const secondPreparation = Promise.withResolvers<AgentTool[]>();
+  vi.spyOn(mcp, "tools")
+    .mockReturnValueOnce(firstPreparation.promise)
+    .mockReturnValueOnce(secondPreparation.promise);
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: vi.fn<(value: Settings) => void>(),
+    broadcast: vi.fn<(event: UiAgentEvent) => void>(),
+    store: new SessionStore(join(profile.path, "sessions")),
+    skillsDir: join(profile.path, "skills"),
+    mcp,
+  });
+
+  const a = host.newSession().composerId;
+  host.saveSessionDraft(a, ["First"]);
+  const b = host.newSession().composerId;
+  host.saveSessionDraft(b, ["Second chat"]);
+  host.loadSession(a);
+  const first = host.prompt("First", a);
+  const previous = host.getSnapshot().activeRun!;
+  try {
+    host.abort(previous);
+    host.loadSession(b);
+    expect(host.prompt("Second chat", b)).toMatchObject({ sessionId: a, status: "stopping" });
+    expect(host.getSnapshot().composerDraft).toEqual(["Second chat"]);
+  } finally {
+    firstPreparation.resolve([]);
+    await first;
+  }
+
+  host.loadSession(a);
+  const second = host.prompt("A new run", a);
+  const active = host.getSnapshot().activeRun!;
+  try {
+    expect(active.runId).not.toBe(previous.runId);
+    await host.prompt("Queued in A", a);
+    host.loadSession(b);
+    host.clearQueue(active);
+    host.loadSession(a);
+    host.clearQueue(previous);
+    host.abort(previous);
+    expect(host.getSnapshot()).toMatchObject({ status: "streaming", steerCount: 1 });
+    host.clearQueue(active);
+    expect(host.getSnapshot().steerCount).toBe(0);
+  } finally {
+    host.abort(active);
+    secondPreparation.resolve([]);
+    await second;
   }
 });
 
@@ -476,8 +545,9 @@ it("applies an installed skill explicitly for one run and keeps its instructions
     text: "Check this with @[skill:review]",
     mentions: [{ type: "skill", id: "review", label: "Review", meta: { description: "" } }],
   } as const;
-  const invokeSkill = (): Promise<void> =>
-    host.prompt(host.preparePrompt({ ...prompt, mentions: [...prompt.mentions] }));
+  const invokeSkill = async (): Promise<void> => {
+    await host.prompt({ ...prompt, mentions: [...prompt.mentions] });
+  };
 
   try {
     await invokeSkill();
@@ -530,20 +600,18 @@ it("sends mention context to the provider and restores the same user parts from 
   });
   const text = "Review @[file:example file.txt].";
   try {
-    await host.prompt(
-      host.preparePrompt({
-        text,
-        mentions: [
-          {
-            type: "file",
-            id: "example file.txt",
-            label: "example file.txt",
-            offset: "Review ".length,
-            meta: { workingDirectory: root },
-          },
-        ],
-      }),
-    );
+    await host.prompt({
+      text,
+      mentions: [
+        {
+          type: "file",
+          id: "example file.txt",
+          label: "example file.txt",
+          offset: "Review ".length,
+          meta: { workingDirectory: root },
+        },
+      ],
+    });
     const snapshot = host.getSnapshot();
     const id = snapshot.sessionId!;
     const parts = [

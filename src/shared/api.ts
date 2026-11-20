@@ -1,6 +1,7 @@
 // @env all
 // 渲染层可用的 API 形状。preload 实现它，renderer 通过 window.pi 消费。
 import type {
+  ActiveRun,
   AgentSmokeResult,
   AppInfo,
   ComposerDraft,
@@ -18,6 +19,7 @@ import type {
   ProviderInput,
   ProviderTestResult,
   PublicSettings,
+  RunRef,
   SessionMeta,
   SessionSettingsInput,
   SettingsInput,
@@ -58,21 +60,21 @@ export interface PiApi {
     input: string | PromptInput,
     expectedDirectory?: string | null,
     composerId?: string,
-  ): Promise<void>;
+  ): Promise<ActiveRun | null>;
   searchWorkspace(query: string, expectedDirectory?: string): Promise<WorkspaceEntry[]>;
   previewWorkspaceReference(
     reference: WorkspaceReferenceRequest,
   ): Promise<WorkspaceReferencePreview>;
-  agentAbort(): Promise<void>;
+  agentAbort(run: RunRef): Promise<void>;
   /** 清空排队中的插话（steer + followUp） */
-  clearQueue(): Promise<void>;
+  clearQueue(run: RunRef): Promise<void>;
   sessionNew(): Promise<Snapshot>;
   sessionSaveDraft(composerId: string, draft: ComposerDraft): Promise<void>;
   sessionUpdateSettings(composerId: string, input: SessionSettingsInput): Promise<void>;
   sessionSelectProject(locale: Locale, sessionId?: string): Promise<Snapshot | null>;
   sessionUseRecentProject(directory: string, sessionId?: string): Promise<Snapshot>;
   sessionGitHead(directory: string): Promise<ProjectGitHead | null>;
-  sessionLoad(id: string): Promise<Snapshot>;
+  sessionLoad(id: string, record?: boolean): Promise<Snapshot>;
   sessionRename(id: string, title: string): Promise<SessionMeta[]>;
   sessionDelete(id: string): Promise<Snapshot>;
   /** 置顶/取消置顶，返回刷新后的会话列表 */
@@ -122,7 +124,7 @@ export interface PiApi {
   /** Provider 连通性测试（FR-5.1）：最小流式探测 */
   testProvider(ref: string | ProviderInput): Promise<ProviderTestResult>;
   /** 对权限确认弹窗应答；requestId 来自 permission_request 事件 */
-  permissionRespond(requestId: string, decision: PermissionDecision): Promise<void>;
+  permissionRespond(run: RunRef, requestId: string, decision: PermissionDecision): Promise<void>;
   /** 订阅主进程事件流；返回退订函数 */
   onAgentEvent(callback: (event: UiAgentEvent) => void): () => void;
 }

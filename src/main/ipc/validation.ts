@@ -40,6 +40,7 @@ const promptInput = z.strictObject({
 });
 const locale = z.tuple([z.enum(SUPPORTED_LOCALES)]);
 const session = z.tuple([z.uuid()]);
+const runRef = z.strictObject({ sessionId: z.uuid(), runId: z.uuid() });
 const sessionFlag = z.tuple([z.uuid(), z.boolean()]);
 const sessionChange = z.tuple([z.uuid(), z.uuid()]);
 const approvalMode = z.enum(["standard", "read-only", "full-access"]);
@@ -146,8 +147,8 @@ const inputs = {
   [IPC.agentPreviewWorkspaceReference]: z.tuple([
     z.strictObject({ path: mentionId, workingDirectory: nonBlank.optional() }),
   ]),
-  [IPC.agentAbort]: none,
-  [IPC.agentClearQueue]: none,
+  [IPC.agentAbort]: z.tuple([runRef]),
+  [IPC.agentClearQueue]: z.tuple([runRef]),
   [IPC.sessionNew]: none,
   [IPC.sessionSaveDraft]: z.tuple([z.uuid(), composerDraft]),
   [IPC.sessionUpdateSettings]: z.tuple([
@@ -160,7 +161,7 @@ const inputs = {
   [IPC.sessionSelectProject]: z.tuple([z.enum(SUPPORTED_LOCALES), z.uuid().optional()]),
   [IPC.sessionUseRecentProject]: z.tuple([nonBlank, z.uuid().optional()]),
   [IPC.sessionGitHead]: z.tuple([nonBlank]),
-  [IPC.sessionLoad]: session,
+  [IPC.sessionLoad]: z.tuple([z.uuid(), z.boolean().optional()]),
   [IPC.sessionRename]: z.tuple([z.uuid(), nonBlank]),
   [IPC.sessionDelete]: session,
   [IPC.sessionPin]: sessionFlag,
@@ -195,7 +196,11 @@ const inputs = {
   [IPC.settingsMcpSave]: z.tuple([mcpServer]),
   [IPC.settingsMcpReconnect]: z.tuple([z.uuid()]),
   [IPC.settingsMcpRemove]: z.tuple([z.uuid()]),
-  [IPC.toolPermissionRespond]: z.tuple([z.uuid(), z.enum(["once", "session", "global", "deny"])]),
+  [IPC.toolPermissionRespond]: z.tuple([
+    runRef,
+    z.uuid(),
+    z.enum(["once", "session", "global", "deny"]),
+  ]),
 } satisfies Record<IpcChannel, z.ZodType<unknown[]>>;
 
 export function parseIpcArgs<C extends IpcChannel>(

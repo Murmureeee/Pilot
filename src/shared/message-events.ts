@@ -1,5 +1,5 @@
 // @env all
-import type { UiAgentEvent, UiMessage, UiPart } from "./contract";
+import type { AgentRunEvent, UiMessage, UiPart } from "./contract";
 import { applyPlanUpdate } from "./plan";
 
 type ToolPart = Extract<UiPart, { type: "tool" }>;
@@ -36,7 +36,7 @@ function updateTool(
   return messages;
 }
 
-export function applyMessageEvent(messages: UiMessage[], event: UiAgentEvent): UiMessage[] {
+export function applyMessageEvent(messages: UiMessage[], event: AgentRunEvent): UiMessage[] {
   switch (event.type) {
     case "messages":
       return event.messages;

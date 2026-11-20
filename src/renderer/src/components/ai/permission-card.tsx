@@ -6,6 +6,7 @@ import {
   EllipsisIcon,
   FilePenLineIcon,
   PlugIcon,
+  SquareIcon,
   TerminalIcon,
 } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
@@ -20,16 +21,19 @@ import { COMPOSER_SURFACE_CLASS } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { toolInput } from "@renderer/lib/tool-trace";
 import { useAgentStore } from "@renderer/stores/agent";
-import type { PermissionDecision, UiAgentEvent } from "@shared/contract";
+import type { PermissionDecision, PermissionRequest, RunRef } from "@shared/contract";
 import { cn } from "cn";
 
 export function PermissionCard({
   request,
+  run,
 }: {
-  request: Extract<UiAgentEvent, { type: "permission_request" }>;
+  request: PermissionRequest;
+  run: RunRef;
 }): JSX.Element {
   const locale = useLocale();
   const respondPermission = useAgentStore((s) => s.respondPermission);
+  const abort = useAgentStore((s) => s.abort);
   const remaining = useAgentStore((s) => s.pendingPermissions.length - 1);
   const card = useRef<HTMLElement>(null);
   const code = useRef<HTMLPreElement>(null);
@@ -77,7 +81,7 @@ export function PermissionCard({
     setResponding(true);
     setError(null);
     try {
-      await respondPermission(request.requestId, decision);
+      await respondPermission(run, request.requestId, decision);
     } catch (cause) {
       setError(cause instanceof Error ? localizeError(cause.message, locale) : String(cause));
     } finally {
@@ -189,6 +193,10 @@ export function PermissionCard({
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="me-auto flex min-w-0 items-center gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={() => abort(run)}>
+            <SquareIcon data-icon="inline-start" />
+            {t("停止", locale)}
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger
               render={<Button type="button" variant="ghost" size="icon-sm" />}

@@ -84,7 +84,7 @@ export function registerAppRoutes(
   handle(IPC.appGetUpdateStatus, () => ctx.updater.getStatus());
   handle(IPC.appCheckForUpdates, () => ctx.updater.check());
   handle(IPC.appInstallUpdate, () => {
-    if (ctx.host.getSnapshot().status !== "idle") {
+    if (ctx.host.hasActiveRun()) {
       throw new Error("请等待当前任务结束后再安装更新。");
     }
     ctx.updater.install();

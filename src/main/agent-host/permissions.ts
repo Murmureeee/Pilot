@@ -3,12 +3,18 @@
 import { randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
 import type { BeforeToolCallResult } from "@earendil-works/pi-agent-core";
-import type { ApprovalMode, PermissionDecision, ToolRule, UiAgentEvent } from "@shared/contract";
+import type {
+  ApprovalMode,
+  PermissionDecision,
+  PermissionRequest,
+  ToolRule,
+} from "@shared/contract";
 import type { McpToolPolicy } from "./mcp/types";
 import { isReadOnly, labelOf, pathOfArgs } from "./tools";
 import { isWithinDirectory } from "../workspace/paths";
+import type { PendingPermission } from "./types";
 
-type Broadcast = (event: UiAgentEvent) => void;
+type Broadcast = (request: PermissionRequest) => void;
 
 /** bash 危险命令特征（FR-7.5）：硬编码列表 + 弹窗红标，命中也不自动拒绝，只提升警示 */
 const DANGER_PATTERNS: RegExp[] = [
@@ -62,22 +68,15 @@ function ruleMatches(rule: ToolRule, toolName: string, args: unknown): boolean {
 }
 
 export class PermissionManager {
-  private pending = new Map<string, (decision: PermissionDecision) => void>();
-  private sessionRules: ToolRule[] = [];
+  private readonly pending = new Map<string, PendingPermission>();
 
   constructor(
     private readonly broadcast: Broadcast,
     private readonly getGlobalRules: () => ToolRule[],
     private readonly addGlobalRule: (rule: ToolRule) => void,
     private readonly getApprovalMode: () => ApprovalMode = () => "standard",
+    private readonly sessionRules: ToolRule[] = [],
   ) {}
-
-  /** 新会话清空会话级规则 */
-  resetSession(): void {
-    this.sessionRules = [];
-    for (const resolveP of this.pending.values()) resolveP("deny");
-    this.pending.clear();
-  }
 
   async gate(
     toolName: string,
@@ -116,34 +115,39 @@ export class PermissionManager {
 
   private ask(toolName: string, args: unknown, label: string): Promise<PermissionDecision> {
     const requestId = randomUUID();
-    return new Promise<PermissionDecision>((resolveP) => {
-      this.pending.set(requestId, resolveP);
-      this.broadcast({
-        type: "permission_request",
-        requestId,
-        toolName,
-        label,
-        inputSummary: summarizeArgs(args),
-        danger: isDangerous(toolName, args),
-      });
+    const request: PermissionRequest = {
+      type: "permission_request",
+      requestId,
+      toolName,
+      label,
+      inputSummary: summarizeArgs(args),
+      danger: isDangerous(toolName, args),
+    };
+    return new Promise<PermissionDecision>((resolve) => {
+      this.pending.set(requestId, { request, resolve });
+      this.broadcast(request);
     });
   }
 
-  respond(requestId: string, decision: PermissionDecision): void {
-    const resolveP = this.pending.get(requestId);
-    if (resolveP) {
-      this.pending.delete(requestId);
-      resolveP(decision);
-    }
+  respond(requestId: string, decision: PermissionDecision): boolean {
+    const pending = this.pending.get(requestId);
+    if (!pending) return false;
+    this.pending.delete(requestId);
+    pending.resolve(decision);
+    return true;
   }
 
   /** abort 时全部按拒绝处理，避免工具预检卡死 */
   abortAll(): void {
-    for (const resolveP of this.pending.values()) resolveP("deny");
+    for (const { resolve } of this.pending.values()) resolve("deny");
     this.pending.clear();
   }
 
   hasPending(): boolean {
     return this.pending.size > 0;
+  }
+
+  listPending(): PermissionRequest[] {
+    return [...this.pending.values()].map(({ request }) => request);
   }
 }

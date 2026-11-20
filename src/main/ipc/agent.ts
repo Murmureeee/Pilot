@@ -11,7 +11,7 @@ import type { IpcContext } from "./types";
 
 export function registerAgentRoutes({ host }: Pick<IpcContext, "host">): void {
   handle(IPC.runAgentSmoke, () => runAgentSmoke());
-  handle(IPC.agentGetSnapshot, () => host.getSnapshot());
+  handle(IPC.agentGetSnapshot, () => host.publishSnapshot());
   handle(IPC.agentSearchWorkspace, (_event, query, expectedDirectory) => {
     if (expectedDirectory !== undefined) host.checkWorkingDirectory(expectedDirectory);
     return searchWorkspace(host.getWorkingDirectory(), query);
@@ -20,12 +20,10 @@ export function registerAgentRoutes({ host }: Pick<IpcContext, "host">): void {
     previewWorkspaceReference(host.getWorkingDirectory(), reference),
   );
   handle(IPC.agentPrompt, (_event, input, expectedDirectory, composerId) => {
-    if (expectedDirectory !== undefined) host.checkWorkingDirectory(expectedDirectory);
-    const prompt = host.preparePrompt(input);
-    // 不 await：结果通过事件流推送
-    void host.prompt(prompt, composerId);
+    const result = host.prompt(input, composerId, expectedDirectory);
+    return result instanceof Promise ? null : result;
   });
-  handle(IPC.agentAbort, () => host.abort());
+  handle(IPC.agentAbort, (_event, run) => host.abort(run));
 
   handle(IPC.sessionNew, () => host.newSession());
   handle(IPC.sessionSaveDraft, (_event, composerId, draft) =>
@@ -55,7 +53,7 @@ export function registerAgentRoutes({ host }: Pick<IpcContext, "host">): void {
   handle(IPC.sessionGitHead, (_event, directory) =>
     directory === host.getProjectDirectory() ? readProjectGitHead(directory) : null,
   );
-  handle(IPC.sessionLoad, (_event, id) => host.loadSession(id));
+  handle(IPC.sessionLoad, (_event, id, record) => host.loadSession(id, record));
   handle(IPC.sessionRename, (_event, id, title) =>
     host.renameSession(id, title.trim().slice(0, 100)),
   );
@@ -68,9 +66,9 @@ export function registerAgentRoutes({ host }: Pick<IpcContext, "host">): void {
   handle(IPC.sessionPersona, (_event, id, persona) => host.setSessionPersona(id, persona));
   handle(IPC.sessionFileDiff, (_event, id, changeId) => host.getFileDiff(id, changeId));
   handle(IPC.sessionUndoFileChange, (_event, id, changeId) => host.undoFileChange(id, changeId));
-  handle(IPC.agentClearQueue, () => host.clearQueue());
+  handle(IPC.agentClearQueue, (_event, run) => host.clearQueue(run));
 
-  handle(IPC.toolPermissionRespond, (_event, requestId, decision) =>
-    host.respondPermission(requestId, decision),
+  handle(IPC.toolPermissionRespond, (_event, run, requestId, decision) =>
+    host.respondPermission(run, requestId, decision),
   );
 }
