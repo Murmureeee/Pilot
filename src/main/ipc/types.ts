@@ -29,6 +29,7 @@ export interface IpcContext {
   settingsDir: string;
   sessionsDir: string;
   skillsDir: string;
+  logsDir: string;
   getSettings(): Settings;
   saveSettings(settings: Settings): void;
   host: AgentHost;

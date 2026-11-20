@@ -57,6 +57,10 @@ const api: PiApi = {
     ipcRenderer.invoke(IPC.sessionPersona, id, persona),
   settingsGet: () => ipcRenderer.invoke(IPC.settingsGet),
   settingsSave: (input: SettingsInput) => ipcRenderer.invoke(IPC.settingsSave, input),
+  settingsSetLogLevel: (level) => ipcRenderer.invoke(IPC.settingsSetLogLevel, level),
+  settingsSelectModel: (providerId, modelId) =>
+    ipcRenderer.invoke(IPC.settingsSelectModel, providerId, modelId),
+  settingsSetThinkingLevel: (level) => ipcRenderer.invoke(IPC.settingsSetThinkingLevel, level),
   mcpList: () => ipcRenderer.invoke(IPC.settingsMcpList),
   mcpSave: (input) => ipcRenderer.invoke(IPC.settingsMcpSave, input),
   mcpReconnect: (id) => ipcRenderer.invoke(IPC.settingsMcpReconnect, id),

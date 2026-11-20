@@ -8,6 +8,7 @@ import { t, useLocale } from "@renderer/lib/i18n";
 import { relativeTime } from "@renderer/lib/relative-time";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { AppInfo, SessionMeta } from "@shared/contract";
+import { DiagnosticSettings } from "./DiagnosticSettings";
 
 export function DataSettings({ appInfo }: { appInfo: AppInfo | null }): JSX.Element {
   const locale = useLocale();
@@ -130,6 +131,7 @@ export function DataSettings({ appInfo }: { appInfo: AppInfo | null }): JSX.Elem
           </div>
         </div>
       </section>
+      <DiagnosticSettings />
       <SessionDeleteDialog target={deleteTarget} onClose={() => setDeleteTarget(null)} />
     </div>
   );

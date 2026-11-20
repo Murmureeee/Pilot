@@ -4,20 +4,26 @@ import { join } from "node:path";
 import { app } from "electron";
 import { autoUpdater } from "electron-updater";
 import type { UpdateStatus } from "@shared/contract";
+import { errorDetails, type DiagnosticLog } from "./diagnostics";
 
 export class DesktopUpdater {
   private status: UpdateStatus = { state: "unavailable" };
 
-  constructor(private readonly publish: (status: UpdateStatus) => void) {
+  constructor(
+    private readonly publish: (status: UpdateStatus) => void,
+    private readonly log: DiagnosticLog,
+  ) {
     if (
       !app.isPackaged ||
       process.platform !== "win32" ||
       !existsSync(join(process.resourcesPath, "app-update.yml"))
     ) {
+      log.write("debug", "updater", "unavailable");
       return;
     }
 
     this.status = { state: "idle" };
+    log.write("info", "updater", "idle");
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = false;
     autoUpdater.disableWebInstaller = true;
@@ -39,10 +45,18 @@ export class DesktopUpdater {
     autoUpdater.on("update-downloaded", (info) =>
       this.setStatus({ state: "ready", version: info.version }),
     );
-    autoUpdater.on("error", () => this.setStatus({ state: "error" }));
+    autoUpdater.on("error", (error) => this.setStatus({ state: "error" }, error));
   }
 
-  private setStatus(status: UpdateStatus): void {
+  private setStatus(status: UpdateStatus, error?: unknown): void {
+    if (this.status.state !== status.state) {
+      this.log.write(
+        status.state === "error" ? "error" : "info",
+        "updater",
+        status.state,
+        errorDetails(error),
+      );
+    }
     this.status = status;
     this.publish(status);
   }
@@ -60,8 +74,8 @@ export class DesktopUpdater {
       if (!result) this.setStatus({ state: "unavailable" });
       // Download errors emit the same updater error event as check failures.
       void result?.downloadPromise?.catch(() => {});
-    } catch {
-      this.setStatus({ state: "error" });
+    } catch (error) {
+      this.setStatus({ state: "error" }, error);
     }
     return this.status;
   }

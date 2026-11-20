@@ -48,9 +48,37 @@ describe("model catalog (FR-5.2)", () => {
     const cfg: ProviderConfig = { id: "o", kind: "openai-compatible", name: "o", modelId: "q" };
     await expect(listModels(cfg, "k")).rejects.toThrow(/baseUrl/);
   });
+
+  it("reads a Responses provider catalog without duplicates, invalid IDs or echoed secrets", async () => {
+    using fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        data: [
+          { id: "first", name: "First model" },
+          { id: "first", name: "Duplicate" },
+          { id: "second" },
+          { id: " " },
+          { id: "test-catalog-key" },
+          { id: "private", name: "test-catalog-key" },
+        ],
+      }),
+    );
+    await expect(listModels(responsesCfg, "test-catalog-key")).resolves.toEqual([
+      { id: "first", name: "First model" },
+      { id: "second", name: "second" },
+    ]);
+    expect(fetch).toHaveBeenCalledExactlyOnceWith("https://example.test/v1/models", {
+      headers: { Authorization: "Bearer test-catalog-key" },
+      signal: expect.any(AbortSignal),
+    });
+  });
 });
 
 describe("provider connectivity test (FR-5.1)", () => {
+  it("uses Pi reasoning metadata for a known Responses model", () => {
+    const { model } = resolveModel({ ...responsesCfg, modelId: "gpt-6.1-terra" }, "test-key");
+    expect(model.reasoning).toBe(true);
+    expect(model.thinkingLevelMap?.max).toBe("max");
+  });
   it("streams Responses text over the configured endpoint with a bounded output", async () => {
     const { model, streamFn } = resolveModel(responsesCfg, "test-key");
     const context = {

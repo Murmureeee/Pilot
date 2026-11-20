@@ -6,6 +6,7 @@ import { initialNavState, moveNav, peekNav, pushNav, type NavState } from "../li
 import type { SettingsSection } from "../lib/types";
 import type {
   ApprovalMode,
+  LogLevel,
   MenuAction,
   PermissionDecision,
   PublicSettings,
@@ -66,6 +67,7 @@ interface AgentStore extends AgentUiState {
   navBack(): Promise<void>;
   navForward(): Promise<void>;
   saveSettings(input: SettingsInput): Promise<void>;
+  setLogLevel(level: LogLevel): Promise<void>;
   saveToolEnvironment(
     input: Pick<SettingsInput, "workingDirectory" | "commandShell">,
   ): Promise<void>;
@@ -83,12 +85,13 @@ function providerSelection(
   settings: PublicSettings,
 ): Pick<SettingsInput, "providers" | "activeProviderId"> {
   return {
-    providers: settings.providers.map(({ id, kind, name, baseUrl, modelId }) => ({
+    providers: settings.providers.map(({ id, kind, name, baseUrl, modelId, models }) => ({
       id,
       kind,
       name,
       baseUrl,
       modelId,
+      models,
     })),
     activeProviderId: settings.activeProviderId,
   };
@@ -285,6 +288,11 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     set({ settings, view: "chat" });
   },
 
+  setLogLevel: async (logLevel) => {
+    await window.pi.settingsSetLogLevel(logLevel);
+    set(({ settings }) => (settings ? { settings: { ...settings, logLevel } } : {}));
+  },
+
   saveToolEnvironment: async (input) => {
     const current = get().settings;
     if (!current) return;
@@ -332,12 +340,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   /** 思考强度滑块：持久化 + 主进程同步到当前 Agent（下一轮请求生效） */
   setThinkingLevel: async (level) => {
-    const s = get().settings;
-    if (!s) return;
-    const settings = await window.pi.settingsSave({
-      ...providerSelection(s),
-      thinkingLevel: level,
-    });
+    const settings = await window.pi.settingsSetThinkingLevel(level);
     set({ settings });
   },
 

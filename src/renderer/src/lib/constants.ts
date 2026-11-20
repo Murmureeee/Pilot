@@ -1,5 +1,5 @@
 // @env browser
-import type { ApprovalMode, ThemeSetting } from "@shared/contract";
+import type { ApprovalMode, LogLevel, ProviderKind, ThemeSetting } from "@shared/contract";
 import type { ExternalImportKind } from "@shared/imports";
 import type { SettingsSection } from "./types";
 
@@ -29,6 +29,21 @@ export const THEME_LABELS: Record<ThemeSetting, string> = {
   light: "亮色",
   dark: "暗色",
   system: "跟随系统",
+};
+
+export const LOG_LEVEL_LABELS: Record<LogLevel, string> = {
+  off: "关闭记录",
+  error: "仅错误",
+  warn: "警告",
+  info: "信息",
+  debug: "调试",
+};
+
+export const PROVIDER_KIND_LABELS: Record<ProviderKind, string> = {
+  anthropic: "Anthropic",
+  "openai-compatible": "OpenAI 兼容（Chat Completions）",
+  "openai-responses": "OpenAI Responses",
+  faux: "Faux 测试（无需 key）",
 };
 
 export const EXTERNAL_IMPORT_OPTIONS: Record<

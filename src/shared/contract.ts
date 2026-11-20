@@ -1,6 +1,6 @@
 // @env all
 // 双进程共用契约：通道名与数据类型。此文件只允许类型与常量，不得引入运行时依赖。
-import type { SUPPORTED_LOCALES } from "./constants";
+import type { LOG_LEVELS, SUPPORTED_LOCALES, THINKING_LEVELS } from "./constants";
 
 export const IPC = {
   ping: "app:ping",
@@ -40,6 +40,9 @@ export const IPC = {
   skillsToggle: "skills:toggle",
   settingsGet: "settings:get",
   settingsSave: "settings:save",
+  settingsSetLogLevel: "settings:set-log-level",
+  settingsSelectModel: "settings:select-model",
+  settingsSetThinkingLevel: "settings:set-thinking-level",
   settingsMcpList: "settings:mcp-list",
   settingsMcpSave: "settings:mcp-save",
   settingsMcpReconnect: "settings:mcp-reconnect",
@@ -53,7 +56,8 @@ export interface WorkspaceEntry {
 }
 
 /** 数据目录（shell.openPath 的白名单目标，防止渲染层打开任意路径） */
-export type OpenPathTarget = "settings" | "sessions" | "skills";
+export type OpenPathTarget = "settings" | "sessions" | "skills" | "logs";
+export type LogLevel = (typeof LOG_LEVELS)[number];
 
 /** 菜单可触发的窗口级动作（白名单在主进程校验） */
 export type MenuAction =
@@ -232,7 +236,7 @@ export type ProviderKind = "anthropic" | "openai-compatible" | "openai-responses
 export type ApprovalMode = "standard" | "full-access" | "read-only";
 
 /** 模型思考强度（pi 的 7 档离散值，composer 滑块选择） */
-export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 /** 技能元数据（SKILL.md 解析结果；path/body 不出主进程） */
 export interface SkillMeta {
@@ -264,18 +268,21 @@ export interface ProviderFields {
   name: string;
   baseUrl?: string;
   modelId: string;
+  models?: ModelCatalogEntry[];
 }
 
 /** 渲染层可见形态：明文/密文 key 永不出主进程，只有 hasKey 标志 */
-type PublicProvider = ProviderFields & { hasKey: boolean };
+type PublicProvider = ProviderFields & { hasKey: boolean; models: ModelCatalogEntry[] };
 export interface PublicSettings {
   providers: PublicProvider[];
   activeProviderId: string;
   toolRules?: ToolRule[];
   approvalMode: ApprovalMode;
   thinkingLevel: ThinkingLevel;
+  thinkingLevels: ThinkingLevel[];
   workingDirectory: string | null;
   commandShell: CommandShell;
+  logLevel: LogLevel;
   /** 全局人设/自定义指令（设置页「个性化」编辑） */
   persona: string;
   /** 启用的技能 id 列表 */
@@ -291,6 +298,7 @@ export interface SettingsInput {
   activeProviderId: string;
   approvalMode?: ApprovalMode;
   thinkingLevel?: ThinkingLevel;
+  thinkingLevels?: ThinkingLevel[];
   /** null 恢复主目录；缺省保留原设置 */
   workingDirectory?: string | null;
   commandShell?: CommandShell;

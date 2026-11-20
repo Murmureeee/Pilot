@@ -4,6 +4,7 @@ import type {
   AgentSmokeResult,
   AppInfo,
   Locale,
+  LogLevel,
   MenuAction,
   ModelCatalogEntry,
   OpenPathTarget,
@@ -18,6 +19,7 @@ import type {
   SkillMeta,
   Snapshot,
   ThemeSetting,
+  ThinkingLevel,
   UiAgentEvent,
   UpdateStatus,
   WorkspaceEntry,
@@ -37,7 +39,7 @@ export interface PiApi {
   /** 窗口级菜单动作（编辑/缩放/重载/全屏/关闭/退出），主进程白名单校验 */
   menuAction(action: MenuAction): Promise<void>;
   /** 打开数据目录（设置/会话），主进程白名单校验 */
-  openPath(target: OpenPathTarget): Promise<void>;
+  openPath(target: OpenPathTarget): Promise<string>;
   /** 同步原生标题栏（窗控按钮）颜色到主题 */
   setTitlebarTheme(theme: ThemeSetting): Promise<void>;
   getUpdateStatus(): Promise<UpdateStatus>;
@@ -68,6 +70,9 @@ export interface PiApi {
   sessionPersona(id: string, persona: string | null): Promise<void>;
   settingsGet(): Promise<PublicSettings>;
   settingsSave(input: SettingsInput): Promise<PublicSettings>;
+  settingsSetLogLevel(level: LogLevel): Promise<void>;
+  settingsSelectModel(providerId: string, modelId: string): Promise<PublicSettings>;
+  settingsSetThinkingLevel(level: ThinkingLevel): Promise<PublicSettings>;
   mcpList(): Promise<McpServerInfo[]>;
   mcpSave(input: McpServerInput): Promise<McpServerInfo[]>;
   mcpReconnect(id: string): Promise<McpServerInfo[]>;

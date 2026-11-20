@@ -2,6 +2,7 @@
 import type {
   ApprovalMode,
   CommandShell,
+  LogLevel,
   ProviderFields,
   ThinkingLevel,
   ToolRule,
@@ -32,8 +33,10 @@ export interface Settings {
   toolRules?: ToolRule[];
   approvalMode?: ApprovalMode;
   thinkingLevel?: ThinkingLevel;
+  thinkingLevels?: ThinkingLevel[];
   workingDirectory?: string;
   commandShell?: CommandShell;
+  logLevel?: LogLevel;
   persona?: string;
   skillsEnabled?: string[];
   mcpServers?: McpServerConfig[];

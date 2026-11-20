@@ -16,7 +16,9 @@ import { streamSimple as anthropicStreamSimple } from "@earendil-works/pi-ai/api
 import { streamSimple as chatCompletionsStreamSimple } from "@earendil-works/pi-ai/api/openai-completions";
 import { streamSimple as responsesStreamSimple } from "@earendil-works/pi-ai/api/openai-responses";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
+import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import type { ModelCatalogEntry, ProviderInput, ProviderTestResult } from "@shared/contract";
+import { normalizeModelCatalog } from "../settings/models";
 import type { ProviderConfig } from "../settings/types";
 import { messageText } from "./session-store";
 import { PLAN_TOOL_NAME } from "./tools/constants";
@@ -155,9 +157,14 @@ function resolveOpenAi(cfg: ProviderConfig, apiKey: string): ResolvedModel {
     maxTokens: 8_192,
   };
   if (cfg.kind === "openai-responses") {
+    const models = createModels();
+    models.setProvider(openaiProvider());
+    const known = models.getModel("openai", cfg.modelId);
     const model: Model<"openai-responses"> = {
       ...common,
       api: "openai-responses",
+      reasoning: known?.reasoning ?? false,
+      thinkingLevelMap: known?.thinkingLevelMap,
       compat: { supportsDeveloperRole: false },
     };
     const streamFn: StreamFn = (m, context, options) =>
@@ -203,7 +210,9 @@ export function resolveProviderRef(
   // 从草稿测试新端点时，只能使用本次输入的 key。
   const key =
     draftKey ??
-    (saved?.kind === ref.kind && saved.baseUrl === ref.baseUrl ? readKey(saved.apiKey) : undefined);
+    (saved?.kind === ref.kind && saved.baseUrl?.trim() === ref.baseUrl?.trim()
+      ? readKey(saved.apiKey)
+      : undefined);
   return {
     cfg: { ...ref, apiKey: undefined },
     key,
@@ -256,11 +265,10 @@ export async function listModels(
       if (!response.ok) {
         throw new Error(`获取模型目录失败：HTTP ${response.status}`);
       }
-      const json = (await response.json()) as { data?: { id?: string }[] } | { id?: string }[];
-      const list = Array.isArray(json) ? json : (json.data ?? []);
-      const entries = list
-        .filter((m): m is { id: string } => typeof m?.id === "string")
-        .map((m) => ({ id: m.id, name: m.id }));
+      const json = (await response.json()) as { data?: unknown } | null;
+      const entries = normalizeModelCatalog(Array.isArray(json) ? json : json?.data).filter(
+        ({ id, name }) => !apiKey || (!id.includes(apiKey) && !name.includes(apiKey)),
+      );
       if (entries.length === 0) throw new Error("端点返回了空模型目录");
       return entries;
     }

@@ -1,4 +1,5 @@
 // @env node
+import { mkdirSync } from "node:fs";
 import { BrowserWindow, app, nativeTheme, shell, type WebContents } from "electron";
 import {
   IPC,
@@ -40,7 +41,10 @@ const MENU_ACTIONS: Record<MenuAction, (wc: WebContents) => void> = {
 };
 
 export function registerAppRoutes(
-  ctx: Pick<IpcContext, "settingsDir" | "sessionsDir" | "skillsDir" | "isDev" | "updater" | "host">,
+  ctx: Pick<
+    IpcContext,
+    "settingsDir" | "sessionsDir" | "skillsDir" | "logsDir" | "isDev" | "updater" | "host"
+  >,
 ): void {
   handle(IPC.ping, (_event, request): PingResponse => {
     return { payload: `pong: ${request.payload}`, receivedAt: Date.now() };
@@ -58,7 +62,9 @@ export function registerAppRoutes(
       settings: ctx.settingsDir,
       sessions: ctx.sessionsDir,
       skills: ctx.skillsDir,
+      logs: ctx.logsDir,
     };
+    if (target === "logs") mkdirSync(ctx.logsDir, { recursive: true, mode: 0o700 });
     return shell.openPath(dirs[target]);
   });
   handle(IPC.appSetTitlebarTheme, (event, theme) => {

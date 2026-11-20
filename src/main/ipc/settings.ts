@@ -5,6 +5,7 @@ import { listModels, resolveProviderRef, testProvider } from "../agent-host/mode
 import { importSkill, scanSkills } from "../agent-host/skills";
 import { NATIVE_DIALOG_TITLES } from "../constants";
 import { mergeSettingsInput, toPublicSettings, validateSettingsInput } from "../settings";
+import { updateActiveModel } from "../settings/models";
 import { decryptSecret } from "../settings/secrets";
 import { handle } from "./transport";
 import type { IpcContext } from "./types";
@@ -13,6 +14,23 @@ export function registerSettingsRoutes(
   ctx: Pick<IpcContext, "skillsDir" | "getSettings" | "saveSettings" | "host">,
 ): void {
   handle(IPC.settingsGet, () => toPublicSettings(ctx.getSettings()));
+  handle(IPC.settingsSetLogLevel, (_event, logLevel) => {
+    ctx.saveSettings({ ...ctx.getSettings(), logLevel });
+  });
+  handle(IPC.settingsSelectModel, (_event, providerId, modelId) => {
+    const settings = updateActiveModel(ctx.getSettings(), providerId, modelId);
+    ctx.saveSettings(settings);
+    return toPublicSettings(settings);
+  });
+  handle(IPC.settingsSetThinkingLevel, (_event, thinkingLevel) => {
+    const current = ctx.getSettings();
+    const { thinkingLevels } = toPublicSettings(current);
+    if (!thinkingLevels.includes(thinkingLevel)) throw new Error("请从已启用的思考强度中选择。");
+    const settings = { ...current, thinkingLevel };
+    ctx.saveSettings(settings);
+    ctx.host.setThinkingLevel(thinkingLevel);
+    return toPublicSettings(settings);
+  });
   const skillList = () => {
     const settings = ctx.getSettings();
     return scanSkills(ctx.skillsDir, settings.skillsEnabled ?? []);
@@ -64,7 +82,8 @@ export function registerSettingsRoutes(
     const merged = mergeSettingsInput(ctx.getSettings(), input);
     ctx.saveSettings(merged);
     // 思考强度运行时同步到当前 Agent（provider/权限模式由各自通道/下次 prompt 生效）
-    if (input.thinkingLevel) ctx.host.setThinkingLevel(input.thinkingLevel);
+    if (input.thinkingLevel || input.thinkingLevels)
+      ctx.host.setThinkingLevel(merged.thinkingLevel);
     return toPublicSettings(merged);
   });
 }

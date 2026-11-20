@@ -7,9 +7,11 @@ import { AGENT_EVENT_CHANNEL, UPDATE_STATUS_CHANNEL } from "../shared/contract";
 import { AgentHost } from "./agent-host/host";
 import { McpManager } from "./agent-host/mcp";
 import { SessionStore } from "./agent-host/session-store";
+import { DiagnosticLog, errorDetails } from "./diagnostics";
+import { logRendererConsole } from "./diagnostics/renderer";
 import { registerIpc } from "./ipc";
 import { registerRenderer, sendToRenderers } from "./ipc/transport";
-import { loadSettings, saveSettings } from "./settings";
+import { getLogLevel, loadSettings, saveSettings } from "./settings";
 import type { Settings } from "./settings/types";
 import { runAgentSmoke } from "./agent-host/smoke";
 import { TITLE_BAR_OVERLAY_COLORS, USER_DATA_DIRECTORY } from "./constants";
@@ -36,7 +38,7 @@ async function runSmoke(): Promise<void> {
 const CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'";
 
-function createWindow(): BrowserWindow {
+function createWindow(log: DiagnosticLog): BrowserWindow {
   const iconDir = isDev ? join(app.getAppPath(), "resources") : process.resourcesPath;
   const iconPath = join(iconDir, "icon.png");
   const iconOptions = existsSync(iconPath) ? { icon: iconPath } : {};
@@ -65,14 +67,19 @@ function createWindow(): BrowserWindow {
   });
   registerRenderer(win.webContents);
 
-  // 渲染层 console 转发到主进程日志（FR-9.1 种子；dev 排障必需）
+  // Dev startup checks consume the console marker. Packaged diagnostics store metadata only.
   win.webContents.on("console-message", (event) => {
-    const e = event as unknown as { message?: string; lineNumber?: number; sourceId?: string };
-    console.log(
-      `[renderer] ${e.message ?? String(event)} (${e.sourceId ?? "?"}:${e.lineNumber ?? "?"})`,
-    );
+    logRendererConsole(log, event);
+    if (isDev) console.log(`[renderer] ${event.message} (${event.sourceId}:${event.lineNumber})`);
+  });
+  win.webContents.on("preload-error", (_event, _path, error) => {
+    log.write("error", "renderer", "preload-error", errorDetails(error));
   });
   win.webContents.on("render-process-gone", (_e, details) => {
+    log.write(details.reason === "clean-exit" ? "debug" : "error", "renderer", "process-gone", {
+      reason: details.reason,
+      code: details.exitCode,
+    });
     console.error(`[renderer] process gone: ${details.reason}`);
   });
 
@@ -100,11 +107,14 @@ function createWindow(): BrowserWindow {
     event.preventDefault();
   });
 
-  if (isDev && process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(process.env.ELECTRON_RENDERER_URL);
-  } else {
-    void win.loadFile(join(__dirname, "../renderer/index.html"));
-  }
+  const load =
+    isDev && process.env.ELECTRON_RENDERER_URL
+      ? win.loadURL(process.env.ELECTRON_RENDERER_URL)
+      : win.loadFile(join(__dirname, "../renderer/index.html"));
+  void load.catch((error: unknown) => {
+    const details = errorDetails(error);
+    if (details.code !== "ERR_ABORTED") log.write("error", "renderer", "load-failed", details);
+  });
   return win;
 }
 
@@ -120,15 +130,29 @@ app.whenReady().then(() => {
   const userData = app.getPath("userData");
   const sessionsDir = join(userData, "sessions");
   const skillsDir = join(userData, "skills");
-  const store = new SessionStore(sessionsDir);
+  const logsDir = join(userData, "logs");
   const getSettings = (): ReturnType<typeof loadSettings> => loadSettings(userData);
-  const persistSettings = (settings: Settings): void => saveSettings(userData, settings);
+  const log = new DiagnosticLog(logsDir, getLogLevel(getSettings()));
+  log.write("info", "main", "startup", { version: app.getVersion() });
+  process.on("uncaughtExceptionMonitor", (error) => {
+    log.write("error", "main", "uncaught-exception", errorDetails(error));
+  });
+  app.once("will-quit", () => log.write("info", "main", "quit"));
+
+  const persistSettings = (settings: Settings): void => {
+    saveSettings(userData, settings);
+    log.setLevel(getLogLevel(settings));
+  };
+  const store = new SessionStore(sessionsDir);
   const mcp = new McpManager(getSettings, app.getVersion());
   const host = new AgentHost({
     store,
     getSettings,
     saveSettings: persistSettings,
-    broadcast: (event) => sendToRenderers(AGENT_EVENT_CHANNEL, event),
+    broadcast: (event) => {
+      if (event.type === "error") log.write("error", "main", "agent-error");
+      sendToRenderers(AGENT_EVENT_CHANNEL, event);
+    },
     skillsDir,
     mcp,
   });
@@ -141,11 +165,12 @@ app.whenReady().then(() => {
     });
   }
 
-  const updater = new DesktopUpdater((event) => sendToRenderers(UPDATE_STATUS_CHANNEL, event));
+  const updater = new DesktopUpdater((event) => sendToRenderers(UPDATE_STATUS_CHANNEL, event), log);
   registerIpc({
     settingsDir: userData,
     sessionsDir,
     skillsDir,
+    logsDir,
     getSettings,
     saveSettings: persistSettings,
     host,
@@ -153,7 +178,7 @@ app.whenReady().then(() => {
     updater,
     isDev,
   });
-  createWindow();
+  createWindow(log);
   app.once("before-quit", (event) => {
     event.preventDefault();
     void mcp.close().finally(() => app.quit());
@@ -161,7 +186,7 @@ app.whenReady().then(() => {
   setTimeout(() => void updater.check(), 2000).unref();
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(log);
   });
 });
 

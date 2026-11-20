@@ -1,6 +1,12 @@
 // @env all
 export { productName as APP_NAME } from "../../package.json";
 export const WORKSPACE_QUERY_LENGTH = 512;
+export const DEFAULT_THINKING_LEVEL = "medium";
+export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export const LOG_LEVELS = ["off", "error", "warn", "info", "debug"] as const;
+export const DEFAULT_LOG_LEVEL = "info";
+export const LOG_FILE_COUNT = 3;
+export const LOG_FILE_MAX_BYTES = 1024 * 1024;
 
 export const SUPPORTED_LOCALES = ["zh", "en"] as const;
 export const DEFAULT_LOCALE = SUPPORTED_LOCALES[0];

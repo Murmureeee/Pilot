@@ -125,6 +125,7 @@ export function OnboardingDialog({
       name: p.name,
       baseUrl: p.baseUrl,
       modelId: p.modelId,
+      models: p.models,
     }));
     void saveSettings({
       providers: [...existing, d],

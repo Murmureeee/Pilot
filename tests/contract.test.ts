@@ -18,6 +18,15 @@ describe("IPC contract", () => {
     expect(Object.values(IPC)).not.toContain(UPDATE_STATUS_CHANNEL);
   });
 
+  it("uses the settings namespace for the diagnostic log level", () => {
+    expect(IPC.settingsSetLogLevel).toBe("settings:set-log-level");
+  });
+
+  it("keeps focused model and thinking changes separate from editing providers", () => {
+    expect(IPC.settingsSelectModel).toBe("settings:select-model");
+    expect(IPC.settingsSetThinkingLevel).toBe("settings:set-thinking-level");
+  });
+
   it("exposes Phase 3 wrap-up channels (重命名/删除/清空队列/数据目录/标题栏主题)", () => {
     expect(IPC.sessionRename).toBe("session:rename");
     expect(IPC.sessionDelete).toBe("session:delete");

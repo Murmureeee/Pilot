@@ -1,6 +1,11 @@
 // @env node
 import { z } from "zod";
-import { SUPPORTED_LOCALES, WORKSPACE_QUERY_LENGTH } from "../../shared/constants";
+import {
+  LOG_LEVELS,
+  SUPPORTED_LOCALES,
+  THINKING_LEVELS,
+  WORKSPACE_QUERY_LENGTH,
+} from "../../shared/constants";
 import { IPC } from "../../shared/contract";
 import type { IpcChannel } from "./types";
 
@@ -16,6 +21,15 @@ const provider = z.strictObject({
   name: z.string(),
   baseUrl: z.string().optional(),
   modelId: z.string(),
+  models: z
+    .array(
+      z.strictObject({
+        id: nonBlank,
+        name: z.string(),
+        contextWindow: z.number().positive().optional(),
+      }),
+    )
+    .optional(),
   apiKey: z.string().optional(),
 });
 const providerRef = z.tuple([z.union([id, provider])]);
@@ -50,7 +64,8 @@ const settings = z.strictObject({
   providers: z.array(provider),
   activeProviderId: z.string(),
   approvalMode: z.enum(["standard", "read-only", "full-access"]).optional(),
-  thinkingLevel: z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]).optional(),
+  thinkingLevel: z.enum(THINKING_LEVELS).optional(),
+  thinkingLevels: z.array(z.enum(THINKING_LEVELS)).min(1).optional(),
   workingDirectory: z.string().nullable().optional(),
   commandShell: z.enum(["powershell", "bash"]).optional(),
   toolRules: z
@@ -67,7 +82,7 @@ const inputs = {
   [IPC.ping]: z.tuple([z.strictObject({ payload: z.string() })]),
   [IPC.runAgentSmoke]: none,
   [IPC.appInfo]: none,
-  [IPC.appOpenPath]: z.tuple([z.enum(["settings", "sessions", "skills"])]),
+  [IPC.appOpenPath]: z.tuple([z.enum(["settings", "sessions", "skills", "logs"])]),
   [IPC.appSetTitlebarTheme]: z.tuple([z.enum(["light", "dark", "system"])]),
   [IPC.appGetUpdateStatus]: none,
   [IPC.appCheckForUpdates]: none,
@@ -122,6 +137,9 @@ const inputs = {
   [IPC.skillsToggle]: z.tuple([id, z.boolean()]),
   [IPC.settingsGet]: none,
   [IPC.settingsSave]: z.tuple([settings]),
+  [IPC.settingsSetLogLevel]: z.tuple([z.enum(LOG_LEVELS)]),
+  [IPC.settingsSelectModel]: z.tuple([id, nonBlank]),
+  [IPC.settingsSetThinkingLevel]: z.tuple([z.enum(THINKING_LEVELS)]),
   [IPC.settingsMcpList]: none,
   [IPC.settingsMcpSave]: z.tuple([mcpServer]),
   [IPC.settingsMcpReconnect]: z.tuple([z.uuid()]),
