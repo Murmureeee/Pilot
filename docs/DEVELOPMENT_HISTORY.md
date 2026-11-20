@@ -6,6 +6,7 @@
 
 ### 2026-11-20
 
+- **项目入口与会话目录绑定。** 可从侧栏或文件菜单打开本地文件夹，新聊天沿用项目目录并在标题下显示。Windows 隔离 Electron 实例验证了两个项目的文件搜索、同名文件预览、切换后工具写入和重启恢复。旧会话关联前沿用默认工作目录，手动关联后按项目查找文件，原转录逐字节一致。原生文件夹选择结果由测试夹具提供。八步验证通过，181 项测试通过。[提交 ee63460](https://github.com/Murmureeee/Pilot/commit/ee63460)
 - **输入区审批卡。** 等待审批时在输入区显示操作与详情，允许用键盘处理，多个请求按顺序展示。处理后恢复草稿。Windows 隔离实例验证了命令展开、键盘允许与拒绝、草稿和焦点恢复、浅色与 720 px 深色布局。八步验证通过，175 项测试通过。[提交 d6720fa](https://github.com/Murmureeee/Pilot/commit/d6720fa)
 - **文件变更审查。** 将文本文件的逐行差异按目录组织，提供变更面板与独立的文件导航。可从聊天定位差异，并在校验当前文件后逐文件撤销内置编辑或写入产生的变更。[目录分组](https://github.com/Murmureeee/Pilot/commit/11dfea2) · [差异与导航](https://github.com/Murmureeee/Pilot/commit/08573f5)
 - **对话与工具轨迹。** 加入结构化文件引用和工具轨迹，支持回到最新消息、手动折叠思考块，以及从输入区查看最近一次请求的上下文占用。[引用与轨迹](https://github.com/Murmureeee/Pilot/commit/1941e68) · [对话跳转](https://github.com/Murmureeee/Pilot/commit/5b17c4a) · [上下文用量](https://github.com/Murmureeee/Pilot/commit/895a188)
