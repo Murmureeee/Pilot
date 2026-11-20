@@ -19,6 +19,7 @@ export const useFileChangesStore = create<FileChangesStore>((set) => ({
           replyId,
           expanded: changeId && !expanded.includes(changeId) ? [...expanded, changeId] : expanded,
           collapsedFolders,
+          selectedId: changeId,
           jump: { changeId },
           undoChangeId: confirmUndo && changeId ? changeId : null,
         },
@@ -45,10 +46,15 @@ export const useFileChangesStore = create<FileChangesStore>((set) => ({
         review: {
           ...review,
           expanded,
+          selectedId: id,
           undoChangeId: review.undoChangeId === id ? null : review.undoChangeId,
         },
       };
     }),
+  collapseFiles: () =>
+    set((state) =>
+      state.review ? { review: { ...state.review, expanded: [], undoChangeId: null } } : state,
+    ),
   confirmUndo: (id) =>
     set((state) => (state.review ? { review: { ...state.review, undoChangeId: id } } : state)),
   cancelUndo: (id) =>

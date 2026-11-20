@@ -10,7 +10,10 @@ import { AppRail, SidebarPanel } from "@renderer/views/Sidebar";
 import { ChatView } from "@renderer/views/ChatView";
 import { SettingsView } from "@renderer/views/SettingsView";
 import { applyTheme, loadTheme, watchSystemTheme } from "@renderer/lib/theme";
-import { FILE_REVIEW_MIN_WINDOW_WIDTH } from "@renderer/lib/constants";
+import {
+  FILE_CHANGES_MIN_WINDOW_WIDTH,
+  FILE_REVIEW_MIN_WINDOW_WIDTH,
+} from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { ComposerDraft } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
@@ -35,9 +38,12 @@ export default function App(): JSX.Element {
   const visibleReview = view === "chat" && review?.sessionId === sessionId ? review : null;
   const reference = useWorkspaceReferenceStore((state) => state.reference);
   const visibleReference = view === "chat" && reference?.sessionId === sessionId ? reference : null;
+  const reviewMinWidth =
+    visibleReview && !visibleReference
+      ? FILE_CHANGES_MIN_WINDOW_WIDTH
+      : FILE_REVIEW_MIN_WINDOW_WIDTH;
   const compactReview =
-    !!(visibleReview || visibleReference) &&
-    windowWidth < FILE_REVIEW_MIN_WINDOW_WIDTH + sidebarWidth;
+    !!(visibleReview || visibleReference) && windowWidth < reviewMinWidth + sidebarWidth;
   const sidebarCollapsed = collapsed || compactReview;
 
   const expandSidebar = useCallback((): void => {

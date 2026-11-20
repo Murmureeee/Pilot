@@ -1,7 +1,8 @@
 // @env browser
-import { Fragment, useEffect, useState, type JSX } from "react";
+import { Fragment, useEffect, useState, type JSX, type ReactNode } from "react";
 import { LoaderCircleIcon, Undo2Icon } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
+import { loadHighlighter } from "@renderer/lib/highlighter";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
 import type { FileChangeSummary, FileDiff, FileDiffLine } from "@shared/contract";
@@ -23,8 +24,48 @@ function hunkHeader(lines: FileDiffLine[]): string {
   );
 }
 
-function DiffLines({ diff }: { diff: FileDiff }): JSX.Element {
+async function highlightDiff(diff: FileDiff, path: string): Promise<ReactNode[][] | null> {
+  const extension = path.match(/\.([a-z\d]+)$/i)?.[1];
+  if (!extension) return null;
+  const highlighter = await loadHighlighter(extension);
+  if (!highlighter) return null;
+
+  return diff.hunks.map((hunk) => {
+    const original = hunk.filter((line) => line.kind !== "added");
+    const modified = hunk.filter((line) => line.kind !== "removed");
+    // Highlight each version separately so deleted text can't change how added lines are parsed.
+    const before = highlighter.highlight(original.map((line) => line.text).join("\n")).lines;
+    const after = highlighter.highlight(modified.map((line) => line.text).join("\n")).lines;
+    let beforeIndex = 0;
+    let afterIndex = 0;
+    return hunk.map((line) => {
+      if (line.kind === "removed") return before[beforeIndex++];
+      if (line.kind === "context") beforeIndex++;
+      return after[afterIndex++];
+    });
+  });
+}
+
+function DiffLines({ diff, path }: { diff: FileDiff; path: string }): JSX.Element {
   const locale = useLocale();
+  const [highlighted, setHighlighted] = useState<ReactNode[][] | null>(null);
+
+  useEffect(() => {
+    if (!diff.hunks.length) return;
+    let active = true;
+    void highlightDiff(diff, path).then(
+      (result) => {
+        if (active) setHighlighted(result);
+      },
+      () => {
+        if (active) setHighlighted(null);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [diff, path]);
+
   if (diff.hunks.length === 0) {
     return <p className="text-muted-foreground px-4 py-5 text-xs">{t("没有文本行变更", locale)}</p>;
   }
@@ -35,7 +76,7 @@ function DiffLines({ diff }: { diff: FileDiff }): JSX.Element {
         {diff.hunks.map((hunk, hunkIndex) => (
           <Fragment key={hunkIndex}>
             <tr className="bg-secondary/65 text-muted-foreground">
-              <td colSpan={4} className="px-3 py-1.5">
+              <td colSpan={4} className="px-3 py-0.5">
                 {hunkHeader(hunk)}
               </td>
             </tr>
@@ -48,15 +89,15 @@ function DiffLines({ diff }: { diff: FileDiff }): JSX.Element {
                   line.kind === "removed" && "bg-destructive/10 dark:bg-destructive/15",
                 )}
               >
-                <td className="text-muted-foreground w-11 px-1.5 text-right tabular-nums select-none">
+                <td className="text-muted-foreground w-9 min-w-9 px-1.5 text-right tabular-nums select-none">
                   {line.before}
                 </td>
-                <td className="text-muted-foreground w-11 px-1.5 text-right tabular-nums select-none">
+                <td className="text-muted-foreground w-9 min-w-9 px-1.5 text-right tabular-nums select-none">
                   {line.after}
                 </td>
                 <td
                   className={cn(
-                    "w-6 px-1.5 text-center select-none",
+                    "w-5 min-w-5 text-center select-none",
                     line.kind === "added" && "text-emerald-700 dark:text-emerald-400",
                     line.kind === "removed" && "text-destructive",
                   )}
@@ -64,7 +105,7 @@ function DiffLines({ diff }: { diff: FileDiff }): JSX.Element {
                   {line.kind === "added" ? "+" : line.kind === "removed" ? "−" : " "}
                 </td>
                 <td className="pr-4 whitespace-pre">
-                  {line.text || " "}
+                  {line.text ? (highlighted?.[hunkIndex]?.[lineIndex] ?? line.text) : " "}
                   {line.noNewline && (
                     <span className="text-muted-foreground ml-3 select-none">
                       {t("末尾无换行", locale)}
@@ -132,12 +173,12 @@ export function FileDiffPreview({
   return (
     <div className="min-w-0 border-t" data-file-diff>
       <div
-        className="overflow-x-auto [scrollbar-width:thin]"
+        className="relative overflow-x-auto [scrollbar-width:thin]"
         tabIndex={diff ? 0 : undefined}
         aria-label={diff ? t("逐行差异", locale) : undefined}
       >
         {diff ? (
-          <DiffLines diff={diff} />
+          <DiffLines diff={diff} path={change.path} />
         ) : !available || loadError ? (
           <p
             role={loadError ? "alert" : undefined}

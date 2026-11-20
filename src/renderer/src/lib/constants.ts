@@ -128,5 +128,7 @@ export const MESSAGE_JUMP = {
 } as const;
 // Leave room for the chat and its review pane after the navigation rail and frame.
 export const FILE_REVIEW_MIN_WINDOW_WIDTH = 700;
+export const FILE_CHANGES_MIN_WINDOW_WIDTH = 900;
+export const FILE_CHANGES_TREE_MIN_WIDTH = 500;
 export const WORKSPACE_LINK_PREFIX = "#pilot-workspace-reference=";
 export const SANITIZED_WORKSPACE_LINK_PREFIX = "#user-content-" + WORKSPACE_LINK_PREFIX.slice(1);

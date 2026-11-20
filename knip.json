@@ -1,6 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["tests/**/*.test.ts", "scripts/*.mjs"],
-  "ignore": ["src/renderer/src/components/**", "src/renderer/src/hooks/**", "src/renderer/src/lib/**"],
-  "ignoreDependencies": ["shiki"]
+  "ignore": ["src/renderer/src/components/**", "src/renderer/src/hooks/**", "src/renderer/src/lib/**"]
 }

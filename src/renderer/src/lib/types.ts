@@ -139,6 +139,7 @@ export interface FileChangesReview {
   replyId: string;
   expanded: string[];
   collapsedFolders: string[];
+  selectedId?: string;
   jump: { changeId?: string };
   undoChangeId: string | null;
 }
@@ -152,6 +153,7 @@ export interface FileChangesStore {
   open(request: OpenFileChanges): void;
   close(): void;
   toggleFile(id: string): void;
+  collapseFiles(): void;
   setFolderOpen(path: string, open: boolean): void;
   confirmUndo(id: string): void;
   cancelUndo(id: string): void;

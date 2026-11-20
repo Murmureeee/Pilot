@@ -41,13 +41,14 @@ export function FileChangesCard({
         <span className="bg-secondary text-secondary-foreground grid size-8 shrink-0 place-items-center rounded-lg">
           <FileDiffIcon aria-hidden="true" className="size-4" />
         </span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-[1_0_6rem]">
           <h3 className="text-sm font-medium">{t("变更了 {0} 个文件", locale, [count])}</h3>
           {stats && <DiffStats stats={stats} />}
         </div>
         <Button
           variant="outline"
           size="sm"
+          className="ms-auto"
           disabled={!sessionId}
           data-review-overview={replyId}
           onClick={() => show(changes.length === 1 ? changes[0]?.id : undefined)}

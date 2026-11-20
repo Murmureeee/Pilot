@@ -1,6 +1,11 @@
 // @env node
 import { afterEach, describe, expect, it } from "vitest";
-import { fileChangesTree, fileChangeFolderPaths } from "../src/renderer/src/lib/file-changes";
+import {
+  fileChangeFolderPaths,
+  fileChangeLabel,
+  fileChangesTree,
+  filterFileChanges,
+} from "../src/renderer/src/lib/file-changes";
 import { useFileChangesStore } from "../src/renderer/src/stores/file-changes";
 import type { FileChangeSummary } from "../src/shared/contract";
 
@@ -15,11 +20,44 @@ describe("file changes navigation", () => {
     open({ ...reply, changeId: "first" });
     open({ ...reply, changeId: "second" });
     const second = useFileChangesStore.getState().review;
-    expect(second).toMatchObject({ expanded: ["first", "second"], jump: { changeId: "second" } });
+    expect(second).toMatchObject({
+      expanded: ["first", "second"],
+      selectedId: "second",
+      jump: { changeId: "second" },
+    });
     open({ ...reply, changeId: "second" });
     const repeated = useFileChangesStore.getState().review;
     expect(repeated?.expanded).toEqual(["first", "second"]);
     expect(repeated?.jump).not.toBe(second?.jump);
+  });
+
+  it("collapses diffs while keeping the selected file and the folder state", () => {
+    const { open, setFolderOpen, collapseFiles } = useFileChangesStore.getState();
+    open({ sessionId: "chat", replyId: "reply", changeId: "file", confirmUndo: true });
+    setFolderOpen("src", false);
+    collapseFiles();
+    expect(useFileChangesStore.getState().review).toMatchObject({
+      selectedId: "file",
+      expanded: [],
+      collapsedFolders: ["src"],
+      undoChangeId: null,
+    });
+  });
+
+  it("filters by directory and filename across slash styles and letter widths", () => {
+    const changes: FileChangeSummary[] = [
+      { id: "one", kind: "modified", path: "E:\\pilot\\src\\tools\\main.ts" },
+      { id: "two", kind: "modified", path: "tests/tools/main.ts" },
+      { id: "three", kind: "created", path: "src/tools/README.md" },
+    ];
+    expect(filterFileChanges(changes, "  ＳＲＣ/tools MAIN.TS ")).toEqual([changes[0]]);
+    expect(filterFileChanges(changes, "tools\\main")).toEqual(changes.slice(0, 2));
+    expect(filterFileChanges(changes, "bin main")).toEqual([]);
+    expect(filterFileChanges(changes, " ")).toBe(changes);
+    expect(fileChangeLabel(changes[0].path)).toEqual({
+      directory: "E:\\pilot\\src\\tools\\",
+      name: "main.ts",
+    });
   });
 
   it("switches the files within the pane when opening a different reply", () => {

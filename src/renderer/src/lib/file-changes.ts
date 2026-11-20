@@ -22,6 +22,25 @@ export function fileChangeFolderPaths(path: string): string[] {
   return fileLocation(path).folders.map((folder) => folder.path);
 }
 
+export function fileChangeLabel(path: string): { directory: string; name: string } {
+  const { name } = fileLocation(path);
+  return { directory: path.slice(0, path.length - name.length), name };
+}
+
+export function filterFileChanges(
+  changes: readonly FileChangeSummary[],
+  query: string,
+): readonly FileChangeSummary[] {
+  const normalize = (value: string): string =>
+    value.normalize("NFKC").replaceAll("\\", "/").toLowerCase();
+  const terms = normalize(query).trim().split(/\s+/).filter(Boolean);
+  if (!terms.length) return changes;
+  return changes.filter(({ path }) => {
+    const name = normalize(path);
+    return terms.every((term) => name.includes(term));
+  });
+}
+
 export function fileChangesTree(changes: readonly FileChangeSummary[]): FileChangeNode[] {
   const root: FileChangeNode[] = [];
   const folders = new Map<string, Extract<FileChangeNode, { kind: "directory" }>>();
