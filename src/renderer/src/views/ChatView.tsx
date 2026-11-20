@@ -49,9 +49,11 @@ function chatRows(messages: UiMessage[]): ChatRow[] {
 }
 
 export function ChatView({
-  composerDraft,
+  composerDrafts,
+  workingDirectory,
 }: {
-  composerDraft: RefObject<ComposerDraft>;
+  composerDrafts: RefObject<Map<string | null, ComposerDraft>>;
+  workingDirectory: string | null;
 }): JSX.Element {
   const locale = useLocale();
   const messages = useAgentStore((s) => s.messages);
@@ -59,6 +61,7 @@ export function ChatView({
   const busy = useAgentStore((s) => s.status !== "idle");
   const permission = useAgentStore((s) => s.pendingPermissions[0]);
   const error = useAgentStore((s) => s.error);
+  const projectError = useAgentStore((s) => s.projectError);
   const settings = useAgentStore((s) => s.settings);
   const setView = useAgentStore((s) => s.setView);
   const rows = useMemo(() => chatRows(messages), [messages]);
@@ -215,6 +218,11 @@ export function ChatView({
             </div>
           </div>
         )}
+        {projectError && (
+          <p role="alert" className="text-destructive wrap-anywhere text-sm">
+            {localizeError(projectError, locale)}
+          </p>
+        )}
         {error && (
           <div
             role="alert"
@@ -229,7 +237,11 @@ export function ChatView({
         )}
         {permission && <PermissionCard key={permission.requestId} request={permission} />}
         <Activity mode={permission ? "hidden" : "visible"}>
-          <Composer savedDraft={composerDraft} />
+          <Composer
+            key={workingDirectory ?? "unbound"}
+            workingDirectory={workingDirectory}
+            savedDrafts={composerDrafts}
+          />
         </Activity>
       </div>
       {isEmpty && (

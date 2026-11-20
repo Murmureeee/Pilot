@@ -99,8 +99,8 @@ export class McpManager {
     private readonly version: string,
   ) {}
 
-  private sync(reconnectId?: string): McpConnection[] {
-    const { mcpServers = [], workingDirectory } = this.getSettings();
+  private sync(workingDirectory: string | undefined, reconnectId?: string): McpConnection[] {
+    const { mcpServers = [] } = this.getSettings();
     this.configs = mcpServers;
     const active = mcpServers.filter((config) => config.enabled);
     const enabledIds = new Set(active.map((config) => config.id));
@@ -184,8 +184,10 @@ export class McpManager {
     }
   }
 
-  async list(reconnectId?: string): Promise<McpServerInfo[]> {
-    await Promise.all(this.sync(reconnectId).map((connection) => connection.ready));
+  async list(workingDirectory: string | undefined, reconnectId?: string): Promise<McpServerInfo[]> {
+    await Promise.all(
+      this.sync(workingDirectory, reconnectId).map((connection) => connection.ready),
+    );
     return this.configs.map(
       ({ id, name, transport, enabled, policy, encryptedEnv, encryptedImport }) => {
         const connection = this.connections.get(id);
@@ -208,9 +210,9 @@ export class McpManager {
     );
   }
 
-  async tools(signal?: AbortSignal): Promise<AgentTool[]> {
+  async tools(workingDirectory: string | undefined, signal?: AbortSignal): Promise<AgentTool[]> {
     signal?.throwIfAborted();
-    const connections = this.sync();
+    const connections = this.sync(workingDirectory);
     const ready = Promise.all(connections.map((connection) => connection.ready));
     if (signal) {
       const cancelled = Promise.withResolvers<never>();

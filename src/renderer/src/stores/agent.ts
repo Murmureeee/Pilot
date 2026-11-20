@@ -13,6 +13,7 @@ import type {
   PublicSettings,
   SettingsInput,
   SkillMeta,
+  Snapshot,
   ThinkingLevel,
   ToolRule,
   UiAgentEvent,
@@ -22,6 +23,9 @@ type View = "chat" | "settings";
 
 interface AgentStore extends AgentUiState {
   settings: PublicSettings | null;
+  draftWorkingDirectory: string | null;
+  choosingProject: boolean;
+  projectError: string | null;
   view: View;
   /** 设置页当前分区（侧栏导航与设置内容共用） */
   settingsSection: SettingsSection;
@@ -44,9 +48,10 @@ interface AgentStore extends AgentUiState {
   setSessionPersona(id: string, persona: string | null): Promise<void>;
   init(): Promise<void>;
   setView(view: View): void;
-  prompt(input: PromptInput): Promise<void>;
+  prompt(input: PromptInput, workingDirectory: string | null): Promise<void>;
   abort(): void;
   newSession(): Promise<void>;
+  selectProject(sessionId?: string, onSelected?: (directory: string) => void): Promise<void>;
   /** record=false 用于前进/后退（不重复入栈） */
   loadSession(id: string, record?: boolean): Promise<void>;
   /** 手动重命名会话（titleCustom 保护，自动标题不再覆盖） */
@@ -96,20 +101,46 @@ function providerSelection(
   };
 }
 
-function applySnapshotExtras(
-  snapshot: Awaited<ReturnType<typeof window.pi.getSnapshot>>,
-): Pick<AgentStore, "usage" | "contextTokens" | "contextWindow" | "steerCount"> {
+export function selectProjectDirectory(
+  state: Pick<AgentStore, "sessionId" | "draftWorkingDirectory" | "sessions">,
+): string | null {
+  if (state.sessionId) {
+    return state.sessions.find(({ id }) => id === state.sessionId)?.workingDirectory ?? null;
+  }
+  return state.draftWorkingDirectory;
+}
+
+export function selectWorkingDirectory(
+  state: Pick<AgentStore, "sessionId" | "draftWorkingDirectory" | "sessions" | "settings">,
+): string | null {
+  return selectProjectDirectory(state) ?? state.settings?.workingDirectory ?? null;
+}
+
+function sessionSnapshot(
+  snapshot: Snapshot,
+): Omit<AgentUiState, "error" | "pendingPermissions"> &
+  Pick<AgentStore, "draftWorkingDirectory"> &
+  Partial<Pick<AgentUiState, "pendingPermissions">> {
   return {
+    sessionId: snapshot.sessionId,
+    draftWorkingDirectory: snapshot.draftWorkingDirectory,
+    sessions: snapshot.sessions,
+    messages: snapshot.messages,
+    status: snapshot.status,
     usage: snapshot.usage,
     contextTokens: snapshot.contextTokens,
     contextWindow: snapshot.contextWindow,
     steerCount: snapshot.steerCount,
+    ...(snapshot.status === "idle" ? { pendingPermissions: [] } : {}),
   };
 }
 
 export const useAgentStore = create<AgentStore>((set, get) => ({
   ...initialAgentUiState(),
   settings: null,
+  draftWorkingDirectory: null,
+  choosingProject: false,
+  projectError: null,
   view: "chat",
   settingsSection: "general",
   skills: [],
@@ -164,47 +195,49 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     });
     const snapshot = await window.pi.getSnapshot();
     set({
-      messages: snapshot.messages,
-      status: snapshot.status,
-      sessionId: snapshot.sessionId,
-      sessions: snapshot.sessions,
+      ...sessionSnapshot(snapshot),
       settings: snapshot.settings,
       nav: snapshot.sessionId ? pushNav(get().nav, snapshot.sessionId) : get().nav,
-      ...applySnapshotExtras(snapshot),
     });
   },
 
   setView: (view) => set({ view }),
 
-  prompt: async (input) => {
+  prompt: async (input, workingDirectory) => {
     set({ error: null });
-    await window.pi.agentPrompt(input);
+    await window.pi.agentPrompt(input, workingDirectory);
   },
 
   abort: () => window.pi.agentAbort(),
 
   newSession: async () => {
     const snapshot = await window.pi.sessionNew();
-    set({
-      messages: snapshot.messages,
-      status: snapshot.status,
-      sessionId: snapshot.sessionId,
-      sessions: snapshot.sessions,
-      error: null,
-      ...applySnapshotExtras(snapshot),
-    });
+    set({ ...sessionSnapshot(snapshot), error: null, projectError: null });
+  },
+
+  selectProject: async (sessionId, onSelected) => {
+    if (get().choosingProject) return;
+    set({ choosingProject: true, projectError: null });
+    try {
+      const snapshot = await window.pi.sessionSelectProject(currentLocale(), sessionId);
+      if (!snapshot) return;
+      const directory = selectProjectDirectory(snapshot);
+      if (directory) onSelected?.(directory);
+      set({ ...sessionSnapshot(snapshot), view: "chat", error: null });
+    } catch (error) {
+      set({ view: "chat", projectError: error instanceof Error ? error.message : String(error) });
+    } finally {
+      set({ choosingProject: false });
+    }
   },
 
   loadSession: async (id, record = true) => {
     const snapshot = await window.pi.sessionLoad(id);
     set({
-      messages: snapshot.messages,
-      status: snapshot.status,
-      sessionId: snapshot.sessionId,
-      sessions: snapshot.sessions,
+      ...sessionSnapshot(snapshot),
       error: null,
-      nav: record ? pushNav(get().nav, id) : get().nav,
-      ...applySnapshotExtras(snapshot),
+      projectError: null,
+      nav: record && snapshot.sessionId === id ? pushNav(get().nav, id) : get().nav,
     });
   },
 
@@ -238,13 +271,9 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     const snapshot = await window.pi.sessionArchive(id, archived);
     const { nav } = get();
     set({
-      messages: snapshot.messages,
-      status: snapshot.status,
-      sessionId: snapshot.sessionId,
-      sessions: snapshot.sessions,
+      ...sessionSnapshot(snapshot),
       error: null,
       nav: snapshot.sessionId ? nav : initialNavState(),
-      ...applySnapshotExtras(snapshot),
     });
   },
 
@@ -268,14 +297,10 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     const snapshot = await window.pi.sessionDelete(id);
     const { nav } = get();
     set({
-      messages: snapshot.messages,
-      status: snapshot.status,
-      sessionId: snapshot.sessionId,
-      sessions: snapshot.sessions,
+      ...sessionSnapshot(snapshot),
       error: null,
       // 当前会话被删除 → 前进/后退栈里指向它的历史一并失效（导航重置）
       nav: snapshot.sessionId ? nav : initialNavState(),
-      ...applySnapshotExtras(snapshot),
     });
   },
 

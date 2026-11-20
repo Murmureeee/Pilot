@@ -3,6 +3,22 @@ import { applyAgentEvent, initialAgentUiState } from "../src/renderer/src/adapte
 import type { UiMessage } from "../src/shared/contract";
 
 describe("agent-events adapter", () => {
+  it("activates a newly created project session before its first message arrives", () => {
+    const session = {
+      id: "project-chat",
+      title: "New chat",
+      workingDirectory: "E:/projects/Pilot",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const state = applyAgentEvent(initialAgentUiState(), {
+      type: "sessions",
+      sessions: [session],
+      activeSessionId: session.id,
+    });
+    expect(state).toMatchObject({ sessionId: session.id, sessions: [session], messages: [] });
+  });
+
   it("preserves typed references in a user message event", () => {
     const message: UiMessage = {
       id: "s-0",

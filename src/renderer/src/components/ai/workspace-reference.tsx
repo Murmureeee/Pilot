@@ -1,7 +1,7 @@
 // @env browser
 import type { JSX, ReactNode } from "react";
 import { cn } from "cn";
-import { useAgentStore } from "@renderer/stores/agent";
+import { selectWorkingDirectory, useAgentStore } from "@renderer/stores/agent";
 import { useWorkspaceReferenceStore } from "@renderer/stores/workspace-reference";
 import type { PromptMention } from "@shared/contract";
 
@@ -21,12 +21,13 @@ export function InlineWorkspaceReference({
   children: ReactNode;
 }): JSX.Element {
   const sessionId = useAgentStore((state) => state.sessionId);
+  const directory = useAgentStore(selectWorkingDirectory);
   const className = cn(
     "workspace-reference",
     chip ? "workspace-reference-chip" : "workspace-reference-link",
   );
   const title = line ? path + ":" + line : path;
-  if (kind === "skill" || !sessionId) {
+  if (kind === "skill" || !sessionId || !directory) {
     return (
       <span className={className} title={title} data-reference-kind={kind}>
         {children}
@@ -41,13 +42,12 @@ export function InlineWorkspaceReference({
       title={title}
       data-reference-kind={kind}
       onClick={() => {
-        const { settings } = useAgentStore.getState();
         useWorkspaceReferenceStore.getState().open({
           sessionId,
           path,
           kind,
           line,
-          workingDirectory: workingDirectory ?? settings?.workingDirectory ?? undefined,
+          workingDirectory: workingDirectory ?? directory,
         });
       }}
     >

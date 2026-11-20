@@ -40,6 +40,7 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.agentClearQueue]: [],
   [IPC.agentGetSnapshot]: [],
   [IPC.sessionNew]: [],
+  [IPC.sessionSelectProject]: ["zh"],
   [IPC.sessionLoad]: [sessionId],
   [IPC.sessionRename]: [sessionId, "标题"],
   [IPC.sessionDelete]: [sessionId],
@@ -87,7 +88,7 @@ describe("IPC argument validation", () => {
     for (const channel of Object.values(IPC)) {
       const args = valid[channel];
       expect(parseIpcArgs(channel, args)).toEqual(args);
-      expect(() => parseIpcArgs(channel, [...args, null])).toThrow(/Invalid IPC arguments/);
+      expect(() => parseIpcArgs(channel, [...args, null, null])).toThrow(/Invalid IPC arguments/);
     }
     for (const channel of Object.values(IPC).filter((name) => valid[name].length > 0)) {
       expect(() => parseIpcArgs(channel, valid[channel].slice(0, -1))).toThrow(
@@ -104,9 +105,15 @@ describe("IPC argument validation", () => {
     expect(parseIpcArgs(IPC.settingsSave, [input])).toEqual([input]);
   });
 
-  it("accepts the directory the composer used for a referenced prompt", () => {
+  it("accepts the directory the composer used for a prompt or file search", () => {
     const args = ["review the selected file", "E:/projects/Pilot"];
     expect(parseIpcArgs(IPC.agentPrompt, args)).toEqual(args);
+    expect(parseIpcArgs(IPC.agentPrompt, [args[0], null])).toEqual([args[0], null]);
+    expect(parseIpcArgs(IPC.agentSearchWorkspace, args)).toEqual(args);
+  });
+
+  it("accepts a session ID when choosing a project for an existing chat", () => {
+    expect(parseIpcArgs(IPC.sessionSelectProject, ["en", sessionId])).toEqual(["en", sessionId]);
   });
 
   it("receives typed mentions and rejects invalid source metadata", () => {
@@ -139,6 +146,7 @@ describe("IPC argument validation", () => {
   it.each([
     [IPC.toolPermissionRespond, [sessionId, "later"]],
     [IPC.sessionLoad, ["not-a-session-id"]],
+    [IPC.sessionSelectProject, ["zh", "C:/projects/Pilot"]],
     [IPC.sessionUndoFileChange, [sessionId, "C:/some/path"]],
     [IPC.sessionPin, [sessionId, "true"]],
     [IPC.appOpenPath, ["other-directory"]],

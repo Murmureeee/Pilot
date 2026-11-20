@@ -1,10 +1,11 @@
 // @env browser
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import { MessageSquareIcon } from "lucide-react";
+import { FolderIcon, FolderOpenIcon, MessageSquareIcon } from "lucide-react";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
 import { FileChangesPanel } from "@renderer/components/ai/file-changes-panel";
 import { TopBar } from "@renderer/components/ai/top-bar";
 import { WorkspaceReferencePanel } from "@renderer/components/ai/workspace-reference-panel";
+import { Button } from "@renderer/components/ui/button";
 import { AppRail, SidebarPanel } from "@renderer/views/Sidebar";
 import { ChatView } from "@renderer/views/ChatView";
 import { SettingsView } from "@renderer/views/SettingsView";
@@ -15,7 +16,11 @@ import {
 } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { ComposerDraft } from "@renderer/lib/types";
-import { useAgentStore } from "@renderer/stores/agent";
+import {
+  selectProjectDirectory,
+  selectWorkingDirectory,
+  useAgentStore,
+} from "@renderer/stores/agent";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
 import { useWorkspaceReferenceStore } from "@renderer/stores/workspace-reference";
 import { LOCALE_DETAILS } from "@shared/constants";
@@ -25,13 +30,17 @@ export default function App(): JSX.Element {
   const init = useAgentStore((s) => s.init);
   const sessions = useAgentStore((s) => s.sessions);
   const sessionId = useAgentStore((s) => s.sessionId);
+  const workingDirectory = useAgentStore(selectWorkingDirectory);
+  const projectDirectory = useAgentStore(selectProjectDirectory);
+  const selectProject = useAgentStore((s) => s.selectProject);
+  const choosingProject = useAgentStore((s) => s.choosingProject);
   const locale = useLocale();
   const setPaletteOpen = useAgentStore((s) => s.setPaletteOpen);
   const [sidebarWidth, setSidebarWidth] = useState(262);
   const [collapsed, setCollapsed] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
-  const composerDraft = useRef<ComposerDraft>([]);
+  const composerDrafts = useRef(new Map<string | null, ComposerDraft>());
   const review = useFileChangesStore((state) => state.review);
   const closeReview = useFileChangesStore((state) => state.close);
   const visibleReview = view === "chat" && review?.sessionId === sessionId ? review : null;
@@ -89,6 +98,9 @@ export default function App(): JSX.Element {
         event.preventDefault();
         store.setView("chat");
         void store.newSession();
+      } else if (key === "o") {
+        event.preventDefault();
+        void store.selectProject();
       } else if (key === "[") {
         event.preventDefault();
         void store.navBack();
@@ -141,9 +153,38 @@ export default function App(): JSX.Element {
                       className="text-muted-foreground size-3.5 shrink-0"
                       aria-hidden="true"
                     />
-                    <span className="truncate text-[13px] font-medium">{title}</span>
+                    <div className="flex min-w-0 flex-1 flex-col justify-center">
+                      <span className="truncate text-[13px] font-medium" title={title}>
+                        {title}
+                      </span>
+                      {workingDirectory && (
+                        <div
+                          className="text-muted-foreground flex min-w-0 items-center gap-1 text-xs"
+                          title={workingDirectory}
+                        >
+                          <FolderIcon className="size-3 shrink-0" aria-hidden="true" />
+                          {!projectDirectory && (
+                            <span className="shrink-0">{t("默认工作目录", locale)}</span>
+                          )}
+                          <span className="truncate [direction:rtl]">
+                            <bdi dir="ltr">{workingDirectory}</bdi>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {!projectDirectory && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={choosingProject}
+                        onClick={() => void selectProject(sessionId ?? undefined)}
+                      >
+                        <FolderOpenIcon data-icon="inline-start" />
+                        {t(sessionId ? "关联项目…" : "打开项目…", locale)}
+                      </Button>
+                    )}
                   </header>
-                  <ChatView composerDraft={composerDraft} />
+                  <ChatView composerDrafts={composerDrafts} workingDirectory={workingDirectory} />
                 </>
               ) : (
                 <SettingsView />

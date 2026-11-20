@@ -24,6 +24,7 @@ import { toPublicSettings } from "../settings";
 import { decryptSecret } from "../settings/secrets";
 import type { ProviderConfig, Settings } from "../settings/types";
 import { readFileChange, restoreFileChange } from "../workspace/file-changes";
+import { createToolPathResolver, normalizeWorkingDirectory } from "../workspace/paths";
 import { getCommandShell } from "../workspace/shell";
 import type { RecordedFileChange } from "../workspace/types";
 import type { McpManager } from "./mcp";
@@ -70,7 +71,9 @@ export class AgentHost {
   private readonly thinkingStarts = new Map<number, number>();
   private thinkingDurations: Record<number, number> = {};
   private preparingPrompt?: AbortController;
+  private runningPrompt?: Promise<void>;
   private sessionId: string | null = null;
+  private draftWorkingDirectory?: string;
   private uiMessages: UiMessage[] = [];
   private status: AgentStatus = "idle";
   private nextId = 0;
@@ -129,10 +132,25 @@ export class AgentHost {
     this.send({ type: "status", status });
   }
 
-  private ensureSession(): string {
+  private getProjectDirectory(): string | undefined {
+    return this.sessionId
+      ? this.deps.store.getMeta(this.sessionId)?.workingDirectory
+      : this.draftWorkingDirectory;
+  }
+
+  getWorkingDirectory(): string | undefined {
+    if (this.status !== "idle" && this.agentToolEnvironment) {
+      return this.agentToolEnvironment.workingDirectory;
+    }
+    return this.getProjectDirectory() ?? this.deps.getSettings().workingDirectory;
+  }
+
+  private ensureSession(workingDirectory: string | undefined): string {
     if (this.sessionId) return this.sessionId;
-    const meta = this.deps.store.create();
+    const meta = this.deps.store.create(workingDirectory);
     this.sessionId = meta.id;
+    this.draftWorkingDirectory = undefined;
+    this.send({ type: "sessions", sessions: this.deps.store.list(), activeSessionId: meta.id });
     return meta.id;
   }
 
@@ -140,9 +158,13 @@ export class AgentHost {
    * 组装 systemPrompt（FR-1.7 / FR-5.9，注入顺序固定）：
    * 应用提示词 → 人设/自定义指令（会话 personaOverride 优先于全局 persona）→ 启用技能 sections。
    */
-  private buildSystemPrompt(sessionId: string, settings: Settings): string {
+  private buildSystemPrompt(
+    sessionId: string,
+    settings: Settings,
+    workingDirectory: string | undefined,
+  ): string {
     const sections = [`You are a helpful assistant running inside ${APP_NAME}.`];
-    if (settings.workingDirectory) {
+    if (workingDirectory) {
       sections.push(
         "When citing a known workspace item in a reply, link to its workspace-relative path in Markdown. Use a trailing / for folders and add #L followed by the line number for files when known. URL-encode spaces and brackets in the link target.",
       );
@@ -189,14 +211,16 @@ export class AgentHost {
 
   /** 确保当前会话有 Agent 实例；跨会话或 provider/模型/systemPrompt 变更时重建（转录从落盘恢复） */
   private ensureAgent(): Agent {
-    const sessionId = this.ensureSession();
     const settings = this.deps.getSettings();
     const active = settings.providers.find((p) => p.id === settings.activeProviderId);
     if (!active) throw new Error("尚未配置 provider，请先到设置页添加");
 
-    const systemPrompt = this.buildSystemPrompt(sessionId, settings);
+    const workingDirectory = this.getWorkingDirectory();
+    if (workingDirectory) createToolPathResolver(workingDirectory)(".");
+    const sessionId = this.ensureSession(workingDirectory);
+    const systemPrompt = this.buildSystemPrompt(sessionId, settings, workingDirectory);
     const toolEnvironment: ToolEnvironment = {
-      workingDirectory: settings.workingDirectory,
+      workingDirectory,
       commandShell: getCommandShell(settings.commandShell),
     };
 
@@ -474,18 +498,18 @@ export class AgentHost {
     return this.deps.mcp.policyOf(name)?.label ?? labelOf(name);
   }
 
-  acceptsReferenceDirectory(directory: string): boolean {
-    return (
-      this.deps.getSettings().workingDirectory === directory &&
-      (this.status === "idle" || this.agentToolEnvironment?.workingDirectory === directory)
-    );
+  checkWorkingDirectory(expected: string | null): void {
+    if ((this.getWorkingDirectory() ?? null) !== expected) {
+      throw new Error("工作目录已变更，请重新选择文件引用。");
+    }
   }
 
   preparePrompt(input: string | PromptInput): string | PreparedPrompt {
     if (typeof input === "string") return input;
+    const workingDirectory = this.getWorkingDirectory();
     return prepareMentionPrompt(
       input,
-      (directory) => this.acceptsReferenceDirectory(directory),
+      (directory) => directory === workingDirectory,
       this.deps.skillsDir,
     );
   }
@@ -508,13 +532,27 @@ export class AgentHost {
       this.send({ type: "queue", steerCount: this.steerCount });
       return;
     }
+
+    const running = this.runPrompt(message);
+    this.runningPrompt = running;
+    try {
+      await running;
+    } finally {
+      if (this.runningPrompt === running) this.runningPrompt = undefined;
+    }
+  }
+
+  private async runPrompt(message: ReferencedUserMessage): Promise<void> {
     const preparation = new AbortController();
     let agent: Agent | undefined;
     try {
       agent = this.ensureAgent();
       this.preparingPrompt = preparation;
       this.sendStatus("streaming");
-      const externalTools = await this.deps.mcp.tools(preparation.signal);
+      const externalTools = await this.deps.mcp.tools(
+        this.getWorkingDirectory(),
+        preparation.signal,
+      );
       if (this.agent !== agent) return;
       preparation.signal.throwIfAborted();
       // pi snapshots tool declarations as it starts the prompt, before preparing the request.
@@ -544,6 +582,13 @@ export class AgentHost {
     this.agent?.abort();
   }
 
+  private async stopBeforeSwitch(): Promise<void> {
+    if (!this.runningPrompt) return;
+    // The current run needs its session and event subscription until it has saved the transcript.
+    this.abort();
+    await this.runningPrompt;
+  }
+
   /** 清空排队中的插话（steer + followUp），状态行撤回入口 */
   clearQueue(): void {
     this.agent?.clearAllQueues();
@@ -569,21 +614,10 @@ export class AgentHost {
 
   /** 归档/取消归档；归档当前打开的会话时回到草稿态（数据保留在归档区） */
   async archiveSession(id: string, archived: boolean): Promise<Snapshot> {
+    if (archived && this.sessionId === id) await this.stopBeforeSwitch();
+    const directory = this.deps.store.getMeta(id)?.workingDirectory;
     this.deps.store.setArchived(id, archived);
-    if (archived && this.sessionId === id) {
-      this.sessionId = null;
-      this.agent = null;
-      this.agentSessionId = null;
-      this.uiMessages = [];
-      this.permissions.resetSession();
-      this.usage = { input: 0, output: 0, cacheRead: 0, costTotal: 0 };
-      this.contextTokens = 0;
-      this.contextWindow = null;
-      this.steerCount = 0;
-      this.send({ type: "messages", messages: this.uiMessages });
-      this.send({ type: "queue", steerCount: 0 });
-      this.sendStatus("idle");
-    }
+    if (archived && this.sessionId === id) this.switchSession(null, [], directory);
     const sessions = this.deps.store.list();
     this.send({ type: "sessions", sessions });
     return this.getSnapshot();
@@ -617,21 +651,10 @@ export class AgentHost {
 
   /** 删除会话；删除当前会话时回到草稿态（不新建会话文件） */
   async deleteSession(id: string): Promise<Snapshot> {
+    if (this.sessionId === id) await this.stopBeforeSwitch();
+    const directory = this.deps.store.getMeta(id)?.workingDirectory;
     this.deps.store.remove(id);
-    if (this.sessionId === id) {
-      this.sessionId = null;
-      this.agent = null;
-      this.agentSessionId = null;
-      this.uiMessages = [];
-      this.permissions.resetSession();
-      this.usage = { input: 0, output: 0, cacheRead: 0, costTotal: 0 };
-      this.contextTokens = 0;
-      this.contextWindow = null;
-      this.steerCount = 0;
-      this.send({ type: "messages", messages: this.uiMessages });
-      this.send({ type: "queue", steerCount: 0 });
-      this.sendStatus("idle");
-    }
+    if (this.sessionId === id) this.switchSession(null, [], directory);
     const sessions = this.deps.store.list();
     this.send({ type: "sessions", sessions });
     return this.getSnapshot();
@@ -639,37 +662,60 @@ export class AgentHost {
 
   /** 新聊天：仅回到草稿态，不创建会话——首个 prompt 时才由 ensureSession 落盘建会话 */
   async newSession(): Promise<Snapshot> {
-    this.sessionId = null;
-    this.agent = null;
-    this.agentSessionId = null;
-    this.uiMessages = [];
-    this.permissions.resetSession();
-    this.usage = { input: 0, output: 0, cacheRead: 0, costTotal: 0 };
-    this.contextTokens = 0;
-    this.contextWindow = null;
-    this.steerCount = 0;
-    this.send({ type: "queue", steerCount: 0 });
-    this.sendStatus("idle");
+    await this.stopBeforeSwitch();
+    this.switchSession(null, [], this.getProjectDirectory());
+    return this.getSnapshot();
+  }
+
+  async openProject(directory: string): Promise<Snapshot> {
+    const workingDirectory = normalizeWorkingDirectory(directory);
+    await this.stopBeforeSwitch();
+    this.switchSession(null, [], workingDirectory);
+    return this.getSnapshot();
+  }
+
+  async bindProject(id: string, directory: string): Promise<Snapshot> {
+    if (this.sessionId !== id) throw new Error("会话已切换，请重新关联项目。");
+    const workingDirectory = normalizeWorkingDirectory(directory);
+    await this.stopBeforeSwitch();
+    if (this.sessionId !== id) throw new Error("会话已切换，请重新关联项目。");
+    this.deps.store.bindProject(id, workingDirectory);
+    this.resetAgent();
     return this.getSnapshot();
   }
 
   async loadSession(id: string): Promise<Snapshot> {
-    this.sessionId = id;
+    if (this.sessionId === id || !this.deps.store.getMeta(id)) return this.getSnapshot();
+    await this.stopBeforeSwitch();
+    if (!this.deps.store.getMeta(id)) return this.getSnapshot();
+    this.deps.store.setUnread(id, false);
+    this.switchSession(id, toUiMessages(this.deps.store.load(id), "s"));
+    return this.getSnapshot();
+  }
+
+  private resetAgent(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
     this.agent = null;
     this.agentSessionId = null;
-    // 打开即清除未读（snapshot.sessions 会带上刷新后的列表）
-    this.deps.store.setUnread(id, false);
-    this.uiMessages = toUiMessages(this.deps.store.load(id), "s");
-    this.nextId = this.uiMessages.length;
     this.permissions.resetSession();
+  }
+
+  private switchSession(
+    id: string | null,
+    messages: UiMessage[],
+    draftWorkingDirectory?: string,
+  ): void {
+    this.resetAgent();
+    this.sessionId = id;
+    this.draftWorkingDirectory = draftWorkingDirectory;
+    this.uiMessages = messages;
+    this.nextId = messages.length;
     this.usage = { input: 0, output: 0, cacheRead: 0, costTotal: 0 };
     this.contextTokens = 0;
-    // Agent 实例尚未重建：窗口大小要等下一轮 usage 才可测得
     this.contextWindow = null;
     this.steerCount = 0;
-    this.sendStatus("idle");
-    this.send({ type: "messages", messages: this.uiMessages });
-    return this.getSnapshot();
+    this.status = "idle";
   }
 
   private sessionFileChange(
@@ -704,7 +750,7 @@ export class AgentHost {
     if (this.status !== "idle") throw new Error("请等待当前回复结束后再撤销。");
     const { messages, index, message, change } = this.sessionFileChange(sessionId, changeId);
     if (change.summary.reverted) return;
-    restoreFileChange(change, this.deps.getSettings().workingDirectory);
+    restoreFileChange(change, this.getWorkingDirectory());
 
     const reverted = { ...change.summary, reverted: true };
     const updated = messages.with(index, {
@@ -719,6 +765,7 @@ export class AgentHost {
   getSnapshot(): Snapshot {
     return {
       sessionId: this.sessionId,
+      draftWorkingDirectory: this.draftWorkingDirectory ?? null,
       sessions: this.deps.store.list(),
       messages: this.uiMessages,
       status: this.status,

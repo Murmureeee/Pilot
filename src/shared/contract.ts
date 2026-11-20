@@ -19,6 +19,7 @@ export const IPC = {
   agentClearQueue: "agent:clear-queue",
   agentGetSnapshot: "agent:get-snapshot",
   sessionNew: "session:new",
+  sessionSelectProject: "session:select-project",
   sessionLoad: "session:load",
   sessionRename: "session:rename",
   sessionDelete: "session:delete",
@@ -275,6 +276,7 @@ export interface SessionMeta {
   title: string;
   createdAt: number;
   updatedAt: number;
+  workingDirectory?: string;
   /** 用户手动重命名后为 true：自动标题（首条用户消息）不再覆盖 */
   titleCustom?: boolean;
   /** 置顶：侧栏「置顶」分区（时间倒序在其内），悬浮按钮/右键菜单可切换 */
@@ -374,6 +376,7 @@ export interface SettingsInput {
 
 export interface Snapshot {
   sessionId: string | null;
+  draftWorkingDirectory: string | null;
   sessions: SessionMeta[];
   messages: UiMessage[];
   status: AgentStatus;

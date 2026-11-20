@@ -30,6 +30,7 @@ describe("IPC contract", () => {
   it("exposes Phase 3 wrap-up channels (重命名/删除/清空队列/数据目录/标题栏主题)", () => {
     expect(IPC.sessionRename).toBe("session:rename");
     expect(IPC.sessionDelete).toBe("session:delete");
+    expect(IPC.sessionSelectProject).toBe("session:select-project");
     expect(IPC.agentClearQueue).toBe("agent:clear-queue");
     expect(IPC.agentSearchWorkspace).toBe("agent:search-workspace");
     expect(IPC.agentPreviewWorkspaceReference).toBe("agent:preview-workspace-reference");

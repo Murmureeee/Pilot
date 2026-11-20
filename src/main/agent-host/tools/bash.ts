@@ -1,9 +1,8 @@
 // @env node
 import { spawn } from "node:child_process";
-import { homedir } from "node:os";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { int, obj, opt, str } from "@earendil-works/pi-schema";
-import { normalizeWorkingDirectory } from "../../workspace/paths";
+import { createToolPathResolver } from "../../workspace/paths";
 import { findGitBash } from "../../workspace/shell";
 import { TOOL_LABELS } from "./constants";
 import { truncate } from "./output";
@@ -30,7 +29,7 @@ export function createBashTool({
     executionMode: "sequential",
     execute: async (_id, params, signal, onUpdate): Promise<AgentToolResult> => {
       signal?.throwIfAborted();
-      const cwd = workingDirectory ? normalizeWorkingDirectory(workingDirectory) : homedir();
+      const cwd = createToolPathResolver(workingDirectory)(".");
       const executable = powershell
         ? "powershell.exe"
         : process.platform === "win32"

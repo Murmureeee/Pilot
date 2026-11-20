@@ -16,6 +16,7 @@ import {
   CircleIcon,
   CopyIcon,
   DownloadIcon,
+  FolderOpenIcon,
   GitForkIcon,
   HardDriveIcon,
   HouseIcon,
@@ -221,6 +222,8 @@ export function SidebarPanel({
   const sessionId = useAgentStore((s) => s.sessionId);
   const newSession = useAgentStore((s) => s.newSession);
   const loadSession = useAgentStore((s) => s.loadSession);
+  const selectProject = useAgentStore((s) => s.selectProject);
+  const choosingProject = useAgentStore((s) => s.choosingProject);
   const renameSession = useAgentStore((s) => s.renameSession);
   const setSessionPinned = useAgentStore((s) => s.setSessionPinned);
   const setSessionArchived = useAgentStore((s) => s.setSessionArchived);
@@ -458,6 +461,14 @@ export function SidebarPanel({
       {inChat ? (
         <>
           <div className="shrink-0 px-3 pb-3">
+            <Button
+              variant="ghost"
+              className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-sidebar-foreground w-full justify-start gap-2.5 rounded-lg text-[13px] font-normal"
+              disabled={choosingProject}
+              onClick={() => void selectProject()}
+            >
+              <FolderOpenIcon data-icon="inline-start" strokeWidth={1.7} /> {t("打开项目…", locale)}
+            </Button>
             <Button
               variant="ghost"
               className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-sidebar-foreground w-full justify-start gap-2.5 rounded-lg text-[13px] font-normal"

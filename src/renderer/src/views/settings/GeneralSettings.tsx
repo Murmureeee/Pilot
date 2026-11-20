@@ -198,9 +198,9 @@ function ToolEnvironmentForm({
       <div className="settings-list">
         <div className="settings-row">
           <div className="min-w-0 flex-1 basis-64">
-            <h3 className="text-sm font-medium">{t("工作目录", locale)}</h3>
+            <h3 className="text-sm font-medium">{t("默认工作目录", locale)}</h3>
             <p className="text-muted-foreground mt-0.5 text-xs leading-5">
-              {t("文件工具限定在所选目录内，命令也从此目录启动。", locale)}
+              {t("未关联项目时，文件工具和命令使用此目录。", locale)}
             </p>
             <p className="mt-1 select-text wrap-anywhere text-xs">
               {directory ?? t("用户主目录（默认）", locale)}

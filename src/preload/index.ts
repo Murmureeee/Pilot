@@ -35,14 +35,17 @@ const api: PiApi = {
     return () => ipcRenderer.removeListener(UPDATE_STATUS_CHANNEL, listener);
   },
   getSnapshot: () => ipcRenderer.invoke(IPC.agentGetSnapshot),
-  agentPrompt: (input, referenceDirectory) =>
-    ipcRenderer.invoke(IPC.agentPrompt, input, referenceDirectory),
-  searchWorkspace: (query) => ipcRenderer.invoke(IPC.agentSearchWorkspace, query),
+  agentPrompt: (input, expectedDirectory) =>
+    ipcRenderer.invoke(IPC.agentPrompt, input, expectedDirectory),
+  searchWorkspace: (query, expectedDirectory) =>
+    ipcRenderer.invoke(IPC.agentSearchWorkspace, query, expectedDirectory),
   previewWorkspaceReference: (reference) =>
     ipcRenderer.invoke(IPC.agentPreviewWorkspaceReference, reference),
   agentAbort: () => ipcRenderer.invoke(IPC.agentAbort),
   clearQueue: () => ipcRenderer.invoke(IPC.agentClearQueue),
   sessionNew: () => ipcRenderer.invoke(IPC.sessionNew),
+  sessionSelectProject: (locale, sessionId) =>
+    ipcRenderer.invoke(IPC.sessionSelectProject, locale, sessionId),
   sessionLoad: (id: string) => ipcRenderer.invoke(IPC.sessionLoad, id),
   sessionRename: (id: string, title: string) =>
     ipcRenderer.invoke(IPC.sessionRename, id, title) as Promise<SessionMeta[]>,

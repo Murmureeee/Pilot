@@ -110,7 +110,13 @@ const TONE_BADGE: Record<ModeTone, string> = {
   amber: "bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 dark:text-amber-400",
 };
 
-export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> }): JSX.Element {
+export function Composer({
+  savedDrafts,
+  workingDirectory,
+}: {
+  savedDrafts: RefObject<Map<string | null, ComposerDraft>>;
+  workingDirectory: string | null;
+}): JSX.Element {
   const locale = useLocale();
   const status = useAgentStore((s) => s.status);
   const busy = status !== "idle";
@@ -118,7 +124,9 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
   const steerCount = useAgentStore((s) => s.steerCount);
   const usage = useAgentStore((s) => s.usage);
   const sessionId = useAgentStore((s) => s.sessionId);
-  const [draft, setDraft] = useState(() => promptFromDraft(savedDraft.current));
+  const [draft, setDraft] = useState(() =>
+    promptFromDraft(savedDrafts.current.get(workingDirectory) ?? []),
+  );
   const [selection, setSelection] = useState<ComposerSelection | null>(null);
   const [focused, setFocused] = useState(false);
   const [composing, setComposing] = useState(false);
@@ -127,12 +135,10 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
   const [toolbarMenu, setToolbarMenu] = useState<ComposerToolbarMenu | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
-  const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [skillError, setSkillError] = useState<string | null>(null);
   const [loadingSkills, setLoadingSkills] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [pickingDirectory, setPickingDirectory] = useState(false);
   const editor = useRef<HTMLDivElement>(null);
   const lastRange = useRef<Range | null>(null);
   const resources = useRef(new Map<string, PromptMention>());
@@ -148,14 +154,15 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
   const archiveSession = useAgentStore((s) => s.setSessionArchived);
   const setView = useAgentStore((s) => s.setView);
   const setSettingsSection = useAgentStore((s) => s.setSettingsSection);
-  const saveToolEnvironment = useAgentStore((s) => s.saveToolEnvironment);
+  const selectProject = useAgentStore((s) => s.selectProject);
+  const choosingProject = useAgentStore((s) => s.choosingProject);
+  const projectError = useAgentStore((s) => s.projectError);
   const skills = useAgentStore((s) => s.skills);
   const listSkills = useAgentStore((s) => s.listSkills);
 
   const mode = settings?.approvalMode ?? "standard";
   const modeMeta = MODE_META[mode];
   const ModeIcon = modeMeta.icon;
-  const workingDirectory = settings?.workingDirectory ?? null;
   const enabledSkills = settings?.skillsEnabled;
   const isDismissed =
     dismissed &&
@@ -172,9 +179,15 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
   const attachEditor = useCallback(
     (field: HTMLDivElement | null): void => {
       editor.current = field;
-      if (field) restoreComposerDraft(field, savedDraft.current, resources.current);
+      if (field) {
+        restoreComposerDraft(
+          field,
+          savedDrafts.current.get(workingDirectory) ?? [],
+          resources.current,
+        );
+      }
     },
-    [savedDraft],
+    [savedDrafts, workingDirectory],
   );
 
   const updateSelection = useCallback((): void => {
@@ -209,8 +222,9 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
 
   const readEditor = (): void => {
     if (!editor.current) return;
-    savedDraft.current = readComposerDraft(editor.current, resources.current);
-    setDraft(promptFromDraft(savedDraft.current));
+    const next = readComposerDraft(editor.current, resources.current);
+    savedDrafts.current.set(workingDirectory, next);
+    setDraft(promptFromDraft(next));
     setSendError(null);
     setDismissed(null);
     setHighlighted(null);
@@ -218,18 +232,13 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
   };
 
   const pickDirectory = async (): Promise<void> => {
-    if (pickingDirectory) return;
-    setPickingDirectory(true);
-    setDirectoryError(null);
-    try {
-      const directory = await window.pi.pickWorkingDirectory(locale);
-      if (directory !== null) await saveToolEnvironment({ workingDirectory: directory });
-    } catch (error) {
-      setDirectoryError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setPickingDirectory(false);
-      (pickerInput.current ?? editor.current)?.focus();
-    }
+    await selectProject(sessionId ?? undefined, (directory) => {
+      const currentDraft = savedDrafts.current.get(workingDirectory);
+      if (!currentDraft?.length || savedDrafts.current.get(directory)?.length) return;
+      savedDrafts.current.set(directory, currentDraft);
+      savedDrafts.current.delete(workingDirectory);
+    });
+    (pickerInput.current ?? editor.current)?.focus();
   };
 
   const closePicker = (): void => {
@@ -345,10 +354,10 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
   }
   if (workspaceQuery !== null) {
     if (workingDirectory === null) {
-      if (!pickingDirectory)
+      if (!choosingProject)
         options.push({
           id: "working-directory",
-          label: t("选择工作目录", locale),
+          label: t(sessionId ? "关联项目…" : "打开项目…", locale),
           icon: FolderIcon,
           select: () => void pickDirectory(),
         });
@@ -368,9 +377,10 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
     trigger?.kind === "command" ? "/" + trigger.query.normalize("NFKC").toLowerCase() : null;
   const exactIndex = options.findIndex(({ shortcut }) => shortcut?.toLowerCase() === exactShortcut);
   const activeIndex = Math.min(highlighted ?? Math.max(0, exactIndex), options.length - 1);
-  const pending = workspace.pending || pickingDirectory || (skillSearchOpen && loadingSkills);
+  const pending = workspace.pending || choosingProject || (skillSearchOpen && loadingSkills);
   const feedback = t(pending ? "加载中…" : "没有匹配的结果", locale);
-  const workspaceError = workspaceQuery !== null ? (directoryError ?? workspace.error) : undefined;
+  const workspaceError =
+    workspaceQuery !== null && !workingDirectory ? projectError : workspace.error;
   const lookupError = workspaceError ?? (skillSearchOpen ? skillError : undefined);
   const localizedLookupError = lookupError ? localizeError(lookupError, locale) : undefined;
   const commandPending =
@@ -381,13 +391,13 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
 
   const send = async (): Promise<void> => {
     if (!canSend || submitting) return;
-    const sentDraft = savedDraft.current;
+    const sentDraft = savedDrafts.current.get(workingDirectory);
     setSubmitting(true);
     setSendError(null);
     try {
-      await prompt(trimPrompt(draft));
-      if (savedDraft.current === sentDraft) {
-        savedDraft.current = [];
+      await prompt(trimPrompt(draft), workingDirectory);
+      if (savedDrafts.current.get(workingDirectory) === sentDraft) {
+        savedDrafts.current.delete(workingDirectory);
         editor.current?.replaceChildren();
         resources.current.clear();
         lastRange.current = null;
@@ -518,7 +528,6 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
           }}
           onBlur={() => {
             setFocused(false);
-            setDirectoryError(null);
             setSkillError(null);
           }}
           onCompositionStart={() => setComposing(true)}
@@ -554,7 +563,6 @@ export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> 
                 if (open) {
                   setPickerOpen(true);
                   setHighlighted(null);
-                  setDirectoryError(null);
                 } else closePicker();
               }}
               onOpenChangeComplete={(open) => {

@@ -240,7 +240,7 @@ describe("external import selection", () => {
       settings.mcpServers?.every(({ enabled, policy }) => !enabled && policy === "confirm"),
     ).toBe(true);
     const manager = new McpManager(() => settings, "0.0.0");
-    const views = await manager.list();
+    const views = await manager.list(undefined);
     expect(views.find(({ name }) => name === "private_stdio")).toMatchObject({
       transport: { type: "stdio", command: "", args: [] },
       imported: true,

@@ -14,11 +14,16 @@ import { handle } from "./transport";
 import type { IpcContext } from "./types";
 
 export function registerIntegrationRoutes(
-  ctx: Pick<IpcContext, "settingsDir" | "skillsDir" | "getSettings" | "saveSettings" | "mcp">,
+  ctx: Pick<
+    IpcContext,
+    "settingsDir" | "skillsDir" | "getSettings" | "saveSettings" | "mcp" | "host"
+  >,
 ): void {
   handle(IPC.settingsImportedPlugins, () => importedPlugins(ctx.getSettings(), ctx.skillsDir));
   const importLocations = (project: string | null): ReturnType<typeof resolveImportLocations> =>
     resolveImportLocations(app.getPath("home"), ctx.settingsDir, ctx.skillsDir, project);
+  const listMcp = (reconnectId?: string): ReturnType<IpcContext["mcp"]["list"]> =>
+    ctx.mcp.list(ctx.host.getWorkingDirectory(), reconnectId);
   handle(IPC.settingsPreviewExternalImport, (_event, kind, project) =>
     previewExternalImport(kind, ctx.getSettings(), importLocations(project)),
   );
@@ -37,7 +42,7 @@ export function registerIntegrationRoutes(
     const settings = toggleImportedPlugin(current, id, enabled);
     if (current !== settings) {
       ctx.saveSettings(settings);
-      await ctx.mcp.list();
+      await listMcp();
     }
     return importedPlugins(ctx.getSettings(), ctx.skillsDir);
   });
@@ -50,18 +55,18 @@ export function registerIntegrationRoutes(
     return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
-  handle(IPC.settingsMcpList, () => ctx.mcp.list());
+  handle(IPC.settingsMcpList, () => listMcp());
   handle(IPC.settingsMcpSave, (_event, input) => {
     ctx.saveSettings(mergeMcpServer(ctx.getSettings(), input));
-    return ctx.mcp.list();
+    return listMcp();
   });
-  handle(IPC.settingsMcpReconnect, (_event, id) => ctx.mcp.list(id));
+  handle(IPC.settingsMcpReconnect, (_event, id) => listMcp(id));
   handle(IPC.settingsMcpRemove, (_event, id) => {
     const settings = ctx.getSettings();
     ctx.saveSettings({
       ...settings,
       mcpServers: (settings.mcpServers ?? []).filter((server) => server.id !== id),
     });
-    return ctx.mcp.list();
+    return listMcp();
   });
 }

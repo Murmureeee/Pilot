@@ -1,5 +1,6 @@
 // @env node
 import {
+  existsSync,
   mkdirSync,
   mkdtempDisposableSync,
   readFileSync,
@@ -17,6 +18,8 @@ import { McpManager } from "../src/main/agent-host/mcp";
 import * as models from "../src/main/agent-host/models";
 import { SessionStore } from "../src/main/agent-host/session-store";
 import type { Settings } from "../src/main/settings/types";
+import { previewWorkspaceReference } from "../src/main/workspace/reference";
+import { searchWorkspace } from "../src/main/workspace/search";
 import { MENTION_CONTEXT_HEADING } from "../src/shared/constants";
 import type { UiAgentEvent } from "../src/shared/contract";
 
@@ -54,10 +57,10 @@ it("keeps waiting for approval until the last parallel request is answered", asy
 
 it("keeps queued file references in the working directory of the active run", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pi-agent-references-"));
-  const original = join(profile.path, "original");
-  const next = join(profile.path, "next");
-  mkdirSync(original);
-  mkdirSync(next);
+  mkdirSync(join(profile.path, "original"));
+  mkdirSync(join(profile.path, "next"));
+  const original = realpathSync(join(profile.path, "original"));
+  const next = realpathSync(join(profile.path, "next"));
   const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
   const settings: Settings = {
     providers: [provider],
@@ -78,15 +81,157 @@ it("keeps queued file references in the working directory of the active run", as
 
   const running = host.prompt("First reply");
   try {
-    expect(host.acceptsReferenceDirectory(original)).toBe(true);
+    expect(() => host.checkWorkingDirectory(original)).not.toThrow();
     settings.workingDirectory = next;
-    expect(host.acceptsReferenceDirectory(original)).toBe(false);
-    expect(host.acceptsReferenceDirectory(next)).toBe(false);
+    expect(() => host.checkWorkingDirectory(original)).not.toThrow();
+    expect(() => host.checkWorkingDirectory(next)).toThrow("工作目录已变更");
   } finally {
     preparation.resolve([]);
     await running;
   }
-  expect(host.acceptsReferenceDirectory(next)).toBe(true);
+  expect(host.getWorkingDirectory()).toBe(original);
+  expect((await host.newSession()).draftWorkingDirectory).toBe(original);
+});
+
+it("uses each project's files and tools after switching and reopening sessions", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-project-sessions-"));
+  const root = realpathSync(profile.path);
+  const alpha = join(root, "Project Alpha");
+  const beta = join(root, "项目 Beta");
+  mkdirSync(alpha);
+  mkdirSync(beta);
+  writeFileSync(join(alpha, "alpha.md"), "Alpha reference");
+  writeFileSync(join(beta, "beta.md"), "Beta reference");
+  writeFileSync(join(alpha, "pi-desktop-demo.txt"), "Alpha original");
+  writeFileSync(join(beta, "pi-desktop-demo.txt"), "Beta original");
+
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = {
+    providers: [provider],
+    activeProviderId: provider.id,
+    workingDirectory: root,
+    approvalMode: "full-access",
+  };
+  const createHost = (): AgentHost =>
+    new AgentHost({
+      getSettings: () => settings,
+      saveSettings: vi.fn<(value: Settings) => void>(),
+      broadcast: vi.fn<(event: UiAgentEvent) => void>(),
+      store: new SessionStore(join(root, "sessions")),
+      skillsDir: join(root, "skills"),
+      mcp: new McpManager(() => settings, "0.0.0"),
+    });
+  const host = createHost();
+  const opened = await host.openProject(alpha);
+  expect(opened).toMatchObject({ sessionId: null, draftWorkingDirectory: alpha });
+  await host.prompt("Alpha 演示");
+  const alphaId = host.getSnapshot().sessionId!;
+  expect(readFileSync(join(alpha, "pi-desktop-demo.txt"), "utf8")).toContain("faux");
+  expect(readFileSync(join(beta, "pi-desktop-demo.txt"), "utf8")).toBe("Beta original");
+
+  await host.openProject(beta);
+  await host.prompt("Beta 演示");
+  const betaId = host.getSnapshot().sessionId!;
+  expect(readFileSync(join(beta, "pi-desktop-demo.txt"), "utf8")).toContain("faux");
+  await host.loadSession(alphaId);
+  expect(await searchWorkspace(host.getWorkingDirectory(), ".md")).toEqual([
+    { path: "alpha.md", kind: "file" },
+  ]);
+  expect(() => host.checkWorkingDirectory(beta)).toThrow("工作目录已变更");
+  expect(() =>
+    previewWorkspaceReference(host.getWorkingDirectory(), {
+      path: "beta.md",
+      workingDirectory: beta,
+    }),
+  ).toThrow("工作目录已变更");
+
+  const restarted = createHost();
+  for (const [id, directory, path, text] of [
+    [alphaId, alpha, "alpha.md", "Alpha reference"],
+    [betaId, beta, "beta.md", "Beta reference"],
+  ]) {
+    const snapshot = await restarted.loadSession(id);
+    expect(snapshot.sessions.find((session) => session.id === id)?.workingDirectory).toBe(
+      directory,
+    );
+    expect(previewWorkspaceReference(restarted.getWorkingDirectory(), { path })).toMatchObject({
+      text,
+    });
+  }
+}, 10000);
+
+it("links an old chat without changing its existing transcript", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-legacy-session-"));
+  const root = realpathSync(profile.path);
+  const sessions = join(root, "sessions");
+  const store = new SessionStore(sessions);
+  const { id } = store.create();
+  const transcript = join(sessions, id + ".jsonl");
+  store.save(id, [{ role: "user", content: "Earlier conversation", timestamp: 1 }]);
+  const original = readFileSync(transcript, "utf8");
+  const settings: Settings = { providers: [], activeProviderId: "", workingDirectory: root };
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: vi.fn<(value: Settings) => void>(),
+    broadcast: vi.fn<(event: UiAgentEvent) => void>(),
+    store: new SessionStore(sessions),
+    skillsDir: join(root, "skills"),
+    mcp: new McpManager(() => settings, "0.0.0"),
+  });
+  const before = await host.loadSession(id);
+  expect(before.sessions.find((session) => session.id === id)?.workingDirectory).toBeUndefined();
+  expect(host.getWorkingDirectory()).toBe(root);
+  expect(host.copySession(id)).toContain("Earlier conversation");
+  const after = await host.bindProject(id, root);
+  expect(after.messages).toEqual(before.messages);
+  expect(after.sessionId).toBe(id);
+  expect(new SessionStore(sessions).getMeta(id)?.workingDirectory).toBe(root);
+  expect(readFileSync(transcript, "utf8")).toBe(original);
+  await expect(host.bindProject(id, sessions)).rejects.toThrow("该会话已关联项目");
+  host.forkSession(id);
+  expect(host.getSnapshot().sessions.find((session) => session.id !== id)?.workingDirectory).toBe(
+    root,
+  );
+});
+
+it("saves the old turn and clears its pending approval before opening another project", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-project-switch-"));
+  const original = realpathSync(profile.path);
+  const next = join(original, "next");
+  mkdirSync(next);
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = { providers: [provider], activeProviderId: provider.id };
+  const requested = Promise.withResolvers<void>();
+  const store = new SessionStore(join(original, "sessions"));
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: vi.fn<(value: Settings) => void>(),
+    broadcast: (event) => {
+      if (event.type === "permission_request") requested.resolve();
+    },
+    store,
+    skillsDir: join(original, "skills"),
+    mcp: new McpManager(() => settings, "0.0.0"),
+  });
+  await host.openProject(original);
+  const running = host.prompt("Original 演示");
+  try {
+    await requested.promise;
+    const id = host.getSnapshot().sessionId!;
+    const snapshot = await host.openProject(next);
+    expect(snapshot).toMatchObject({
+      status: "idle",
+      sessionId: null,
+      draftWorkingDirectory: next,
+      messages: [],
+    });
+    expect(store.load(id)).toContainEqual(expect.objectContaining({ content: "Original 演示" }));
+    expect(host.permissions.hasPending()).toBe(false);
+    expect(existsSync(join(original, "pi-desktop-demo.txt"))).toBe(false);
+  } finally {
+    host.abort();
+    await running;
+  }
 });
 
 it("declares the current MCP tools on the first request and refreshes a resumed prompt", async () => {
@@ -320,6 +465,7 @@ it("streams and restores a timed trace and reverts a recorded workspace edit", a
     state: "success",
     fileChange: change,
   });
+  settings.workingDirectory = join(root, "sessions");
   host.undoFileChange(sessionId, change.id);
   expect(readFileSync(file, "utf8")).toBe(original);
   expect(

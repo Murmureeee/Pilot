@@ -159,8 +159,9 @@ export class SessionStore {
     }
   }
 
-  private writeIndex(): void {
-    writeJsonAtomic(this.indexPath(), this.index);
+  private writeIndex(index = this.index): void {
+    writeJsonAtomic(this.indexPath(), index);
+    this.index = index;
   }
 
   private indexPath(): string {
@@ -193,16 +194,27 @@ export class SessionStore {
     return meta;
   }
 
-  create(): SessionMeta {
+  create(workingDirectory?: string): SessionMeta {
     const meta: SessionMeta = {
       id: randomUUID(),
       title: "新会话",
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      workingDirectory,
     };
-    this.index.sessions.push(meta);
-    this.writeIndex();
+    this.writeIndex({ sessions: [...this.index.sessions, meta] });
     return meta;
+  }
+
+  bindProject(id: string, workingDirectory: string): void {
+    const meta = this.getMeta(id);
+    if (!meta) throw new Error("找不到该会话。");
+    if (meta.workingDirectory) throw new Error("该会话已关联项目。");
+    this.writeIndex({
+      sessions: this.index.sessions.map((session) =>
+        session.id === id ? { ...session, workingDirectory } : session,
+      ),
+    });
   }
 
   /** 手动重命名：置 titleCustom，之后的自动标题不再覆盖 */
@@ -238,6 +250,7 @@ export class SessionStore {
   setUnread(id: string, unread: boolean): SessionMeta | null {
     const meta = this.index.sessions.find((s) => s.id === id);
     if (!meta) return null;
+    if (Boolean(meta.unread) === unread) return meta;
     meta.unread = unread;
     this.writeIndex();
     return meta;
@@ -248,7 +261,7 @@ export class SessionStore {
     const origin = this.index.sessions.find((s) => s.id === id);
     if (!origin) return null;
     const messages = this.load(id);
-    const meta = this.create();
+    const meta = this.create(origin.workingDirectory);
     if (messages.length > 0) this.save(meta.id, messages);
     return this.rename(meta.id, `分叉：${origin.title.slice(0, 21)}`);
   }

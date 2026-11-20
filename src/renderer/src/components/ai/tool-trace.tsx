@@ -21,7 +21,7 @@ import {
 import { t, useLocale } from "@renderer/lib/i18n";
 import { parseToolFailure, stackDisplayPath, toolInput } from "@renderer/lib/tool-trace";
 import type { ToolFailure } from "@renderer/lib/types";
-import { useAgentStore } from "@renderer/stores/agent";
+import { selectWorkingDirectory, useAgentStore } from "@renderer/stores/agent";
 import type { UiPart } from "@shared/contract";
 import { InlineWorkspaceReference } from "./workspace-reference";
 
@@ -67,7 +67,7 @@ function FailureDetails({
   output: string;
 }): JSX.Element {
   const locale = useLocale();
-  const workspace = useAgentStore((state) => state.settings?.workingDirectory) ?? undefined;
+  const workspace = useAgentStore(selectWorkingDirectory) ?? undefined;
   const project = failure.frames.filter((frame) => !frame.framework);
   const framework = failure.frames.filter((frame) => frame.framework);
   return (

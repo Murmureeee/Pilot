@@ -15,13 +15,23 @@ export const NATIVE_DIALOG_TITLES = {
     skill: "选择技能目录（须含 SKILL.md）",
     importProject: "选择导入来源项目",
     workingDirectory: "选择工具工作目录",
+    openProject: "打开项目",
+    bindProject: "关联项目",
   },
   en: {
     skill: "Choose a skill folder containing SKILL.md",
     importProject: "Choose a project to import from",
     workingDirectory: "Choose the tools’ working directory",
+    openProject: "Open project",
+    bindProject: "Link project",
   },
 } as const satisfies Record<
   Locale,
-  { skill: string; importProject: string; workingDirectory: string }
+  {
+    skill: string;
+    importProject: string;
+    workingDirectory: string;
+    openProject: string;
+    bindProject: string;
+  }
 >;

@@ -15,7 +15,7 @@ export function useWorkspaceSearch(
     if (workingDirectory === null || needle === null) return;
     let cancelled = false;
     const timeout = window.setTimeout(() => {
-      void window.pi.searchWorkspace(needle).then(
+      void window.pi.searchWorkspace(needle, workingDirectory).then(
         (entries) => {
           if (!cancelled) setResult({ workingDirectory, query: needle, entries });
         },

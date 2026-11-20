@@ -78,6 +78,8 @@ export function TopBar({
   const navBack = useAgentStore((s) => s.navBack);
   const navForward = useAgentStore((s) => s.navForward);
   const newSession = useAgentStore((s) => s.newSession);
+  const selectProject = useAgentStore((s) => s.selectProject);
+  const choosingProject = useAgentStore((s) => s.choosingProject);
   const setView = useAgentStore((s) => s.setView);
   const setPaletteOpen = useAgentStore((s) => s.setPaletteOpen);
   const menuAction = useAgentStore((s) => s.menuAction);
@@ -143,6 +145,12 @@ export function TopBar({
                   setView("chat");
                   void newSession();
                 }}
+              />
+              <Item
+                label={t("打开项目…", locale)}
+                shortcut="Ctrl+O"
+                disabled={choosingProject}
+                onRun={() => void selectProject()}
               />
               <Item
                 label={t("搜索…", locale)}

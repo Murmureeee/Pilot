@@ -51,8 +51,8 @@ export interface PiApi {
   installUpdate(): Promise<void>;
   onUpdateStatus(callback: (status: UpdateStatus) => void): () => void;
   getSnapshot(): Promise<Snapshot>;
-  agentPrompt(input: string | PromptInput, referenceDirectory?: string): Promise<void>;
-  searchWorkspace(query: string): Promise<WorkspaceEntry[]>;
+  agentPrompt(input: string | PromptInput, expectedDirectory?: string | null): Promise<void>;
+  searchWorkspace(query: string, expectedDirectory?: string): Promise<WorkspaceEntry[]>;
   previewWorkspaceReference(
     reference: WorkspaceReferenceRequest,
   ): Promise<WorkspaceReferencePreview>;
@@ -60,6 +60,7 @@ export interface PiApi {
   /** 清空排队中的插话（steer + followUp） */
   clearQueue(): Promise<void>;
   sessionNew(): Promise<Snapshot>;
+  sessionSelectProject(locale: Locale, sessionId?: string): Promise<Snapshot | null>;
   sessionLoad(id: string): Promise<Snapshot>;
   sessionRename(id: string, title: string): Promise<SessionMeta[]>;
   sessionDelete(id: string): Promise<Snapshot>;
