@@ -1,7 +1,7 @@
 {
   "name": "pi-desktop",
   "productName": "Pilot",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Desktop AI agent app built on pi (earendil-works/pi)",
   "homepage": "https://github.com/Murmureeee/Pilot",
