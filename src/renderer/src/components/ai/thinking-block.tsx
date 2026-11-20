@@ -1,48 +1,83 @@
 // @env browser
-// Reasoning 思考块（FR-4.5）：流式收集中自动展开观察，结束后自动折叠为一行摘要；
-// 点击头部可随时展开全文。折叠态摘要用单行截断（muted，次级信息规范）。
-import { useState, type JSX } from "react";
-import { BrainIcon, ChevronDownIcon, LoaderCircleIcon } from "lucide-react";
+import { useId, useState, type JSX } from "react";
+import { BrainIcon, ChevronRightIcon } from "lucide-react";
 import { t, useLocale } from "@renderer/lib/i18n";
+import type { UiPart } from "@shared/contract";
 import { cn } from "cn";
+import { Response } from "./response";
 
 export function ThinkingBlock({
-  text,
-  streaming,
+  part,
 }: {
-  text: string;
-  /** 本块仍在接收 thinking_delta（自动展开）；结束后自动折叠 */
-  streaming: boolean;
+  part: Extract<UiPart, { type: "thinking" }>;
 }): JSX.Element {
   const locale = useLocale();
   const [open, setOpen] = useState(false);
+  const bodyId = useId();
+  const streaming = part.streaming === true;
   const expanded = streaming || open;
-  const summary = text.trimStart().split("\n")[0] ?? "";
+  const seconds =
+    part.durationMs === undefined ? null : Math.max(0.1, Math.round(part.durationMs / 100) / 10);
+  const label = streaming
+    ? t("思考中…", locale)
+    : seconds === null
+      ? t("已完成思考", locale)
+      : t("已完成思考，用时 {0} 秒", locale, [seconds]);
+  const headingClass =
+    "text-muted-foreground flex min-h-7 items-center gap-2 rounded-md px-1 text-left text-[13px]";
+  const heading = (
+    <>
+      <BrainIcon aria-hidden="true" className="size-3.5 shrink-0" />
+      <span>{label}</span>
+      {streaming && (
+        <span
+          aria-hidden="true"
+          className="text-emerald-600 flex items-center gap-0.5 dark:text-emerald-400"
+        >
+          <span className="size-1 rounded-full bg-current motion-safe:animate-bounce" />
+          <span className="size-1 rounded-full bg-current [animation-delay:120ms] motion-safe:animate-bounce" />
+          <span className="size-1 rounded-full bg-current [animation-delay:240ms] motion-safe:animate-bounce" />
+        </span>
+      )}
+    </>
+  );
 
   return (
-    <div className="border-border/60 bg-muted/40 rounded-lg border">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="text-muted-foreground hover:bg-accent/50 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs transition-colors"
-      >
-        {streaming ? (
-          <LoaderCircleIcon className="size-3.5 animate-spin" />
-        ) : (
-          <BrainIcon className="size-3.5" />
-        )}
-        <span className={cn("min-w-0 flex-1 truncate text-left", streaming && "text-foreground")}>
-          {streaming ? t("思考中…", locale) : summary || t("思考过程", locale)}
-        </span>
-        <ChevronDownIcon
-          className={cn("size-3.5 shrink-0 transition-transform", expanded && "rotate-180")}
-        />
-      </button>
-      {expanded && text.length > 0 && (
-        <div className="text-muted-foreground max-h-64 overflow-y-auto border-t px-3 py-2 text-xs whitespace-pre-wrap">
-          {text}
+    <section data-thinking-state={streaming ? "streaming" : "complete"} className="min-w-0">
+      {streaming || !part.text ? (
+        <div className={headingClass}>{heading}</div>
+      ) : (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={bodyId}
+          onClick={() => setOpen((current) => !current)}
+          className={cn(
+            headingClass,
+            "hover:bg-accent/60 focus-visible:ring-ring/40 outline-none focus-visible:ring-2",
+          )}
+        >
+          {heading}
+          <ChevronRightIcon
+            aria-hidden="true"
+            className={cn(
+              "size-3.5 transition-transform motion-reduce:transition-none",
+              expanded && "rotate-90",
+            )}
+          />
+        </button>
+      )}
+      {expanded && part.text && (
+        <div
+          id={bodyId}
+          className={cn(
+            "border-border/80 text-muted-foreground ml-2 min-w-0 border-l py-1 pl-4 text-[13px] leading-6 wrap-anywhere",
+            !streaming && "max-h-80 overflow-y-auto overscroll-contain",
+          )}
+        >
+          <Response content={part.text} />
         </div>
       )}
-    </div>
+    </section>
   );
 }

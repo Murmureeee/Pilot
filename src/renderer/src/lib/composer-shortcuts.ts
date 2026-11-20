@@ -1,36 +1,67 @@
 // @env browser
-import type { WorkspaceEntry } from "@shared/contract";
-import type { ComposerTrigger } from "./types";
+import type { PromptInput } from "@shared/contract";
+import { mentionToken } from "../../../shared/mentions";
+import type { ComposerDraft, ComposerTrigger } from "./types";
 
 export function composerTrigger(text: string, start: number, end: number): ComposerTrigger | null {
   if (start !== end) return null;
-  const command = /^(\s*)\/([\p{L}\p{N}_-]*)$/u.exec(text);
-  if (command && end === text.length) {
-    return { kind: "command", start: command[1].length, end, query: command[2] };
+  const before = text.slice(0, end);
+  const after = text.slice(end);
+  const mention = /(^|[\s(（、，。！？\p{Script=Han}])@([^\s@),;!?）、，。！？]*)$/u.exec(before);
+  if (mention) {
+    const suffix = /^[^\s@),;!?）、，。！？]*/u.exec(after)?.[0] ?? "";
+    return {
+      kind: "mention",
+      start: mention.index + mention[1].length,
+      end: end + suffix.length,
+      query: mention[2],
+    };
   }
 
-  const mention = /(^|[\s(（、，。！？\p{Script=Han}])@([^\s@)）、，。！？]*)$/u.exec(
-    text.slice(0, end),
-  );
-  if (!mention) return null;
-  const suffix = /^[^\s@)）、，。！？]*/u.exec(text.slice(end))?.[0] ?? "";
-  return {
-    kind: "reference",
-    start: mention.index + mention[1].length,
-    end: end + suffix.length,
-    query: mention[2],
-  };
+  const command = /(^|[\s(（、，。！？])\/([\p{L}\p{N}_-]*)$/u.exec(before);
+  if (command && !/^[\p{L}\p{N}_-]*[./\\:]/u.test(after)) {
+    const suffix = /^[\p{L}\p{N}_-]*/u.exec(after)?.[0] ?? "";
+    return {
+      kind: "command",
+      start: command.index + command[1].length,
+      end: end + suffix.length,
+      query: command[2],
+    };
+  }
+  return null;
 }
 
-export function promptWithReferences(
-  text: string,
-  references: readonly WorkspaceEntry[],
-  heading: string,
-): string {
-  if (references.length === 0) return text;
-  const paths = references.map(({ path, kind }) => {
-    const reference = kind === "directory" ? path + "/" : path;
-    return "- " + JSON.stringify(reference);
-  });
-  return [text, "", heading, ...paths].join("\n");
+export function matchesComposerQuery(label: string, query: string): boolean {
+  const value = label.normalize("NFKC").toLowerCase();
+  let index = 0;
+  for (const character of query.normalize("NFKC").toLowerCase().trim()) {
+    const match = value.indexOf(character, index);
+    if (match === -1) return false;
+    index = match + character.length;
+  }
+  return true;
+}
+
+export function promptFromDraft(draft: ComposerDraft): PromptInput {
+  const mentions: PromptInput["mentions"] = [];
+  let text = "";
+  for (const part of draft) {
+    if (typeof part === "string") text += part;
+    else {
+      mentions.push({ ...part, offset: text.length });
+      text += mentionToken(part);
+    }
+  }
+  return { text, mentions };
+}
+
+export function trimPrompt(input: PromptInput): PromptInput {
+  const text = input.text.trimStart();
+  const removed = input.text.length - text.length;
+  return {
+    text: text.trimEnd(),
+    mentions: input.mentions.map((mention) =>
+      mention.offset === undefined ? mention : { ...mention, offset: mention.offset - removed },
+    ),
+  };
 }

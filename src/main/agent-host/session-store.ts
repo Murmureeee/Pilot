@@ -5,10 +5,14 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { SessionMeta, UiMessage, UiPart } from "@shared/contract";
+import { visibleMessageText } from "../../shared/mentions";
 import { applyPlanUpdate } from "../../shared/plan";
+import { readFileChange } from "../workspace/file-changes";
+import { legacyMentionParts } from "./mentions";
 import { labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
+import type { ReferencedUserMessage, TimedAssistantMessage } from "./types";
 
 export interface SessionIndex {
   sessions: SessionMeta[];
@@ -29,19 +33,62 @@ export function messageText(message: AgentMessage): string {
   return "";
 }
 
-/** 转录 content 块 → UI parts：text/thinking 保留，其余（toolCall 等）跳过 */
-export function messageParts(message: AgentMessage): UiPart[] {
+export function messageParts(message: AgentMessage, getToolLabel = labelOf): UiPart[] {
+  if (message.role === "user") {
+    const parts = (message as ReferencedUserMessage).pilotReference?.parts;
+    if (
+      Array.isArray(parts) &&
+      parts.length &&
+      parts.every((part) =>
+        part?.type === "text"
+          ? typeof part.text === "string"
+          : part?.type === "mention" &&
+            (part.kind === "directory" || part.kind === "file" || part.kind === "skill") &&
+            typeof part.label === "string" &&
+            typeof part.id === "string" &&
+            (part.workingDirectory === undefined || typeof part.workingDirectory === "string"),
+      )
+    ) {
+      return parts;
+    }
+    const text = messageText(message);
+    return legacyMentionParts(text) ?? [{ type: "text", text }];
+  }
   const content = (message as { content?: unknown }).content;
   if (typeof content === "string") return [{ type: "text", text: content }];
   if (!Array.isArray(content)) return [];
+  const timings =
+    message.role === "assistant"
+      ? (message as TimedAssistantMessage).pilotThinkingDurations
+      : undefined;
   const parts: UiPart[] = [];
-  for (const block of content) {
+  for (const [blockIndex, block] of content.entries()) {
     if (!block || typeof block !== "object") continue;
-    const b = block as { type?: string; text?: unknown; thinking?: unknown };
-    if (b.type === "text" && typeof b.text === "string") {
-      parts.push({ type: "text", text: b.text });
-    } else if (b.type === "thinking" && typeof b.thinking === "string") {
-      parts.push({ type: "thinking", text: b.thinking });
+    if (block.type === "text" && typeof block.text === "string") {
+      parts.push({ type: "text", text: block.text });
+    } else if (block.type === "thinking" && typeof block.thinking === "string") {
+      const durationMs = timings?.[blockIndex];
+      parts.push({
+        type: "thinking",
+        text: block.thinking,
+        blockIndex,
+        ...(typeof durationMs === "number" && durationMs >= 0 ? { durationMs } : {}),
+      });
+    } else if (
+      message.role === "assistant" &&
+      block.type === "toolCall" &&
+      typeof block.id === "string" &&
+      typeof block.name === "string" &&
+      block.name !== PLAN_TOOL_NAME
+    ) {
+      parts.push({
+        type: "tool",
+        callId: block.id,
+        toolName: block.name,
+        label: getToolLabel(block.name),
+        inputSummary: JSON.stringify(block.arguments) ?? "{}",
+        state: "pending",
+      });
     }
   }
   return parts;
@@ -53,24 +100,13 @@ export function toUiMessages(
   getToolLabel = labelOf,
 ): UiMessage[] {
   let uiMessages: UiMessage[] = [];
-  const calls = new Map<string, { messageIndex: number; inputSummary: string }>();
+  const calls = new Map<string, Extract<UiPart, { type: "tool" }>>();
   for (const message of messages) {
     if (message.role === "user" || message.role === "assistant") {
-      const ui: UiMessage = {
-        id: `${prefix}-${uiMessages.length}`,
-        role: message.role,
-        parts: messageParts(message),
-      };
-      uiMessages.push(ui);
-      if (message.role === "assistant" && Array.isArray(message.content)) {
-        for (const part of message.content) {
-          if (part?.type === "toolCall" && part.name !== PLAN_TOOL_NAME) {
-            calls.set(part.id, {
-              messageIndex: uiMessages.length - 1,
-              inputSummary: JSON.stringify(part.arguments) ?? "{}",
-            });
-          }
-        }
+      const parts = messageParts(message, getToolLabel);
+      uiMessages.push({ id: prefix + "-" + uiMessages.length, role: message.role, parts });
+      for (const part of parts) {
+        if (part.type === "tool") calls.set(part.callId, part);
       }
     } else if (message.role === "toolResult") {
       if (message.toolName === PLAN_TOOL_NAME) {
@@ -78,29 +114,30 @@ export function toUiMessages(
         if (steps) uiMessages = applyPlanUpdate(uiMessages, steps);
         continue;
       }
-      const call = calls.get(message.toolCallId);
-      if (!call) continue;
+      const part = calls.get(message.toolCallId);
+      if (!part) continue;
       calls.delete(message.toolCallId);
       const { details } = message;
-      const label =
+      if (
         details &&
         typeof details === "object" &&
         "toolLabel" in details &&
         typeof details.toolLabel === "string"
-          ? details.toolLabel
-          : getToolLabel(message.toolName);
+      ) {
+        part.label = details.toolLabel;
+      }
       const output = messageText(message);
-      uiMessages[call.messageIndex].parts.push({
-        type: "tool",
-        callId: message.toolCallId,
-        toolName: message.toolName,
-        label,
-        state: message.isError ? "error" : "success",
-        inputSummary: call.inputSummary,
-        output,
-        error: message.isError ? output : undefined,
-      });
+      part.output = output;
+      part.state = message.isError ? "error" : "success";
+      part.error = message.isError ? output || "工具执行失败" : undefined;
+      if (typeof message.durationMs === "number") part.durationMs = message.durationMs;
+      const change = readFileChange(message.toolName, details);
+      if (change) part.fileChange = change.summary;
     }
+  }
+  for (const part of calls.values()) {
+    part.state = "error";
+    part.error = "工具未执行。";
   }
   return uiMessages;
 }
@@ -223,7 +260,11 @@ export class SessionStore {
     const messages = this.load(id);
     return messages
       .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => `${m.role === "user" ? "【用户】" : "【助手】"}${messageText(m)}`)
+      .map((m) =>
+        m.role === "user"
+          ? "【用户】" + visibleMessageText(messageParts(m))
+          : "【助手】" + messageText(m),
+      )
       .join("\n\n");
   }
 
@@ -263,7 +304,9 @@ export class SessionStore {
     renameSync(tmp, this.filePath(id));
 
     const firstUser = messages.find((m) => m.role === "user");
-    const title = firstUser ? messageText(firstUser).slice(0, 24) || "新会话" : "新会话";
+    const title = firstUser
+      ? visibleMessageText(messageParts(firstUser)).slice(0, 24) || "新会话"
+      : "新会话";
     const meta = this.index.sessions.find((s) => s.id === id);
     if (meta) {
       // 手动重命名过的会话：自动标题不覆盖（titleCustom 由 rename 置位）

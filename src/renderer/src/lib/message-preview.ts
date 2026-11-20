@@ -1,5 +1,6 @@
 // @env browser
 import type { UiMessage } from "@shared/contract";
+import { visibleMessageText } from "../../../shared/mentions";
 import type { TurnPreview } from "./types";
 
 export function messagePreview(text: string, max = 48): string {
@@ -13,7 +14,7 @@ export function turnPreviews(messages: readonly UiMessage[]): TurnPreview[] {
   for (const message of messages) {
     const turn = turns.at(-1);
     if (message.role !== "user" && (message.role !== "assistant" || !turn)) continue;
-    const text = message.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
+    const text = visibleMessageText(message.parts);
     if (message.role === "user") {
       turns.push({ id: message.id, question: text, answer: "" });
     } else if (turn) {

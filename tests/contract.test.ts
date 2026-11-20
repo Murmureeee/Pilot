@@ -32,6 +32,7 @@ describe("IPC contract", () => {
     expect(IPC.sessionDelete).toBe("session:delete");
     expect(IPC.agentClearQueue).toBe("agent:clear-queue");
     expect(IPC.agentSearchWorkspace).toBe("agent:search-workspace");
+    expect(IPC.agentPreviewWorkspaceReference).toBe("agent:preview-workspace-reference");
     expect(IPC.appOpenPath).toBe("app:open-path");
     expect(IPC.appSetTitlebarTheme).toBe("app:set-titlebar-theme");
     expect(IPC.sessionPin).toBe("session:pin");
@@ -46,5 +47,7 @@ describe("IPC contract", () => {
     expect(IPC.skillsImport).toBe("skills:import");
     expect(IPC.skillsToggle).toBe("skills:toggle");
     expect(IPC.sessionPersona).toBe("session:persona");
+    expect(IPC.sessionFileDiff).toBe("session:file-diff");
+    expect(IPC.sessionUndoFileChange).toBe("session:undo-file-change");
   });
 });

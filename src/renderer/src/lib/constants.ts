@@ -1,7 +1,47 @@
 // @env browser
+import { ArchiveIcon, CpuIcon, PlugIcon, ShieldCheckIcon, SquarePenIcon } from "lucide-react";
 import type { ApprovalMode, LogLevel, ProviderKind, ThemeSetting } from "@shared/contract";
 import type { ExternalImportKind } from "@shared/imports";
-import type { SettingsSection } from "./types";
+import type { ComposerCommand, SettingsSection } from "./types";
+
+export const COMPOSER_COMMANDS: readonly ComposerCommand[] = [
+  {
+    id: "new",
+    label: "新聊天",
+    description: "打开一个空白会话",
+    icon: SquarePenIcon,
+    action: (actions) => actions.newChat(),
+  },
+  {
+    id: "model",
+    label: "选择模型",
+    description: "浏览当前提供方的可用模型",
+    icon: CpuIcon,
+    action: (actions) => actions.openMenu("model"),
+  },
+  {
+    id: "permissions",
+    label: "权限模式",
+    description: "调整 Agent 操作的审批方式",
+    icon: ShieldCheckIcon,
+    action: (actions) => actions.openMenu("permissions"),
+  },
+  {
+    id: "mcp",
+    label: "MCP 服务",
+    description: "打开 MCP 服务设置",
+    icon: PlugIcon,
+    action: (actions) => actions.openSettings("mcp"),
+  },
+  {
+    id: "archive",
+    label: "归档当前聊天",
+    description: "把聊天移到已归档列表",
+    icon: ArchiveIcon,
+    requiresSession: true,
+    action: (actions) => actions.archiveChat(),
+  },
+];
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   general: "常规",
@@ -86,3 +126,7 @@ export const MESSAGE_JUMP = {
   idleTickWidth: 6,
   revealTickOptions: { block: "nearest", container: "nearest" },
 } as const;
+// Leave room for the chat and its review pane after the navigation rail and frame.
+export const FILE_REVIEW_MIN_WINDOW_WIDTH = 700;
+export const WORKSPACE_LINK_PREFIX = "#pilot-workspace-reference=";
+export const SANITIZED_WORKSPACE_LINK_PREFIX = "#user-content-" + WORKSPACE_LINK_PREFIX.slice(1);

@@ -7,7 +7,7 @@ import type {
   UiAgentEvent,
   UiMessage,
 } from "@shared/contract";
-import { applyPlanUpdate } from "../../../shared/plan";
+import { applyMessageEvent } from "../../../shared/message-events";
 
 export interface AgentUiState {
   status: AgentStatus;
@@ -37,123 +37,16 @@ export function initialAgentUiState(): AgentUiState {
   };
 }
 
-function appendDelta(message: UiMessage, delta: string): void {
-  const last = message.parts.at(-1);
-  if (last?.type === "text") {
-    last.text += delta;
-  } else {
-    message.parts.push({ type: "text", text: delta });
-  }
-}
-
-function updateToolPart(
-  state: AgentUiState,
-  callId: string,
-  patch: (part: Extract<UiMessage["parts"][number], { type: "tool" }>) => void,
-): void {
-  for (let i = state.messages.length - 1; i >= 0; i--) {
-    for (const part of state.messages[i].parts) {
-      if (part.type === "tool" && part.callId === callId) {
-        patch(part);
-        return;
-      }
-    }
-  }
-}
-
 export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): AgentUiState {
   switch (event.type) {
     case "status":
       return { ...state, status: event.status };
-    case "messages":
-      return { ...state, messages: event.messages };
-    case "user_message":
-      return { ...state, messages: [...state.messages, event.message] };
-    case "assistant_start":
-      return {
-        ...state,
-        messages: [...state.messages, { id: event.id, role: "assistant", parts: [] }],
-      };
-    case "assistant_delta": {
-      const messages = state.messages.map((m) => {
-        if (m.id !== event.id || m.role !== "assistant") return m;
-        const next: UiMessage = { ...m, parts: [...m.parts] };
-        appendDelta(next, event.delta);
-        return next;
-      });
-      return { ...state, messages };
-    }
-    case "assistant_end":
-      return state;
-    case "thinking_start": {
-      const messages = state.messages.map((m) => {
-        if (m.id !== event.id || m.role !== "assistant") return m;
-        return { ...m, parts: [...m.parts, { type: "thinking" as const, text: "" }] };
-      });
-      return { ...state, messages };
-    }
-    case "thinking_delta": {
-      const messages = state.messages.map((m) => {
-        if (m.id !== event.id || m.role !== "assistant") return m;
-        // 追加到最后一个 thinking 块（text 块之后不会再回写 thinking）
-        const parts = [...m.parts];
-        for (let i = parts.length - 1; i >= 0; i--) {
-          const part = parts[i];
-          if (part.type === "thinking") {
-            parts[i] = { ...part, text: part.text + event.delta };
-            break;
-          }
-        }
-        return { ...m, parts };
-      });
-      return { ...state, messages };
-    }
     case "sessions":
       return {
         ...state,
         sessions: event.sessions,
         sessionId: event.activeSessionId ?? state.sessionId,
       };
-    case "plan":
-      return { ...state, messages: applyPlanUpdate(state.messages, event.steps) };
-    case "tool_start":
-      return {
-        ...state,
-        messages: state.messages.map((m, i) =>
-          i === state.messages.length - 1 && m.role === "assistant"
-            ? {
-                ...m,
-                parts: [
-                  ...m.parts,
-                  {
-                    type: "tool",
-                    callId: event.callId,
-                    toolName: event.toolName,
-                    label: event.label,
-                    state: "running",
-                    inputSummary: event.inputSummary,
-                  },
-                ],
-              }
-            : m,
-        ),
-      };
-    case "tool_update": {
-      const next = { ...state, messages: [...state.messages] };
-      updateToolPart(next, event.callId, (part) => {
-        part.output = event.output;
-      });
-      return next;
-    }
-    case "tool_end": {
-      const next = { ...state, messages: [...state.messages] };
-      updateToolPart(next, event.callId, (part) => {
-        part.state = event.state;
-        if (event.output !== undefined) part.output = event.output;
-        if (event.error !== undefined) part.error = event.error;
-      });
-      return next;
-    }
     case "usage":
       return {
         ...state,
@@ -166,7 +59,9 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
       return { ...state, pendingPermission: event };
     case "error":
       return { ...state, error: event.message };
-    default:
-      return state;
+    default: {
+      const messages = applyMessageEvent(state.messages, event);
+      return messages === state.messages ? state : { ...state, messages };
+    }
   }
 }

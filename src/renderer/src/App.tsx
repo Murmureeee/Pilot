@@ -1,15 +1,21 @@
 // @env browser
-import { useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { MessageSquareIcon } from "lucide-react";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
 import { ConfirmationDialog } from "@renderer/components/ai/confirmation-dialog";
+import { FileChangesPanel } from "@renderer/components/ai/file-changes-panel";
 import { TopBar } from "@renderer/components/ai/top-bar";
+import { WorkspaceReferencePanel } from "@renderer/components/ai/workspace-reference-panel";
 import { AppRail, SidebarPanel } from "@renderer/views/Sidebar";
 import { ChatView } from "@renderer/views/ChatView";
 import { SettingsView } from "@renderer/views/SettingsView";
 import { applyTheme, loadTheme, watchSystemTheme } from "@renderer/lib/theme";
+import { FILE_REVIEW_MIN_WINDOW_WIDTH } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
+import type { ComposerDraft } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
+import { useFileChangesStore } from "@renderer/stores/file-changes";
+import { useWorkspaceReferenceStore } from "@renderer/stores/workspace-reference";
 import { LOCALE_DETAILS } from "@shared/constants";
 
 export default function App(): JSX.Element {
@@ -22,6 +28,37 @@ export default function App(): JSX.Element {
   const [sidebarWidth, setSidebarWidth] = useState(262);
   const [collapsed, setCollapsed] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
+  const composerDraft = useRef<ComposerDraft>([]);
+  const review = useFileChangesStore((state) => state.review);
+  const closeReview = useFileChangesStore((state) => state.close);
+  const visibleReview = view === "chat" && review?.sessionId === sessionId ? review : null;
+  const reference = useWorkspaceReferenceStore((state) => state.reference);
+  const visibleReference = view === "chat" && reference?.sessionId === sessionId ? reference : null;
+  const compactReview =
+    !!(visibleReview || visibleReference) &&
+    windowWidth < FILE_REVIEW_MIN_WINDOW_WIDTH + sidebarWidth;
+  const sidebarCollapsed = collapsed || compactReview;
+
+  const expandSidebar = useCallback((): void => {
+    if (compactReview && useAgentStore.getState().view === "chat") {
+      useWorkspaceReferenceStore.getState().close();
+      closeReview();
+    }
+    setCollapsed(false);
+  }, [closeReview, compactReview]);
+
+  const togglePanel = useCallback((): void => {
+    setDragging(false);
+    if (sidebarCollapsed) expandSidebar();
+    else setCollapsed(true);
+  }, [expandSidebar, sidebarCollapsed]);
+
+  useEffect(() => {
+    const resize = (): void => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
 
   useEffect(() => {
     void init();
@@ -59,29 +96,24 @@ export default function App(): JSX.Element {
         store.setView("settings");
       } else if (key === "s" && event.shiftKey) {
         event.preventDefault();
-        setDragging(false);
-        setCollapsed((c) => !c);
+        togglePanel();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setPaletteOpen]);
+  }, [setPaletteOpen, togglePanel]);
 
   const title = sessions.find((s) => s.id === sessionId)?.title ?? t("新会话", locale);
-  const togglePanel = (): void => {
-    setDragging(false);
-    setCollapsed((value) => !value);
-  };
 
   return (
     <div className="bg-window-frame text-foreground grid h-screen grid-cols-[max-content_minmax(0,1fr)] grid-rows-[var(--app-titlebar-height)_minmax(0,1fr)] overflow-hidden">
       <div className="app-drag flex items-center px-3">
-        <TopBar collapsed={collapsed} onToggleSidebar={togglePanel} />
+        <TopBar collapsed={sidebarCollapsed} onToggleSidebar={togglePanel} />
       </div>
       <div className="app-drag" aria-hidden="true" />
 
       <div className="col-span-2 flex min-h-0 pt-1.5 pr-2.5 pb-2.5">
-        <AppRail collapsed={collapsed} onExpand={() => setCollapsed(false)} />
+        <AppRail collapsed={sidebarCollapsed} onExpand={expandSidebar} />
         <div className="border-sidebar-border bg-background flex min-w-0 flex-1 overflow-hidden rounded-xl border">
           <SidebarPanel
             width={sidebarWidth}
@@ -93,24 +125,31 @@ export default function App(): JSX.Element {
               setDragging(false);
               setCollapsed(true);
             }}
-            collapsed={collapsed}
+            collapsed={sidebarCollapsed}
           />
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {view === "chat" ? (
-              <>
-                <header className="border-border/65 flex h-12 shrink-0 items-center gap-2.5 border-b px-5">
-                  <MessageSquareIcon
-                    className="text-muted-foreground size-3.5 shrink-0"
-                    aria-hidden="true"
-                  />
-                  <span className="truncate text-[13px] font-medium">{title}</span>
-                </header>
-                <ChatView />
-              </>
+          <div className="flex min-h-0 min-w-0 flex-1">
+            <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+              {view === "chat" ? (
+                <>
+                  <header className="border-border/65 flex h-12 shrink-0 items-center gap-2.5 border-b px-5">
+                    <MessageSquareIcon
+                      className="text-muted-foreground size-3.5 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span className="truncate text-[13px] font-medium">{title}</span>
+                  </header>
+                  <ChatView composerDraft={composerDraft} />
+                </>
+              ) : (
+                <SettingsView />
+              )}
+            </main>
+            {visibleReference ? (
+              <WorkspaceReferencePanel reference={visibleReference} />
             ) : (
-              <SettingsView />
+              visibleReview && <FileChangesPanel review={visibleReview} />
             )}
-          </main>
+          </div>
         </div>
       </div>
 

@@ -35,9 +35,11 @@ const api: PiApi = {
     return () => ipcRenderer.removeListener(UPDATE_STATUS_CHANNEL, listener);
   },
   getSnapshot: () => ipcRenderer.invoke(IPC.agentGetSnapshot),
-  agentPrompt: (text, referenceDirectory) =>
-    ipcRenderer.invoke(IPC.agentPrompt, text, referenceDirectory),
+  agentPrompt: (input, referenceDirectory) =>
+    ipcRenderer.invoke(IPC.agentPrompt, input, referenceDirectory),
   searchWorkspace: (query) => ipcRenderer.invoke(IPC.agentSearchWorkspace, query),
+  previewWorkspaceReference: (reference) =>
+    ipcRenderer.invoke(IPC.agentPreviewWorkspaceReference, reference),
   agentAbort: () => ipcRenderer.invoke(IPC.agentAbort),
   clearQueue: () => ipcRenderer.invoke(IPC.agentClearQueue),
   sessionNew: () => ipcRenderer.invoke(IPC.sessionNew),
@@ -55,6 +57,9 @@ const api: PiApi = {
   sessionCopy: (id: string) => ipcRenderer.invoke(IPC.sessionCopy, id) as Promise<string>,
   sessionPersona: (id: string, persona: string | null) =>
     ipcRenderer.invoke(IPC.sessionPersona, id, persona),
+  sessionFileDiff: (id, changeId) => ipcRenderer.invoke(IPC.sessionFileDiff, id, changeId),
+  sessionUndoFileChange: (id, changeId) =>
+    ipcRenderer.invoke(IPC.sessionUndoFileChange, id, changeId),
   settingsGet: () => ipcRenderer.invoke(IPC.settingsGet),
   settingsSave: (input: SettingsInput) => ipcRenderer.invoke(IPC.settingsSave, input),
   settingsSetLogLevel: (level) => ipcRenderer.invoke(IPC.settingsSetLogLevel, level),

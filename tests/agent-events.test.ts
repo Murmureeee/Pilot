@@ -3,6 +3,20 @@ import { applyAgentEvent, initialAgentUiState } from "../src/renderer/src/adapte
 import type { UiMessage } from "../src/shared/contract";
 
 describe("agent-events adapter", () => {
+  it("preserves typed references in a user message event", () => {
+    const message: UiMessage = {
+      id: "s-0",
+      role: "user",
+      parts: [
+        { type: "text", text: "Read " },
+        { type: "mention", kind: "file", id: "src/index.ts", label: "index.ts" },
+        { type: "text", text: "." },
+      ],
+    };
+    const state = applyAgentEvent(initialAgentUiState(), { type: "user_message", message });
+    expect(state.messages).toEqual([message]);
+  });
+
   it("accumulates streaming deltas into the matching assistant message", () => {
     let state = initialAgentUiState();
     const id = "s-1";
@@ -20,19 +34,28 @@ describe("agent-events adapter", () => {
     expect(assistant.parts).toEqual([{ type: "text", text: "pong" }]);
   });
 
-  it("streams thinking into a dedicated part (thinking_start + deltas)", () => {
+  it("completes thinking on its own event while the assistant is still streaming", () => {
     let state = initialAgentUiState();
     const id = "s-1";
     state = applyAgentEvent(state, { type: "assistant_start", id });
-    state = applyAgentEvent(state, { type: "thinking_start", id });
-    state = applyAgentEvent(state, { type: "thinking_delta", id, delta: "let me " });
-    state = applyAgentEvent(state, { type: "thinking_delta", id, delta: "think" });
-    // 思考结束后正文开始：text 追加在 thinking 块之后，不混入思考文本
+    state = applyAgentEvent(state, { type: "thinking_start", id, blockIndex: 0 });
+    state = applyAgentEvent(state, { type: "thinking_delta", id, blockIndex: 0, delta: "let me " });
+    const active = state;
+    state = applyAgentEvent(state, { type: "thinking_delta", id, blockIndex: 0, delta: "think" });
+    state = applyAgentEvent(state, {
+      type: "thinking_end",
+      id,
+      blockIndex: 0,
+      text: "let me think",
+      durationMs: 3000,
+    });
     state = applyAgentEvent(state, { type: "assistant_delta", id, delta: "answer" });
 
     const assistant = state.messages[0] as UiMessage;
+    expect(active.messages[0].parts[0]).toMatchObject({ streaming: true, text: "let me " });
+    expect(assistant.streaming).toBe(true);
     expect(assistant.parts).toEqual([
-      { type: "thinking", text: "let me think" },
+      { type: "thinking", blockIndex: 0, text: "let me think", streaming: false, durationMs: 3000 },
       { type: "text", text: "answer" },
     ]);
   });
@@ -83,6 +106,50 @@ describe("agent-events adapter", () => {
 
     const part = state.messages[0].parts[0];
     expect(part).toMatchObject({ type: "tool", state: "error", error: "boom" });
+  });
+
+  it("keeps dispatch order and immutable snapshots when tools finish out of order", () => {
+    let state = applyAgentEvent(initialAgentUiState(), { type: "assistant_start", id: "a" });
+    const first = {
+      id: "a",
+      callId: "first",
+      toolName: "bash",
+      label: "执行命令",
+      inputSummary: '{"command":"pwd"}',
+    };
+    const second = { id: "a", callId: "second", toolName: "edit_file", label: "编辑文件" };
+    state = applyAgentEvent(state, { type: "tool_call", ...first });
+    state = applyAgentEvent(state, { type: "tool_call", ...second });
+    const queued = state;
+    state = applyAgentEvent(state, { type: "tool_start", ...second });
+    state = applyAgentEvent(state, {
+      type: "tool_end",
+      callId: "second",
+      state: "success",
+      output: "written",
+      durationMs: 12,
+    });
+    const completed = state;
+    const change = {
+      id: "test-change",
+      path: "src/main.ts",
+      kind: "modified" as const,
+      stats: { added: 2, removed: 1 },
+    };
+    state = applyAgentEvent(state, { type: "file_change", callId: "second", change });
+    state = applyAgentEvent(state, { type: "tool_start", ...first });
+    state = applyAgentEvent(state, {
+      type: "tool_end",
+      callId: "first",
+      state: "error",
+      error: "command failed",
+    });
+    expect(state.messages[0].parts).toMatchObject([
+      { callId: "first", state: "error", error: "command failed" },
+      { callId: "second", state: "success", fileChange: change, durationMs: 12 },
+    ]);
+    expect(queued.messages[0].parts[1]).toMatchObject({ state: "pending" });
+    expect(completed.messages[0].parts[1]).not.toHaveProperty("fileChange");
   });
 
   it("replaces the plan for the current turn without touching earlier turns", () => {

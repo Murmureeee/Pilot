@@ -1,47 +1,86 @@
 import { describe, expect, it } from "vitest";
-import { composerTrigger, promptWithReferences } from "../src/renderer/src/lib/composer-shortcuts";
+import {
+  composerTrigger,
+  matchesComposerQuery,
+  promptFromDraft,
+  trimPrompt,
+} from "../src/renderer/src/lib/composer-shortcuts";
+import type { PromptMention } from "../src/shared/contract";
 
 describe("composer shortcuts", () => {
-  it("finds a command at the start of the draft and preserves ordinary paths and URLs", () => {
+  it("finds the entire slash token while leaving neighboring prose outside the token", () => {
     expect(composerTrigger("/model", 6, 6)).toEqual({
       kind: "command",
       start: 0,
       end: 6,
       query: "model",
     });
-    for (const text of ["/usr/local/bin", "https://example.com/a", "look at /model"]) {
+    const draft = "保留这段 /模型 和后续内容";
+    const start = draft.indexOf("/");
+    expect(composerTrigger(draft, start + 2, start + 2)).toEqual({
+      kind: "command",
+      start,
+      end: start + 3,
+      query: "模",
+    });
+    for (const text of ["/usr/local/bin", "https://example.com/a", "查看 资料/文档"]) {
       expect(composerTrigger(text, text.length, text.length)).toBeNull();
     }
+    expect(composerTrigger("/usr/local/bin", 4, 4)).toBeNull();
   });
 
   it("filters the reference at the caret without taking its neighboring punctuation", () => {
     const text = "检查（@src/readme.md），然后总结";
     const caret = text.indexOf("readme");
     expect(composerTrigger(text, caret, caret)).toEqual({
-      kind: "reference",
+      kind: "mention",
       start: text.indexOf("@"),
       end: text.indexOf("）"),
       query: "src/",
     });
     expect(composerTrigger("查看@文档", 5, 5)).toMatchObject({
-      kind: "reference",
+      kind: "mention",
       query: "文档",
     });
     expect(composerTrigger("name@domain", 11, 11)).toBeNull();
+    expect(composerTrigger("See @readme.md, please", 7, 7)?.end).toBe(14);
     expect(composerTrigger(text, caret - 1, caret)).toBeNull();
   });
 
-  it("appends selected paths to the ordinary prompt so they persist with the message", () => {
-    expect(promptWithReferences("review", [], "Workspace references")).toBe("review");
-    expect(
-      promptWithReferences(
-        "review",
-        [
-          { path: "notes/draft one.md", kind: "file" },
-          { path: "src", kind: "directory" },
-        ],
-        "Workspace references",
-      ),
-    ).toBe('review\n\nWorkspace references\n- "notes/draft one.md"\n- "src/"');
+  it("matches localized command labels by ordered characters", () => {
+    expect(matchesComposerQuery("Choose a model", "ＣＭＤ")).toBe(true);
+    expect(matchesComposerQuery("选择模型", "选模")).toBe(true);
+    expect(matchesComposerQuery("选择模型", "模型选")).toBe(false);
+  });
+
+  it("serializes chips at their inline positions and leaves typed at-signs as ordinary text", () => {
+    const file: PromptMention = {
+      type: "file",
+      id: "notes/report [draft].md",
+      label: "draft",
+      meta: { workingDirectory: "E:/work" },
+    };
+    const skill: PromptMention = {
+      type: "skill",
+      id: "review",
+      label: "Review",
+      meta: { description: "Review changes" },
+    };
+    expect(promptFromDraft(["Email @team about ", file, " with ", skill, "."])).toEqual({
+      text: "Email @team about @[file:notes/report %5Bdraft%5D.md] with @[skill:review].",
+      mentions: [
+        { ...file, offset: "Email @team about ".length },
+        { ...skill, offset: "Email @team about @[file:notes/report %5Bdraft%5D.md] with ".length },
+      ],
+    });
+    expect(promptFromDraft(["@[file:typed.txt]"])).toEqual({
+      text: "@[file:typed.txt]",
+      mentions: [],
+    });
+    const prefix = "查看原文 @[file:notes/report %5Bdraft%5D.md] 和 ";
+    expect(trimPrompt(promptFromDraft(["  " + prefix, file, "   "]))).toEqual({
+      text: prefix + "@[file:notes/report %5Bdraft%5D.md]",
+      mentions: [{ ...file, offset: prefix.length }],
+    });
   });
 });

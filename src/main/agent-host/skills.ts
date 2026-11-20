@@ -69,6 +69,10 @@ export function loadSkillBody(skillsDir: string, id: string): string | null {
   }
 }
 
+export function skillSection(name: string, body: string): string {
+  return `## 技能：${name}\n\n${body}`;
+}
+
 /** 导入本地技能目录（复制整个目录）；重名自动加 -2/-3 后缀；返回新技能 id，取消/失败抛异常 */
 export function importSkill(srcDir: string, skillsDir: string): string {
   if (!existsSync(srcDir)) throw new Error("源目录不存在");

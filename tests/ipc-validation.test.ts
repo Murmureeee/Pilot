@@ -33,6 +33,9 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.appInstallUpdate]: [],
   [IPC.agentPrompt]: ["  preserve prompt whitespace  "],
   [IPC.agentSearchWorkspace]: ["src/报告"],
+  [IPC.agentPreviewWorkspaceReference]: [
+    { path: "src/报告.md", workingDirectory: "E:/projects/Pilot" },
+  ],
   [IPC.agentAbort]: [],
   [IPC.agentClearQueue]: [],
   [IPC.agentGetSnapshot]: [],
@@ -46,6 +49,8 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.sessionFork]: [sessionId],
   [IPC.sessionCopy]: [sessionId],
   [IPC.sessionPersona]: [sessionId, null],
+  [IPC.sessionFileDiff]: [sessionId, sessionId],
+  [IPC.sessionUndoFileChange]: [sessionId, sessionId],
   [IPC.settingsModelCatalog]: [draft],
   [IPC.settingsTestProvider]: ["local"],
   [IPC.settingsPickWorkingDirectory]: ["zh"],
@@ -104,14 +109,43 @@ describe("IPC argument validation", () => {
     expect(parseIpcArgs(IPC.agentPrompt, args)).toEqual(args);
   });
 
+  it("receives typed mentions and rejects invalid source metadata", () => {
+    const input = {
+      text: "Read @[file:src/index.ts] with @[skill:review]",
+      mentions: [
+        {
+          type: "file",
+          id: "src/index.ts",
+          label: "index.ts",
+          offset: 5,
+          meta: { workingDirectory: "E:/projects/Pilot" },
+        },
+        { type: "skill", id: "review", label: "Review", meta: { description: "Review changes" } },
+      ],
+    };
+    expect(parseIpcArgs(IPC.agentPrompt, [input])).toEqual([input]);
+    for (const mention of [
+      { ...input.mentions[0], type: "browserTab" },
+      { ...input.mentions[0], meta: {} },
+      { ...input.mentions[0], id: "src\0index.ts" },
+      { ...input.mentions[0], offset: -1 },
+    ]) {
+      expect(() => parseIpcArgs(IPC.agentPrompt, [{ ...input, mentions: [mention] }])).toThrow(
+        /Invalid IPC arguments/,
+      );
+    }
+  });
+
   it.each([
     [IPC.toolPermissionRespond, [sessionId, "later"]],
     [IPC.sessionLoad, ["not-a-session-id"]],
+    [IPC.sessionUndoFileChange, [sessionId, "C:/some/path"]],
     [IPC.sessionPin, [sessionId, "true"]],
     [IPC.appOpenPath, ["other-directory"]],
     [IPC.appSetTitlebarTheme, ["other-theme"]],
     [IPC.agentPrompt, [" \t\n"]],
     [IPC.agentSearchWorkspace, ["x".repeat(513)]],
+    [IPC.agentPreviewWorkspaceReference, [{ path: "src\0index.ts" }]],
     [IPC.skillsImport, ["other-language"]],
     [IPC.settingsPreviewExternalImport, ["unsupported", null]],
     [IPC.settingsImportExternal, ["codex", null]],

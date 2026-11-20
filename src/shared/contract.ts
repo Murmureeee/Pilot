@@ -14,6 +14,7 @@ export const IPC = {
   appInstallUpdate: "app:install-update",
   agentPrompt: "agent:prompt",
   agentSearchWorkspace: "agent:search-workspace",
+  agentPreviewWorkspaceReference: "agent:preview-workspace-reference",
   agentAbort: "agent:abort",
   agentClearQueue: "agent:clear-queue",
   agentGetSnapshot: "agent:get-snapshot",
@@ -27,6 +28,8 @@ export const IPC = {
   sessionFork: "session:fork",
   sessionCopy: "session:copy",
   sessionPersona: "session:persona",
+  sessionFileDiff: "session:file-diff",
+  sessionUndoFileChange: "session:undo-file-change",
   settingsModelCatalog: "settings:model-catalog",
   settingsTestProvider: "settings:test-provider",
   settingsPickWorkingDirectory: "settings:pick-working-directory",
@@ -53,6 +56,24 @@ export const IPC = {
 export interface WorkspaceEntry {
   path: string;
   kind: "file" | "directory";
+}
+
+export interface WorkspaceReferenceRequest {
+  path: string;
+  workingDirectory?: string;
+}
+
+export type WorkspaceReferencePreview =
+  | { kind: "file"; path: string; text: string | null }
+  | { kind: "directory"; path: string; entries: WorkspaceEntry[]; truncated: boolean };
+
+export type PromptMention =
+  | { type: WorkspaceEntry["kind"]; id: string; label: string; meta: { workingDirectory: string } }
+  | { type: "skill"; id: string; label: string; meta: { description: string } };
+
+export interface PromptInput {
+  text: string;
+  mentions: (PromptMention & { offset?: number })[];
 }
 
 /** 数据目录（shell.openPath 的白名单目标，防止渲染层打开任意路径） */
@@ -126,25 +147,68 @@ export interface PlanStep {
   status: (typeof PLAN_STATUSES)[number];
 }
 
-export type UiPart =
+export type FileChangeSummary = {
+  id: string;
+  path: string;
+  kind: "created" | "modified";
+  stats?: { added: number; removed: number };
+  reverted?: boolean;
+};
+
+export type FileDiffLine = {
+  kind: "context" | "added" | "removed";
+  text: string;
+  before?: number;
+  after?: number;
+  noNewline?: boolean;
+};
+
+export type FileDiff = {
+  hunks: FileDiffLine[][];
+  truncated: boolean;
+};
+
+interface ToolInvocation {
+  callId: string;
+  toolName: string;
+  label: string;
+  inputSummary?: string;
+}
+
+export type UiUserPart =
   | { type: "text"; text: string }
-  | { type: "thinking"; text: string }
-  | { type: "plan"; steps: PlanStep[] }
   | {
-      type: "tool";
-      callId: string;
-      toolName: string;
+      type: "mention";
+      kind: PromptMention["type"];
+      id: string;
       label: string;
+      workingDirectory?: string;
+    };
+
+export type UiPart =
+  | UiUserPart
+  | {
+      type: "thinking";
+      text: string;
+      blockIndex?: number;
+      streaming?: boolean;
+      durationMs?: number;
+    }
+  | { type: "plan"; steps: PlanStep[] }
+  | (ToolInvocation & {
+      type: "tool";
       state: ToolState;
-      inputSummary?: string;
       output?: string;
       error?: string;
-    };
+      durationMs?: number;
+      fileChange?: FileChangeSummary;
+    });
 
 export interface UiMessage {
   id: string;
   role: "user" | "assistant" | "system" | "toolResult";
   parts: UiPart[];
+  streaming?: boolean;
 }
 
 export type AgentStatus = "idle" | "streaming" | "waiting_approval";
@@ -162,18 +226,13 @@ export type UiAgentEvent =
   | { type: "assistant_start"; id: string }
   | { type: "assistant_delta"; id: string; delta: string }
   | { type: "assistant_end"; id: string }
-  | { type: "thinking_start"; id: string }
-  | { type: "thinking_delta"; id: string; delta: string }
+  | { type: "thinking_start"; id: string; blockIndex: number }
+  | { type: "thinking_delta"; id: string; blockIndex: number; delta: string }
+  | { type: "thinking_end"; id: string; blockIndex: number; text: string; durationMs?: number }
   | { type: "plan"; steps: PlanStep[] }
   /** 会话元数据全量刷新（自动标题/重命名/删除后推动侧栏更新） */
   | { type: "sessions"; sessions: SessionMeta[]; activeSessionId?: string }
-  | {
-      type: "tool_start";
-      callId: string;
-      toolName: string;
-      label: string;
-      inputSummary: string;
-    }
+  | (ToolInvocation & { type: "tool_call" | "tool_start"; id?: string })
   | { type: "tool_update"; callId: string; output: string }
   | {
       type: "tool_end";
@@ -181,7 +240,9 @@ export type UiAgentEvent =
       state: "success" | "error";
       output?: string;
       error?: string;
+      durationMs?: number;
     }
+  | { type: "file_change"; callId: string; change: FileChangeSummary }
   | {
       type: "usage";
       tokens: UsageTotals;

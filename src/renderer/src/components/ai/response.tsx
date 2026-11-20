@@ -1,8 +1,30 @@
 // @env browser
 // 流式 Markdown 渲染：Streamdown（流式安全的增量解析 + 代码高亮内置）。
-import { memo, type JSX } from "react";
-import { Streamdown, type StreamdownTranslations } from "streamdown";
+import { memo, type ComponentProps, type JSX } from "react";
+import {
+  defaultComponents,
+  defaultRemarkPlugins,
+  Streamdown,
+  type ExtraProps,
+  type StreamdownTranslations,
+} from "streamdown";
 import { useLocale } from "@renderer/lib/i18n";
+import { remarkWorkspaceLinks, workspaceLinkFromHref } from "@renderer/lib/workspace-links";
+import { InlineWorkspaceReference } from "./workspace-reference";
+
+const MARKDOWN_PLUGINS = [...Object.values(defaultRemarkPlugins), remarkWorkspaceLinks];
+const DefaultLink = defaultComponents.a;
+
+function MarkdownLink(props: ComponentProps<"a"> & ExtraProps): JSX.Element {
+  const reference = workspaceLinkFromHref(props.href);
+  return reference ? (
+    <InlineWorkspaceReference {...reference}>{props.children}</InlineWorkspaceReference>
+  ) : (
+    <DefaultLink {...props} />
+  );
+}
+
+const MARKDOWN_COMPONENTS = { a: MarkdownLink };
 
 const ZH_TRANSLATIONS: Partial<StreamdownTranslations> = {
   close: "关闭",
@@ -38,6 +60,12 @@ const ZH_TRANSLATIONS: Partial<StreamdownTranslations> = {
 export const Response = memo(function Response({ content }: { content: string }): JSX.Element {
   const locale = useLocale();
   return (
-    <Streamdown translations={locale === "zh" ? ZH_TRANSLATIONS : undefined}>{content}</Streamdown>
+    <Streamdown
+      components={MARKDOWN_COMPONENTS}
+      remarkPlugins={MARKDOWN_PLUGINS}
+      translations={locale === "zh" ? ZH_TRANSLATIONS : undefined}
+    >
+      {content}
+    </Streamdown>
   );
 });

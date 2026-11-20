@@ -153,7 +153,7 @@ describe("SessionStore", () => {
       timestamp: 1,
     } as AgentMessage;
     expect(messageParts(message)).toEqual([
-      { type: "thinking", text: "reasoning trace" },
+      { type: "thinking", blockIndex: 0, text: "reasoning trace" },
       { type: "text", text: "visible answer" },
     ]);
     // 恢复的转录同样保留思考块（toUiMessages 走 messageParts）

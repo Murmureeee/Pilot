@@ -3,6 +3,7 @@
 import type {
   AgentSmokeResult,
   AppInfo,
+  FileDiff,
   Locale,
   LogLevel,
   MenuAction,
@@ -11,6 +12,7 @@ import type {
   PermissionDecision,
   PingRequest,
   PingResponse,
+  PromptInput,
   ProviderInput,
   ProviderTestResult,
   PublicSettings,
@@ -23,6 +25,8 @@ import type {
   UiAgentEvent,
   UpdateStatus,
   WorkspaceEntry,
+  WorkspaceReferencePreview,
+  WorkspaceReferenceRequest,
 } from "./contract";
 import type { McpServerInfo, McpServerInput } from "./mcp";
 import type {
@@ -47,8 +51,11 @@ export interface PiApi {
   installUpdate(): Promise<void>;
   onUpdateStatus(callback: (status: UpdateStatus) => void): () => void;
   getSnapshot(): Promise<Snapshot>;
-  agentPrompt(text: string, referenceDirectory?: string): Promise<void>;
+  agentPrompt(input: string | PromptInput, referenceDirectory?: string): Promise<void>;
   searchWorkspace(query: string): Promise<WorkspaceEntry[]>;
+  previewWorkspaceReference(
+    reference: WorkspaceReferenceRequest,
+  ): Promise<WorkspaceReferencePreview>;
   agentAbort(): Promise<void>;
   /** 清空排队中的插话（steer + followUp） */
   clearQueue(): Promise<void>;
@@ -68,6 +75,8 @@ export interface PiApi {
   sessionCopy(id: string): Promise<string>;
   /** 会话级人设覆盖（null = 清除，回落全局） */
   sessionPersona(id: string, persona: string | null): Promise<void>;
+  sessionFileDiff(id: string, changeId: string): Promise<FileDiff>;
+  sessionUndoFileChange(id: string, changeId: string): Promise<void>;
   settingsGet(): Promise<PublicSettings>;
   settingsSave(input: SettingsInput): Promise<PublicSettings>;
   settingsSetLogLevel(level: LogLevel): Promise<void>;

@@ -1,0 +1,7 @@
+// @env node
+export const MAX_FILE_SNAPSHOT_BYTES = 256 * 1024;
+export const MAX_DIFF_SEARCH_DISTANCE = 512;
+export const MAX_DIFF_COMPARISONS = 1_000_000;
+export const MAX_DIFF_PREVIEW_LINES = 700;
+export const MAX_DIRECTORY_PREVIEW_ENTRIES = 200;
+export const DIFF_CONTEXT_LINES = 3;

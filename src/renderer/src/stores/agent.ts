@@ -9,6 +9,7 @@ import type {
   LogLevel,
   MenuAction,
   PermissionDecision,
+  PromptInput,
   PublicSettings,
   SettingsInput,
   SkillMeta,
@@ -45,7 +46,7 @@ interface AgentStore extends AgentUiState {
   setSessionPersona(id: string, persona: string | null): Promise<void>;
   init(): Promise<void>;
   setView(view: View): void;
-  prompt(text: string, referenceDirectory?: string): Promise<void>;
+  prompt(input: PromptInput): Promise<void>;
   abort(): void;
   newSession(): Promise<void>;
   /** record=false 用于前进/后退（不重复入栈） */
@@ -77,7 +78,7 @@ interface AgentStore extends AgentUiState {
   clearQueue(): void;
   setApprovalMode(mode: ApprovalMode): Promise<void>;
   setThinkingLevel(level: ThinkingLevel): Promise<void>;
-  switchModel(providerId: string): Promise<void>;
+  selectModel(providerId: string, modelId: string): Promise<void>;
   removeToolRule(rule: ToolRule): Promise<void>;
 }
 
@@ -178,9 +179,9 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   setView: (view) => set({ view }),
 
-  prompt: async (text, referenceDirectory) => {
+  prompt: async (input) => {
     set({ error: null });
-    await window.pi.agentPrompt(text, referenceDirectory);
+    await window.pi.agentPrompt(input);
   },
 
   abort: () => window.pi.agentAbort(),
@@ -327,14 +328,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     set({ settings });
   },
 
-  /** composer 模型快速切换：切换 active provider（下次 prompt 生效） */
-  switchModel: async (providerId) => {
-    const s = get().settings;
-    if (!s) return;
-    const settings = await window.pi.settingsSave({
-      ...providerSelection(s),
-      activeProviderId: providerId,
-    });
+  selectModel: async (providerId, modelId) => {
+    const settings = await window.pi.settingsSelectModel(providerId, modelId);
     set({ settings });
   },
 

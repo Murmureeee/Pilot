@@ -12,8 +12,8 @@ import type { ResolveToolPath, ToolEnvironment } from "./types";
 export function createTools(environment: ToolEnvironment): AgentTool[] {
   const resolvePath = createToolPathResolver(environment.workingDirectory);
   const scoped = environment.workingDirectory !== undefined;
-  const write = createWriteFileTool(resolvePath);
-  const edit = createEditFileTool(resolvePath);
+  const write = createWriteFileTool(resolvePath, environment.workingDirectory);
+  const edit = createEditFileTool(resolvePath, environment.workingDirectory);
   if (scoped) {
     // 审批与执行使用同一个绝对路径，旧目录的相对路径授权不会授权新目录。
     write.prepareArguments = (args) => prepareWritePath(args, resolvePath);

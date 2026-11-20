@@ -1,20 +1,24 @@
 // @env browser
-import { useId, useRef, useState, type KeyboardEvent } from "react";
-import type { JSX } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type JSX,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import {
   ArrowUpIcon,
+  BlocksIcon,
   CheckIcon,
-  ChevronDownIcon,
-  CpuIcon,
   EyeIcon,
   FileIcon,
   FolderIcon,
-  PlugIcon,
   PlusIcon,
   ShieldCheckIcon,
-  SquarePenIcon,
   SquareIcon,
-  XIcon,
   ZapIcon,
 } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
@@ -34,23 +38,38 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupTextarea,
-} from "@renderer/components/ui/input-group";
+import { InputGroup, InputGroupAddon } from "@renderer/components/ui/input-group";
 import { Input } from "@renderer/components/ui/input";
 import { useWorkspaceSearch } from "@renderer/hooks/use-workspace-search";
-import { composerTrigger, promptWithReferences } from "@renderer/lib/composer-shortcuts";
-import { levelAt, levelIndex, levelLabel, THINKING_LEVELS } from "@renderer/lib/thinking-level";
-import { APPROVAL_MODE_OPTIONS } from "@renderer/lib/constants";
-import { displayProviderName, localizeError, t, useLocale } from "@renderer/lib/i18n";
-import type { ComposerSuggestion } from "@renderer/lib/types";
+import {
+  composerRange,
+  insertComposerMention,
+  mentionKey,
+  readComposerDraft,
+  readComposerSelection,
+  restoreComposerDraft,
+  selectComposerRange,
+} from "@renderer/lib/composer-editor";
+import {
+  matchesComposerQuery,
+  promptFromDraft,
+  trimPrompt,
+} from "@renderer/lib/composer-shortcuts";
+import type { ComposerSelection } from "@renderer/lib/composer/types";
+import { APPROVAL_MODE_OPTIONS, COMPOSER_COMMANDS } from "@renderer/lib/constants";
+import { localizeError, t, useLocale } from "@renderer/lib/i18n";
+import type {
+  ComposerCommand,
+  ComposerDraft,
+  ComposerSuggestion,
+  ComposerToolbarMenu,
+} from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
 import { APP_NAME, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
-import type { ApprovalMode, WorkspaceEntry } from "@shared/contract";
+import type { ApprovalMode, PromptMention } from "@shared/contract";
 import { cn } from "cn";
-import { ComposerSuggestions } from "./composer-suggestions";
+import { ComposerModelControls } from "./composer-model-controls";
+import { ComposerCaretMenu, ComposerSuggestions } from "./composer-suggestions";
 
 // 语义色分级（AGENTS.md）：红 = 破坏性动作；amber 橙 = 风险提示（警觉但不吓退）；灰 = 常态
 type ModeTone = "neutral" | "amber";
@@ -86,14 +105,7 @@ const TONE_BADGE: Record<ModeTone, string> = {
   amber: "bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 dark:text-amber-400",
 };
 
-const COMMANDS = [
-  { id: "new", label: "新聊天", icon: SquarePenIcon },
-  { id: "model", label: "选择模型", icon: CpuIcon },
-  { id: "permissions", label: "权限模式", icon: ShieldCheckIcon },
-  { id: "mcp", label: "MCP 服务", icon: PlugIcon },
-] as const;
-
-export function Composer(): JSX.Element {
+export function Composer({ savedDraft }: { savedDraft: RefObject<ComposerDraft> }): JSX.Element {
   const locale = useLocale();
   const status = useAgentStore((s) => s.status);
   const busy = status !== "idle";
@@ -103,25 +115,25 @@ export function Composer(): JSX.Element {
   const contextTokens = useAgentStore((s) => s.contextTokens);
   const contextWindow = useAgentStore((s) => s.contextWindow);
   const sessionId = useAgentStore((s) => s.sessionId);
-  const [text, setText] = useState("");
-  const [selection, setSelection] = useState({ start: 0, end: 0 });
+  const [draft, setDraft] = useState(() => promptFromDraft(savedDraft.current));
+  const [selection, setSelection] = useState<ComposerSelection | null>(null);
   const [focused, setFocused] = useState(false);
   const [composing, setComposing] = useState(false);
-  const [dismissed, setDismissed] = useState("");
-  const [highlighted, setHighlighted] = useState(0);
-  const [toolbarMenu, setToolbarMenu] = useState<"permissions" | "model" | null>(null);
+  const [dismissed, setDismissed] = useState<Range | null>(null);
+  const [highlighted, setHighlighted] = useState<number | null>(null);
+  const [toolbarMenu, setToolbarMenu] = useState<ComposerToolbarMenu | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
   const [directoryError, setDirectoryError] = useState<string | null>(null);
+  const [skillError, setSkillError] = useState<string | null>(null);
+  const [loadingSkills, setLoadingSkills] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [pickingDirectory, setPickingDirectory] = useState(false);
-  const [draftReferences, setDraftReferences] = useState<{
-    workingDirectory: string | null;
-    sessionId: string | null;
-    entries: WorkspaceEntry[];
-  } | null>(null);
-  const editor = useRef<HTMLTextAreaElement>(null);
+  const editor = useRef<HTMLDivElement>(null);
+  const lastRange = useRef<Range | null>(null);
+  const resources = useRef(new Map<string, PromptMention>());
+  const pendingMention = useRef<PromptMention | null>(null);
   const pickerInput = useRef<HTMLInputElement>(null);
   const inlineId = useId();
   const pickerId = useId();
@@ -129,48 +141,77 @@ export function Composer(): JSX.Element {
   const abort = useAgentStore((s) => s.abort);
   const clearQueue = useAgentStore((s) => s.clearQueue);
   const setApprovalMode = useAgentStore((s) => s.setApprovalMode);
-  const switchModel = useAgentStore((s) => s.switchModel);
-  const setThinkingLevel = useAgentStore((s) => s.setThinkingLevel);
   const newSession = useAgentStore((s) => s.newSession);
+  const archiveSession = useAgentStore((s) => s.setSessionArchived);
   const setView = useAgentStore((s) => s.setView);
   const setSettingsSection = useAgentStore((s) => s.setSettingsSection);
   const saveToolEnvironment = useAgentStore((s) => s.saveToolEnvironment);
+  const skills = useAgentStore((s) => s.skills);
+  const listSkills = useAgentStore((s) => s.listSkills);
 
   const mode = settings?.approvalMode ?? "standard";
   const modeMeta = MODE_META[mode];
   const ModeIcon = modeMeta.icon;
-  const active = settings?.providers.find((p) => p.id === settings.activeProviderId);
-  const thinkingLevel = settings?.thinkingLevel ?? "medium";
   const workingDirectory = settings?.workingDirectory ?? null;
-  const references =
-    draftReferences?.workingDirectory === workingDirectory &&
-    draftReferences.sessionId === sessionId
-      ? draftReferences.entries
-      : [];
-  const rawTrigger =
-    focused && !composing && !pickerOpen && toolbarMenu === null
-      ? composerTrigger(text, selection.start, selection.end)
-      : null;
-  const triggerKey = rawTrigger ? JSON.stringify(rawTrigger) : "";
-  const trigger = triggerKey !== dismissed ? rawTrigger : null;
-  const workspaceQuery = pickerOpen
-    ? pickerQuery
-    : trigger?.kind === "reference"
-      ? trigger.query
-      : null;
+  const enabledSkills = settings?.skillsEnabled;
+  const isDismissed =
+    dismissed &&
+    selection?.caret.startContainer === dismissed.startContainer &&
+    selection.caret.startOffset === dismissed.startOffset;
+  const rawTrigger = !composing && !pickerOpen && toolbarMenu === null ? selection?.trigger : null;
+  const trigger = focused && !isDismissed ? rawTrigger : null;
+  const mentionOpen = trigger?.kind === "mention";
+  const skillSearchOpen =
+    trigger?.kind === "command" || (mentionOpen && Boolean(enabledSkills?.length));
+  const workspaceQuery = pickerOpen ? pickerQuery : mentionOpen ? trigger.query : null;
   const workspace = useWorkspaceSearch(workingDirectory, workspaceQuery);
 
-  const updateSelection = (field: HTMLTextAreaElement): void => {
-    const start = field.selectionStart;
-    const end = field.selectionEnd;
-    if (start === selection.start && end === selection.end) return;
-    setSelection({ start, end });
-    setHighlighted(0);
-  };
+  const attachEditor = useCallback(
+    (field: HTMLDivElement | null): void => {
+      editor.current = field;
+      if (field) restoreComposerDraft(field, savedDraft.current, resources.current);
+    },
+    [savedDraft],
+  );
 
-  const editReferences = (entries: WorkspaceEntry[]): void => {
+  const updateSelection = useCallback((): void => {
+    const field = editor.current;
+    if (!field || document.activeElement !== field) return;
+    const range = composerRange(field);
+    lastRange.current = range;
+    setSelection(range ? readComposerSelection(field, range) : null);
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("selectionchange", updateSelection);
+    return () => document.removeEventListener("selectionchange", updateSelection);
+  }, [updateSelection]);
+
+  useEffect(() => {
+    if (!skillSearchOpen) return;
+    let cancelled = false;
+    setLoadingSkills(true);
+    setSkillError(null);
+    void listSkills()
+      .catch((error: unknown) => {
+        if (!cancelled) setSkillError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSkills(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [skillSearchOpen, enabledSkills, listSkills]);
+
+  const readEditor = (): void => {
+    if (!editor.current) return;
+    savedDraft.current = readComposerDraft(editor.current, resources.current);
+    setDraft(promptFromDraft(savedDraft.current));
     setSendError(null);
-    setDraftReferences({ workingDirectory, sessionId, entries });
+    setDismissed(null);
+    setHighlighted(null);
+    updateSelection();
   };
 
   const pickDirectory = async (): Promise<void> => {
@@ -184,92 +225,172 @@ export function Composer(): JSX.Element {
       setDirectoryError(error instanceof Error ? error.message : String(error));
     } finally {
       setPickingDirectory(false);
-      (pickerOpen ? pickerInput.current : editor.current)?.focus();
+      (pickerInput.current ?? editor.current)?.focus();
     }
   };
 
   const closePicker = (): void => {
     setPickerOpen(false);
     setPickerQuery("");
-    setHighlighted(0);
+    setHighlighted(null);
   };
 
-  const chooseReference = (entry: WorkspaceEntry): void => {
-    if (!references.some(({ path }) => path === entry.path)) editReferences([...references, entry]);
-    if (pickerOpen) closePicker();
-    if (trigger?.kind === "reference") {
-      const { start, end } = trigger;
-      setText(text.slice(0, start) + text.slice(end));
-      setSelection({ start, end: start });
-      requestAnimationFrame(() => editor.current?.setSelectionRange(start, start));
+  const insertMention = (mention: PromptMention, range: Range | null): void => {
+    if (!editor.current) return;
+    insertComposerMention(editor.current, range, mention, resources.current);
+    readEditor();
+  };
+
+  const chooseMention = (mention: PromptMention): void => {
+    if (pickerOpen) {
+      pendingMention.current = mention;
+      closePicker();
+    } else if (trigger) {
+      insertMention(mention, trigger.range);
     }
-    setHighlighted(0);
   };
 
-  const chooseCommand = (id: (typeof COMMANDS)[number]["id"]): void => {
-    setText("");
-    setSelection({ start: 0, end: 0 });
-    setHighlighted(0);
-    switch (id) {
-      case "model":
-      case "permissions":
-        setToolbarMenu(id);
-        return;
-      case "mcp":
-        setSettingsSection("mcp");
-        setView("settings");
-        return;
-      case "new":
-        setDraftReferences(null);
-        void newSession();
+  const chooseCommand = async (command: ComposerCommand): Promise<void> => {
+    if (trigger?.kind !== "command" || !editor.current) return;
+    const range = trigger.range.cloneRange();
+    range.setEnd(editor.current, editor.current.childNodes.length);
+    selectComposerRange(editor.current, range);
+    document.execCommand("delete");
+    readEditor();
+    try {
+      await command.action({
+        newChat: newSession,
+        archiveChat: () => (sessionId ? archiveSession(sessionId, true) : Promise.resolve()),
+        openMenu: setToolbarMenu,
+        openSettings: (section) => {
+          setSettingsSection(section);
+          setView("settings");
+        },
+      });
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : String(error));
     }
   };
 
   const options: ComposerSuggestion[] = [];
-  if (trigger?.kind === "command") {
-    const query = trigger.query.toLowerCase();
-    for (const { id, label, icon } of COMMANDS) {
-      const name = t(label, locale);
-      if (id.includes(query) || label.includes(query) || name.toLowerCase().includes(query)) {
-        options.push({ id, label: name, detail: "/" + id, icon, select: () => chooseCommand(id) });
-      }
-    }
-  } else if (workspaceQuery !== null && workingDirectory === null && !pickingDirectory) {
+  const attached = new Set(draft.mentions.map(mentionKey));
+  const addMention = (
+    mention: PromptMention,
+    detail: string | undefined,
+    icon: ComposerSuggestion["icon"],
+    group?: string,
+    shortcut?: string,
+  ): void => {
+    const id = mentionKey(mention);
     options.push({
-      id: "working-directory",
-      label: t("选择工作目录", locale),
-      icon: FolderIcon,
-      select: () => void pickDirectory(),
+      id,
+      label: mention.label,
+      detail,
+      group,
+      shortcut,
+      icon,
+      attached: attached.has(id),
+      select: () => chooseMention(mention),
     });
-  } else {
-    for (const entry of workspace.entries) {
+  };
+  const commands =
+    rawTrigger?.kind === "command"
+      ? COMPOSER_COMMANDS.filter((command) => {
+          if (command.requiresSession && !sessionId) return false;
+          const query = rawTrigger.query;
+          return [command.id, command.label, t(command.label, locale)].some((label) =>
+            matchesComposerQuery(label, query),
+          );
+        })
+      : [];
+  const matchedSkills = rawTrigger
+    ? skills.filter((skill) => {
+        const available = rawTrigger.kind === "command" || enabledSkills?.includes(skill.id);
+        return (
+          available &&
+          [skill.name, skill.id].some((label) => matchesComposerQuery(label, rawTrigger.query))
+        );
+      })
+    : [];
+  if (trigger?.kind === "command") {
+    for (const command of commands) {
       options.push({
-        id: entry.path,
-        label: entry.path.split("/").at(-1) ?? entry.path,
-        detail: entry.path.includes("/") ? entry.path : undefined,
-        icon: entry.kind === "directory" ? FolderIcon : FileIcon,
-        attached: references.some(({ path }) => path === entry.path),
-        select: () => chooseReference(entry),
+        id: command.id,
+        label: t(command.label, locale),
+        detail: t(command.description, locale),
+        shortcut: "/" + command.id,
+        icon: command.icon,
+        select: () => void chooseCommand(command),
       });
     }
   }
-  const activeIndex = Math.min(highlighted, options.length - 1);
-  const feedback = t(workspace.pending || pickingDirectory ? "加载中…" : "没有匹配的结果", locale);
-  const lookupError = workspaceQuery !== null ? (directoryError ?? workspace.error) : undefined;
+  if (trigger) {
+    for (const skill of matchedSkills) {
+      addMention(
+        {
+          type: "skill",
+          id: skill.id,
+          label: skill.name,
+          meta: { description: skill.description },
+        },
+        skill.description,
+        BlocksIcon,
+        t("技能", locale),
+        trigger.kind === "command" ? "/" + skill.id : undefined,
+      );
+    }
+  }
+  if (workspaceQuery !== null) {
+    if (workingDirectory === null) {
+      if (!pickingDirectory)
+        options.push({
+          id: "working-directory",
+          label: t("选择工作目录", locale),
+          icon: FolderIcon,
+          select: () => void pickDirectory(),
+        });
+    } else {
+      for (const { path, kind } of workspace.entries) {
+        const label = path.split("/").at(-1) ?? path;
+        addMention(
+          { type: kind, id: path, label, meta: { workingDirectory } },
+          path !== label ? path : undefined,
+          kind === "directory" ? FolderIcon : FileIcon,
+          mentionOpen ? t("工作目录", locale) : undefined,
+        );
+      }
+    }
+  }
+  const exactShortcut =
+    trigger?.kind === "command" ? "/" + trigger.query.normalize("NFKC").toLowerCase() : null;
+  const exactIndex = options.findIndex(({ shortcut }) => shortcut?.toLowerCase() === exactShortcut);
+  const activeIndex = Math.min(highlighted ?? Math.max(0, exactIndex), options.length - 1);
+  const pending = workspace.pending || pickingDirectory || (skillSearchOpen && loadingSkills);
+  const feedback = t(pending ? "加载中…" : "没有匹配的结果", locale);
+  const workspaceError = workspaceQuery !== null ? (directoryError ?? workspace.error) : undefined;
+  const lookupError = workspaceError ?? (skillSearchOpen ? skillError : undefined);
   const localizedLookupError = lookupError ? localizeError(lookupError, locale) : undefined;
+  const commandPending =
+    rawTrigger?.kind === "command" &&
+    (!isDismissed || commands.length > 0 || matchedSkills.length > 0);
+  const canSend = !composing && draft.text.trim().length > 0 && !commandPending;
+  const placeholder = busy ? t("输入插话消息…", locale) : t("给 {0} 发消息…", locale, [APP_NAME]);
 
   const send = async (): Promise<void> => {
-    const trimmed = text.trim();
-    if (!trimmed || submitting) return;
+    if (!canSend || submitting) return;
+    const sentDraft = savedDraft.current;
     setSubmitting(true);
     setSendError(null);
     try {
-      await prompt(
-        promptWithReferences(trimmed, references, t("工作目录引用", locale)),
-        references.length > 0 ? (workingDirectory ?? undefined) : undefined,
-      );
-      setText((current) => (current === text ? "" : current));
-      setDraftReferences((current) => (current === draftReferences ? null : current));
+      await prompt(trimPrompt(draft));
+      if (savedDraft.current === sentDraft) {
+        savedDraft.current = [];
+        editor.current?.replaceChildren();
+        resources.current.clear();
+        lastRange.current = null;
+        setDraft({ text: "", mentions: [] });
+        setSelection(null);
+      }
     } catch (error) {
       setSendError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -281,7 +402,7 @@ export function Composer(): JSX.Element {
     if (!trigger && !pickerOpen) return false;
     if (event.key === "Escape" && trigger) {
       event.preventDefault();
-      setDismissed(triggerKey);
+      setDismissed(selection?.caret ?? null);
       return true;
     }
     if ((event.key === "ArrowDown" || event.key === "ArrowUp") && options.length > 0) {
@@ -290,7 +411,11 @@ export function Composer(): JSX.Element {
       setHighlighted(Math.max(0, Math.min(options.length - 1, activeIndex + offset)));
       return true;
     }
-    if (event.key === "Enter" && !event.shiftKey && (activeIndex >= 0 || workspace.pending)) {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      (activeIndex >= 0 || pending || trigger?.kind === "command")
+    ) {
       event.preventDefault();
       options[activeIndex]?.select();
       return true;
@@ -298,7 +423,7 @@ export function Composer(): JSX.Element {
     return false;
   };
 
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (composing || event.nativeEvent.isComposing || onSuggestionKey(event)) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -371,18 +496,18 @@ export function Composer(): JSX.Element {
         </div>
       )}
 
-      {trigger && (
-        <div className="border-border bg-popover text-popover-foreground absolute inset-x-0 bottom-full z-20 mb-2 rounded-xl border shadow-md">
+      {trigger && selection && (
+        <ComposerCaretMenu selection={selection}>
           <ComposerSuggestions
             id={inlineId}
-            label={t(trigger.kind === "command" ? "快捷操作" : "引用文件和文件夹", locale)}
+            label={t(trigger.kind === "command" ? "快捷操作" : "提及资源", locale)}
             options={options}
             activeIndex={activeIndex}
             setActiveIndex={setHighlighted}
             feedback={feedback}
             error={localizedLookupError}
           />
-        </div>
+        </ComposerCaretMenu>
       )}
       {sendError && (
         <p role="alert" className="text-destructive wrap-anywhere px-2 text-xs">
@@ -390,67 +515,53 @@ export function Composer(): JSX.Element {
         </p>
       )}
       <InputGroup className="border-border bg-card rounded-[22px] shadow-sm shadow-foreground/10">
-        {references.length > 0 && (
-          <InputGroupAddon align="block-start" className="flex-wrap justify-start gap-1.5 px-3">
-            {references.map(({ path, kind }) => {
-              const Icon = kind === "directory" ? FolderIcon : FileIcon;
-              return (
-                <span
-                  key={path}
-                  className="bg-muted flex min-w-0 max-w-full items-center gap-1.5 rounded-lg px-2 py-0.5"
-                >
-                  <Icon aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0" />
-                  <span title={path} className="min-w-0 truncate text-xs font-normal">
-                    {path}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={t("移除引用 {0}", locale, [path])}
-                    onClick={() => {
-                      editReferences(references.filter((entry) => entry.path !== path));
-                      editor.current?.focus();
-                    }}
-                  >
-                    <XIcon />
-                  </Button>
-                </span>
-              );
-            })}
-          </InputGroupAddon>
-        )}
-        <InputGroupTextarea
-          ref={editor}
-          className="min-h-[3.75rem] max-h-[min(14rem,38vh)] px-4 pt-3.5 pb-2 text-[15px] leading-6 md:text-[15px]"
+        <div
+          ref={attachEditor}
+          contentEditable
+          role="textbox"
+          aria-multiline="true"
+          data-slot="input-group-control"
+          className="composer-editor relative min-h-[3.75rem] max-h-[min(14rem,38dvh)] w-full overflow-y-auto px-4 pt-3.5 pb-2 text-[15px] leading-6 wrap-anywhere whitespace-pre-wrap outline-none"
           aria-label={t("消息", locale)}
+          aria-placeholder={placeholder}
           aria-autocomplete="list"
           aria-controls={trigger ? inlineId : undefined}
           aria-activedescendant={
             trigger && activeIndex >= 0 ? inlineId + "-" + activeIndex : undefined
           }
-          value={text}
-          onChange={(event) => {
-            setText(event.currentTarget.value);
-            setSendError(null);
-            setDismissed("");
-            setHighlighted(0);
-            updateSelection(event.currentTarget);
-          }}
-          onFocus={(event) => {
+          data-empty={draft.text.length === 0}
+          data-placeholder={placeholder}
+          onInput={readEditor}
+          onFocus={() => {
             setFocused(true);
-            updateSelection(event.currentTarget);
+            updateSelection();
           }}
-          onBlur={() => setFocused(false)}
-          onSelect={(event) => updateSelection(event.currentTarget)}
+          onBlur={() => {
+            setFocused(false);
+            setDirectoryError(null);
+            setSkillError(null);
+          }}
           onCompositionStart={() => setComposing(true)}
-          onCompositionEnd={(event) => {
+          onCompositionEnd={() => {
             setComposing(false);
-            updateSelection(event.currentTarget);
+            readEditor();
+          }}
+          onPaste={(event) => {
+            event.preventDefault();
+            const text = event.clipboardData.getData("text/plain");
+            if (text) document.execCommand("insertText", false, text);
+          }}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            const text = event.dataTransfer.getData("text/plain");
+            const range = document.caretRangeFromPoint(event.clientX, event.clientY);
+            if (!text || !range || !event.currentTarget.contains(range.commonAncestorContainer))
+              return;
+            selectComposerRange(event.currentTarget, range);
+            document.execCommand("insertText", false, text);
           }}
           onKeyDown={onKeyDown}
-          placeholder={busy ? t("输入插话消息…", locale) : t("给 {0} 发消息…", locale, [APP_NAME])}
-          rows={2}
         />
         <InputGroupAddon
           align="block-end"
@@ -462,9 +573,15 @@ export function Composer(): JSX.Element {
               onOpenChange={(open) => {
                 if (open) {
                   setPickerOpen(true);
-                  setHighlighted(0);
+                  setHighlighted(null);
                   setDirectoryError(null);
                 } else closePicker();
+              }}
+              onOpenChangeComplete={(open) => {
+                if (open || !pendingMention.current) return;
+                const mention = pendingMention.current;
+                pendingMention.current = null;
+                insertMention(mention, lastRange.current);
               }}
             >
               <DialogTrigger
@@ -503,7 +620,7 @@ export function Composer(): JSX.Element {
                   value={pickerQuery}
                   onChange={(event) => {
                     setPickerQuery(event.currentTarget.value);
-                    setHighlighted(0);
+                    setHighlighted(null);
                   }}
                   onKeyDown={(event) => {
                     if (!event.nativeEvent.isComposing) onSuggestionKey(event);
@@ -584,77 +701,11 @@ export function Composer(): JSX.Element {
           </div>
 
           <div className="ms-auto flex min-w-0 items-center gap-2">
-            <DropdownMenu
-              open={toolbarMenu === "model"}
-              onOpenChange={(open) =>
-                setToolbarMenu((current) => (open ? "model" : current === "model" ? null : current))
-              }
-            >
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    aria-label={t("选择模型", locale)}
-                    title={active?.modelId}
-                    className="border-border/80 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring/40 flex min-h-8 min-w-0 max-w-56 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors outline-none focus-visible:ring-2"
-                  />
-                }
-              >
-                <CpuIcon aria-hidden="true" className="size-3.5 shrink-0" />
-                <span className="truncate">{active ? active.modelId : t("选择模型", locale)}</span>
-                <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                side="top"
-                align="end"
-                sideOffset={8}
-                className="min-w-64 max-w-[min(26rem,var(--available-width))]"
-              >
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>{t("模型（点击切换）", locale)}</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {(settings?.providers ?? []).map((p) => (
-                    <DropdownMenuItem
-                      key={p.id}
-                      onClick={() => void switchModel(p.id)}
-                      className="items-start gap-2"
-                    >
-                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="text-sm">{displayProviderName(p, locale)}</span>
-                        <span className="text-muted-foreground wrap-anywhere text-xs">
-                          {p.modelId}
-                        </span>
-                      </span>
-                      {p.id === settings?.activeProviderId && (
-                        <CheckIcon className="mt-0.5 shrink-0" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                  {(settings?.providers ?? []).length === 0 && (
-                    <DropdownMenuItem disabled>{t("尚未配置 Provider", locale)}</DropdownMenuItem>
-                  )}
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                {/* 思考强度滑块：非 MenuItem，交互不关闭菜单 */}
-                <div className="px-2 py-2">
-                  <div className="flex items-center justify-between pb-2 text-xs">
-                    <span className="text-muted-foreground">{t("思考强度", locale)}</span>
-                    <span className="text-foreground">{t(levelLabel(thinkingLevel), locale)}</span>
-                  </div>
-                  <input
-                    type="range"
-                    aria-label={t("思考强度", locale)}
-                    aria-valuetext={t(levelLabel(thinkingLevel), locale)}
-                    min={0}
-                    max={THINKING_LEVELS.length - 1}
-                    step={1}
-                    value={levelIndex(thinkingLevel)}
-                    onChange={(e) => void setThinkingLevel(levelAt(Number(e.target.value)))}
-                    className="level-slider w-full"
-                  />
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <ComposerModelControls
+              menu={toolbarMenu}
+              setMenu={setToolbarMenu}
+              onError={setSendError}
+            />
 
             {busy ? (
               <Button
@@ -670,7 +721,7 @@ export function Composer(): JSX.Element {
               <Button
                 size="icon-lg"
                 className="disabled:bg-muted disabled:text-muted-foreground rounded-full disabled:opacity-100"
-                disabled={submitting || text.trim().length === 0}
+                disabled={submitting || !canSend}
                 onClick={() => void send()}
                 aria-label={t("发送", locale)}
                 title={t("发送", locale)}

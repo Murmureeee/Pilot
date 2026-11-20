@@ -1,13 +1,11 @@
 // @env browser
-import { useRef, useState, type JSX } from "react";
-import { LoaderCircleIcon, SquareTerminalIcon } from "lucide-react";
+import { Fragment, useMemo, useRef, useState, type JSX, type RefObject } from "react";
+import { SquareTerminalIcon } from "lucide-react";
+import { AssistantReply } from "@renderer/components/ai/assistant-reply";
 import { Composer } from "@renderer/components/ai/composer";
 import { MessageJump } from "@renderer/components/ai/message-jump";
 import { OnboardingDialog } from "@renderer/components/ai/onboarding-dialog";
-import { PlanCard } from "@renderer/components/ai/plan-card";
-import { Response } from "@renderer/components/ai/response";
-import { ThinkingBlock } from "@renderer/components/ai/thinking-block";
-import { ToolCard } from "@renderer/components/ai/tool-card";
+import { InlineWorkspaceReference } from "@renderer/components/ai/workspace-reference";
 import { Button } from "@renderer/components/ui/button";
 import {
   MessageScroller,
@@ -19,53 +17,31 @@ import {
 import { Message, MessageContent } from "@renderer/components/ui/message";
 import { Bubble, BubbleContent } from "@renderer/components/ui/bubble";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
+import type { ChatRow, ComposerDraft } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
 import { cn } from "cn";
-import type { UiPart } from "@shared/contract";
+import type { UiMessage } from "@shared/contract";
 import { isLocalOpenAiProvider } from "@shared/providers";
 
-function AssistantPart({
-  part,
-  streamingTail,
-  thinkingStreaming,
-}: {
-  part: UiPart;
-  streamingTail: boolean;
-  /** 思考块仍在流式接收（最后一条 part 且 busy） */
-  thinkingStreaming: boolean;
-}): JSX.Element | null {
-  if (part.type === "text") {
-    return (
-      <div className="min-w-0 text-[15px] leading-7">
-        {part.text.length > 0 ? (
-          <>
-            <Response content={part.text} />
-            {streamingTail && (
-              <span className="ml-0.5 inline-block h-4 w-1.5 rounded-xs bg-emerald-500 align-text-bottom motion-safe:animate-pulse" />
-            )}
-          </>
-        ) : (
-          <LoaderCircleIcon
-            aria-hidden="true"
-            className="size-4 text-emerald-600 motion-safe:animate-spin dark:text-emerald-400"
-          />
-        )}
-      </div>
-    );
+function chatRows(messages: UiMessage[]): ChatRow[] {
+  const rows: ChatRow[] = [];
+  for (const message of messages) {
+    if (message.role === "user") {
+      rows.push({ id: message.id, role: "user", message });
+    } else if (message.role === "assistant") {
+      const previous = rows.at(-1);
+      if (previous?.role === "assistant") previous.messages.push(message);
+      else rows.push({ id: message.id, role: "assistant", messages: [message] });
+    }
   }
-  if (part.type === "thinking") {
-    return <ThinkingBlock text={part.text} streaming={thinkingStreaming} />;
-  }
-  if (part.type === "tool") {
-    return <ToolCard part={part} />;
-  }
-  if (part.type === "plan") {
-    return <PlanCard steps={part.steps} />;
-  }
-  return null;
+  return rows;
 }
 
-export function ChatView(): JSX.Element {
+export function ChatView({
+  composerDraft,
+}: {
+  composerDraft: RefObject<ComposerDraft>;
+}): JSX.Element {
   const locale = useLocale();
   const messages = useAgentStore((s) => s.messages);
   const sessionId = useAgentStore((s) => s.sessionId);
@@ -73,7 +49,8 @@ export function ChatView(): JSX.Element {
   const error = useAgentStore((s) => s.error);
   const settings = useAgentStore((s) => s.settings);
   const setView = useAgentStore((s) => s.setView);
-  const isEmpty = messages.length === 0;
+  const rows = useMemo(() => chatRows(messages), [messages]);
+  const isEmpty = rows.length === 0;
   const needsSetup =
     isEmpty &&
     settings !== null &&
@@ -87,42 +64,41 @@ export function ChatView(): JSX.Element {
       {!isEmpty && (
         <div className="relative flex min-h-0 flex-1 flex-col">
           <MessageJump
-            key={sessionId}
+            key={"jump-" + sessionId}
             messages={messages}
             viewportRef={viewportRef}
             contentRef={contentRef}
           />
-          <MessageScrollerProvider autoScroll>
+          <MessageScrollerProvider key={sessionId ?? "draft"} autoScroll={busy}>
             <MessageScroller className="min-h-0 flex-1">
               <MessageScrollerViewport
                 ref={viewportRef}
-                className="[scrollbar-color:var(--border)_transparent] [scrollbar-gutter:stable_both-edges] [scrollbar-width:thin]"
+                className="[overflow-anchor:none] [scrollbar-color:var(--border)_transparent] [scrollbar-gutter:stable_both-edges] [scrollbar-width:thin]"
               >
                 <MessageScrollerContent
                   ref={contentRef}
                   className="workspace-column gap-7 pt-7 pb-5"
                 >
-                  {messages.map((message, index) => {
-                    const isLast = index === messages.length - 1;
-                    const isUser = message.role === "user";
-                    const isStreaming = isLast && busy;
-                    if (message.role === "assistant" && !message.parts.length && !isStreaming)
+                  {rows.map((row, index) => {
+                    const isUser = row.role === "user";
+                    const live = index === rows.length - 1 && busy;
+                    if (
+                      !isUser &&
+                      !live &&
+                      !row.messages.some((message) => message.parts.length > 0)
+                    )
                       return null;
-                    const beginsReply = index === 0 || messages[index - 1].role === "user";
                     return (
                       <MessageScrollerItem
-                        key={message.id}
-                        id={`msg-${message.id}`}
+                        key={row.id}
+                        id={"msg-" + row.id}
                         className={isUser ? "message-scroller-user-item" : undefined}
                       >
                         <Message align={isUser ? "end" : "start"} className="items-start gap-3">
                           {!isUser && (
                             <span
                               aria-hidden="true"
-                              className={cn(
-                                "bg-secondary text-secondary-foreground mt-0.5 grid size-7 shrink-0 place-items-center rounded-[9px]",
-                                !beginsReply && "invisible",
-                              )}
+                              className="bg-secondary text-secondary-foreground mt-0.5 grid size-7 shrink-0 place-items-center rounded-[9px]"
                             >
                               <SquareTerminalIcon className="size-4" strokeWidth={1.65} />
                             </span>
@@ -131,32 +107,31 @@ export function ChatView(): JSX.Element {
                             {isUser ? (
                               <Bubble align="end" variant="secondary" className="max-w-[88%]">
                                 <BubbleContent className="rounded-[18px] rounded-br-md px-4 py-2.5 text-[15px] leading-6 whitespace-pre-wrap">
-                                  {message.parts
-                                    .map((part) => (part.type === "text" ? part.text : ""))
-                                    .join("")}
+                                  {row.message.parts.map((part, partIndex) => {
+                                    if (part.type === "text")
+                                      return <Fragment key={partIndex}>{part.text}</Fragment>;
+                                    if (part.type !== "mention") return null;
+                                    return (
+                                      <InlineWorkspaceReference
+                                        key={partIndex}
+                                        chip
+                                        kind={part.kind}
+                                        path={part.id}
+                                        workingDirectory={part.workingDirectory}
+                                      >
+                                        {part.label}
+                                      </InlineWorkspaceReference>
+                                    );
+                                  })}
                                 </BubbleContent>
                               </Bubble>
                             ) : (
-                              <>
-                                {message.parts.map((part, partIndex) => {
-                                  const streamingTail =
-                                    isStreaming && partIndex === message.parts.length - 1;
-                                  return (
-                                    <AssistantPart
-                                      key={partIndex}
-                                      part={part}
-                                      streamingTail={streamingTail && part.type === "text"}
-                                      thinkingStreaming={streamingTail}
-                                    />
-                                  );
-                                })}
-                                {!message.parts.length && (
-                                  <LoaderCircleIcon
-                                    aria-hidden="true"
-                                    className="mt-2 size-4 text-emerald-600 motion-safe:animate-spin dark:text-emerald-400"
-                                  />
-                                )}
-                              </>
+                              <AssistantReply
+                                messages={row.messages}
+                                sessionId={sessionId}
+                                live={live}
+                                busy={busy}
+                              />
                             )}
                           </MessageContent>
                         </Message>
@@ -218,7 +193,7 @@ export function ChatView(): JSX.Element {
             </p>
           </div>
         )}
-        <Composer />
+        <Composer savedDraft={composerDraft} />
       </div>
       {isEmpty && (
         <OnboardingDialog open={onboardingOpen} onClose={() => setOnboardingOpen(false)} />

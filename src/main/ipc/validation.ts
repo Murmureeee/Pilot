@@ -12,9 +12,33 @@ import type { IpcChannel } from "./types";
 const none = z.tuple([]);
 const id = z.string().min(1);
 const nonBlank = z.string().refine((value) => value.trim().length > 0);
+const mentionId = id.refine((value) => !value.includes("\0"));
+const mentionOffset = z.number().int().nonnegative().optional();
+const promptInput = z.strictObject({
+  text: nonBlank,
+  mentions: z.array(
+    z.discriminatedUnion("type", [
+      z.strictObject({
+        type: z.enum(["file", "directory"]),
+        id: mentionId,
+        label: id,
+        offset: mentionOffset,
+        meta: z.strictObject({ workingDirectory: nonBlank }),
+      }),
+      z.strictObject({
+        type: z.literal("skill"),
+        id: mentionId,
+        label: id,
+        offset: mentionOffset,
+        meta: z.strictObject({ description: z.string() }),
+      }),
+    ]),
+  ),
+});
 const locale = z.tuple([z.enum(SUPPORTED_LOCALES)]);
 const session = z.tuple([z.uuid()]);
 const sessionFlag = z.tuple([z.uuid(), z.boolean()]);
+const sessionChange = z.tuple([z.uuid(), z.uuid()]);
 const provider = z.strictObject({
   id,
   kind: z.enum(["anthropic", "openai-compatible", "openai-responses", "faux"]),
@@ -106,8 +130,11 @@ const inputs = {
     ]),
   ]),
   [IPC.agentGetSnapshot]: none,
-  [IPC.agentPrompt]: z.tuple([nonBlank, nonBlank.optional()]),
+  [IPC.agentPrompt]: z.tuple([z.union([nonBlank, promptInput]), nonBlank.optional()]),
   [IPC.agentSearchWorkspace]: z.tuple([z.string().max(WORKSPACE_QUERY_LENGTH)]),
+  [IPC.agentPreviewWorkspaceReference]: z.tuple([
+    z.strictObject({ path: mentionId, workingDirectory: nonBlank.optional() }),
+  ]),
   [IPC.agentAbort]: none,
   [IPC.agentClearQueue]: none,
   [IPC.sessionNew]: none,
@@ -120,6 +147,8 @@ const inputs = {
   [IPC.sessionFork]: session,
   [IPC.sessionCopy]: session,
   [IPC.sessionPersona]: z.tuple([z.uuid(), z.string().nullable()]),
+  [IPC.sessionFileDiff]: sessionChange,
+  [IPC.sessionUndoFileChange]: sessionChange,
   [IPC.settingsModelCatalog]: providerRef,
   [IPC.settingsTestProvider]: providerRef,
   [IPC.settingsPickWorkingDirectory]: locale,

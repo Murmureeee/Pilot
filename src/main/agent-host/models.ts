@@ -7,6 +7,7 @@ import {
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
+  fauxThinking,
   fauxToolCall,
   type Api,
   type Model,
@@ -24,6 +25,8 @@ import { messageText } from "./session-store";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
 import { isLocalOpenAiProvider } from "../../shared/providers";
+import { visibleMessageText } from "../../shared/mentions";
+import { legacyMentionParts } from "./mentions";
 
 export interface ResolvedModel {
   model: Model<Api>;
@@ -43,7 +46,10 @@ function resolveFaux(): ResolvedModel {
     const messages = context.messages ?? [];
     const last = messages.at(-1) as AgentMessage | undefined;
     const lastUser = messages.findLast((message) => message.role === "user");
-    const echoed = lastUser ? messageText(lastUser).slice(0, 200) : "（空输入）";
+    const text = lastUser ? messageText(lastUser) : "（空输入）";
+    const withoutSkillBodies = text.split("\n\n## Skills selected for this request\n\n", 1)[0];
+    const parts = legacyMentionParts(withoutSkillBodies);
+    const echoed = (parts ? visibleMessageText(parts) : text).slice(0, 200);
     const chinese = /\p{Script=Han}/u.test(echoed);
 
     // 工具结果回填后的收尾响应
@@ -102,11 +108,16 @@ function resolveFaux(): ResolvedModel {
       return inner(m, context, options);
     }
 
-    // 触发词「演示 / demo」→ 脚本化 write_file 工具调用（会弹权限确认窗）
+    // 触发词「演示 / demo」覆盖思考流、工具授权和文件变更。
     if (/演示|demo/i.test(echoed)) {
       faux.appendResponses([
         fauxAssistantMessage(
           [
+            fauxThinking(
+              chinese
+                ? "先在工作目录写入演示文件，再确认工具返回与文件差异。"
+                : "Write the demo file in the workspace, then check the tool result and file changes.",
+            ),
             fauxToolCall("write_file", {
               path: "pi-desktop-demo.txt",
               content: "由 faux 工具演示写入\n时间戳占位",

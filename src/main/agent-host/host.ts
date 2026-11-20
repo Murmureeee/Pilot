@@ -7,30 +7,36 @@ import {
   type AgentMessage,
   type AgentTool,
 } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessageEvent, ToolResultMessage } from "@earendil-works/pi-ai";
 import type {
   AgentStatus,
+  FileDiff,
+  PromptInput,
   SessionMeta,
   Snapshot,
   ToolRule,
   UiAgentEvent,
   UiMessage,
 } from "@shared/contract";
-import { APP_NAME } from "../../shared/constants";
-import { applyPlanUpdate } from "../../shared/plan";
+import { APP_NAME, DEFAULT_THINKING_LEVEL } from "../../shared/constants";
+import { applyMessageEvent } from "../../shared/message-events";
 import { toPublicSettings } from "../settings";
 import { decryptSecret } from "../settings/secrets";
 import type { ProviderConfig, Settings } from "../settings/types";
+import { readFileChange, restoreFileChange } from "../workspace/file-changes";
 import { getCommandShell } from "../workspace/shell";
+import type { RecordedFileChange } from "../workspace/types";
 import type { McpManager } from "./mcp";
+import { prepareMentionPrompt } from "./mentions";
 import { resolveModel } from "./models";
 import { PermissionManager } from "./permissions";
-import { messageText, SessionStore, toUiMessages } from "./session-store";
-import { loadSkillBody, scanSkills } from "./skills";
+import { messageParts, messageText, SessionStore, toUiMessages } from "./session-store";
+import { loadSkillBody, scanSkills, skillSection } from "./skills";
 import { createTools, labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
 import type { ToolEnvironment } from "./tools/types";
+import type { PreparedPrompt, ReferencedUserMessage, TimedAssistantMessage } from "./types";
 
 type Broadcast = (event: UiAgentEvent) => void;
 
@@ -60,6 +66,9 @@ export class AgentHost {
   private agentSystemPrompt: string | null = null;
   private agentToolEnvironment: ToolEnvironment | null = null;
   private localTools: AgentTool[] = [];
+  private readonly promptSkillInstructions = new Map<AgentMessage, readonly string[]>();
+  private readonly thinkingStarts = new Map<number, number>();
+  private thinkingDurations: Record<number, number> = {};
   private preparingPrompt?: AbortController;
   private sessionId: string | null = null;
   private uiMessages: UiMessage[] = [];
@@ -108,6 +117,7 @@ export class AgentHost {
   }
 
   private send(event: UiAgentEvent): void {
+    this.uiMessages = applyMessageEvent(this.uiMessages, event);
     this.deps.broadcast(event);
   }
 
@@ -129,6 +139,11 @@ export class AgentHost {
    */
   private buildSystemPrompt(sessionId: string, settings: Settings): string {
     const sections = [`You are a helpful assistant running inside ${APP_NAME}.`];
+    if (settings.workingDirectory) {
+      sections.push(
+        "When citing a known workspace item in a reply, link to its workspace-relative path in Markdown. Use a trailing / for folders and add #L followed by the line number for files when known. URL-encode spaces and brackets in the link target.",
+      );
+    }
 
     const meta = this.deps.store.getMeta(sessionId);
     const custom = (meta?.personaOverride ?? settings.persona ?? "").trim();
@@ -141,10 +156,32 @@ export class AgentHost {
       if (!skill.enabled) continue;
       const body = loadSkillBody(this.deps.skillsDir, skill.id);
       if (body && body.length > 0) {
-        sections.push(`## 技能：${skill.name}\n\n${body}`);
+        sections.push(skillSection(skill.name, body));
       }
     }
     return sections.join("\n\n");
+  }
+
+  private prepareRequestMessages(messages: AgentMessage[], systemPrompt: string): AgentMessage[] {
+    // Apply explicit skills to the model request without putting their bodies in the transcript.
+    return messages.map((message) => {
+      if (message.role === "toolResult" && readFileChange(message.toolName, message.details)) {
+        return { ...message, details: undefined };
+      }
+      if (message.role !== "user") return message;
+      const sections = this.promptSkillInstructions
+        .get(message)
+        ?.filter((section) => !systemPrompt.includes(section));
+      const { pilotReference, ...providerMessage } = message as ReferencedUserMessage;
+      if (!pilotReference && !sections?.length) return message;
+      const content = [messageText(message)];
+      if (typeof pilotReference?.context === "string") content.push(pilotReference.context);
+      if (sections?.length) content.push("## Skills selected for this request", ...sections);
+      return {
+        ...providerMessage,
+        content: content.join("\n\n"),
+      };
+    });
   }
 
   /** 确保当前会话有 Agent 实例；跨会话或 provider/模型/systemPrompt 变更时重建（转录从落盘恢复） */
@@ -191,11 +228,22 @@ export class AgentHost {
         model,
         tools: this.localTools,
         messages,
-        thinkingLevel: settings.thinkingLevel ?? "medium",
+        thinkingLevel: settings.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
       },
       streamFn,
-      beforeToolCall: async ({ toolCall, args }) =>
-        this.permissions.gate(toolCall.name, args, this.deps.mcp.policyOf(toolCall.name)),
+      transformContext: async (contextMessages) =>
+        this.prepareRequestMessages(contextMessages, systemPrompt),
+      beforeToolCall: async ({ toolCall, args }, signal) => {
+        const result = await this.permissions.gate(
+          toolCall.name,
+          args,
+          this.deps.mcp.policyOf(toolCall.name),
+        );
+        if (!result?.block && !signal?.aborted) {
+          this.reportTool("tool_start", toolCall.id, toolCall.name, toolCall.arguments);
+        }
+        return result;
+      },
     });
 
     this.unsubscribe?.();
@@ -211,61 +259,99 @@ export class AgentHost {
     return agent;
   }
 
+  private reportTool(
+    type: "tool_call" | "tool_start",
+    callId: string,
+    toolName: string,
+    args: unknown,
+  ): void {
+    const message = this.uiMessages.at(-1);
+    if (toolName === PLAN_TOOL_NAME || message?.role !== "assistant") return;
+    if (
+      type === "tool_call" &&
+      message.parts.some((part) => part.type === "tool" && part.callId === callId)
+    )
+      return;
+    this.send({
+      type,
+      id: message.id,
+      callId,
+      toolName,
+      label: this.toolLabel(toolName),
+      inputSummary: JSON.stringify(args) ?? "{}",
+    });
+  }
+
+  private finishThinking(id: string, blockIndex: number, text: string): void {
+    const startedAt = this.thinkingStarts.get(blockIndex);
+    this.thinkingStarts.delete(blockIndex);
+    const durationMs =
+      startedAt === undefined ? undefined : Math.round(performance.now() - startedAt);
+    if (durationMs !== undefined) this.thinkingDurations[blockIndex] = durationMs;
+    this.send({ type: "thinking_end", id, blockIndex, text, durationMs });
+  }
+
+  private onAssistantUpdate(event: AssistantMessageEvent): void {
+    const last = this.uiMessages.at(-1);
+    if (last?.role !== "assistant") return;
+    const { id } = last;
+    switch (event.type) {
+      case "text_delta":
+        this.send({ type: "assistant_delta", id, delta: event.delta });
+        break;
+      case "thinking_start":
+        this.thinkingStarts.set(event.contentIndex, performance.now());
+        this.send({ type: "thinking_start", id, blockIndex: event.contentIndex });
+        break;
+      case "thinking_delta":
+        this.send({
+          type: "thinking_delta",
+          id,
+          blockIndex: event.contentIndex,
+          delta: event.delta,
+        });
+        break;
+      case "thinking_end":
+        this.finishThinking(id, event.contentIndex, event.content);
+        break;
+      case "toolcall_end":
+        this.reportTool(
+          "tool_call",
+          event.toolCall.id,
+          event.toolCall.name,
+          event.toolCall.arguments,
+        );
+        break;
+    }
+  }
+
   private onAgentEvent(event: AgentEvent): void {
     if (event.type === "message_start") {
       const message = event.message;
       if (message.role === "user") {
-        const ui: UiMessage = {
-          id: `s-${this.nextId++}`,
-          role: "user",
-          parts: [{ type: "text", text: messageText(message) }],
-        };
-        this.uiMessages.push(ui);
-        this.send({ type: "user_message", message: ui });
-        return;
-      }
-      if (message.role === "assistant") {
-        const ui: UiMessage = { id: `s-${this.nextId++}`, role: "assistant", parts: [] };
-        this.uiMessages.push(ui);
-        this.send({ type: "assistant_start", id: ui.id });
+        this.send({
+          type: "user_message",
+          message: {
+            id: "s-" + this.nextId++,
+            role: "user",
+            parts: messageParts(message),
+          },
+        });
+      } else if (message.role === "assistant") {
+        this.thinkingStarts.clear();
+        this.thinkingDurations = {};
+        this.send({ type: "assistant_start", id: "s-" + this.nextId++ });
       }
       return;
     }
 
     if (event.type === "message_update") {
-      const inner = event.assistantMessageEvent;
-      if (inner.type === "text_delta") {
-        const last = this.uiMessages.at(-1);
-        if (last?.role === "assistant") {
-          const textPart = last.parts.at(-1);
-          if (textPart?.type === "text") {
-            textPart.text += inner.delta;
-          } else {
-            last.parts.push({ type: "text", text: inner.delta });
-          }
-          this.send({ type: "assistant_delta", id: last.id, delta: inner.delta });
-        }
-      }
-      if (inner.type === "thinking_start") {
-        const last = this.uiMessages.at(-1);
-        if (last?.role === "assistant") {
-          last.parts.push({ type: "thinking", text: "" });
-          this.send({ type: "thinking_start", id: last.id });
-        }
-      }
-      if (inner.type === "thinking_delta") {
-        const last = this.uiMessages.at(-1);
-        if (last?.role === "assistant") {
-          const thinkingPart = last.parts.findLast((p) => p.type === "thinking");
-          if (thinkingPart?.type === "thinking") thinkingPart.text += inner.delta;
-          this.send({ type: "thinking_delta", id: last.id, delta: inner.delta });
-        }
-      }
+      this.onAssistantUpdate(event.assistantMessageEvent);
       return;
     }
 
     if (event.type === "message_end" && event.message.role === "assistant") {
-      const assistant = event.message as AssistantMessage;
+      const assistant: TimedAssistantMessage = event.message;
       if (assistant.usage) {
         this.usage.input += assistant.usage.input;
         this.usage.output += assistant.usage.output;
@@ -286,68 +372,57 @@ export class AgentHost {
         });
       }
       const last = this.uiMessages.at(-1);
-      if (last?.role === "assistant") this.send({ type: "assistant_end", id: last.id });
+      if (last?.role === "assistant") {
+        for (const blockIndex of this.thinkingStarts.keys()) {
+          const block = assistant.content[blockIndex];
+          if (block?.type === "thinking") this.finishThinking(last.id, blockIndex, block.thinking);
+        }
+        if (Object.keys(this.thinkingDurations).length > 0)
+          assistant.pilotThinkingDurations = this.thinkingDurations;
+        this.send({ type: "assistant_end", id: last.id });
+      }
       return;
     }
 
     if (event.type === "tool_execution_start") {
-      if (event.toolName === PLAN_TOOL_NAME) return;
-      const last = this.uiMessages.at(-1);
-      if (last?.role === "assistant") {
-        const inputSummary = JSON.stringify(event.args) ?? "{}";
-        const label = this.toolLabel(event.toolName);
-        last.parts.push({
-          type: "tool",
-          callId: event.toolCallId,
-          toolName: event.toolName,
-          label,
-          state: "running",
-          inputSummary,
-        });
-        this.send({
-          type: "tool_start",
-          callId: event.toolCallId,
-          toolName: event.toolName,
-          label,
-          inputSummary,
-        });
-      }
+      this.reportTool("tool_call", event.toolCallId, event.toolName, event.args);
       return;
     }
 
     if (event.type === "tool_execution_update") {
       if (event.toolName === PLAN_TOOL_NAME) return;
       const output = resultText(event.partialResult);
-      if (output !== undefined) {
+      if (output !== undefined)
         this.send({ type: "tool_update", callId: event.toolCallId, output });
-      }
       return;
     }
 
     if (event.type === "tool_execution_end") {
       if (event.toolName === PLAN_TOOL_NAME) {
         const steps = event.isError ? undefined : readPlanSteps(event.result.details);
-        if (steps) {
-          this.uiMessages = applyPlanUpdate(this.uiMessages, steps);
-          this.send({ type: "plan", steps });
-        }
+        if (steps) this.send({ type: "plan", steps });
         return;
       }
       const output = resultText(event.result);
-      const isError = event.isError;
-      const part = findToolPart(this.uiMessages, event.toolCallId);
-      if (part) {
-        part.state = isError ? "error" : "success";
-        if (output !== undefined) part.output = output;
-        if (isError && output !== undefined) part.error = output;
-      }
       this.send({
         type: "tool_end",
         callId: event.toolCallId,
-        state: isError ? "error" : "success",
+        state: event.isError ? "error" : "success",
         output,
-        error: isError ? (output ?? "工具执行失败") : undefined,
+        error: event.isError ? (output ?? "工具执行失败") : undefined,
+        durationMs: event.durationMs,
       });
+      return;
+    }
+
+    if (event.type === "message_end" && event.message.role === "toolResult") {
+      const change = readFileChange(event.message.toolName, event.message.details);
+      if (change)
+        this.send({
+          type: "file_change",
+          callId: event.message.toolCallId,
+          change: change.summary,
+        });
       return;
     }
 
@@ -365,6 +440,7 @@ export class AgentHost {
 
   /** 一轮运行结束：以 agent 转录为准全量校准 UI，落盘，回 idle */
   private settle(): void {
+    this.promptSkillInstructions.clear();
     if (this.agent && this.agentSessionId) {
       this.uiMessages = toUiMessages(this.agent.state.messages, "s", (name) =>
         this.toolLabel(name),
@@ -400,11 +476,27 @@ export class AgentHost {
     );
   }
 
+  preparePrompt(input: string | PromptInput): string | PreparedPrompt {
+    if (typeof input === "string") return input;
+    return prepareMentionPrompt(
+      input,
+      (directory) => this.acceptsReferenceDirectory(directory),
+      this.deps.skillsDir,
+    );
+  }
+
   /** 运行中 = 插话（steer），空闲 = 发起新一轮 */
-  async prompt(text: string): Promise<void> {
-    if (this.status === "streaming" || this.status === "waiting_approval") {
+  async prompt(input: string | PreparedPrompt): Promise<void> {
+    const busy = this.status !== "idle";
+    if (!busy) this.promptSkillInstructions.clear();
+    const text = typeof input === "string" ? input : input.text;
+    const message: ReferencedUserMessage = { role: "user", content: text, timestamp: Date.now() };
+    if (typeof input !== "string" && input.reference) message.pilotReference = input.reference;
+    if (typeof input !== "string" && input.skillInstructions.length > 0) {
+      this.promptSkillInstructions.set(message, input.skillInstructions);
+    }
+    if (busy) {
       if (!this.agent) return;
-      const message: AgentMessage = { role: "user", content: text, timestamp: Date.now() };
       this.agent.steer(message);
       const queued = this.agent.peekQueuedMessages() ?? [];
       this.steerCount = queued.length;
@@ -423,7 +515,7 @@ export class AgentHost {
       // pi snapshots tool declarations as it starts the prompt, before preparing the request.
       agent.state.tools = [...this.localTools, ...externalTools];
       this.preparingPrompt = undefined;
-      await agent.prompt(text);
+      await agent.prompt(message);
     } catch (error) {
       if (agent && this.agent !== agent) return;
       if (preparation.signal.aborted) {
@@ -575,6 +667,50 @@ export class AgentHost {
     return this.getSnapshot();
   }
 
+  private sessionFileChange(
+    sessionId: string,
+    changeId: string,
+  ): {
+    messages: AgentMessage[];
+    index: number;
+    message: ToolResultMessage;
+    change: RecordedFileChange;
+  } {
+    if (this.sessionId !== sessionId) throw new Error("会话已切换，请重新打开文件变更。");
+    const messages =
+      this.agentSessionId === sessionId && this.agent
+        ? this.agent.state.messages
+        : this.deps.store.load(sessionId);
+    for (const [index, message] of messages.entries()) {
+      if (message.role !== "toolResult") continue;
+      const change = readFileChange(message.toolName, message.details);
+      if (change?.summary.id === changeId) return { messages, index, message, change };
+    }
+    throw new Error("找不到这条文件变更。");
+  }
+
+  getFileDiff(sessionId: string, changeId: string): FileDiff {
+    const { change } = this.sessionFileChange(sessionId, changeId);
+    if (!change.snapshot) throw new Error("此文件没有可用的差异预览。");
+    return change.snapshot.diff;
+  }
+
+  undoFileChange(sessionId: string, changeId: string): void {
+    if (this.status !== "idle") throw new Error("请等待当前回复结束后再撤销。");
+    const { messages, index, message, change } = this.sessionFileChange(sessionId, changeId);
+    if (change.summary.reverted) return;
+    restoreFileChange(change, this.deps.getSettings().workingDirectory);
+
+    const reverted = { ...change.summary, reverted: true };
+    const updated = messages.with(index, {
+      ...message,
+      details: { pilotFileChange: { ...change, summary: reverted } },
+    });
+    this.deps.store.save(sessionId, updated);
+    if (this.agentSessionId === sessionId && this.agent) this.agent.state.messages = updated;
+    this.send({ type: "file_change", callId: message.toolCallId, change: reverted });
+  }
+
   getSnapshot(): Snapshot {
     return {
       sessionId: this.sessionId,
@@ -588,18 +724,6 @@ export class AgentHost {
       steerCount: this.steerCount,
     };
   }
-}
-
-function findToolPart(
-  messages: UiMessage[],
-  callId: string,
-): Extract<UiMessage["parts"][number], { type: "tool" }> | undefined {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    for (const part of messages[i].parts) {
-      if (part.type === "tool" && part.callId === callId) return part;
-    }
-  }
-  return undefined;
 }
 
 /** 从工具结果 / 部分结果提取纯文本 */

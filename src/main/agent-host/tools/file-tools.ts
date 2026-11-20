@@ -1,9 +1,10 @@
 // @env node
 // 文件类工具：read_file / write_file / edit_file。错误一律 throw（pi 转为 isError 给模型）。
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { int, bool, obj, opt, str } from "@earendil-works/pi-schema";
+import { readFileSnapshot, recordFileChange, textSnapshot } from "../../workspace/file-changes";
 import { TOOL_LABELS } from "./constants";
 import { truncate } from "./output";
 import type { ResolveToolPath } from "./types";
@@ -48,6 +49,7 @@ const writeFileParams = obj({
 
 export function createWriteFileTool(
   resolvePath: ResolveToolPath,
+  workingDirectory?: string,
 ): AgentTool<typeof writeFileParams> {
   return {
     name: "write_file",
@@ -56,11 +58,12 @@ export function createWriteFileTool(
     parameters: writeFileParams,
     execute: async (_id, params): Promise<AgentToolResult> => {
       const abs = resolvePath(params.path);
+      const before = readFileSnapshot(abs);
       mkdirSync(dirname(abs), { recursive: true });
       writeFileSync(abs, params.content, "utf-8");
       return {
         content: [{ type: "text", text: `已写入 ${params.content.length} 字符到 ${abs}` }],
-        details: {},
+        details: recordFileChange(abs, workingDirectory, before, params.content),
       };
     },
   };
@@ -73,7 +76,10 @@ const editFileParams = obj({
   replaceAll: opt(bool({ description: "替换全部匹配（默认仅替换第一处）" })),
 });
 
-export function createEditFileTool(resolvePath: ResolveToolPath): AgentTool<typeof editFileParams> {
+export function createEditFileTool(
+  resolvePath: ResolveToolPath,
+  workingDirectory?: string,
+): AgentTool<typeof editFileParams> {
   return {
     name: "edit_file",
     label: TOOL_LABELS.edit_file,
@@ -81,7 +87,10 @@ export function createEditFileTool(resolvePath: ResolveToolPath): AgentTool<type
     parameters: editFileParams,
     execute: async (_id, params): Promise<AgentToolResult> => {
       const abs = resolvePath(params.path);
-      const raw = readFileSync(abs, "utf-8");
+      const original = readFileSync(abs);
+      const stat = lstatSync(abs);
+      const before = stat.isFile() && stat.nlink === 1 ? textSnapshot(original) : undefined;
+      const raw = original.toString("utf-8");
       const count = raw.split(params.oldText).length - 1;
       if (count === 0) throw new Error("oldText 未在文件中找到，请先 read_file 核对原文");
       if (count > 1 && !params.replaceAll) {
@@ -94,7 +103,7 @@ export function createEditFileTool(resolvePath: ResolveToolPath): AgentTool<type
       const replaced = params.replaceAll ? count : 1;
       return {
         content: [{ type: "text", text: `已在 ${abs} 中替换 ${replaced} 处` }],
-        details: {},
+        details: recordFileChange(abs, workingDirectory, before, next),
       };
     },
   };
