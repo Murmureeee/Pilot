@@ -295,11 +295,9 @@ const EN: Record<string, string> = {
   删除提供方: "Remove provider",
   名称: "Name",
   类型: "Type",
-  "OpenAI 兼容端点（Ollama / 中转站…）": "OpenAI-compatible endpoint (Ollama, proxies, etc.)",
-  "OpenAI 兼容端点": "OpenAI-compatible endpoint",
-  "openai-compatible 必须提供 baseUrl": "An OpenAI-compatible endpoint needs a base URL.",
-  "openai-compatible provider 未配置 API key":
-    "Enter an API key for the OpenAI-compatible provider.",
+  "OpenAI 兼容（Chat Completions）": "OpenAI-compatible (Chat Completions)",
+  "OpenAI 端点必须提供 baseUrl": "An OpenAI endpoint needs a base URL.",
+  "OpenAI 端点未配置 API key": "Enter an API key for the OpenAI endpoint.",
   "anthropic provider 未配置 API key": "Enter an API key for Anthropic.",
   端点返回了空模型目录: "The endpoint returned no models.",
   "provider 缺少 id/kind/modelId": "Enter a model ID for each provider before saving.",
@@ -350,6 +348,7 @@ const EN: Record<string, string> = {
   "Claude 系列模型，填 API Key 即可": "Use an API key to connect to Claude models.",
   "Ollama / LM Studio / 中转站，填 Base URL + Key":
     "Enter the base URL and key for Ollama, LM Studio, or a proxy.",
+  "连接使用 Responses API 的服务": "Connect to a service that uses the Responses API.",
   "本地演示（无需 Key）": "Local demo (no key needed)",
   "内置演示模型，离线体验完整对话与工具流": "Try chatting and running tools offline.",
   "演示模型无需任何配置。发送「演示」可体验工具调用，发送「计划演示」可查看任务计划。":

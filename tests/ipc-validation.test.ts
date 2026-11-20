@@ -87,6 +87,14 @@ describe("IPC argument validation", () => {
     }
   });
 
+  it("accepts Responses providers for catalog, connection tests, and settings", () => {
+    const responses = { ...draft, kind: "openai-responses", modelId: "test-model" };
+    expect(parseIpcArgs(IPC.settingsModelCatalog, [responses])).toEqual([responses]);
+    expect(parseIpcArgs(IPC.settingsTestProvider, [responses])).toEqual([responses]);
+    const input = { ...settings, providers: [responses] };
+    expect(parseIpcArgs(IPC.settingsSave, [input])).toEqual([input]);
+  });
+
   it.each([
     [IPC.toolPermissionRespond, [sessionId, "later"]],
     [IPC.sessionLoad, ["not-a-session-id"]],

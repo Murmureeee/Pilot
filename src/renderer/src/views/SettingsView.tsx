@@ -31,7 +31,7 @@ import type {
   ProviderKind,
   ProviderTestResult,
 } from "@shared/contract";
-import { isLocalOpenAiProvider } from "@shared/providers";
+import { isLocalOpenAiProvider, isOpenAiProvider } from "@shared/providers";
 import { LocalProviderPresets } from "@renderer/components/ai/local-provider-presets";
 import { McpSettings } from "@renderer/components/ai/mcp-settings";
 import { ExternalImportSettings } from "@renderer/components/ai/external-import-settings";
@@ -50,7 +50,8 @@ interface DraftProvider {
 
 const KIND_LABELS: Record<ProviderKind, string> = {
   anthropic: "Anthropic",
-  "openai-compatible": "OpenAI 兼容端点（Ollama / 中转站…）",
+  "openai-compatible": "OpenAI 兼容（Chat Completions）",
+  "openai-responses": "OpenAI Responses",
   faux: "Faux 测试（无需 key）",
 };
 
@@ -59,7 +60,7 @@ function toProviderInput(draft: DraftProvider): ProviderInput {
     id: draft.id,
     kind: draft.kind,
     name: draft.name || draft.id,
-    baseUrl: draft.kind === "openai-compatible" ? draft.baseUrl : undefined,
+    baseUrl: isOpenAiProvider(draft.kind) ? draft.baseUrl : undefined,
     modelId: draft.modelId,
     apiKey: draft.apiKeyInput || undefined,
   };
@@ -370,16 +371,22 @@ export function SettingsView(): JSX.Element {
                     </div>
                   </div>
 
-                  {d.kind === "openai-compatible" && (
+                  {isOpenAiProvider(d.kind) && (
                     <div className="text-muted-foreground grid gap-1 text-xs">
                       <span>Base URL</span>
                       <Input
                         aria-label="Base URL"
                         value={d.baseUrl}
-                        placeholder="http://localhost:11434/v1"
+                        placeholder={
+                          d.kind === "openai-responses"
+                            ? "https://api.openai.com/v1"
+                            : "http://localhost:11434/v1"
+                        }
                         onChange={(e) => update(d.id, { baseUrl: e.target.value })}
                       />
-                      <LocalProviderPresets onSelect={(baseUrl) => update(d.id, { baseUrl })} />
+                      {d.kind === "openai-compatible" && (
+                        <LocalProviderPresets onSelect={(baseUrl) => update(d.id, { baseUrl })} />
+                      )}
                     </div>
                   )}
 

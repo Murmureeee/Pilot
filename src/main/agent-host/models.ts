@@ -13,7 +13,8 @@ import {
   type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import { streamSimple as anthropicStreamSimple } from "@earendil-works/pi-ai/api/anthropic-messages";
-import { streamSimple as openaiStreamSimple } from "@earendil-works/pi-ai/api/openai-completions";
+import { streamSimple as chatCompletionsStreamSimple } from "@earendil-works/pi-ai/api/openai-completions";
+import { streamSimple as responsesStreamSimple } from "@earendil-works/pi-ai/api/openai-responses";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import type {
   ModelCatalogEntry,
@@ -143,19 +144,33 @@ function resolveAnthropic(cfg: ProviderConfig, apiKey: string): ResolvedModel {
   return { model, streamFn };
 }
 
-function resolveOpenAiCompatible(cfg: ProviderConfig, apiKey: string): ResolvedModel {
-  if (!cfg.baseUrl) throw new Error("openai-compatible 必须提供 baseUrl");
-  const model: Model<"openai-completions"> = {
+function resolveOpenAi(cfg: ProviderConfig, apiKey: string): ResolvedModel {
+  const baseUrl = cfg.baseUrl?.trim();
+  if (!baseUrl) throw new Error("OpenAI 端点必须提供 baseUrl");
+  const common: Omit<Model<Api>, "api" | "compat"> = {
     id: cfg.modelId,
     name: cfg.modelId,
-    api: "openai-completions",
     provider: cfg.id,
-    baseUrl: cfg.baseUrl,
+    baseUrl,
     reasoning: false,
     input: ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 128_000,
     maxTokens: 8_192,
+  };
+  if (cfg.kind === "openai-responses") {
+    const model: Model<"openai-responses"> = {
+      ...common,
+      api: "openai-responses",
+      compat: { supportsDeveloperRole: false },
+    };
+    const streamFn: StreamFn = (m, context, options) =>
+      responsesStreamSimple(m as Model<"openai-responses">, context, { ...options, apiKey });
+    return { model, streamFn };
+  }
+  const model: Model<"openai-completions"> = {
+    ...common,
+    api: "openai-completions",
     compat: {
       // Ollama / vLLM / 中转站等兼容端普遍不支持 developer 角色与 reasoning_effort
       supportsDeveloperRole: false,
@@ -163,7 +178,7 @@ function resolveOpenAiCompatible(cfg: ProviderConfig, apiKey: string): ResolvedM
     },
   };
   const streamFn: StreamFn = (m, context, options) =>
-    openaiStreamSimple(m as Model<"openai-completions">, context, {
+    chatCompletionsStreamSimple(m as Model<"openai-completions">, context, {
       ...options,
       apiKey,
     });
@@ -206,18 +221,19 @@ export function resolveModel(cfg: ProviderConfig, apiKey: string | undefined): R
     case "anthropic":
       if (!apiKey) throw new Error("anthropic provider 未配置 API key");
       return resolveAnthropic(cfg, apiKey);
-    case "openai-compatible": {
+    case "openai-compatible":
+    case "openai-responses": {
       // The OpenAI client requires a nonempty key even for servers with authentication disabled.
       const key = apiKey || (isLocalOpenAiProvider(cfg) ? "local" : undefined);
-      if (!key) throw new Error("openai-compatible provider 未配置 API key");
-      return resolveOpenAiCompatible(cfg, key);
+      if (!key) throw new Error("OpenAI 端点未配置 API key");
+      return resolveOpenAi(cfg, key);
     }
     default:
       throw new Error(`未知 provider kind: ${String(cfg.kind)}`);
   }
 }
 
-/** 模型目录（FR-5.2）：anthropic 走 pi-ai catalog；openai-compatible 探测 GET /models */
+/** 模型目录（FR-5.2）：Anthropic 走 pi-ai catalog；OpenAI 兼容端点探测 GET /models。 */
 export async function listModels(
   cfg: ProviderConfig,
   apiKey: string | undefined,
@@ -232,9 +248,11 @@ export async function listModels(
         .getModels("anthropic")
         .map((m) => ({ id: m.id, name: m.name, contextWindow: m.contextWindow }));
     }
-    case "openai-compatible": {
-      if (!cfg.baseUrl) throw new Error("openai-compatible 必须提供 baseUrl");
-      const url = `${cfg.baseUrl.replace(/\/+$/, "")}/models`;
+    case "openai-compatible":
+    case "openai-responses": {
+      const baseUrl = cfg.baseUrl?.trim();
+      if (!baseUrl) throw new Error("OpenAI 端点必须提供 baseUrl");
+      const url = `${baseUrl.replace(/\/+$/, "")}/models`;
       const response = await fetch(url, {
         headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
         signal: AbortSignal.timeout(15_000),
@@ -255,7 +273,7 @@ export async function listModels(
   }
 }
 
-/** 连通性测试（FR-5.1）：最小流式请求探测（faux 离线可测；真实端点消耗 1 token 级用量） */
+/** 连通性测试（FR-5.1）使用最小流式请求，并关闭自动重试。 */
 export async function testProvider(
   cfg: ProviderConfig,
   apiKey: string | undefined,
@@ -269,18 +287,20 @@ export async function testProvider(
     } as TranscriptContext;
     const stream = await streamFn(model, context, {
       maxTokens: 1,
+      maxRetries: 0,
       signal: AbortSignal.timeout(20_000),
     });
     for await (const event of stream) {
       if (event.type === "error") {
-        throw new Error(String(event.error ?? "流式请求失败"));
+        throw new Error(event.error.errorMessage ?? "流式请求失败");
       }
     }
     return { ok: true, latencyMs: Date.now() - startedAt };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       ok: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: apiKey ? message.replaceAll(apiKey, "••••") : message,
       latencyMs: Date.now() - startedAt,
     };
   }

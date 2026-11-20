@@ -221,7 +221,7 @@ export type ThemeSetting = "light" | "dark" | "system";
 export type Locale = "zh" | "en";
 export type CommandShell = "powershell" | "bash";
 
-export type ProviderKind = "anthropic" | "openai-compatible" | "faux";
+export type ProviderKind = "anthropic" | "openai-compatible" | "openai-responses" | "faux";
 
 /** 权限模式（composer 徽章切换）：standard = 读放行写确认；full-access = 全放行；read-only = 写类直接拒绝 */
 export type ApprovalMode = "standard" | "full-access" | "read-only";

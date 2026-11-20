@@ -4,6 +4,7 @@ import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { safeStorage } from "electron";
 import type { PublicSettings, ProviderConfig, Settings, SettingsInput } from "@shared/contract";
+import { isOpenAiProvider } from "../../shared/providers";
 import { findGitBash, getCommandShell } from "./tools/bash";
 import { normalizeWorkingDirectory } from "./tools/paths";
 
@@ -140,8 +141,8 @@ export function validateSettingsInput(input: SettingsInput): string | undefined 
   }
   for (const p of input.providers) {
     if (!p.modelId) return "provider 缺少 id/kind/modelId";
-    if (p.kind === "openai-compatible" && !p.baseUrl) {
-      return "openai-compatible 必须提供 baseUrl";
+    if (isOpenAiProvider(p.kind) && !p.baseUrl?.trim()) {
+      return "OpenAI 端点必须提供 baseUrl";
     }
   }
   return undefined;

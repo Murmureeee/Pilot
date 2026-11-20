@@ -23,15 +23,20 @@ import type {
   ProviderKind,
   ProviderTestResult,
 } from "@shared/contract";
-import { isLocalOpenAiProvider } from "@shared/providers";
+import { isLocalOpenAiProvider, isOpenAiProvider } from "@shared/providers";
 import { LocalProviderPresets } from "./local-provider-presets";
 
 const KIND_OPTIONS: { kind: ProviderKind; label: string; desc: string }[] = [
   { kind: "anthropic", label: "Anthropic", desc: "Claude 系列模型，填 API Key 即可" },
   {
     kind: "openai-compatible",
-    label: "OpenAI 兼容端点",
+    label: "OpenAI 兼容（Chat Completions）",
     desc: "Ollama / LM Studio / 中转站，填 Base URL + Key",
+  },
+  {
+    kind: "openai-responses",
+    label: "OpenAI Responses",
+    desc: "连接使用 Responses API 的服务",
   },
   { kind: "faux", label: "本地演示（无需 Key）", desc: "内置演示模型，离线体验完整对话与工具流" },
 ];
@@ -77,7 +82,7 @@ export function OnboardingDialog({
     id: `onboarding-${Date.now()}`,
     kind,
     name: t(KIND_OPTIONS.find((o) => o.kind === kind)?.label ?? "Provider", locale),
-    baseUrl: kind === "openai-compatible" ? baseUrl.trim() : undefined,
+    baseUrl: isOpenAiProvider(kind) ? baseUrl.trim() : undefined,
     modelId: modelId.trim() || (kind === "faux" ? "faux-default" : ""),
     apiKey: apiKey.trim().length > 0 ? apiKey.trim() : undefined,
   });
@@ -142,7 +147,7 @@ export function OnboardingDialog({
     (step === 2 &&
       (kind === "faux" ||
         (kind === "anthropic" && apiKey.trim().length > 0) ||
-        (kind === "openai-compatible" &&
+        (isOpenAiProvider(kind) &&
           baseUrl.trim().length > 0 &&
           (localProvider || apiKey.trim().length > 0)))) ||
     (step === 3 && (kind === "faux" || modelId.trim().length > 0));
@@ -229,16 +234,20 @@ export function OnboardingDialog({
               </p>
             ) : (
               <>
-                {kind === "openai-compatible" && (
+                {isOpenAiProvider(kind) && (
                   <div className="text-muted-foreground grid gap-1 text-xs">
                     <span>Base URL</span>
                     <Input
                       aria-label="Base URL"
                       value={baseUrl}
-                      placeholder="http://localhost:11434/v1"
+                      placeholder={
+                        kind === "openai-responses"
+                          ? "https://api.openai.com/v1"
+                          : "http://localhost:11434/v1"
+                      }
                       onChange={(e) => setBaseUrl(e.target.value)}
                     />
-                    <LocalProviderPresets onSelect={setBaseUrl} />
+                    {kind === "openai-compatible" && <LocalProviderPresets onSelect={setBaseUrl} />}
                   </div>
                 )}
                 <div className="text-muted-foreground grid gap-1 text-xs">

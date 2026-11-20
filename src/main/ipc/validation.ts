@@ -11,7 +11,7 @@ const session = z.tuple([z.uuid()]);
 const sessionFlag = z.tuple([z.uuid(), z.boolean()]);
 const provider = z.strictObject({
   id,
-  kind: z.enum(["anthropic", "openai-compatible", "faux"]),
+  kind: z.enum(["anthropic", "openai-compatible", "openai-responses", "faux"]),
   name: z.string(),
   baseUrl: z.string().optional(),
   modelId: z.string(),
