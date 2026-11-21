@@ -19,7 +19,7 @@ Pilot 现在可以在多个本地项目之间切换，并在重启后继续中�
 
 ### 下载与更新
 
-- Windows x64 可下载安装包。已安装的用户可在「帮助 → 关于 Pilot」检查更新。
+- 已安装的 Windows 用户可在「帮助 → 关于 Pilot」检查更新。[下载 Windows x64 安装包](https://github.com/Murmureeee/Pilot/releases/download/v0.2.0/pilot-0.2.0-x64-setup.exe)
 - Linux x64 提供 AppImage 和 Debian `.deb` 安装包。
 
 [查看 v0.1.1 到 v0.2.0 的提交记录](https://github.com/Murmureeee/Pilot/compare/v0.1.1...v0.2.0)
