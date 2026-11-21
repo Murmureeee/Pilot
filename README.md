@@ -15,7 +15,7 @@ Pilot 是基于 pi 的桌面 AI 工作台。你可以从一次对话开始，让
 
 Linux 文件随启用该构建流程的正式版提供。AppImage 添加执行权限后运行。Debian、Ubuntu 及其衍生发行版可使用 `sudo apt install ./pilot-<版本号>-linux-amd64.deb` 安装。
 
-Windows 用户可以从 **帮助 → 关于 Pilot** 检查更新并确认安装。Linux 用户通过 Releases 下载新版。
+Windows 安装版在启动后自动检查并下载更新，也可以从 **帮助 → 检查更新…** 手动检查。下载完成后，点击侧栏设置上方的更新图标即可安装并重新打开 Pilot。Linux 用户通过 Releases 下载新版。
 
 ## 开始使用
 

@@ -15,7 +15,7 @@ Download the package for your platform from **Assets**. Each release page descri
 
 Linux packages are available starting with the first release built by the Linux workflow. Make the AppImage executable before running it. On Debian, Ubuntu, or a derivative, install the Debian package with `sudo apt install ./pilot-<version>-linux-amd64.deb`.
 
-On Windows, open **Help → About Pilot** to check for updates and confirm installation. On Linux, download the updated package from Releases.
+On Windows, Pilot checks for and downloads updates after launch. To check manually, open **Help → Check for updates…**. Once the update is ready, click the update icon above Settings to install it and reopen Pilot. On Linux, download the updated package from Releases.
 
 ## Get started
 
