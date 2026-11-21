@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { int, obj, opt, str } from "@earendil-works/pi-schema";
 import { createToolPathResolver } from "../../workspace/paths";
-import { findGitBash } from "../../workspace/shell";
+import { shellExecutable } from "../../workspace/shell";
 import { TOOL_LABELS } from "./constants";
 import { truncate } from "./output";
 import type { ToolEnvironment } from "./types";
@@ -30,13 +30,7 @@ export function createBashTool({
     execute: async (_id, params, signal, onUpdate): Promise<AgentToolResult> => {
       signal?.throwIfAborted();
       const cwd = createToolPathResolver(workingDirectory)(".");
-      const executable = powershell
-        ? "powershell.exe"
-        : process.platform === "win32"
-          ? findGitBash()
-          : "bash";
-      if (!executable)
-        throw new Error("找不到 Git Bash。请安装 Git for Windows，或切换到 PowerShell。");
+      const executable = shellExecutable(commandShell);
       const args = powershell
         ? [
             "-NoProfile",

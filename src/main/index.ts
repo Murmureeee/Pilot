@@ -17,6 +17,7 @@ import { runAgentSmoke } from "./agent-host/smoke";
 import { TITLE_BAR_OVERLAY_COLORS, WINDOWS_APP_ID } from "./constants";
 import { prepareUserDataDirectory } from "./profile";
 import { DesktopUpdater } from "./updater";
+import { VerificationManager } from "./verification";
 
 const isDev = !app.isPackaged;
 
@@ -146,6 +147,9 @@ app.whenReady().then(() => {
     log.setLevel(getLogLevel(settings));
   };
   const store = new SessionStore(sessionsDir);
+  const verification = new VerificationManager(join(sessionsDir, "verification"), (result) =>
+    sendToRenderers(AGENT_EVENT_CHANNEL, { type: "verification_updated", result }),
+  );
   const mcp = new McpManager(getSettings, app.getVersion());
   const host = new AgentHost({
     store,
@@ -178,12 +182,13 @@ app.whenReady().then(() => {
     host,
     mcp,
     updater,
+    verification,
     isDev,
   });
   createWindow(log);
   app.once("before-quit", (event) => {
     event.preventDefault();
-    void mcp.close().finally(() => app.quit());
+    void Promise.allSettled([mcp.close(), verification.close()]).then(() => app.quit());
   });
   setTimeout(() => void updater.check(), 2000).unref();
 

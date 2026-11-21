@@ -32,10 +32,13 @@ import type {
   SettingsInput,
   SkillMeta,
   Snapshot,
+  StartVerification,
   ThemeSetting,
   ThinkingLevel,
   UiAgentEvent,
   UpdateStatus,
+  VerificationResult,
+  VerificationState,
   WorkspaceEntry,
   WorkspaceReferencePreview,
   WorkspaceReferenceRequest,
@@ -113,6 +116,14 @@ export interface PiApi {
   sessionInstructionSources(composerId: string): Promise<SessionInstructionSources>;
   sessionFileDiff(id: string, changeId: string): Promise<FileDiff>;
   sessionUndoFileChange(id: string, changeId: string): Promise<void>;
+  sessionVerification(composerId: string): Promise<VerificationState>;
+  sessionVerificationRun(composerId: string, runId: string): Promise<VerificationResult>;
+  sessionStartVerification(
+    composerId: string,
+    request: StartVerification,
+  ): Promise<VerificationResult>;
+  sessionStopVerification(composerId: string, runId: string): Promise<VerificationResult>;
+  sessionRerunVerification(composerId: string, runId: string): Promise<VerificationResult>;
   settingsGet(): Promise<PublicSettings>;
   settingsSave(input: SettingsInput): Promise<PublicSettings>;
   settingsSetLogLevel(level: LogLevel): Promise<void>;

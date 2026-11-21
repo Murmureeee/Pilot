@@ -20,6 +20,29 @@ function applyRunEvent(state: AgentUiState, event: AgentRunEvent): AgentUiState 
 }
 
 describe("agent-events adapter", () => {
+  it("keeps verification output separate from agent messages and usage", () => {
+    const state = initialRunUiState();
+    expect(
+      applyAgentEvent(state, {
+        type: "verification_updated",
+        result: {
+          ...run,
+          runId: "check-1",
+          task: { taskId: "task-1", agentRunId: run.runId },
+          kind: "test",
+          command: "pnpm test --run",
+          shell: "powershell",
+          workingDirectory: "E:/a",
+          status: "success",
+          output: "passed",
+          startedAt: 1,
+          durationMs: 24,
+          exitCode: 0,
+          revision: 1,
+        },
+      }),
+    ).toBe(state);
+  });
   it("activates a newly created project session before its first message arrives", () => {
     const session = {
       id: "project-chat",

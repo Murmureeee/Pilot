@@ -8,6 +8,8 @@ import type {
   LogLevel,
   ProviderKind,
   ThemeSetting,
+  VerificationKind,
+  VerificationStatus,
 } from "@shared/contract";
 import type { ExternalImportKind } from "@shared/imports";
 import type { ComposerCommand, SettingsSection } from "./types";
@@ -144,6 +146,19 @@ export const COMPOSER_SURFACE_CLASS =
 export const FILE_REVIEW_MIN_WINDOW_WIDTH = 700;
 export const FILE_CHANGES_MIN_WINDOW_WIDTH = 900;
 export const FILE_CHANGES_TREE_MIN_WIDTH = 500;
+export const VERIFICATION_LABELS: Record<VerificationKind, string> = {
+  test: "测试",
+  typecheck: "类型检查",
+  build: "构建",
+};
+export const VERIFICATION_STATUS_LABELS: Record<VerificationStatus, string> = {
+  running: "运行中…",
+  stopping: "正在停止…",
+  success: "成功",
+  failed: "失败",
+  stopped: "已停止",
+  interrupted: "已中断",
+};
 export const FILE_CHANGES_PANEL_CLASS =
   "border-border bg-background flex min-w-0 shrink-0 flex-col border-s [width:min(62%,56rem,calc(100%_-_21rem))]";
 

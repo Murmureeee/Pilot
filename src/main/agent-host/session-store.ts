@@ -10,6 +10,7 @@ import type {
   SessionSettings,
   UiMessage,
   UiPart,
+  VerificationTask,
 } from "@shared/contract";
 import { visibleMessageText } from "../../shared/mentions";
 import { applyPlanUpdate } from "../../shared/plan";
@@ -411,6 +412,7 @@ export class SessionStore {
     messages: AgentMessage[],
     checkpoint?: RunCheckpoint,
     gitChanges?: SavedGitChanges | null,
+    lastTask?: VerificationTask,
   ): SessionMeta {
     this.writeTranscript(id, messages, checkpoint, gitChanges);
     const firstUser = messages.find((m) => m.role === "user") ?? checkpoint?.pending[0];
@@ -422,12 +424,14 @@ export class SessionStore {
       // 手动重命名过的会话：自动标题不覆盖（titleCustom 由 rename 置位）
       if (!meta.titleCustom) meta.title = title;
       meta.updatedAt = Date.now();
+      if (lastTask) meta.lastTask = lastTask;
     } else {
       this.index.sessions.push({
         id,
         title,
         createdAt: Date.now(),
         updatedAt: Date.now(),
+        lastTask,
       });
     }
     this.writeIndex();

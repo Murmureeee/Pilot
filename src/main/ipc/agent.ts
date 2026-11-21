@@ -7,10 +7,15 @@ import { openVsCodeAtLine } from "../workspace/editor";
 import { readProjectGitHead } from "../workspace/git";
 import { previewWorkspaceReference } from "../workspace/reference";
 import { searchWorkspace } from "../workspace/search";
+import { getCommandShell } from "../workspace/shell";
 import { handle } from "./transport";
 import type { IpcContext } from "./types";
 
-export function registerAgentRoutes({ host }: Pick<IpcContext, "host">): void {
+export function registerAgentRoutes({
+  host,
+  verification,
+  getSettings,
+}: Pick<IpcContext, "host" | "verification" | "getSettings">): void {
   handle(IPC.runAgentSmoke, () => runAgentSmoke());
   handle(IPC.agentGetSnapshot, () => host.publishSnapshot());
   handle(IPC.agentSearchWorkspace, (_event, query, expectedDirectory) => {
@@ -79,7 +84,11 @@ export function registerAgentRoutes({ host }: Pick<IpcContext, "host">): void {
   handle(IPC.sessionRename, (_event, id, title) =>
     host.renameSession(id, title.trim().slice(0, 100)),
   );
-  handle(IPC.sessionDelete, (_event, id) => host.deleteSession(id));
+  handle(IPC.sessionDelete, async (_event, id) => {
+    const snapshot = await host.deleteSession(id);
+    await verification.remove(id);
+    return snapshot;
+  });
   handle(IPC.sessionPin, (_event, id, pinned) => host.pinSession(id, pinned));
   handle(IPC.sessionArchive, (_event, id, archived) => host.archiveSession(id, archived));
   handle(IPC.sessionUnread, (_event, id, unread) => host.unreadSession(id, unread));
@@ -91,6 +100,37 @@ export function registerAgentRoutes({ host }: Pick<IpcContext, "host">): void {
   );
   handle(IPC.sessionFileDiff, (_event, id, changeId) => host.getFileDiff(id, changeId));
   handle(IPC.sessionUndoFileChange, (_event, id, changeId) => host.undoFileChange(id, changeId));
+  handle(IPC.sessionVerification, (_event, composerId) => {
+    const { sessionId, workingDirectory } = host.verificationScope(composerId);
+    return verification.state(sessionId, workingDirectory);
+  });
+  const verificationRef = (
+    composerId: string,
+    runId: string,
+  ): { sessionId: string; runId: string } => {
+    const { sessionId } = host.verificationScope(composerId);
+    if (!sessionId) throw new Error("找不到这次验证。");
+    return { sessionId, runId };
+  };
+  handle(IPC.sessionVerificationRun, (_event, composerId, runId) =>
+    verification.result(verificationRef(composerId, runId)),
+  );
+  handle(IPC.sessionStartVerification, (_event, composerId, request) => {
+    const { sessionId, task } = host.verificationScope(composerId, request.workingDirectory);
+    if (!sessionId) throw new Error("请先选择工作目录。");
+    return verification.start({
+      ...request,
+      sessionId,
+      task,
+      shell: getCommandShell(getSettings().commandShell),
+    });
+  });
+  handle(IPC.sessionStopVerification, (_event, composerId, runId) =>
+    verification.stop(verificationRef(composerId, runId)),
+  );
+  handle(IPC.sessionRerunVerification, (_event, composerId, runId) =>
+    verification.rerun(verificationRef(composerId, runId)),
+  );
   handle(IPC.agentClearQueue, (_event, run) => host.clearQueue(run));
 
   handle(IPC.toolPermissionRespond, (_event, run, requestId, decision) =>

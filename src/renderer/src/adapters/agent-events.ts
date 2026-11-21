@@ -82,6 +82,7 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
   }
 
   switch (event.type) {
+    case "verification_updated":
     case "snapshot":
       return state;
     case "sessions":

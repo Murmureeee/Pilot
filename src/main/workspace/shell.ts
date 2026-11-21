@@ -7,6 +7,14 @@ export function getCommandShell(shell?: CommandShell): CommandShell {
   return process.platform === "win32" && shell !== "bash" ? "powershell" : "bash";
 }
 
+export function shellExecutable(shell: CommandShell): string {
+  if (shell === "powershell") return "powershell.exe";
+  if (process.platform !== "win32") return "bash";
+  const bash = findGitBash();
+  if (!bash) throw new Error("找不到 Git Bash。请安装 Git for Windows，或切换到 PowerShell。");
+  return bash;
+}
+
 export function findGitBash(): string | undefined {
   const roots = [
     process.env.ProgramFiles && join(process.env.ProgramFiles, "Git"),

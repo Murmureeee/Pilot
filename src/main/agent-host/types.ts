@@ -9,6 +9,7 @@ import type {
   SessionInstructionSources,
   SessionMeta,
   UiUserPart,
+  VerificationTask,
 } from "@shared/contract";
 import type {
   GitCheckpointBase,
@@ -42,6 +43,7 @@ export interface RunCheckpoint {
   pending: ReferencedUserMessage[];
   actions: string[];
   gitBaseline?: GitSnapshot;
+  task?: VerificationTask;
 }
 
 export interface SavedGitChanges {

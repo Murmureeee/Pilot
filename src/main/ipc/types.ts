@@ -11,6 +11,7 @@ import type { AgentHost } from "../agent-host/host";
 import type { McpManager } from "../agent-host/mcp";
 import type { Settings } from "../settings/types";
 import type { DesktopUpdater } from "../updater";
+import type { VerificationManager } from "../verification";
 import type { parseIpcArgs } from "./validation";
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
@@ -35,5 +36,6 @@ export interface IpcContext {
   host: AgentHost;
   mcp: McpManager;
   updater: DesktopUpdater;
+  verification: VerificationManager;
   isDev: boolean;
 }

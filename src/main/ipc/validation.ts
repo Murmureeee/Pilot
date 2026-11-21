@@ -6,7 +6,7 @@ import {
   THINKING_LEVELS,
   WORKSPACE_QUERY_LENGTH,
 } from "../../shared/constants";
-import { IPC } from "../../shared/contract";
+import { IPC, VERIFICATION_KINDS } from "../../shared/contract";
 import type { IpcChannel } from "./types";
 
 const none = z.tuple([]);
@@ -190,6 +190,23 @@ const inputs = {
   [IPC.sessionInstructionSources]: session,
   [IPC.sessionFileDiff]: sessionChange,
   [IPC.sessionUndoFileChange]: sessionChange,
+  [IPC.sessionVerification]: session,
+  [IPC.sessionVerificationRun]: sessionChange,
+  [IPC.sessionStartVerification]: z.tuple([
+    z.uuid(),
+    z.strictObject({
+      workingDirectory: mentionId,
+      kind: z.enum(VERIFICATION_KINDS),
+      command: z
+        .string()
+        .trim()
+        .min(1)
+        .max(4096)
+        .refine((command) => !command.includes("\0")),
+    }),
+  ]),
+  [IPC.sessionStopVerification]: sessionChange,
+  [IPC.sessionRerunVerification]: sessionChange,
   [IPC.settingsModelCatalog]: providerRef,
   [IPC.settingsTestProvider]: providerRef,
   [IPC.settingsPickWorkingDirectory]: locale,

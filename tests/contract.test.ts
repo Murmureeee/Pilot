@@ -62,5 +62,10 @@ describe("IPC contract", () => {
     expect(IPC.sessionInstructionSources).toBe("session:instruction-sources");
     expect(IPC.sessionFileDiff).toBe("session:file-diff");
     expect(IPC.sessionUndoFileChange).toBe("session:undo-file-change");
+    expect(IPC.sessionVerification).toBe("session:verification");
+    expect(IPC.sessionVerificationRun).toBe("session:verification-run");
+    expect(IPC.sessionStartVerification).toBe("session:start-verification");
+    expect(IPC.sessionStopVerification).toBe("session:stop-verification");
+    expect(IPC.sessionRerunVerification).toBe("session:rerun-verification");
   });
 });

@@ -43,6 +43,11 @@ export const IPC = {
   sessionInstructionSources: "session:instruction-sources",
   sessionFileDiff: "session:file-diff",
   sessionUndoFileChange: "session:undo-file-change",
+  sessionVerification: "session:verification",
+  sessionVerificationRun: "session:verification-run",
+  sessionStartVerification: "session:start-verification",
+  sessionStopVerification: "session:stop-verification",
+  sessionRerunVerification: "session:rerun-verification",
   settingsModelCatalog: "settings:model-catalog",
   settingsTestProvider: "settings:test-provider",
   settingsPickWorkingDirectory: "settings:pick-working-directory",
@@ -301,6 +306,7 @@ export type UiAgentEvent =
       activeSessionId?: string;
     }
   | { type: "run_started"; run: ActiveRun }
+  | { type: "verification_updated"; result: VerificationResult }
   | (AgentRunEvent & { run: RunRef })
   | (Extract<AgentRunEvent, { type: "file_change" }> & { sessionId: string });
 
@@ -344,6 +350,7 @@ export interface SessionMeta extends SessionSettings {
   createdAt: number;
   updatedAt: number;
   workingDirectory?: string;
+  lastTask?: VerificationTask;
   /** 用户手动重命名后为 true：自动标题（首条用户消息）不再覆盖 */
   titleCustom?: boolean;
   /** 置顶：侧栏「置顶」分区（时间倒序在其内），悬浮按钮/右键菜单可切换 */
@@ -425,6 +432,55 @@ export interface GitRollbackPreview {
 export type ThemeSetting = "light" | "dark" | "system";
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
 export type CommandShell = "powershell" | "bash";
+
+export const VERIFICATION_KINDS = ["test", "typecheck", "build"] as const;
+export type VerificationKind = (typeof VERIFICATION_KINDS)[number];
+export type VerificationStatus =
+  | "running"
+  | "stopping"
+  | "success"
+  | "failed"
+  | "stopped"
+  | "interrupted";
+
+export interface VerificationTask {
+  taskId: string;
+  agentRunId?: string;
+  title?: string;
+}
+
+export interface VerificationRun extends RunRef {
+  task: VerificationTask;
+  rerunOf?: string;
+  kind: VerificationKind;
+  workingDirectory: string;
+  command: string;
+  shell: CommandShell;
+  status: VerificationStatus;
+  startedAt: number;
+  durationMs: number;
+  exitCode: number | null;
+  revision: number;
+  error?: string;
+  saveError?: string;
+}
+
+export interface VerificationResult extends VerificationRun {
+  output: string;
+  truncated?: true;
+}
+
+export interface VerificationState {
+  workingDirectory: string | null;
+  commands: Partial<Record<VerificationKind, string>>;
+  runs: VerificationRun[];
+}
+
+export interface StartVerification {
+  workingDirectory: string;
+  kind: VerificationKind;
+  command: string;
+}
 
 export type ProviderKind = "anthropic" | "openai-compatible" | "openai-responses" | "faux";
 

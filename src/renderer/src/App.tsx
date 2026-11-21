@@ -7,6 +7,7 @@ import { GitChangesPanel } from "@renderer/components/ai/git-changes-panel";
 import { InstructionSources } from "@renderer/components/ai/instruction-sources";
 import { ProjectBranch, ProjectChooser } from "@renderer/components/ai/project-controls";
 import { TopBar } from "@renderer/components/ai/top-bar";
+import { VerificationControl } from "@renderer/components/ai/verification-dialog";
 import { WorkspaceReferencePanel } from "@renderer/components/ai/workspace-reference-panel";
 import { AppRail, SidebarPanel } from "@renderer/views/Sidebar";
 import { ChatView } from "@renderer/views/ChatView";
@@ -183,6 +184,12 @@ export default function App(): JSX.Element {
                       />
                     ) : (
                       <ProjectChooser sessionId={sessionId} />
+                    )}
+                    {composerId && (workingDirectory || sessionId) && (
+                      <VerificationControl
+                        key={"verification-" + composerId}
+                        composerId={composerId}
+                      />
                     )}
                     {composerId && <InstructionSources key={composerId} composerId={composerId} />}
                   </header>

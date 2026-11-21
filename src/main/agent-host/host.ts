@@ -34,7 +34,9 @@ import type {
   ToolRule,
   UiAgentEvent,
   UiMessage,
+  VerificationTask,
 } from "@shared/contract";
+import { visibleMessageText } from "../../shared/mentions";
 import { APP_NAME, DEFAULT_THINKING_LEVEL } from "../../shared/constants";
 import { applyMessageEvent } from "../../shared/message-events";
 import { hasSavedModel, resolveSessionModel } from "../../shared/providers";
@@ -685,7 +687,7 @@ export class AgentHost {
       return { type: "pilot_git_changes" as const, workingDirectory, view, checkpoint };
     });
     run.gitChangesAtEnd = reviewed.then((saved) => (saved ? this.finishedGitView(saved) : null));
-    this.deps.store.save(sessionId, messages, undefined, await reviewed);
+    this.deps.store.save(sessionId, messages, undefined, await reviewed, run.checkpoint.task);
     this.uiMessages = toUiMessages(messages, "s", (name) => this.toolLabel(name));
     this.nextId = this.uiMessages.length;
     this.send({ type: "messages", messages: this.uiMessages });
@@ -708,6 +710,29 @@ export class AgentHost {
 
   private checkComposerId(id: string): void {
     if (id !== this.composerId) throw new Error("会话已切换，请重试。");
+  }
+
+  verificationScope(
+    composerId: string,
+    expectedDirectory?: string,
+  ): {
+    sessionId: string | null;
+    workingDirectory: string | null;
+    task?: VerificationTask;
+  } {
+    this.checkComposerId(composerId);
+    const workingDirectory = this.getWorkingDirectory() ?? null;
+    if (expectedDirectory !== undefined) {
+      if (workingDirectory !== expectedDirectory)
+        throw new Error("工作目录已变更，请重新打开验证。");
+      this.ensureSession(workingDirectory);
+    }
+    const sessionId = this.sessionId;
+    const checkpoint = sessionId ? this.deps.store.checkpoint(sessionId) : undefined;
+    const task = checkpoint
+      ? (checkpoint.task ?? { taskId: checkpoint.runId, agentRunId: checkpoint.runId })
+      : this.getCurrentSession()?.lastTask;
+    return { sessionId, workingDirectory, task };
   }
 
   saveSessionDraft(id: string, draft: ComposerDraft): void {
@@ -820,6 +845,13 @@ export class AgentHost {
     const sessionId = this.sessionId!;
     const previous = this.deps.store.checkpoint(sessionId);
     const runId = randomUUID();
+    const task: VerificationTask = {
+      taskId: previous?.task?.taskId ?? previous?.runId ?? runId,
+      agentRunId: runId,
+      title:
+        previous?.task?.title ??
+        (message ? visibleMessageText(messageParts(message)).trim().slice(0, 100) : undefined),
+    };
     const checkpoint: RunCheckpoint = {
       type: "pilot_run_checkpoint",
       runId,
@@ -828,6 +860,7 @@ export class AgentHost {
       pending: message ? [message] : [],
       actions: previous?.actions ?? [],
       gitBaseline: previous?.gitBaseline,
+      task,
     };
     this.deps.store.save(sessionId, agent.state.messages, checkpoint);
     if (clearDraftFor !== undefined) this.deps.store.saveDraft(clearDraftFor, []);

@@ -83,6 +83,14 @@ const api: PiApi = {
   sessionFileDiff: (id, changeId) => ipcRenderer.invoke(IPC.sessionFileDiff, id, changeId),
   sessionUndoFileChange: (id, changeId) =>
     ipcRenderer.invoke(IPC.sessionUndoFileChange, id, changeId),
+  sessionVerification: (id) => ipcRenderer.invoke(IPC.sessionVerification, id),
+  sessionVerificationRun: (id, runId) => ipcRenderer.invoke(IPC.sessionVerificationRun, id, runId),
+  sessionStartVerification: (id, request) =>
+    ipcRenderer.invoke(IPC.sessionStartVerification, id, request),
+  sessionStopVerification: (id, runId) =>
+    ipcRenderer.invoke(IPC.sessionStopVerification, id, runId),
+  sessionRerunVerification: (id, runId) =>
+    ipcRenderer.invoke(IPC.sessionRerunVerification, id, runId),
   settingsGet: () => ipcRenderer.invoke(IPC.settingsGet),
   settingsSave: (input: SettingsInput) => ipcRenderer.invoke(IPC.settingsSave, input),
   settingsSetLogLevel: (level) => ipcRenderer.invoke(IPC.settingsSetLogLevel, level),
