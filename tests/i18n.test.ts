@@ -34,7 +34,7 @@ describe("interface language", () => {
     expect(t("退出 {0}", "en", ["$5 {0}"])).toBe("Quit $5 {0}");
   });
 
-  it("reuses the existing pi-locale preference and defaults to Chinese for an invalid value", () => {
+  it("migrates the legacy locale preference and uses the Pilot key", () => {
     const values = new Map([["pi-locale", "en"]]);
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => values.get(key) ?? null,
@@ -45,8 +45,8 @@ describe("interface language", () => {
       expect(currentLocale()).toBe("en");
       setLocale("zh");
       expect(currentLocale()).toBe("zh");
-      expect(values.get("pi-locale")).toBe("zh");
-      values.set("pi-locale", "unknown");
+      expect(values.get("pilot-locale")).toBe("zh");
+      values.set("pilot-locale", "unknown");
       restoreLocale();
       expect(currentLocale()).toBe("zh");
     } finally {

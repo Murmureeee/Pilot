@@ -1,8 +1,8 @@
 // @env node
 import type { Locale } from "../shared/contract";
 
-// Electron derives its default profile path from the app name. Keep existing profiles on rename.
-export const USER_DATA_DIRECTORY = "pi Desktop";
+export const WINDOWS_APP_ID = "dev.pilot.app";
+export const LEGACY_USER_DATA_DIRECTORIES = ["pi Desktop", "pi-desktop"] as const;
 
 // 原生窗控与 src/renderer/src/assets/main.css 的窗口底色对齐。
 export const TITLE_BAR_OVERLAY_COLORS = {

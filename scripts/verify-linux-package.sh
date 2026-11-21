@@ -8,6 +8,9 @@ deb="$PWD/dist/pilot-$version-linux-amd64.deb"
 test -s "$appimage"
 test -x "$appimage"
 test -s "$deb"
+test "$(dpkg-deb -f "$deb" Package)" = pilot
+test "$(dpkg-deb -f "$deb" Conflicts)" = pi-desktop
+test "$(dpkg-deb -f "$deb" Replaces)" = pi-desktop
 test "$(dpkg-deb -f "$deb" Version)" = "$version"
 test "$(dpkg-deb -f "$deb" Architecture)" = amd64
 

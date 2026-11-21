@@ -119,7 +119,7 @@ function resolveFaux(): ResolvedModel {
                 : "Write the demo file in the workspace, then check the tool result and file changes.",
             ),
             fauxToolCall("write_file", {
-              path: "pi-desktop-demo.txt",
+              path: "pilot-demo.txt",
               content: "由 faux 工具演示写入\n时间戳占位",
             }),
           ],

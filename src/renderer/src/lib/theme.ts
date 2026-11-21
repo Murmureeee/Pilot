@@ -3,10 +3,11 @@
 // 切换时同步原生标题栏窗控颜色（system 档由主进程 nativeTheme 解析）。
 import type { ThemeSetting } from "@shared/contract";
 
-const STORAGE_KEY = "pi-theme";
+const STORAGE_KEY = "pilot-theme";
+const LEGACY_STORAGE_KEY = "pi-theme";
 
 export function loadTheme(): ThemeSetting {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
   return raw === "dark" || raw === "light" ? raw : "system";
 }
 

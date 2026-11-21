@@ -20,9 +20,10 @@ import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { stopProcessTree } from "./windows-process.mjs";
 
-const exeName = "pi Desktop.exe";
 const legacyName = "pi Desktop";
 const legacyVersion = "0.1.0";
+const legacyExeName = `${legacyName}.exe`;
+const pilotExeName = "pilot.exe";
 const skillId = "installer-acceptance";
 const skillBody =
   "---\nname: Installer acceptance\ndescription: A test skill\n---\nVerify that this file survives an upgrade.\n";
@@ -52,14 +53,17 @@ function runInstaller(file, directory, args = ["/S"]) {
   assert.equal(run.status, 0, `${basename(file)} failed`);
 }
 
+function installedExecutable(directory) {
+  return [pilotExeName, legacyExeName].find((name) => existsSync(join(directory, name)));
+}
+
 async function uninstall(directory) {
-  if (!existsSync(join(directory, exeName))) return;
-  const uninstaller = ["Pilot", legacyName]
-    .map((name) => join(directory, `Uninstall ${name}.exe`))
-    .find(existsSync);
-  assert.ok(uninstaller, "The installation must create an uninstaller");
+  const exe = installedExecutable(directory);
+  if (!exe) return;
+  const uninstaller = join(directory, `Uninstall ${basename(exe, ".exe")}.exe`);
+  assert.ok(existsSync(uninstaller), "The installation must create an uninstaller");
   runInstaller(uninstaller, directory);
-  await waitFor("uninstallation", () => !existsSync(join(directory, exeName)));
+  await waitFor("uninstallation", () => !installedExecutable(directory) && !existsSync(uninstaller));
 }
 
 async function freeLoopbackPort() {
@@ -87,18 +91,17 @@ async function findPage(port, child) {
   });
 }
 
-async function withApp(directory, profile, verify, installsUpdate = false) {
+async function withApp(directory, verify, { profile, installsUpdate = false } = {}) {
   const port = await freeLoopbackPort();
-  const args = [
-    `--remote-debugging-port=${port}`,
-    "--remote-debugging-address=127.0.0.1",
-    `--user-data-dir=${profile}`,
-  ];
+  const args = [`--remote-debugging-port=${port}`, "--remote-debugging-address=127.0.0.1"];
+  if (profile) args.push(`--user-data-dir=${profile}`);
   if (certificatePin) {
     // The loopback fixture uses a temporary certificate.
     args.push(`--ignore-certificate-errors-spki-list=${certificatePin}`);
   }
-  const child = spawn(join(directory, exeName), args, {
+  const exe = installedExecutable(directory);
+  assert.ok(exe, `An installed executable is required in ${directory}`);
+  const child = spawn(join(directory, exe), args, {
     cwd: directory,
     env: { ...process.env, LOCALAPPDATA: updateCache },
     windowsHide: true,
@@ -270,8 +273,15 @@ assert.ok(
   legacyInstaller && candidateInstaller && candidateVersion && candidateVersion !== legacyVersion,
 );
 
-const legacyProfile = join(realpathSync.native(process.env.APPDATA), legacyName);
-assert.ok(!existsSync(legacyProfile), "The runner must start with an unused legacy profile");
+const appData = realpathSync.native(process.env.APPDATA);
+const legacyProfile = join(appData, legacyName);
+const pilotProfile = join(appData, "Pilot");
+const programs = join(realpathSync.native(process.env.LOCALAPPDATA), "Programs");
+const legacyInstall = join(programs, legacyName);
+const pilotInstall = join(programs, "pilot");
+for (const directory of [legacyProfile, pilotProfile, legacyInstall, pilotInstall]) {
+  assert.ok(!existsSync(directory), `The runner must start without ${directory}`);
+}
 const publishedFeed = process.env.PILOT_PUBLISHED_UPDATE_URL;
 const updateUrl = new URL(publishedFeed ?? process.env.PILOT_UPDATE_TEST_URL);
 assert.equal(updateUrl.protocol, "https:");
@@ -297,11 +307,9 @@ const feed = publishedFeed
       serveUpdateFiles,
     );
 const root = mkdtempSync(join(realpathSync.native(process.env.RUNNER_TEMP), "pilot-install-"));
-const cleanInstall = join(root, "clean-install");
-const cleanProfile = join(root, "clean-profile");
 const onboardingProfile = join(root, "onboarding-profile");
-const upgradeInstall = join(root, "upgrade-install");
-const skillFile = join(legacyProfile, "skills", skillId, "SKILL.md");
+const customInstall = join(root, "custom-install");
+const skillPath = join("skills", skillId, "SKILL.md");
 const updateCache = join(root, "local-app-data");
 const archive = join("resources", "app.asar");
 
@@ -311,13 +319,22 @@ try {
     await once(feed, "listening");
   }
   mkdirSync(updateCache);
-  mkdirSync(cleanProfile);
-  runInstaller(resolve(candidateInstaller), root, ["/S", `/D=${cleanInstall}`]);
+  runInstaller(resolve(candidateInstaller), root);
+  const legacyCandidate = publishedFeed && installedExecutable(legacyInstall) === legacyExeName;
+  const cleanInstall = legacyCandidate ? legacyInstall : pilotInstall;
+  const cleanProfile = legacyCandidate ? legacyProfile : pilotProfile;
+  const candidateExe = legacyCandidate ? legacyExeName : pilotExeName;
+  assert.equal(installedExecutable(cleanInstall), candidateExe);
+  console.log(`Verified default installation at ${join(cleanInstall, candidateExe)}.`);
+  if (!legacyCandidate) {
+    const config = readFileSync(join(cleanInstall, "resources", "app-update.yml"), "utf8");
+    assert.match(config, /^updaterCacheDirName: pilot-updater\r?$/m);
+  }
   if (publishedFeed) verifyPublishedFeed(cleanInstall);
   const expectedHash = createHash("sha256")
     .update(readFileSync(join(cleanInstall, archive)))
     .digest("hex");
-  await withApp(cleanInstall, cleanProfile, async (evaluate) => {
+  await withApp(cleanInstall, async (evaluate) => {
     await verifyApp(evaluate, "Pilot", candidateVersion, cleanProfile);
     assert.deepEqual(await evaluate(async () => (await window.pi.getSnapshot()).sessions), []);
     await sendTurn(evaluate, "Hello from a clean Pilot install");
@@ -328,28 +345,35 @@ try {
     join(onboardingProfile, "settings.json"),
     JSON.stringify({ providers: [], activeProviderId: "" }),
   );
-  await withApp(cleanInstall, onboardingProfile, async (evaluate) => {
-    await click(evaluate, "开始配置");
-    await click(evaluate, "下一步");
-    await click(evaluate, "下一步");
-    await click(evaluate, "完成配置");
-    await waitFor("the demo provider to be enabled", () =>
-      evaluate(async () =>
-        (await window.pi.settingsGet()).activeProviderId.startsWith("onboarding-"),
-      ),
-    );
-    await sendTurn(evaluate, "Hello after completing the Pilot setup wizard");
-  });
+  await withApp(
+    cleanInstall,
+    async (evaluate) => {
+      await click(evaluate, "开始配置");
+      await click(evaluate, "下一步");
+      await click(evaluate, "下一步");
+      await click(evaluate, "完成配置");
+      await waitFor("the demo provider to be enabled", () =>
+        evaluate(async () =>
+          (await window.pi.settingsGet()).activeProviderId.startsWith("onboarding-"),
+        ),
+      );
+      await sendTurn(evaluate, "Hello after completing the Pilot setup wizard");
+    },
+    { profile: onboardingProfile },
+  );
   await uninstall(cleanInstall);
+  removeTestDirectory(cleanProfile);
   console.log(
     `Clean Pilot ${candidateVersion} installation passed onboarding, a demo turn, and uninstall.`,
   );
 
-  runInstaller(resolve(legacyInstaller), root, ["/S", `/D=${upgradeInstall}`]);
-  if (publishedFeed) verifyPublishedFeed(upgradeInstall);
-  const original = await withApp(upgradeInstall, legacyProfile, async (evaluate) => {
+  runInstaller(resolve(legacyInstaller), root);
+  assert.equal(installedExecutable(legacyInstall), legacyExeName);
+  if (publishedFeed) verifyPublishedFeed(legacyInstall);
+  const original = await withApp(legacyInstall, async (evaluate) => {
     await verifyApp(evaluate, legacyName, legacyVersion, legacyProfile);
-    mkdirSync(join(legacyProfile, "skills", skillId), { recursive: true });
+    const skillFile = join(legacyProfile, skillPath);
+    mkdirSync(dirname(skillFile), { recursive: true });
     writeFileSync(skillFile, skillBody);
     await evaluate(
       async (value, id) => {
@@ -362,6 +386,7 @@ try {
         });
         await window.pi.skillsToggle(id, true);
         localStorage.setItem("pi-locale", "en");
+        localStorage.setItem("pi-theme", "dark");
       },
       persona,
       skillId,
@@ -400,8 +425,7 @@ try {
 
   // Quitting after download should leave the old version installed until the user approves.
   await withApp(
-    upgradeInstall,
-    legacyProfile,
+    legacyInstall,
     async (evaluate) => {
       await verifyApp(evaluate, legacyName, legacyVersion, legacyProfile);
       await waitForUpdate(evaluate, "ready", candidateVersion);
@@ -409,9 +433,10 @@ try {
         setTimeout(() => void window.pi.installUpdate(), 100);
       });
     },
-    true,
+    { installsUpdate: true },
   );
 
+  const upgradeInstall = cleanInstall;
   const installedArchive = join(upgradeInstall, archive);
   await waitFor(
     "the updater to replace the installed package",
@@ -428,17 +453,20 @@ try {
     60_000,
   );
   await delay(1_000);
-  await withApp(upgradeInstall, legacyProfile, async (evaluate) => {
-    await verifyApp(evaluate, "Pilot", candidateVersion, legacyProfile);
-    const restored = await evaluate(async (id) => {
+  if (!legacyCandidate) assert.equal(installedExecutable(legacyInstall), undefined);
+  assert.equal(installedExecutable(upgradeInstall), candidateExe);
+  await withApp(upgradeInstall, async (evaluate) => {
+    await verifyApp(evaluate, "Pilot", candidateVersion, cleanProfile);
+    const restored = await evaluate(async (id, prefix) => {
       const snapshot = await window.pi.sessionLoad(id);
       return {
         snapshot,
         transcript: await window.pi.sessionCopy(id),
         skills: await window.pi.skillsList(),
-        locale: localStorage.getItem("pi-locale"),
+        locale: localStorage.getItem(`${prefix}-locale`),
+        theme: localStorage.getItem(`${prefix}-theme`),
       };
-    }, original.sessionId);
+    }, original.sessionId, legacyCandidate ? "pi" : "pilot");
     assert.equal(
       restored.snapshot.sessions.find(({ id }) => id === original.sessionId)?.title,
       sessionTitle,
@@ -447,19 +475,34 @@ try {
     assert.equal(restored.snapshot.settings.approvalMode, "read-only");
     assert.equal(restored.snapshot.settings.persona, persona);
     assert.equal(restored.locale, "en");
+    assert.equal(restored.theme, "dark");
     await waitFor("the restored English interface", () =>
       evaluate(() => document.documentElement.lang === "en"),
     );
+    await waitFor("the restored dark theme", () =>
+      evaluate(() => document.documentElement.classList.contains("dark")),
+    );
     assert.equal(restored.skills.find(({ id }) => id === skillId)?.enabled, true);
-    assert.equal(readFileSync(skillFile, "utf8"), skillBody);
+    assert.equal(readFileSync(join(cleanProfile, skillPath), "utf8"), skillBody);
     const continued = await sendTurn(evaluate, "This is the first turn after upgrading");
     assert.equal(continued.sessionId, original.sessionId);
     await waitForUpdate(evaluate, "current");
   });
+  if (!legacyCandidate) assert.ok(!existsSync(legacyProfile), "The old profile must move to Pilot");
   await uninstall(upgradeInstall);
   console.log(
-    `${legacyName} ${legacyVersion} to Pilot ${candidateVersion} in-place upgrade preserved the transcript, settings, language, and enabled skill.`,
+    `${legacyName} ${legacyVersion} to Pilot ${candidateVersion} preserved the transcript, settings, language, theme, and enabled skill.`,
   );
+  if (!publishedFeed) {
+    runInstaller(resolve(legacyInstaller), root, ["/S", `/D=${customInstall}`]);
+    assert.equal(installedExecutable(customInstall), legacyExeName);
+    runInstaller(resolve(candidateInstaller), root);
+    assert.equal(installedExecutable(customInstall), pilotExeName);
+    assert.ok(!existsSync(join(customInstall, legacyExeName)));
+    assert.equal(installedExecutable(pilotInstall), undefined);
+    await uninstall(customInstall);
+    console.log("The upgrade retained a custom installation directory.");
+  }
   console.log("HTTPS update passed download, ordinary quit, explicit installation, and restart.");
   if (publishedFeed) console.log(`Published update feed verified at ${updateUrl.href}`);
 } finally {
@@ -468,10 +511,12 @@ try {
     await new Promise((closed) => feed.close(closed));
   }
   try {
-    await uninstall(upgradeInstall);
-    await uninstall(cleanInstall);
+    await uninstall(customInstall);
+    await uninstall(pilotInstall);
+    await uninstall(legacyInstall);
   } finally {
     removeTestDirectory(legacyProfile);
+    removeTestDirectory(pilotProfile);
     removeTestDirectory(root);
   }
 }

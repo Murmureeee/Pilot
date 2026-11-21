@@ -99,8 +99,8 @@ describe("search tools", () => {
 
 describe("bash tool", () => {
   it("runs a command in the platform default shell and returns output", async () => {
-    const result = await bashTool.execute("t10", { command: "echo pi-desktop-ok" });
-    expect(textOf(result)).toContain("pi-desktop-ok");
+    const result = await bashTool.execute("t10", { command: "echo pilot-ok" });
+    expect(textOf(result)).toContain("pilot-ok");
   }, 30_000);
 
   it("rejects failing commands with output", async () => {

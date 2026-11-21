@@ -16,7 +16,7 @@ import {
   type Tool,
 } from "@earendil-works/pi-mcp";
 import type { McpServerInfo } from "@shared/mcp";
-import { APP_NAME } from "../../../shared/constants";
+import { APP_NAME, APP_PACKAGE_NAME } from "../../../shared/constants";
 import { MissingMcpEnvironment, resolveImportedMcp } from "../../external-import/mcp";
 import type { ImportedMcpConnection } from "../../external-import/types";
 import { decryptSecret } from "../../settings/secrets";
@@ -127,7 +127,7 @@ export class McpManager {
       this.disconnect(config.id);
       const client = new McpClient({
         // Servers can use the client name as a stable identifier.
-        name: "pi Desktop",
+        name: APP_PACKAGE_NAME,
         title: APP_NAME,
         version: this.version,
         requestTimeoutMs: 10000,

@@ -1,5 +1,5 @@
 // @env node
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { BrowserWindow, Menu, app, nativeTheme, session, shell } from "electron";
 import { APP_NAME } from "../shared/constants";
@@ -14,14 +14,16 @@ import { registerRenderer, sendToRenderers } from "./ipc/transport";
 import { getLogLevel, loadSettings, saveSettings } from "./settings";
 import type { Settings } from "./settings/types";
 import { runAgentSmoke } from "./agent-host/smoke";
-import { TITLE_BAR_OVERLAY_COLORS, USER_DATA_DIRECTORY } from "./constants";
+import { TITLE_BAR_OVERLAY_COLORS, WINDOWS_APP_ID } from "./constants";
+import { prepareUserDataDirectory } from "./profile";
 import { DesktopUpdater } from "./updater";
 
 const isDev = !app.isPackaged;
 
+if (process.platform === "win32" && app.isPackaged) app.setAppUserModelId(WINDOWS_APP_ID);
+
 if (!app.commandLine.getSwitchValue("user-data-dir")) {
-  const profile = join(app.getPath("appData"), USER_DATA_DIRECTORY);
-  mkdirSync(profile, { recursive: true });
+  const profile = prepareUserDataDirectory(app.getPath("appData"));
   app.setPath("userData", profile);
   app.setPath("sessionData", profile);
 }

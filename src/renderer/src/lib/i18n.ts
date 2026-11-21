@@ -5,7 +5,8 @@ import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "../../../shared/constants";
 import type { Locale } from "../../../shared/contract";
 import { EN_MESSAGES } from "./locales/en";
 
-const LOCALE_STORAGE_KEY = "pi-locale";
+const LOCALE_STORAGE_KEY = "pilot-locale";
+const LEGACY_LOCALE_STORAGE_KEY = "pi-locale";
 const i18n = createInstance();
 void i18n.use(initReactI18next).init({
   lng: DEFAULT_LOCALE,
@@ -32,7 +33,11 @@ function asLocale(value: string | null): Locale {
 }
 
 export function restoreLocale(): void {
-  void i18n.changeLanguage(asLocale(localStorage.getItem(LOCALE_STORAGE_KEY)));
+  const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
+  const legacy = stored === null ? localStorage.getItem(LEGACY_LOCALE_STORAGE_KEY) : null;
+  const locale = asLocale(stored ?? legacy);
+  if (legacy !== null) localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+  void i18n.changeLanguage(locale);
 }
 
 export function setLocale(locale: Locale): void {

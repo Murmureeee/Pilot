@@ -130,7 +130,7 @@ jobs:
         if: inputs.verify_installation || inputs.prepare_release
         id: candidate
         env:
-          PI_UPDATE_URL: ${{ env.PILOT_UPDATE_TEST_URL }}
+          PILOT_UPDATE_URL: ${{ env.PILOT_UPDATE_TEST_URL }}
         run: |
           $manifest = Get-Content -Raw -LiteralPath 'package.json' | ConvertFrom-Json
           pnpm package:win
@@ -209,13 +209,13 @@ jobs:
         if: github.ref == 'refs/heads/main' && inputs.prepare_release
         id: release_assets
         env:
-          PI_UPDATE_URL: ${{ env.PILOT_RELEASE_UPDATE_URL }}
+          PILOT_UPDATE_URL: ${{ env.PILOT_RELEASE_UPDATE_URL }}
           PILOT_CANDIDATE_VERSION: ${{ steps.candidate.outputs.version }}
         run: |
           pnpm package:win
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $config = Get-Content -Raw -LiteralPath 'dist/release/win-unpacked/resources/app-update.yml'
-          if ($config -notmatch ('(?m)^url: ' + [regex]::Escape($env:PI_UPDATE_URL) + '\s*$')) { throw 'The build is missing its GitHub Releases URL.' }
+          if ($config -notmatch ('(?m)^url: ' + [regex]::Escape($env:PILOT_UPDATE_URL) + '\s*$')) { throw 'The build is missing its GitHub Releases URL.' }
           "name=Pilot-release-${env:GITHUB_RUN_ID}-${env:GITHUB_RUN_ATTEMPT}" >> $env:GITHUB_OUTPUT
 
       - name: Stage installer, blockmap and update manifest

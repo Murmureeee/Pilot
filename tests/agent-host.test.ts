@@ -97,7 +97,7 @@ it("restores separate session settings and structured drafts in the same project
   try {
     await restarted.loadSession(a);
     await restarted.prompt("A 演示", a);
-    const file = join(root, "pi-desktop-demo.txt");
+    const file = join(root, "pilot-demo.txt");
     expect(existsSync(file)).toBe(false);
     expect(restarted.getSnapshot().composerDraft).toEqual([]);
 
@@ -140,7 +140,7 @@ it("uses the global defaults for older chats and after clearing session settings
   try {
     expect((await host.loadSession(old.id)).composerDraft).toEqual([]);
     await host.prompt("Use the original default: 演示");
-    const file = join(profile.path, "pi-desktop-demo.txt");
+    const file = join(profile.path, "pilot-demo.txt");
     expect(existsSync(file)).toBe(false);
     host.updateSessionSettings(old.id, {
       model: { providerId: "primary", modelId: "basic" },
@@ -210,8 +210,8 @@ it("uses each project's files and tools after switching and reopening sessions",
   mkdirSync(beta);
   writeFileSync(join(alpha, "alpha.md"), "Alpha reference");
   writeFileSync(join(beta, "beta.md"), "Beta reference");
-  writeFileSync(join(alpha, "pi-desktop-demo.txt"), "Alpha original");
-  writeFileSync(join(beta, "pi-desktop-demo.txt"), "Beta original");
+  writeFileSync(join(alpha, "pilot-demo.txt"), "Alpha original");
+  writeFileSync(join(beta, "pilot-demo.txt"), "Beta original");
 
   const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
   const settings: Settings = {
@@ -234,13 +234,13 @@ it("uses each project's files and tools after switching and reopening sessions",
   expect(opened).toMatchObject({ sessionId: null, draftWorkingDirectory: alpha });
   await host.prompt("Alpha 演示");
   const alphaId = host.getSnapshot().sessionId!;
-  expect(readFileSync(join(alpha, "pi-desktop-demo.txt"), "utf8")).toContain("faux");
-  expect(readFileSync(join(beta, "pi-desktop-demo.txt"), "utf8")).toBe("Beta original");
+  expect(readFileSync(join(alpha, "pilot-demo.txt"), "utf8")).toContain("faux");
+  expect(readFileSync(join(beta, "pilot-demo.txt"), "utf8")).toBe("Beta original");
 
   await host.openProject(beta);
   await host.prompt("Beta 演示");
   const betaId = host.getSnapshot().sessionId!;
-  expect(readFileSync(join(beta, "pi-desktop-demo.txt"), "utf8")).toContain("faux");
+  expect(readFileSync(join(beta, "pilot-demo.txt"), "utf8")).toContain("faux");
   await host.loadSession(alphaId);
   expect(await searchWorkspace(host.getWorkingDirectory(), ".md")).toEqual([
     { path: "alpha.md", kind: "file" },
@@ -387,8 +387,8 @@ it("keeps the original run, approval, and transcript while another project is se
       messages: [],
       composerDraft: ["B draft"],
     });
-    expect(existsSync(join(original, "pi-desktop-demo.txt"))).toBe(true);
-    expect(existsSync(join(next, "pi-desktop-demo.txt"))).toBe(false);
+    expect(existsSync(join(original, "pilot-demo.txt"))).toBe(true);
+    expect(existsSync(join(next, "pilot-demo.txt"))).toBe(false);
     expect(store.load(b)).toEqual([]);
     expect(store.load(a)).toContainEqual(
       expect.objectContaining({ role: "toolResult", isError: false }),
@@ -747,7 +747,7 @@ it("sends mention context to the provider and restores the same user parts from 
 it("streams and restores a timed trace and reverts a recorded workspace edit", async () => {
   using fixture = mkdtempDisposableSync(join(tmpdir(), "pilot-reply-trace-"));
   const root = realpathSync(fixture.path);
-  const file = join(root, "pi-desktop-demo.txt");
+  const file = join(root, "pilot-demo.txt");
   const original = "Original workspace content\r\n";
   writeFileSync(file, original);
   const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
@@ -779,7 +779,7 @@ it("streams and restores a timed trace and reverts a recorded workspace edit", a
   const changeEvent = events.find((event) => event.type === "file_change");
   if (!sessionId || !changeEvent) throw new Error("Missing file change");
   const { change } = changeEvent;
-  expect(change.path).toBe("pi-desktop-demo.txt");
+  expect(change.path).toBe("pilot-demo.txt");
   expect(host.getFileDiff(sessionId, change.id).hunks[0]).toEqual(
     expect.arrayContaining([{ kind: "removed", before: 1, text: original.trim() }]),
   );

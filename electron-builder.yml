@@ -1,4 +1,5 @@
-appId: dev.pi-desktop.app
+appId: dev.pilot.app
+executableName: pilot
 directories:
   output: dist
 files:
@@ -12,17 +13,17 @@ electronDownload:
 win:
   target: nsis
   icon: resources/icon.ico
-  # Existing shortcuts and in-place upgrades target this executable.
-  executableName: pi Desktop
 nsis:
-  artifactName: pilot-${version}-${arch}-setup.${ext}
+  # The installed product must keep its registry key across the app ID change.
+  guid: 9a907120-d156-5094-b3fe-beb35bfd5735
+  include: resources/installer.nsh
+  artifactName: ${name}-${version}-${arch}-setup.${ext}
   oneClick: false
   perMachine: false
   allowElevation: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: false
 linux:
-  executableName: pilot
   icon: resources/icon.png
   category: Development
   artifactName: pilot-${version}-linux-${arch}.${ext}
@@ -31,3 +32,5 @@ linux:
     - deb
 deb:
   maintainer: Pilot <49786674+Murmureeee@users.noreply.github.com>
+  # apt replaces the legacy package because both packages own the same app files.
+  fpm: [--conflicts, pi-desktop, --replaces, pi-desktop]

@@ -1,5 +1,5 @@
 <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-  <!-- pi Desktop 应用图标源文件：终端提示符 + emerald 光标（呼应应用内品牌）
+  <!-- Pilot 应用图标源文件：终端提示符 + emerald 光标（呼应应用内品牌）
        修改后运行：node scripts/make-icons.mjs 重新生成 icon.png / icon.ico -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
