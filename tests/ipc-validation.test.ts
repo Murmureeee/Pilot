@@ -5,6 +5,7 @@ import { IPC, type ProviderInput, type SettingsInput } from "../src/shared/contr
 
 const sessionId = "48687a06-2cb0-43a1-a627-9752f1621f1b";
 const run = { sessionId, runId: "7a6c4360-bb48-4cbd-ae92-b515fdd9ce8b" };
+const gitSelection = { path: "file.ts", revision: "a".repeat(64), hunks: [1] };
 const draft: ProviderInput = {
   id: "local",
   kind: "openai-compatible",
@@ -58,6 +59,9 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.sessionGitHead]: ["E:/projects/Pilot"],
   [IPC.sessionGitChanges]: [sessionId],
   [IPC.sessionGitDiff]: [sessionId, { path: "file.ts", area: "unstaged" }],
+  [IPC.sessionStageGit]: [sessionId, { ...gitSelection, area: "unstaged" }],
+  [IPC.sessionPreviewGitCommit]: [sessionId, [gitSelection]],
+  [IPC.sessionCommitGit]: [sessionId, sessionId, "feat: review changes\n\nDetails"],
   [IPC.sessionGitCheckpointDiff]: [sessionId, sessionId, "file.ts"],
   [IPC.sessionPreviewGitRollback]: [
     sessionId,
@@ -188,6 +192,9 @@ describe("IPC argument validation", () => {
     [IPC.sessionUseRecentProject, ["E:/projects/Pilot", "another-folder"]],
     [IPC.sessionGitHead, [" "]],
     [IPC.sessionGitChanges, ["E:/projects/Pilot"]],
+    [IPC.sessionStageGit, [sessionId, { ...gitSelection, area: "staged" }]],
+    [IPC.sessionPreviewGitCommit, [sessionId, []]],
+    [IPC.sessionCommitGit, [sessionId, sessionId, "  "]],
     [
       IPC.sessionPreviewGitRollback,
       [sessionId, { checkpointId: sessionId, revision: sessionId, path: "file.ts", hunks: [-1] }],

@@ -12,22 +12,41 @@ import {
   GIT_ROLLBACK_CONFLICT_LABELS,
   GIT_REVIEW_PHASE_LABELS,
 } from "@renderer/lib/constants";
-import { t, useLocale } from "@renderer/lib/i18n";
+import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
-import type { GitChange, GitChangesView } from "@shared/contract";
+import type {
+  GitChange,
+  GitChangesView,
+  GitCommitResult,
+  GitPatchSelection,
+  GitStageSelection,
+} from "@shared/contract";
+import { GitCommitDialog } from "./git-commit-dialog";
 import { GitCheckpointFilePreview, GitDiffPreview } from "./git-diff-preview";
 
 function GitChangeRow({
   change,
   composerId,
   expanded,
+  live,
+  revision,
+  blocked,
+  selection,
   onToggle,
+  onSelect,
+  onStage,
 }: {
   change: GitChange;
   composerId: string;
   expanded: boolean;
+  live: boolean;
+  revision: number;
+  blocked: boolean;
+  selection?: GitPatchSelection;
   onToggle(): void;
+  onSelect(selection?: GitPatchSelection): void;
+  onStage(selection: GitStageSelection): void;
 }): JSX.Element {
   const locale = useLocale();
   return (
@@ -74,12 +93,22 @@ function GitChangeRow({
             </Badge>
           </span>
         </span>
-        {expanded && <CheckIcon aria-hidden="true" className="mt-0.5" />}
+        {selection && live && (
+          <span className="flex items-center">
+            <CheckIcon aria-hidden="true" className="mt-0.5" />
+            <span className="sr-only">{t("已选入提交", locale)}</span>
+          </span>
+        )}
       </Button>
       {expanded && (
         <GitDiffPreview
+          key={revision}
           composerId={composerId}
-          request={{ path: change.path, area: change.area }}
+          request={{ path: change.path, area: change.area, live }}
+          blocked={blocked}
+          selection={selection}
+          onSelect={onSelect}
+          onStage={onStage}
         />
       )}
     </li>
@@ -91,9 +120,15 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
   const heading = useRef<HTMLHeadingElement>(null);
   const [view, setView] = useState<GitChangesView | null>();
   const [showCheckpoint, setShowCheckpoint] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [expanded, setExpanded] = useState<string>();
   const [revision, setRevision] = useState(0);
+  const [selections, setSelections] = useState<GitPatchSelection[]>([]);
+  const [staging, setStaging] = useState(false);
+  const [stageError, setStageError] = useState("");
+  const [commit, setCommit] = useState<GitCommitResult>();
   const busy = useAgentStore((state) => state.activeRun !== null);
+  const live = !showCheckpoint && !showHistory;
 
   useEffect(() => {
     heading.current?.focus();
@@ -111,10 +146,12 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
       reading = true;
       do {
         queued = false;
-        const next = await window.pi.sessionGitChanges(composerId).catch((): GitChangesView => ({
-          phase: "workspace",
-          changes: null,
-        }));
+        const next = await window.pi
+          .sessionGitChanges(composerId, live)
+          .catch((): GitChangesView => ({
+            phase: "workspace",
+            changes: null,
+          }));
         if (!disposed && !queued) setView(next);
       } while (!disposed && queued);
       reading = false;
@@ -137,14 +174,49 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
       unsubscribe();
       window.removeEventListener("focus", refreshOnFocus);
     };
-  }, [composerId, revision]);
+  }, [composerId, live, revision]);
 
   const close = (): void => {
     useFileChangesStore.getState().close();
     document.getElementById("git-changes-trigger")?.focus();
   };
   const changes = view?.changes;
+  const staged = new Set(
+    changes?.filter((change) => change.area === "staged").map((change) => change.path),
+  );
+  const selected = selections.filter((item) => staged.has(item.path));
   const checkpoint = showCheckpoint ? view?.checkpoint : undefined;
+  const refresh = (): void => setRevision((value) => value + 1);
+  const refreshSelection = (): void => {
+    setSelections([]);
+    refresh();
+  };
+  const select = (path: string, selection?: GitPatchSelection): void =>
+    setSelections((current) => [
+      ...current.filter((item) => item.path !== path),
+      ...(selection ? [selection] : []),
+    ]);
+  const stage = async (selection: GitStageSelection): Promise<void> => {
+    if (busy || staging) return;
+    setStaging(true);
+    setStageError("");
+    try {
+      await window.pi.sessionStageGit(composerId, selection);
+      select(selection.path);
+      const change = changes?.find(
+        ({ area, path }) => area === selection.area && path === selection.path,
+      );
+      if (change?.previousPath) select(change.previousPath);
+      setExpanded(
+        selection.hunks ? selection.area + ":" + selection.path : "staged:" + selection.path,
+      );
+    } catch (error) {
+      setStageError(String(error));
+    } finally {
+      refresh();
+      setStaging(false);
+    }
+  };
   const toggle = (key: string): void =>
     setExpanded((current) => (current === key ? undefined : key));
   const emptyMessage =
@@ -187,24 +259,86 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
           <XIcon aria-hidden="true" />
         </Button>
       </div>
-      {view && changes && (
-        <div className="border-border/70 bg-muted/40 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-1.5">
+      {view && (
+        <div className="border-border/70 bg-muted/40 flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1.5 border-b px-3 py-1.5">
           <p className="text-muted-foreground text-xs">
             {t(GIT_REVIEW_PHASE_LABELS[view.phase], locale)}
           </p>
-          {view.checkpoint && (
-            <Button
-              size="xs"
-              variant={checkpoint ? "secondary" : "outline"}
-              aria-pressed={Boolean(checkpoint)}
-              onClick={() => {
-                setExpanded(undefined);
-                setShowCheckpoint(!checkpoint);
-              }}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(view.hasHistory || showHistory) && (
+              <Button
+                size="xs"
+                variant={showHistory ? "secondary" : "outline"}
+                aria-pressed={showHistory}
+                disabled={staging}
+                onClick={() => {
+                  setExpanded(undefined);
+                  setShowCheckpoint(false);
+                  setShowHistory(!showHistory);
+                }}
+              >
+                {t("任务变更记录", locale)}
+              </Button>
+            )}
+            {view.checkpoint && (
+              <Button
+                size="xs"
+                variant={showCheckpoint ? "secondary" : "outline"}
+                aria-pressed={showCheckpoint}
+                disabled={staging}
+                onClick={() => {
+                  setExpanded(undefined);
+                  setShowHistory(false);
+                  setShowCheckpoint(!showCheckpoint);
+                }}
+              >
+                <HistoryIcon data-icon="inline-start" />
+                {t("任务检查点", locale)}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+      {live && changes && (
+        <div className="border-border/70 flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2">
+          <p className="text-muted-foreground text-xs">
+            {t("暂存区 {0} 个文件", locale, [staged.size])}
+          </p>
+          <GitCommitDialog
+            composerId={composerId}
+            selections={selected}
+            disabled={busy || staging}
+            onRefresh={refreshSelection}
+            onApplied={(result) => {
+              setCommit(result);
+              setExpanded(undefined);
+              setStageError("");
+              refreshSelection();
+            }}
+          />
+          {stageError && (
+            <p role="alert" className="text-destructive basis-full text-xs wrap-anywhere">
+              {localizeError(stageError, locale)}
+            </p>
+          )}
+          {commit && (
+            <div
+              role="status"
+              data-git-commit={commit.commit}
+              className="flex basis-full items-start gap-1.5 text-xs text-emerald-700 dark:text-emerald-400"
             >
-              <HistoryIcon data-icon="inline-start" />
-              {t("任务检查点", locale)}
-            </Button>
+              <CheckIcon aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
+              <div className="min-w-0">
+                <p className="wrap-anywhere">
+                  {commit.branch
+                    ? t("已提交到 {0}", locale, [commit.branch])
+                    : t("已提交到游离 HEAD", locale)}
+                </p>
+                <p className="text-muted-foreground font-mono break-all select-all">
+                  {commit.commit}
+                </p>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -287,7 +421,17 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
                         composerId={composerId}
                         change={change}
                         expanded={expanded === key}
+                        live={live}
+                        revision={revision}
+                        blocked={busy || staging}
+                        selection={
+                          area === "staged"
+                            ? selected.find((item) => item.path === change.path)
+                            : undefined
+                        }
                         onToggle={() => toggle(key)}
+                        onSelect={(selection) => select(change.path, selection)}
+                        onStage={(selection) => void stage(selection)}
                       />
                     );
                   })}

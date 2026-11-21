@@ -22,7 +22,13 @@ import { readGit, readGitBuffer } from "./git";
 import { hashGitBlob } from "./git-changes";
 import { createToolPathResolver, isWithinDirectory } from "./paths";
 import { buildTextDiff } from "./text-diff";
-import type { GitCheckpointBase, GitEntry, GitFileState, GitWorktree } from "./types";
+import type {
+  GitCheckpointBase,
+  GitCommandOptions,
+  GitEntry,
+  GitFileState,
+  GitWorktree,
+} from "./types";
 
 export function gitFilePath(directory: string, root: string, path: string): string {
   const filename = join(root, path);
@@ -74,15 +80,23 @@ export function sameGitFile(a: GitFileState | undefined, b: GitFileState | undef
   return a?.text === b?.text && a?.mode === b?.mode;
 }
 
-export async function readGitIndex(root: string, path?: string): Promise<Map<string, string>> {
-  const output = await readGit(root, [
-    "--literal-pathspecs",
-    "ls-files",
-    "--stage",
-    "-z",
-    "--",
-    ...(path === undefined ? [] : [path]),
-  ]);
+export async function readGitIndex(
+  root: string,
+  path?: string,
+  options?: GitCommandOptions,
+): Promise<Map<string, string>> {
+  const output = await readGit(
+    root,
+    [
+      "--literal-pathspecs",
+      "ls-files",
+      "--stage",
+      "-z",
+      "--",
+      ...(path === undefined ? [] : [path]),
+    ],
+    options,
+  );
   const files = new Map<string, string>();
   for (const record of output.split("\0")) {
     const separator = record.indexOf("\t");
@@ -240,6 +254,7 @@ export async function gitFileDiff(
   snapshot: GitWorktree,
   change: GitChange,
   expected?: GitFileState,
+  nativeDiff?: FileDiff,
 ): Promise<GitFileDiff> {
   const { root, entries } = snapshot;
   const { path, area, previousPath, resolved } = change;
@@ -275,7 +290,8 @@ export async function gitFileDiff(
       ? await gitWorktreeText(root, path, before, after)
       : after;
   const diff =
-    before !== undefined && shown !== undefined ? buildTextDiff(before, shown ?? "").diff : null;
+    nativeDiff ??
+    (before !== undefined && shown !== undefined ? buildTextDiff(before, shown ?? "").diff : null);
   if (typeof after !== "string" || !worktree) return { diff, canOpen: false };
   if (worktree.text === after) return { diff, canOpen: true };
   const lineTargets =

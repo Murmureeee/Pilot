@@ -1,6 +1,38 @@
 // @env node
 import type { FileChangeSummary, FileDiff, GitChange, GitRollbackConflict } from "@shared/contract";
 
+export interface GitCommandOptions {
+  index?: string;
+  input?: Buffer;
+  timeout?: number;
+}
+
+export interface GitPatchHunk {
+  header: string;
+  newStart: number;
+  delta: number;
+  lines: string[];
+}
+
+export interface GitSelectionReview {
+  paths: string[];
+  revision?: string;
+  patch: Buffer;
+  partial?: { header: string; hunks: GitPatchHunk[]; diff: FileDiff };
+}
+
+export interface GitCommitTarget {
+  ref: string | null;
+  head: string | null;
+}
+
+export interface GitCommitPlan extends GitCommitTarget {
+  root: string;
+  indexPath: string;
+  indexTree: string;
+  tree: string;
+}
+
 export type RecordedFileChange = {
   summary: FileChangeSummary;
   absolutePath: string;

@@ -27,6 +27,9 @@ export const IPC = {
   sessionGitHead: "session:git-head",
   sessionGitChanges: "session:git-changes",
   sessionGitDiff: "session:git-diff",
+  sessionStageGit: "session:stage-git",
+  sessionPreviewGitCommit: "session:preview-git-commit",
+  sessionCommitGit: "session:commit-git",
   sessionGitCheckpointDiff: "session:git-checkpoint-diff",
   sessionPreviewGitRollback: "session:preview-git-rollback",
   sessionApplyGitRollback: "session:apply-git-rollback",
@@ -379,17 +382,43 @@ export interface GitChangesView {
   phase: "workspace" | "running" | "interrupted" | "finished";
   changes: GitChange[] | null;
   checkpoint?: GitCheckpointReview;
+  hasHistory?: true;
 }
 
 export interface GitDiffRequest {
   path: string;
   area: GitChange["area"];
+  live?: boolean;
 }
 
 export interface GitFileDiff {
   diff: FileDiff | null;
   canOpen: boolean;
   lineTargets?: Record<number, number>;
+  revision?: string;
+  selectableHunks?: true;
+  patch?: string;
+}
+
+export interface GitPatchSelection {
+  path: string;
+  revision: string;
+  hunks?: number[];
+}
+
+export interface GitStageSelection extends GitPatchSelection {
+  area: "unstaged" | "untracked";
+}
+
+export interface GitCommitPreview {
+  token: string;
+  branch: string | null;
+  patch: string;
+}
+
+export interface GitCommitResult {
+  commit: string;
+  branch: string | null;
 }
 
 export type GitRollbackConflict = "ownership" | "index" | "snapshot" | "later-edit";

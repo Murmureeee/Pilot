@@ -14,6 +14,7 @@ import type {
 import type {
   GitCheckpointBase,
   GitCommandObservation,
+  GitCommitPlan,
   GitSnapshot,
   GitTaskCheckpoint,
 } from "../workspace/types";
@@ -51,6 +52,14 @@ export interface SavedGitChanges {
   workingDirectory: string | null;
   view: GitChangesView;
   checkpoint?: GitTaskCheckpoint;
+  snapshot?: GitSnapshot;
+}
+
+export interface GitCommitOperation {
+  composerId: string;
+  directory: string;
+  token: string;
+  plan: GitCommitPlan;
 }
 
 export interface SessionRecord {

@@ -63,9 +63,18 @@ export function registerAgentRoutes({
   handle(IPC.sessionGitHead, (_event, directory) =>
     directory === host.getProjectDirectory() ? readProjectGitHead(directory) : null,
   );
-  handle(IPC.sessionGitChanges, (_event, composerId) => host.getGitChanges(composerId));
+  handle(IPC.sessionGitChanges, (_event, composerId, live) => host.getGitChanges(composerId, live));
   handle(IPC.sessionGitDiff, (_event, composerId, request) =>
     host.getGitFileDiff(composerId, request),
+  );
+  handle(IPC.sessionStageGit, (_event, composerId, selection) =>
+    host.stageGit(composerId, selection),
+  );
+  handle(IPC.sessionPreviewGitCommit, (_event, composerId, selections) =>
+    host.previewGitCommit(composerId, selections),
+  );
+  handle(IPC.sessionCommitGit, (_event, composerId, token, message) =>
+    host.commitGit(composerId, token, message),
   );
   handle(IPC.sessionGitCheckpointDiff, (_event, composerId, id, path) =>
     host.getGitCheckpointDiff(composerId, id, path),

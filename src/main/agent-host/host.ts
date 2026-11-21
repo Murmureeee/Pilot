@@ -18,10 +18,14 @@ import type {
   FileDiff,
   GitCheckpointDiff,
   GitChangesView,
+  GitCommitPreview,
+  GitCommitResult,
   GitDiffRequest,
   GitFileDiff,
+  GitPatchSelection,
   GitRollbackPreview,
   GitRollbackSelection,
+  GitStageSelection,
   InterruptedRun,
   PermissionDecision,
   PromptInput,
@@ -53,6 +57,13 @@ import {
   verifyGitRollback,
 } from "../workspace/git-checkpoint";
 import {
+  applyGitCommit,
+  gitActionError,
+  previewGitCommit,
+  stageGitSelection,
+} from "../workspace/git-index-actions";
+import { displayGitPatch, readGitSelection } from "../workspace/git-patch";
+import {
   captureGitCheckpointBase,
   gitFileDiff,
   gitFilePath,
@@ -68,6 +79,7 @@ import type {
   GitRollbackOperation,
   GitSnapshot,
   GitTaskCheckpoint,
+  GitWorktree,
   RecordedFileChange,
 } from "../workspace/types";
 import type { McpManager } from "./mcp";
@@ -84,6 +96,7 @@ import { readPlanSteps } from "./tools/plan";
 import type { ToolEnvironment } from "./tools/types";
 import type {
   AgentInstructions,
+  GitCommitOperation,
   ReferencedUserMessage,
   RunCheckpoint,
   RunningTask,
@@ -127,6 +140,8 @@ export class AgentHost {
   private runningPrompt?: Promise<void>;
   private gitRollback?: GitRollbackOperation;
   private applyingGitRollback = false;
+  private gitCommit?: GitCommitOperation;
+  private applyingGitSelection = false;
   private readonly sessionRules = new Map<string, ToolRule[]>();
   private sessionId: string | null = null;
   private composerId: string = randomUUID();
@@ -684,7 +699,13 @@ export class AgentHost {
               run.commandObservations,
             )
           : undefined;
-      return { type: "pilot_git_changes" as const, workingDirectory, view, checkpoint };
+      return {
+        type: "pilot_git_changes" as const,
+        workingDirectory,
+        view,
+        checkpoint,
+        snapshot: checkpoint ? undefined : current,
+      };
     });
     run.gitChangesAtEnd = reviewed.then((saved) => (saved ? this.finishedGitView(saved) : null));
     this.deps.store.save(sessionId, messages, undefined, await reviewed, run.checkpoint.task);
@@ -767,6 +788,7 @@ export class AgentHost {
     expectedDirectory?: string | null,
   ): Promise<void> | ActiveRun {
     if (this.applyingGitRollback) throw new Error("正在撤销 Git 变更，请稍后重试。");
+    if (this.applyingGitSelection) throw new Error("正在更新 Git，请稍后重试。");
     if (composerId !== undefined) this.checkComposerId(composerId);
     const active = this.run?.state;
     if (
@@ -815,6 +837,7 @@ export class AgentHost {
 
   resume(ref: RunRef): Promise<void> | ActiveRun {
     if (this.applyingGitRollback) throw new Error("正在撤销 Git 变更，请稍后重试。");
+    if (this.applyingGitSelection) throw new Error("正在更新 Git，请稍后重试。");
     const active = this.run?.state;
     if (active) return active;
     const checkpoint =
@@ -1141,6 +1164,7 @@ export class AgentHost {
   }
 
   private switchSession(id: string | null, draftWorkingDirectory?: string): void {
+    this.gitCommit = undefined;
     this.sessionId = id;
     this.composerId = id ?? randomUUID();
     this.draftWorkingDirectory = draftWorkingDirectory;
@@ -1170,28 +1194,69 @@ export class AgentHost {
     throw new Error("找不到这条文件变更。");
   }
 
-  async getGitChanges(composerId: string): Promise<GitChangesView | null> {
+  async getGitChanges(composerId: string, live = false): Promise<GitChangesView | null> {
     this.checkComposerId(composerId);
     const sessionId = this.sessionId;
     const run = this.run?.state.sessionId === sessionId ? this.run : undefined;
     const directory = this.getWorkingDirectory();
-    if (run?.gitChangesAtEnd) return run.gitChangesAtEnd;
+    if (!live && run?.gitChangesAtEnd) return run.gitChangesAtEnd;
     const interrupted = !run && sessionId ? this.deps.store.checkpoint(sessionId) : undefined;
     if (!run && !interrupted && sessionId) {
       const saved = this.gitRecord(sessionId, directory);
-      if (saved) return this.finishedGitView(saved);
+      if (saved) {
+        if (!live) return this.finishedGitView(saved);
+        const current = await captureGitSnapshot(directory);
+        this.checkComposerId(composerId);
+        return this.liveGitView(saved, current);
+      }
     }
 
     const baseline = run ? await run.gitBaseline : interrupted?.gitBaseline;
     const current = await captureGitSnapshot(directory);
     this.checkComposerId(composerId);
-    if (run?.gitChangesAtEnd) return run.gitChangesAtEnd;
-    return compareGitSnapshots(
+    if (!live && run?.gitChangesAtEnd) return run.gitChangesAtEnd;
+    const view = compareGitSnapshots(
       baseline,
       current,
       run ? "running" : interrupted ? "interrupted" : "workspace",
       Boolean(interrupted || run?.resumed),
     );
+    if (live && view?.changes) view.changes = view.changes.filter((change) => !change.resolved);
+    return view;
+  }
+
+  private liveGitView(saved: SavedGitChanges, current: GitSnapshot): GitChangesView {
+    const ended = saved.checkpoint?.snapshot ?? saved.snapshot;
+    const previous = this.finishedGitView(saved);
+    const paths = new Set(previous.changes?.map((change) => change.path));
+    const original = new Map(
+      previous.changes?.map((change) => [change.area + ":" + change.path, change]),
+    );
+    const view = compareGitSnapshots(undefined, current, "workspace");
+    const unchanged = new Set(
+      (ended &&
+        compareGitSnapshots(ended, current, "finished")
+          ?.changes?.filter((change) => change.origin === "existing")
+          .map((change) => change.area + ":" + change.path)) ||
+        [],
+    );
+    return {
+      phase: "workspace",
+      hasHistory: true,
+      checkpoint: previous.checkpoint,
+      changes:
+        view?.changes?.map((change) => {
+          const key = change.area + ":" + change.path;
+          const recorded = original.get(key);
+          const origin =
+            unchanged.has(key) && recorded
+              ? recorded.origin
+              : paths.has(change.path)
+                ? "mixed"
+                : "existing";
+          return { ...change, origin };
+        }) ?? null,
+    };
   }
 
   private finishedGitView(saved: SavedGitChanges): GitChangesView {
@@ -1277,6 +1342,16 @@ export class AgentHost {
     change: NonNullable<GitChangesView["changes"]>[number];
     saved?: SavedGitChanges;
   }> {
+    if (request.live) {
+      this.checkComposerId(composerId);
+      const snapshot = await captureGitSnapshot(this.getWorkingDirectory());
+      this.checkComposerId(composerId);
+      const change = compareGitSnapshots(undefined, snapshot, "workspace")?.changes?.find(
+        ({ area, path }) => request.area === area && request.path === path,
+      );
+      if (!change) throw new Error("找不到这条文件变更。");
+      return { snapshot, change };
+    }
     const view = await this.getGitChanges(composerId);
     this.checkComposerId(composerId);
     const change = view?.changes?.find(
@@ -1297,12 +1372,108 @@ export class AgentHost {
     const { snapshot, saved, change } = await this.gitDiffContext(composerId, request);
     const directory = this.getWorkingDirectory();
     if (!directory || !snapshot || !("root" in snapshot)) return { diff: null, canOpen: false };
-    return gitFileDiff(
-      directory,
-      snapshot,
-      change,
-      saved?.checkpoint?.files.find(({ path }) => path === change.path)?.after,
-    );
+    try {
+      const review = request.live ? await readGitSelection(directory, snapshot, change) : undefined;
+      const diff = await gitFileDiff(
+        directory,
+        snapshot,
+        change,
+        saved?.checkpoint?.files.find(({ path }) => path === change.path)?.after,
+        review?.partial?.diff,
+      );
+      return {
+        ...diff,
+        revision: review?.revision,
+        selectableHunks: review?.partial && diff.diff ? true : undefined,
+        patch:
+          !diff.diff?.hunks.length && review?.patch.length
+            ? displayGitPatch(review.patch)
+            : undefined,
+      };
+    } catch (error) {
+      throw gitActionError(error);
+    }
+  }
+
+  private gitActionDirectory(composerId: string): string {
+    this.checkComposerId(composerId);
+    if (this.applyingGitSelection || this.applyingGitRollback)
+      throw new Error("正在更新 Git，请稍后重试。");
+    if (this.run) throw new Error("请等待当前回复结束后再更新 Git。");
+    const directory = this.getWorkingDirectory();
+    if (!directory) throw new Error("请先选择工作目录。");
+    return directory;
+  }
+
+  private checkGitActionSession(composerId: string, directory: string): void {
+    this.checkComposerId(composerId);
+    this.checkWorkingDirectory(directory);
+  }
+
+  private async gitActionSnapshot(directory: string): Promise<GitWorktree> {
+    const snapshot = await captureGitSnapshot(directory);
+    if (!snapshot || !("root" in snapshot)) throw new Error("无法读取 Git 变更");
+    return snapshot;
+  }
+
+  async stageGit(composerId: string, selection: GitStageSelection): Promise<void> {
+    const directory = this.gitActionDirectory(composerId);
+    this.applyingGitSelection = true;
+    try {
+      const snapshot = await this.gitActionSnapshot(directory);
+      await stageGitSelection(directory, snapshot, selection, () =>
+        this.checkGitActionSession(composerId, directory),
+      );
+      this.gitCommit = undefined;
+    } catch (error) {
+      throw gitActionError(error);
+    } finally {
+      this.applyingGitSelection = false;
+    }
+  }
+
+  async previewGitCommit(
+    composerId: string,
+    selections: GitPatchSelection[],
+  ): Promise<GitCommitPreview> {
+    const directory = this.gitActionDirectory(composerId);
+    try {
+      const snapshot = await this.gitActionSnapshot(directory);
+      const { plan, branch, patch } = await previewGitCommit(directory, snapshot, selections);
+      if (this.gitActionDirectory(composerId) !== directory)
+        throw new Error("Git 变更已更新，请重新查看差异。");
+      const token = randomUUID();
+      this.gitCommit = { composerId, directory, token, plan };
+      return { token, branch, patch };
+    } catch (error) {
+      throw gitActionError(error);
+    }
+  }
+
+  async commitGit(composerId: string, token: string, message: string): Promise<GitCommitResult> {
+    const directory = this.gitActionDirectory(composerId);
+    const operation = this.gitCommit;
+    if (
+      !operation ||
+      operation.composerId !== composerId ||
+      operation.token !== token ||
+      operation.directory !== directory
+    )
+      throw new Error("Git 分支或暂存区已变更，请重新预览提交。");
+    this.gitCommit = undefined;
+    this.applyingGitSelection = true;
+    try {
+      const snapshot = await this.gitActionSnapshot(directory);
+      if (snapshot.root !== operation.plan.root)
+        throw new Error("Git 分支或暂存区已变更，请重新预览提交。");
+      return await applyGitCommit(operation.plan, message, () =>
+        this.checkGitActionSession(composerId, directory),
+      );
+    } catch (error) {
+      throw gitActionError(error);
+    } finally {
+      this.applyingGitSelection = false;
+    }
   }
 
   async getGitEditorPath(
@@ -1352,6 +1523,7 @@ export class AgentHost {
 
   async applyGitRollback(composerId: string, token: string): Promise<void> {
     this.checkComposerId(composerId);
+    if (this.applyingGitSelection) throw new Error("正在更新 Git，请稍后重试。");
     if (this.run || this.applyingGitRollback) throw new Error("请等待当前回复结束后再撤销。");
     const operation = this.gitRollback;
     if (!operation || operation.token !== token || operation.sessionId !== composerId)
@@ -1404,6 +1576,7 @@ export class AgentHost {
   }
 
   undoFileChange(sessionId: string, changeId: string): void {
+    if (this.applyingGitSelection) throw new Error("正在更新 Git，请稍后重试。");
     if (this.run?.state.sessionId === sessionId || this.applyingGitRollback) {
       throw new Error("请等待当前回复结束后再撤销。");
     }

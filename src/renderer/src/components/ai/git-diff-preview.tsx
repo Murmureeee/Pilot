@@ -1,6 +1,7 @@
 // @env browser
 import { useEffect, useState, type JSX } from "react";
 import { Button } from "@renderer/components/ui/button";
+import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +16,9 @@ import type {
   GitCheckpointDiff,
   GitDiffRequest,
   GitFileDiff,
+  GitPatchSelection,
   GitRollbackPreview,
+  GitStageSelection,
 } from "@shared/contract";
 import { DiffLines } from "./file-diff-preview";
 
@@ -38,17 +41,26 @@ function DiffStatus({ message, error = false }: { message: string; error?: boole
 export function GitDiffPreview({
   composerId,
   request,
+  blocked,
+  selection,
+  onSelect,
+  onStage,
 }: {
   composerId: string;
   request: GitDiffRequest;
+  blocked: boolean;
+  selection?: GitPatchSelection;
+  onSelect(selection?: GitPatchSelection): void;
+  onStage(selection: GitStageSelection): void;
 }): JSX.Element {
   const locale = useLocale();
-  const { area, path } = request;
+  const { area, path, live } = request;
   const [data, setData] = useState<GitFileDiff>();
   const [error, setError] = useState("");
+  const [stageHunks, setStageHunks] = useState<number[]>([]);
   useEffect(() => {
     let active = true;
-    void window.pi.sessionGitDiff(composerId, { area, path }).then(
+    void window.pi.sessionGitDiff(composerId, { area, path, live }).then(
       (result) => {
         if (active) setData(result);
       },
@@ -59,36 +71,112 @@ export function GitDiffPreview({
     return () => {
       active = false;
     };
-  }, [area, path, composerId]);
+  }, [area, path, live, composerId]);
+  const selected = selection?.revision === data?.revision ? selection : undefined;
+  const revision = data?.revision;
+  const hunks = data?.diff?.hunks;
+  const selectedHunks =
+    area === "staged"
+      ? (selected?.hunks ?? (selected && hunks ? hunks.map((_, index) => index) : []))
+      : stageHunks;
+  const toggleHunk = (index: number, checked: boolean): void => {
+    if (!revision) return;
+    const next = checked
+      ? [...selectedHunks, index]
+      : selectedHunks.filter((hunk) => hunk !== index);
+    if (area === "staged") onSelect(next.length ? { path, revision, hunks: next } : undefined);
+    else setStageHunks(next);
+  };
+  const stage = (hunks?: number[]): void => {
+    if (area !== "staged" && revision) onStage({ path, area, revision, hunks });
+  };
   return (
     <div className="min-w-0 border-t" data-git-diff>
-      {data?.diff && (
-        <div
-          className="overflow-x-auto [scrollbar-width:thin]"
-          tabIndex={0}
-          aria-label={t("逐行差异", locale)}
-        >
-          <DiffLines
-            diff={data.diff}
-            path={path}
-            lineTargets={data.lineTargets}
-            onOpenLine={
-              data.canOpen
-                ? (line) =>
-                    void window.pi
-                      .sessionOpenGitLine(composerId, { area, path }, line)
-                      .catch((reason: unknown) => setError(String(reason)))
-                : undefined
-            }
-          />
-        </div>
+      {data?.patch ? (
+        <CodeBlock size="sm" className="rounded-none">
+          <CodeBlockContent aria-label={t("逐行差异", locale)}>{data.patch}</CodeBlockContent>
+        </CodeBlock>
+      ) : (
+        data?.diff && (
+          <div
+            className="overflow-x-auto [scrollbar-width:thin]"
+            tabIndex={0}
+            aria-label={t("逐行差异", locale)}
+          >
+            <DiffLines
+              diff={data.diff}
+              path={path}
+              lineTargets={data.lineTargets}
+              onOpenLine={
+                data.canOpen
+                  ? (line) =>
+                      void window.pi
+                        .sessionOpenGitLine(composerId, { area, path, live }, line)
+                        .catch((reason: unknown) => setError(String(reason)))
+                  : undefined
+              }
+              hunkAction={
+                revision && data.selectableHunks
+                  ? (index) => (
+                      <label className="text-foreground flex items-center gap-1.5 font-sans text-xs">
+                        <input
+                          type="checkbox"
+                          className="accent-primary size-3.5"
+                          data-git-select-hunk={index}
+                          checked={selectedHunks.includes(index)}
+                          disabled={blocked}
+                          onChange={(event) => toggleHunk(index, event.currentTarget.checked)}
+                        />
+                        {t("选择区块 {0}", locale, [index + 1])}
+                      </label>
+                    )
+                  : undefined
+              }
+            />
+          </div>
+        )
       )}
       {error ? (
         <DiffStatus error message={error} />
       ) : (
-        !data?.diff && <DiffStatus message={data ? "此文件没有可用的差异预览。" : "加载中…"} />
+        !data?.diff &&
+        !data?.patch && <DiffStatus message={data ? "此文件没有可用的差异预览。" : "加载中…"} />
       )}
       {data?.diff?.truncated && <DiffStatus message="仅显示部分差异" />}
+      {revision && (
+        <div className="border-border flex flex-wrap justify-end gap-2 border-t px-3 py-2">
+          {area === "staged" ? (
+            <label className="flex items-center gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                className="accent-primary size-3.5"
+                disabled={blocked}
+                checked={Boolean(selected && !selected.hunks)}
+                onChange={(event) =>
+                  onSelect(event.currentTarget.checked ? { path, revision } : undefined)
+                }
+              />
+              {t("提交整个文件", locale)}
+            </label>
+          ) : (
+            <>
+              <Button size="sm" variant="outline" disabled={blocked} onClick={() => stage()}>
+                {t("暂存文件", locale)}
+              </Button>
+              {data.selectableHunks && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={blocked || !stageHunks.length}
+                  onClick={() => stage(stageHunks)}
+                >
+                  {t("暂存所选区块", locale)}
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

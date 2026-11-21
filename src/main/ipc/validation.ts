@@ -46,7 +46,14 @@ const sessionChange = z.tuple([z.uuid(), z.uuid()]);
 const gitDiffRequest = z.strictObject({
   path: mentionId,
   area: z.enum(["staged", "unstaged", "untracked"]),
+  live: z.boolean().optional(),
 });
+const gitPatchSelection = z.strictObject({
+  path: mentionId,
+  revision: z.string().regex(/^[a-f0-9]{64}$/),
+  hunks: z.array(z.number().int().nonnegative()).min(1).max(700).optional(),
+});
+const gitStageSelection = gitPatchSelection.extend({ area: z.enum(["unstaged", "untracked"]) });
 const gitRollbackSelection = z.strictObject({
   checkpointId: z.uuid(),
   path: mentionId,
@@ -172,8 +179,15 @@ const inputs = {
   [IPC.sessionSelectProject]: z.tuple([z.enum(SUPPORTED_LOCALES), z.uuid().optional()]),
   [IPC.sessionUseRecentProject]: z.tuple([nonBlank, z.uuid().optional()]),
   [IPC.sessionGitHead]: z.tuple([nonBlank]),
-  [IPC.sessionGitChanges]: session,
+  [IPC.sessionGitChanges]: z.tuple([z.uuid(), z.boolean().optional()]),
   [IPC.sessionGitDiff]: z.tuple([z.uuid(), gitDiffRequest]),
+  [IPC.sessionStageGit]: z.tuple([z.uuid(), gitStageSelection]),
+  [IPC.sessionPreviewGitCommit]: z.tuple([z.uuid(), z.array(gitPatchSelection).min(1)]),
+  [IPC.sessionCommitGit]: z.tuple([
+    z.uuid(),
+    z.uuid(),
+    nonBlank.refine((value) => !value.includes("\0")),
+  ]),
   [IPC.sessionGitCheckpointDiff]: z.tuple([z.uuid(), z.uuid(), mentionId]),
   [IPC.sessionPreviewGitRollback]: z.tuple([z.uuid(), gitRollbackSelection]),
   [IPC.sessionApplyGitRollback]: sessionChange,

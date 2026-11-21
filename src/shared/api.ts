@@ -8,10 +8,14 @@ import type {
   FileDiff,
   GitCheckpointDiff,
   GitChangesView,
+  GitCommitPreview,
+  GitCommitResult,
   GitDiffRequest,
   GitFileDiff,
+  GitPatchSelection,
   GitRollbackPreview,
   GitRollbackSelection,
+  GitStageSelection,
   Locale,
   LogLevel,
   MenuAction,
@@ -85,8 +89,14 @@ export interface PiApi {
   sessionSelectProject(locale: Locale, sessionId?: string): Promise<Snapshot | null>;
   sessionUseRecentProject(directory: string, sessionId?: string): Promise<Snapshot>;
   sessionGitHead(directory: string): Promise<ProjectGitHead | null>;
-  sessionGitChanges(composerId: string): Promise<GitChangesView | null>;
+  sessionGitChanges(composerId: string, live?: boolean): Promise<GitChangesView | null>;
   sessionGitDiff(composerId: string, request: GitDiffRequest): Promise<GitFileDiff>;
+  sessionStageGit(composerId: string, selection: GitStageSelection): Promise<void>;
+  sessionPreviewGitCommit(
+    composerId: string,
+    selections: GitPatchSelection[],
+  ): Promise<GitCommitPreview>;
+  sessionCommitGit(composerId: string, token: string, message: string): Promise<GitCommitResult>;
   sessionGitCheckpointDiff(
     composerId: string,
     checkpointId: string,

@@ -4,36 +4,45 @@ import { promisify } from "node:util";
 import type { ProjectGitHead } from "@shared/contract";
 import { GIT_STATUS_MAX_BYTES, GIT_STATUS_TIMEOUT_MS } from "./constants";
 import { createToolPathResolver } from "./paths";
+import type { GitCommandOptions } from "./types";
 
 const run = promisify(execFile);
 
-export async function readGit(cwd: string, args: string[]): Promise<string> {
-  return (await readGitBuffer(cwd, args)).toString("utf8");
+export async function readGit(
+  cwd: string,
+  args: string[],
+  options?: GitCommandOptions,
+): Promise<string> {
+  return (await readGitBuffer(cwd, args, options)).toString("utf8");
 }
 
-export async function readGitBuffer(cwd: string, args: string[]): Promise<Buffer> {
-  const { stdout } = await run(
-    "git",
-    ["--no-optional-locks", "-c", "core.fsmonitor=false", ...args],
-    {
-      cwd,
-      windowsHide: true,
-      timeout: GIT_STATUS_TIMEOUT_MS,
-      maxBuffer: GIT_STATUS_MAX_BYTES,
-      encoding: "buffer",
-      env: {
-        ...process.env,
-        LC_ALL: "C",
-        GIT_DIR: undefined,
-        GIT_WORK_TREE: undefined,
-        GIT_COMMON_DIR: undefined,
-        GIT_INDEX_FILE: undefined,
-        GIT_OBJECT_DIRECTORY: undefined,
-        GIT_ALTERNATE_OBJECT_DIRECTORIES: undefined,
-        GIT_NO_LAZY_FETCH: "1",
-      },
+export async function readGitBuffer(
+  cwd: string,
+  args: string[],
+  options?: GitCommandOptions,
+): Promise<Buffer> {
+  const command = run("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", ...args], {
+    cwd,
+    windowsHide: true,
+    timeout: options?.timeout ?? GIT_STATUS_TIMEOUT_MS,
+    maxBuffer: GIT_STATUS_MAX_BYTES,
+    encoding: "buffer",
+    env: {
+      ...process.env,
+      LC_ALL: "C",
+      GIT_DIR: undefined,
+      GIT_WORK_TREE: undefined,
+      GIT_COMMON_DIR: undefined,
+      GIT_INDEX_FILE: options?.index,
+      GIT_OBJECT_DIRECTORY: undefined,
+      GIT_ALTERNATE_OBJECT_DIRECTORIES: undefined,
+      GIT_NO_LAZY_FETCH: "1",
     },
-  );
+  });
+  // Git may exit before consuming the input. The command's own error is the useful one.
+  command.child.stdin?.on("error", () => {});
+  command.child.stdin?.end(options?.input);
+  const { stdout } = await command;
   return stdout;
 }
 
