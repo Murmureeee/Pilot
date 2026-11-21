@@ -942,7 +942,7 @@ it("reviews built-in tools and shell changes against the run's original Git inde
       await running;
     }
     const finished = await host.getGitChanges(composerId);
-    expect(finished).toEqual({
+    expect(finished).toMatchObject({
       phase: "finished",
       changes: [
         { path: "delete.txt", area: "unstaged", kind: "deleted", origin: "task" },

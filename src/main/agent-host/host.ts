@@ -2,6 +2,7 @@
 // Agent 宿主：Agent 实例生命周期、pi 事件 → UI 事件映射（含工具/用量/队列）、
 // 权限门接线、steer 插话路由、会话恢复与落盘。
 import { randomUUID } from "node:crypto";
+import { relative, sep } from "node:path";
 import {
   Agent,
   type AgentEvent,
@@ -15,7 +16,12 @@ import type {
   AgentStatus,
   ComposerDraft,
   FileDiff,
+  GitCheckpointDiff,
   GitChangesView,
+  GitDiffRequest,
+  GitFileDiff,
+  GitRollbackPreview,
+  GitRollbackSelection,
   InterruptedRun,
   PermissionDecision,
   PromptInput,
@@ -37,9 +43,31 @@ import { decryptSecret } from "../settings/secrets";
 import type { ProviderConfig, Settings } from "../settings/types";
 import { readFileChange, restoreFileChange } from "../workspace/file-changes";
 import { captureGitSnapshot, compareGitSnapshots } from "../workspace/git-changes";
+import {
+  createGitTaskCheckpoint,
+  describeGitCheckpoint,
+  gitCheckpointDiff,
+  rollbackTarget,
+  verifyGitRollback,
+} from "../workspace/git-checkpoint";
+import {
+  captureGitCheckpointBase,
+  gitFileDiff,
+  gitFilePath,
+  readGitWorktreeFile,
+  replaceGitWorktreeFile,
+  sameGitFile,
+} from "../workspace/git-review-files";
 import { createToolPathResolver, normalizeWorkingDirectory } from "../workspace/paths";
 import { getCommandShell } from "../workspace/shell";
-import type { RecordedFileChange } from "../workspace/types";
+import { buildTextDiff, textLines } from "../workspace/text-diff";
+import type {
+  GitCheckpointFile,
+  GitRollbackOperation,
+  GitSnapshot,
+  GitTaskCheckpoint,
+  RecordedFileChange,
+} from "../workspace/types";
 import type { McpManager } from "./mcp";
 import { prepareMentionPrompt } from "./mentions";
 import { resolveModel } from "./models";
@@ -57,6 +85,7 @@ import type {
   ReferencedUserMessage,
   RunCheckpoint,
   RunningTask,
+  SavedGitChanges,
   TimedAssistantMessage,
 } from "./types";
 
@@ -94,6 +123,8 @@ export class AgentHost {
   private thinkingDurations: Record<number, number> = {};
   private run?: RunningTask;
   private runningPrompt?: Promise<void>;
+  private gitRollback?: GitRollbackOperation;
+  private applyingGitRollback = false;
   private readonly sessionRules = new Map<string, ToolRule[]>();
   private sessionId: string | null = null;
   private composerId: string = randomUUID();
@@ -315,7 +346,9 @@ export class AgentHost {
     const { contextWindow } = model;
     this.contextWindow = Number.isFinite(contextWindow) && contextWindow > 0 ? contextWindow : null;
 
-    this.localTools = createTools(toolEnvironment);
+    this.localTools = createTools(toolEnvironment).map((tool) =>
+      tool.name === "bash" ? this.observeGitCommand(tool) : tool,
+    );
     const messages = this.deps.store.load(sessionId);
     // Request-time instructions are loaded from their sources instead of copied into history.
     const first = messages[0];
@@ -591,18 +624,68 @@ export class AgentHost {
     }
   }
 
+  private observeGitCommand(tool: AgentTool): AgentTool {
+    return {
+      ...tool,
+      execute: async (...args) => {
+        const run = this.run;
+        const directory = run?.state.workingDirectory;
+        if (!run?.gitFilesBefore || !directory) return tool.execute(...args);
+        const before = await captureGitSnapshot(directory);
+        args[2]?.throwIfAborted();
+        try {
+          return await tool.execute(...args);
+        } finally {
+          run.commandObservations.push({ before, after: await captureGitSnapshot(directory) });
+        }
+      },
+    };
+  }
+
+  private recordedGitChanges(
+    root: string,
+    messages: AgentMessage[],
+  ): Map<string, RecordedFileChange[]> {
+    const files = new Map<string, RecordedFileChange[]>();
+    for (const message of messages) {
+      if (message.role !== "toolResult") continue;
+      const change = readFileChange(message.toolName, message.details);
+      if (!change) continue;
+      const path = relative(root, change.absolutePath).split(sep).join("/");
+      const changes = files.get(path) ?? [];
+      changes.push(change);
+      files.set(path, changes);
+    }
+    return files;
+  }
+
   private async settle(run: RunningTask, messages: AgentMessage[]): Promise<void> {
-    const { sessionId, workingDirectory } = run.state;
-    run.gitChangesAtEnd = captureGitSnapshot(workingDirectory ?? undefined).then((current) =>
-      compareGitSnapshots(run.checkpoint.gitBaseline, current, "finished", run.resumed),
-    );
-    const view = await run.gitChangesAtEnd;
-    this.deps.store.save(
-      sessionId,
-      messages,
-      undefined,
-      view ? { type: "pilot_git_changes", workingDirectory, view } : null,
-    );
+    const { runId, sessionId, workingDirectory } = run.state;
+    const reviewed = captureGitSnapshot(workingDirectory ?? undefined).then(async (current) => {
+      const view = compareGitSnapshots(
+        run.checkpoint.gitBaseline,
+        current,
+        "finished",
+        run.resumed,
+      );
+      if (!view) return null;
+      const checkpoint =
+        workingDirectory && current && "root" in current
+          ? await createGitTaskCheckpoint(
+              runId,
+              workingDirectory,
+              run.checkpoint.gitBaseline,
+              current,
+              run.gitFilesBefore,
+              view,
+              this.recordedGitChanges(current.root, messages.slice(run.checkpoint.startIndex)),
+              run.commandObservations,
+            )
+          : undefined;
+      return { type: "pilot_git_changes" as const, workingDirectory, view, checkpoint };
+    });
+    run.gitChangesAtEnd = reviewed.then((saved) => (saved ? this.finishedGitView(saved) : null));
+    this.deps.store.save(sessionId, messages, undefined, await reviewed);
     this.uiMessages = toUiMessages(messages, "s", (name) => this.toolLabel(name));
     this.nextId = this.uiMessages.length;
     this.send({ type: "messages", messages: this.uiMessages });
@@ -658,6 +741,7 @@ export class AgentHost {
     composerId?: string,
     expectedDirectory?: string | null,
   ): Promise<void> | ActiveRun {
+    if (this.applyingGitRollback) throw new Error("正在撤销 Git 变更，请稍后重试。");
     if (composerId !== undefined) this.checkComposerId(composerId);
     const active = this.run?.state;
     if (
@@ -705,6 +789,7 @@ export class AgentHost {
   }
 
   resume(ref: RunRef): Promise<void> | ActiveRun {
+    if (this.applyingGitRollback) throw new Error("正在撤销 Git 变更，请稍后重试。");
     const active = this.run?.state;
     if (active) return active;
     const checkpoint =
@@ -766,6 +851,7 @@ export class AgentHost {
       finishedTools: new Map(),
       previousActions: new Set(previous?.actions),
       resumed: previous !== undefined,
+      commandObservations: [],
       gitBaseline: previous
         ? Promise.resolve(
             previous.gitBaseline === undefined ? { unavailable: true } : previous.gitBaseline,
@@ -815,6 +901,15 @@ export class AgentHost {
       this.deps.broadcast({ type: "run_started", run: run.state });
       this.sendSessions();
       const gitBaseline = await run.gitBaseline;
+      const directory = run.state.workingDirectory;
+      if (
+        !run.resumed &&
+        !preparation.signal.aborted &&
+        directory &&
+        gitBaseline &&
+        "root" in gitBaseline
+      )
+        run.gitFilesBefore = await captureGitCheckpointBase(directory, gitBaseline);
       if (run.checkpoint.gitBaseline === undefined)
         this.checkpointRun(run, { ...run.checkpoint, gitBaseline });
       const externalTools = preparation.signal.aborted
@@ -1050,8 +1145,8 @@ export class AgentHost {
     if (run?.gitChangesAtEnd) return run.gitChangesAtEnd;
     const interrupted = !run && sessionId ? this.deps.store.checkpoint(sessionId) : undefined;
     if (!run && !interrupted && sessionId) {
-      const saved = this.deps.store.lastGitChanges(sessionId);
-      if (saved?.workingDirectory === (directory ?? null)) return saved.view;
+      const saved = this.gitRecord(sessionId, directory);
+      if (saved) return this.finishedGitView(saved);
     }
 
     const baseline = run ? await run.gitBaseline : interrupted?.gitBaseline;
@@ -1066,6 +1161,209 @@ export class AgentHost {
     );
   }
 
+  private finishedGitView(saved: SavedGitChanges): GitChangesView {
+    if (!saved.checkpoint || !saved.checkpoint.files.length) return saved.view;
+    const checkpoint = describeGitCheckpoint(saved.checkpoint);
+    const reverted = new Set(
+      checkpoint.files.filter((file) => file.reverted).map((file) => file.path),
+    );
+    return {
+      ...saved.view,
+      checkpoint,
+      changes:
+        saved.view.changes?.map((change) =>
+          change.area !== "staged" && reverted.has(change.path)
+            ? { ...change, taskReverted: true }
+            : change,
+        ) ?? null,
+    };
+  }
+
+  private settleGitRollback(checkpoint: GitTaskCheckpoint, directory: string): GitTaskCheckpoint {
+    const operation = checkpoint.pending;
+    if (!operation) return checkpoint;
+    const current = readGitWorktreeFile(directory, checkpoint.snapshot.root, operation.path);
+    const files = checkpoint.files.map((file): GitCheckpointFile => {
+      if (file.path !== operation.path) return file;
+      if (sameGitFile(current, operation.after))
+        return { ...file, after: operation.after, revision: operation.revision };
+      return sameGitFile(current, file.after) ? file : { ...file, conflict: "later-edit" };
+    });
+    return { ...checkpoint, files, pending: undefined };
+  }
+
+  private gitRecord(id: string, directory: string | undefined): SavedGitChanges | undefined {
+    const saved = this.deps.store.lastGitChanges(id);
+    if (!saved || saved.workingDirectory !== (directory ?? null)) return;
+    if (!saved.checkpoint?.pending || !directory || this.applyingGitRollback) return saved;
+    const checkpoint = this.settleGitRollback(saved.checkpoint, directory);
+    const recovered = { ...saved, checkpoint };
+    const { messages, checkpoint: running } = this.deps.store.read(id);
+    this.deps.store.writeTranscript(id, messages, running, recovered);
+    return recovered;
+  }
+
+  private selectedGitCheckpoint(
+    composerId: string,
+    id: string,
+    path: string,
+  ): {
+    saved: SavedGitChanges;
+    checkpoint: GitTaskCheckpoint;
+    file: GitCheckpointFile;
+    directory: string;
+  } {
+    this.checkComposerId(composerId);
+    const directory = this.getWorkingDirectory();
+    const saved =
+      this.sessionId && directory ? this.gitRecord(this.sessionId, directory) : undefined;
+    const checkpoint = saved?.checkpoint;
+    const file = checkpoint?.files.find((entry) => entry.path === path);
+    if (
+      !saved ||
+      !directory ||
+      !checkpoint ||
+      checkpoint.id !== id ||
+      !file ||
+      this.deps.store.checkpoint(composerId)
+    )
+      throw new Error("检查点已更新，请重新预览撤销范围。");
+    return { saved, checkpoint, file, directory };
+  }
+
+  getGitCheckpointDiff(composerId: string, id: string, path: string): GitCheckpointDiff {
+    const { checkpoint, file, directory } = this.selectedGitCheckpoint(composerId, id, path);
+    return gitCheckpointDiff(directory, checkpoint, file);
+  }
+
+  private async gitDiffContext(
+    composerId: string,
+    request: GitDiffRequest,
+  ): Promise<{
+    snapshot: GitSnapshot;
+    change: NonNullable<GitChangesView["changes"]>[number];
+    saved?: SavedGitChanges;
+  }> {
+    const view = await this.getGitChanges(composerId);
+    this.checkComposerId(composerId);
+    const change = view?.changes?.find(
+      ({ area, path }) => request.area === area && request.path === path,
+    );
+    if (!change) throw new Error("找不到这条文件变更。");
+    const directory = this.getWorkingDirectory();
+    const saved =
+      this.sessionId && view?.phase === "finished" && this.run?.state.sessionId !== this.sessionId
+        ? this.gitRecord(this.sessionId, directory)
+        : undefined;
+    const snapshot = saved?.checkpoint?.snapshot ?? (await captureGitSnapshot(directory));
+    this.checkComposerId(composerId);
+    return { snapshot, saved, change };
+  }
+
+  async getGitFileDiff(composerId: string, request: GitDiffRequest): Promise<GitFileDiff> {
+    const { snapshot, saved, change } = await this.gitDiffContext(composerId, request);
+    const directory = this.getWorkingDirectory();
+    if (!directory || !snapshot || !("root" in snapshot)) return { diff: null, canOpen: false };
+    return gitFileDiff(
+      directory,
+      snapshot,
+      change,
+      saved?.checkpoint?.files.find(({ path }) => path === change.path)?.after,
+    );
+  }
+
+  async getGitEditorPath(
+    composerId: string,
+    request: GitDiffRequest,
+    line: number,
+  ): Promise<string> {
+    const { snapshot } = await this.gitDiffContext(composerId, request);
+    const directory = this.getWorkingDirectory();
+    if (!directory || !snapshot || !("root" in snapshot))
+      throw new Error("无法在编辑器中打开该行。");
+    const current = readGitWorktreeFile(directory, snapshot.root, request.path);
+    if (!current || line > Math.max(1, textLines(current.text).length))
+      throw new Error("无法在编辑器中打开该行。");
+    return gitFilePath(directory, snapshot.root, request.path);
+  }
+
+  async previewGitRollback(
+    composerId: string,
+    selection: GitRollbackSelection,
+  ): Promise<GitRollbackPreview> {
+    if (this.run || this.applyingGitRollback) throw new Error("请等待当前回复结束后再撤销。");
+    const { checkpoint, directory, file } = this.selectedGitCheckpoint(
+      composerId,
+      selection.checkpointId,
+      selection.path,
+    );
+    await verifyGitRollback(directory, checkpoint, file);
+    const current = this.selectedGitCheckpoint(composerId, checkpoint.id, file.path);
+    if (this.run || this.applyingGitRollback) throw new Error("请等待当前回复结束后再撤销。");
+    const after = rollbackTarget(directory, current.checkpoint, current.file, selection);
+    const token = randomUUID();
+    this.gitRollback = {
+      token,
+      sessionId: composerId,
+      checkpointId: checkpoint.id,
+      file: current.file,
+      after,
+    };
+    return {
+      token,
+      path: file.path,
+      operation: after ? (file.after ? "modify" : "create") : "delete",
+      diff: buildTextDiff(file.after?.text ?? null, after?.text ?? "").diff,
+    };
+  }
+
+  async applyGitRollback(composerId: string, token: string): Promise<void> {
+    this.checkComposerId(composerId);
+    if (this.run || this.applyingGitRollback) throw new Error("请等待当前回复结束后再撤销。");
+    const operation = this.gitRollback;
+    if (!operation || operation.token !== token || operation.sessionId !== composerId)
+      throw new Error("检查点已更新，请重新预览撤销范围。");
+    this.gitRollback = undefined;
+    this.applyingGitRollback = true;
+    try {
+      const { checkpoint, file, directory } = this.selectedGitCheckpoint(
+        composerId,
+        operation.checkpointId,
+        operation.file.path,
+      );
+      if (file.revision !== operation.file.revision || file.after === undefined)
+        throw new Error("检查点已更新，请重新预览撤销范围。");
+      await verifyGitRollback(directory, checkpoint, file);
+      const { saved } = this.selectedGitCheckpoint(composerId, checkpoint.id, file.path);
+      const { messages } = this.deps.store.read(composerId);
+      // If the app closes between the file write and transcript update, compare both recorded versions.
+      const journal = {
+        ...checkpoint,
+        pending: { path: file.path, after: operation.after, revision: randomUUID() },
+      };
+      this.deps.store.writeTranscript(composerId, messages, undefined, {
+        ...saved,
+        checkpoint: journal,
+      });
+      try {
+        replaceGitWorktreeFile(
+          directory,
+          checkpoint.snapshot.root,
+          file.path,
+          file.after,
+          operation.after,
+        );
+      } finally {
+        this.deps.store.writeTranscript(composerId, messages, undefined, {
+          ...saved,
+          checkpoint: this.settleGitRollback(journal, directory),
+        });
+      }
+    } finally {
+      this.applyingGitRollback = false;
+    }
+  }
+
   getFileDiff(sessionId: string, changeId: string): FileDiff {
     const { change } = this.sessionFileChange(sessionId, changeId);
     if (!change.snapshot) throw new Error("此文件没有可用的差异预览。");
@@ -1073,12 +1371,18 @@ export class AgentHost {
   }
 
   undoFileChange(sessionId: string, changeId: string): void {
-    if (this.run?.state.sessionId === sessionId) {
+    if (this.run?.state.sessionId === sessionId || this.applyingGitRollback) {
       throw new Error("请等待当前回复结束后再撤销。");
     }
     const { messages, index, message, change } = this.sessionFileChange(sessionId, changeId);
     if (change.summary.reverted) return;
-    restoreFileChange(change, this.getWorkingDirectory());
+    const directory = this.getWorkingDirectory();
+    const checkpoint = this.gitRecord(sessionId, directory)?.checkpoint;
+    const path =
+      checkpoint && relative(checkpoint.snapshot.root, change.absolutePath).split(sep).join("/");
+    if (checkpoint?.files.some((file) => file.path === path))
+      throw new Error("请从 Git 任务检查点预览并撤销此文件。");
+    restoreFileChange(change, directory);
 
     const reverted = { ...change.summary, reverted: true };
     const updated = messages.with(index, {

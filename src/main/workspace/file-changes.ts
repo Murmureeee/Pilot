@@ -48,7 +48,7 @@ export function readFileSnapshot(path: string): string | null | undefined {
   }
 }
 
-function fingerprint(text: string): string {
+export function fingerprintText(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
@@ -75,7 +75,7 @@ export function recordFileChange(
   if (before !== undefined && after !== undefined) {
     const { stats, diff } = buildTextDiff(before, after);
     change.summary.stats = stats;
-    change.snapshot = { before, afterHash: fingerprint(after), diff };
+    change.snapshot = { before, afterHash: fingerprintText(after), diff };
   }
   return { pilotFileChange: change };
 }
@@ -122,7 +122,7 @@ export function restoreFileChange(
   const current = readFileSnapshot(absolutePath);
   // A retry after restoring the file and failing to save the transcript remains safe.
   if (current === snapshot.before) return;
-  if (typeof current !== "string" || fingerprint(current) !== snapshot.afterHash) {
+  if (typeof current !== "string" || fingerprintText(current) !== snapshot.afterHash) {
     throw new Error("文件已有后续改动，无法撤销此变更。");
   }
   if (snapshot.before === null) {

@@ -1,6 +1,6 @@
 // @env browser
 import { useEffect, useRef, useState, type JSX } from "react";
-import { FileDiffIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronRightIcon, FileDiffIcon, HistoryIcon, XIcon } from "lucide-react";
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -9,40 +9,79 @@ import {
   GIT_CHANGE_AREA_LABELS,
   GIT_CHANGE_KIND_LABELS,
   GIT_CHANGE_ORIGIN_LABELS,
+  GIT_ROLLBACK_CONFLICT_LABELS,
   GIT_REVIEW_PHASE_LABELS,
 } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
+import { useAgentStore } from "@renderer/stores/agent";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
 import type { GitChange, GitChangesView } from "@shared/contract";
+import { GitCheckpointFilePreview, GitDiffPreview } from "./git-diff-preview";
 
-function GitChangeRow({ change }: { change: GitChange }): JSX.Element {
+function GitChangeRow({
+  change,
+  composerId,
+  expanded,
+  onToggle,
+}: {
+  change: GitChange;
+  composerId: string;
+  expanded: boolean;
+  onToggle(): void;
+}): JSX.Element {
   const locale = useLocale();
   return (
     <li
       data-git-file={change.path}
       data-git-origin={change.origin}
-      className="border-border/65 flex min-w-0 flex-col items-start gap-0.5 border-b px-3 py-2"
+      className="border-border/65 min-w-0 border-b"
     >
-      <span dir="auto" title={change.path} className="max-w-full truncate font-mono text-sm">
-        {change.path}
-      </span>
-      {change.previousPath && (
-        <span
-          dir="auto"
-          title={change.previousPath}
-          className="text-muted-foreground max-w-full truncate text-xs"
-        >
-          {t("原路径 {0}", locale, [change.previousPath])}
+      <Button
+        type="button"
+        variant="ghost"
+        aria-expanded={expanded}
+        onClick={onToggle}
+        title={change.path}
+        data-git-diff-toggle
+        className="h-auto w-full min-w-0 items-start justify-start gap-2 rounded-none px-3 py-2 text-left font-normal"
+      >
+        <ChevronRightIcon aria-hidden="true" className={expanded ? "mt-0.5 rotate-90" : "mt-0.5"} />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span dir="auto" className="truncate font-mono text-sm">
+            {change.path}
+          </span>
+          {change.previousPath && (
+            <span
+              dir="auto"
+              title={change.previousPath}
+              className="text-muted-foreground truncate text-xs"
+            >
+              {t("原路径 {0}", locale, [change.previousPath])}
+            </span>
+          )}
+          <span className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+            <span>
+              {t(
+                change.resolved ? "任务期间移出清单" : GIT_CHANGE_KIND_LABELS[change.kind],
+                locale,
+              )}
+            </span>
+            <Badge variant={change.origin === "mixed" ? "outline" : "secondary"}>
+              {t(
+                change.taskReverted ? "任务改动已撤销" : GIT_CHANGE_ORIGIN_LABELS[change.origin],
+                locale,
+              )}
+            </Badge>
+          </span>
         </span>
+        {expanded && <CheckIcon aria-hidden="true" className="mt-0.5" />}
+      </Button>
+      {expanded && (
+        <GitDiffPreview
+          composerId={composerId}
+          request={{ path: change.path, area: change.area }}
+        />
       )}
-      <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-        <span>
-          {t(change.resolved ? "任务期间移出清单" : GIT_CHANGE_KIND_LABELS[change.kind], locale)}
-        </span>
-        <Badge variant={change.origin === "mixed" ? "outline" : "secondary"}>
-          {t(GIT_CHANGE_ORIGIN_LABELS[change.origin], locale)}
-        </Badge>
-      </div>
     </li>
   );
 }
@@ -51,9 +90,16 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
   const locale = useLocale();
   const heading = useRef<HTMLHeadingElement>(null);
   const [view, setView] = useState<GitChangesView | null>();
+  const [showCheckpoint, setShowCheckpoint] = useState(false);
+  const [expanded, setExpanded] = useState<string>();
+  const [revision, setRevision] = useState(0);
+  const busy = useAgentStore((state) => state.activeRun !== null);
 
   useEffect(() => {
     heading.current?.focus();
+  }, []);
+
+  useEffect(() => {
     let disposed = false;
     let reading = false;
     let queued = false;
@@ -91,13 +137,16 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
       unsubscribe();
       window.removeEventListener("focus", refreshOnFocus);
     };
-  }, [composerId]);
+  }, [composerId, revision]);
 
   const close = (): void => {
     useFileChangesStore.getState().close();
     document.getElementById("git-changes-trigger")?.focus();
   };
   const changes = view?.changes;
+  const checkpoint = showCheckpoint ? view?.checkpoint : undefined;
+  const toggle = (key: string): void =>
+    setExpanded((current) => (current === key ? undefined : key));
   const emptyMessage =
     view === undefined
       ? "加载中…"
@@ -112,7 +161,7 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
       aria-labelledby="git-changes-heading"
       className={FILE_CHANGES_PANEL_CLASS}
       onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
+        if (event.key !== "Escape" || !event.currentTarget.contains(event.target as Node)) return;
         event.stopPropagation();
         close();
       }}
@@ -139,12 +188,85 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
         </Button>
       </div>
       {view && changes && (
-        <p className="border-border/70 bg-muted/40 text-muted-foreground shrink-0 border-b px-3 py-2 text-xs">
-          {t(GIT_REVIEW_PHASE_LABELS[view.phase], locale)}
-        </p>
+        <div className="border-border/70 bg-muted/40 flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-1.5">
+          <p className="text-muted-foreground text-xs">
+            {t(GIT_REVIEW_PHASE_LABELS[view.phase], locale)}
+          </p>
+          {view.checkpoint && (
+            <Button
+              size="xs"
+              variant={checkpoint ? "secondary" : "outline"}
+              aria-pressed={Boolean(checkpoint)}
+              onClick={() => {
+                setExpanded(undefined);
+                setShowCheckpoint(!checkpoint);
+              }}
+            >
+              <HistoryIcon data-icon="inline-start" />
+              {t("任务检查点", locale)}
+            </Button>
+          )}
+        </div>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin]">
-        {changes?.length ? (
+        {checkpoint ? (
+          <ul aria-label={t("任务检查点", locale)} data-git-checkpoint>
+            {checkpoint.files.map((file) => {
+              const key = "checkpoint:" + file.path;
+              const selected = expanded === key;
+              const change =
+                changes?.find((item) => item.path === file.path && item.area !== "staged") ??
+                changes?.find((item) => item.path === file.path);
+              return (
+                <li
+                  key={file.path}
+                  className="border-border/65 min-w-0 border-b"
+                  data-checkpoint-file={file.path}
+                >
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    aria-expanded={selected}
+                    title={file.path}
+                    onClick={() => toggle(key)}
+                    className="h-auto w-full min-w-0 items-start justify-start gap-2 rounded-none px-3 py-2 text-left font-normal"
+                  >
+                    <ChevronRightIcon
+                      aria-hidden="true"
+                      className={selected ? "mt-0.5 rotate-90" : "mt-0.5"}
+                    />
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span dir="auto" className="truncate font-mono text-sm">
+                        {file.path}
+                      </span>
+                      {(file.conflict || file.reverted) && (
+                        <span className="text-muted-foreground text-xs wrap-anywhere">
+                          {t(
+                            file.conflict
+                              ? GIT_ROLLBACK_CONFLICT_LABELS[file.conflict]
+                              : "任务改动已撤销",
+                            locale,
+                          )}
+                        </span>
+                      )}
+                    </span>
+                    {selected && <CheckIcon aria-hidden="true" className="mt-0.5" />}
+                  </Button>
+                  {selected && change && (
+                    <GitCheckpointFilePreview
+                      key={checkpoint.id + ":" + revision}
+                      composerId={composerId}
+                      checkpointId={checkpoint.id}
+                      request={{ path: file.path, area: change.area }}
+                      busy={busy}
+                      onApplied={() => setRevision((value) => value + 1)}
+                    />
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        ) : changes?.length ? (
           GIT_CHANGE_AREAS.map((area) => {
             const files = changes.filter((change) => change.area === area);
             if (!files.length) return null;
@@ -157,9 +279,18 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
                   {t(GIT_CHANGE_AREA_LABELS[area], locale)}
                 </h3>
                 <ul>
-                  {files.map((change) => (
-                    <GitChangeRow key={change.path} change={change} />
-                  ))}
+                  {files.map((change) => {
+                    const key = area + ":" + change.path;
+                    return (
+                      <GitChangeRow
+                        key={change.path + ":" + view?.phase}
+                        composerId={composerId}
+                        change={change}
+                        expanded={expanded === key}
+                        onToggle={() => toggle(key)}
+                      />
+                    );
+                  })}
                 </ul>
               </section>
             );

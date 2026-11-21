@@ -26,6 +26,11 @@ export const IPC = {
   sessionUseRecentProject: "session:use-recent-project",
   sessionGitHead: "session:git-head",
   sessionGitChanges: "session:git-changes",
+  sessionGitDiff: "session:git-diff",
+  sessionGitCheckpointDiff: "session:git-checkpoint-diff",
+  sessionPreviewGitRollback: "session:preview-git-rollback",
+  sessionApplyGitRollback: "session:apply-git-rollback",
+  sessionOpenGitLine: "session:open-git-line",
   sessionLoad: "session:load",
   sessionRename: "session:rename",
   sessionDelete: "session:delete",
@@ -360,11 +365,60 @@ export interface GitChange {
   kind: "added" | "modified" | "deleted" | "renamed" | "conflicted";
   origin: "existing" | "task" | "mixed";
   resolved?: true;
+  taskReverted?: true;
 }
 
 export interface GitChangesView {
   phase: "workspace" | "running" | "interrupted" | "finished";
   changes: GitChange[] | null;
+  checkpoint?: GitCheckpointReview;
+}
+
+export interface GitDiffRequest {
+  path: string;
+  area: GitChange["area"];
+}
+
+export interface GitFileDiff {
+  diff: FileDiff | null;
+  canOpen: boolean;
+  lineTargets?: Record<number, number>;
+}
+
+export type GitRollbackConflict = "ownership" | "index" | "snapshot" | "later-edit";
+
+interface GitCheckpointFileSummary {
+  path: string;
+  conflict?: GitRollbackConflict;
+  reverted?: true;
+}
+
+export interface GitCheckpointReview {
+  id: string;
+  files: GitCheckpointFileSummary[];
+}
+
+export interface GitCheckpointDiff {
+  diff: FileDiff | null;
+  revision: string;
+  hunks: boolean[];
+  wholeFile: boolean;
+  conflict?: GitRollbackConflict;
+  canOpen: boolean;
+}
+
+export interface GitRollbackSelection {
+  checkpointId: string;
+  path: string;
+  revision: string;
+  hunks?: number[];
+}
+
+export interface GitRollbackPreview {
+  token: string;
+  path: string;
+  operation: "modify" | "create" | "delete";
+  diff: FileDiff;
 }
 
 /** 主题（FR-5.5）：亮 / 暗 / 跟随系统；渲染层本地存储，切换时同步原生标题栏颜色 */

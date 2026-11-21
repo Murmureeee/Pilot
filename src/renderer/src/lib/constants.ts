@@ -4,6 +4,7 @@ import type {
   ApprovalMode,
   GitChange,
   GitChangesView,
+  GitRollbackConflict,
   LogLevel,
   ProviderKind,
   ThemeSetting,
@@ -169,6 +170,12 @@ export const GIT_REVIEW_PHASE_LABELS: Record<GitChangesView["phase"], string> = 
   running: "当前任务",
   interrupted: "已中断的任务",
   finished: "最近一次任务结束时",
+};
+export const GIT_ROLLBACK_CONFLICT_LABELS: Record<GitRollbackConflict, string> = {
+  ownership: "改动归属不明，冲突内容已保留。",
+  index: "暂存内容有变化，文件已保留。",
+  snapshot: "此文件缺少可校验的检查点，文件已保留。",
+  "later-edit": "文件已有后续改动，无法撤销此变更。",
 };
 export const WORKSPACE_LINK_PREFIX = "#pilot-workspace-reference=";
 export const SANITIZED_WORKSPACE_LINK_PREFIX = "#user-content-" + WORKSPACE_LINK_PREFIX.slice(1);

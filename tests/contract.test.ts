@@ -36,6 +36,11 @@ describe("IPC contract", () => {
     expect(IPC.sessionUseRecentProject).toBe("session:use-recent-project");
     expect(IPC.sessionGitHead).toBe("session:git-head");
     expect(IPC.sessionGitChanges).toBe("session:git-changes");
+    expect(IPC.sessionGitDiff).toBe("session:git-diff");
+    expect(IPC.sessionGitCheckpointDiff).toBe("session:git-checkpoint-diff");
+    expect(IPC.sessionPreviewGitRollback).toBe("session:preview-git-rollback");
+    expect(IPC.sessionApplyGitRollback).toBe("session:apply-git-rollback");
+    expect(IPC.sessionOpenGitLine).toBe("session:open-git-line");
     expect(IPC.agentClearQueue).toBe("agent:clear-queue");
     expect(IPC.agentResume).toBe("agent:resume");
     expect(IPC.agentSearchWorkspace).toBe("agent:search-workspace");

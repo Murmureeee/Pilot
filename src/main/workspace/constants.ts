@@ -8,3 +8,4 @@ export const DIFF_CONTEXT_LINES = 3;
 export const GIT_STATUS_MAX_BYTES = 8 * 1024 * 1024;
 export const GIT_STATUS_TIMEOUT_MS = 5000;
 export const GIT_FILE_READ_CONCURRENCY = 16;
+export const MAX_GIT_CHECKPOINT_BYTES = 8 * 1024 * 1024;

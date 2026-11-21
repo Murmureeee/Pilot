@@ -46,7 +46,19 @@ async function highlightDiff(diff: FileDiff, path: string): Promise<ReactNode[][
   });
 }
 
-function DiffLines({ diff, path }: { diff: FileDiff; path: string }): JSX.Element {
+export function DiffLines({
+  diff,
+  path,
+  onOpenLine,
+  lineTargets,
+  hunkAction,
+}: {
+  diff: FileDiff;
+  path: string;
+  onOpenLine?(line: number): void;
+  lineTargets?: Record<number, number>;
+  hunkAction?(index: number): ReactNode;
+}): JSX.Element {
   const locale = useLocale();
   const [highlighted, setHighlighted] = useState<ReactNode[][] | null>(null);
 
@@ -77,43 +89,62 @@ function DiffLines({ diff, path }: { diff: FileDiff; path: string }): JSX.Elemen
           <Fragment key={hunkIndex}>
             <tr className="bg-secondary/65 text-muted-foreground">
               <td colSpan={4} className="px-3 py-0.5">
-                {hunkHeader(hunk)}
+                <div className="flex flex-wrap items-center gap-x-3">
+                  {hunkHeader(hunk)}
+                  {hunkAction?.(hunkIndex)}
+                </div>
               </td>
             </tr>
-            {hunk.map((line, lineIndex) => (
-              <tr
-                key={lineIndex}
-                data-diff-line={line.kind}
-                className={cn(
-                  line.kind === "added" && "bg-emerald-500/10 dark:bg-emerald-500/15",
-                  line.kind === "removed" && "bg-destructive/10 dark:bg-destructive/15",
-                )}
-              >
-                <td className="text-muted-foreground w-9 min-w-9 px-1.5 text-right tabular-nums select-none">
-                  {line.before}
-                </td>
-                <td className="text-muted-foreground w-9 min-w-9 px-1.5 text-right tabular-nums select-none">
-                  {line.after}
-                </td>
-                <td
+            {hunk.map((line, lineIndex) => {
+              const target =
+                line.after === undefined || !lineTargets ? line.after : lineTargets[line.after];
+              return (
+                <tr
+                  key={lineIndex}
+                  data-diff-line={line.kind}
                   className={cn(
-                    "w-5 min-w-5 text-center select-none",
-                    line.kind === "added" && "text-emerald-700 dark:text-emerald-400",
-                    line.kind === "removed" && "text-destructive",
+                    line.kind === "added" && "bg-emerald-500/10 dark:bg-emerald-500/15",
+                    line.kind === "removed" && "bg-destructive/10 dark:bg-destructive/15",
                   )}
                 >
-                  {line.kind === "added" ? "+" : line.kind === "removed" ? "−" : " "}
-                </td>
-                <td className="pr-4 whitespace-pre">
-                  {line.text ? (highlighted?.[hunkIndex]?.[lineIndex] ?? line.text) : " "}
-                  {line.noNewline && (
-                    <span className="text-muted-foreground ml-3 select-none">
-                      {t("末尾无换行", locale)}
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
+                  <td className="text-muted-foreground w-9 min-w-9 px-1.5 text-right tabular-nums select-none">
+                    {line.before}
+                  </td>
+                  <td className="text-muted-foreground w-9 min-w-9 px-1.5 text-right tabular-nums select-none">
+                    {target !== undefined && onOpenLine ? (
+                      <button
+                        type="button"
+                        title={t("在 VS Code 中打开第 {0} 行", locale, [target])}
+                        aria-label={t("在 VS Code 中打开第 {0} 行", locale, [target])}
+                        className="hover:text-primary focus-visible:ring-ring/50 rounded-sm underline underline-offset-2 outline-none focus-visible:ring-2"
+                        onClick={() => onOpenLine(target)}
+                      >
+                        {line.after}
+                      </button>
+                    ) : (
+                      line.after
+                    )}
+                  </td>
+                  <td
+                    className={cn(
+                      "w-5 min-w-5 text-center select-none",
+                      line.kind === "added" && "text-emerald-700 dark:text-emerald-400",
+                      line.kind === "removed" && "text-destructive",
+                    )}
+                  >
+                    {line.kind === "added" ? "+" : line.kind === "removed" ? "−" : " "}
+                  </td>
+                  <td className="pr-4 whitespace-pre">
+                    {line.text ? (highlighted?.[hunkIndex]?.[lineIndex] ?? line.text) : " "}
+                    {line.noNewline && (
+                      <span className="text-muted-foreground ml-3 select-none">
+                        {t("末尾无换行", locale)}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </Fragment>
         ))}
       </tbody>

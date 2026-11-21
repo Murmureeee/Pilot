@@ -379,6 +379,32 @@ export const EN_MESSAGES: Record<string, string> = {
   任务期间移出清单: "Cleared during the task",
   "当前目录没有 Git 工作树": "This folder has no Git worktree",
   "无法读取 Git 变更": "Could not read Git changes",
+  任务检查点: "Task checkpoint",
+  任务改动已撤销: "Task changes reverted",
+  "选择区块 {0}": "Select hunk {0}",
+  预览撤销所选区块: "Preview reverting selected hunks",
+  预览撤销文件: "Preview reverting file",
+  预览撤销范围: "Preview rollback",
+  "将修改 {0}": "Modify {0}",
+  "将恢复 {0}": "Restore {0}",
+  "将删除 {0}": "Delete {0}",
+  "在 VS Code 中打开第 {0} 行": "Open line {0} in VS Code",
+  "无法在编辑器中打开该行。": "Could not open this line in the editor.",
+  "无法打开 VS Code。请检查编辑器是否已安装。":
+    "Could not open VS Code. Check that the editor is installed.",
+  "改动归属不明，冲突内容已保留。":
+    "Change ownership is unclear. The conflicting content was kept.",
+  "暂存内容有变化，文件已保留。": "Staged content changed. The file was kept.",
+  "此文件缺少可校验的检查点，文件已保留。": "The file has no verifiable checkpoint and was kept.",
+  "检查点已更新，请重新预览撤销范围。": "The checkpoint has changed. Preview the rollback again.",
+  "请从 Git 任务检查点预览并撤销此文件。":
+    "Preview and revert this file from the Git task checkpoint.",
+  "选中的改动存在冲突，文件已保留。": "The selected changes conflict. The file was kept.",
+  "Git 工作树或 HEAD 已变更，无法撤销。":
+    "The Git worktree or HEAD changed. The changes could not be reverted.",
+  "文件的暂存内容已变更，无法撤销。":
+    "The staged content has changed. The changes could not be reverted.",
+  "正在撤销 Git 变更，请稍后重试。": "Git changes are being reverted. Try again shortly.",
   逐行差异: "Line-by-line diff",
   末尾无换行: "No newline at end of file",
   没有文本行变更: "No changed text lines",

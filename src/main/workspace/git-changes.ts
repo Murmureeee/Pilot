@@ -66,6 +66,9 @@ function parseStatus(output: string): { head: string; entries: GitEntry[] } {
             area: "staged",
             kind: changeKind(indexCode),
             previousPath: indexCode === "R" ? previousPath : undefined,
+            headBlob,
+            indexBlob,
+            indexMode,
             fingerprint: [headMode, indexMode, headBlob, indexBlob].join(":"),
           });
         }
@@ -75,6 +78,7 @@ function parseStatus(output: string): { head: string; entries: GitEntry[] } {
             area: "unstaged",
             kind: changeKind(worktreeCode),
             previousPath: worktreeCode === "R" ? previousPath : undefined,
+            headBlob,
             indexBlob,
             indexMode,
             worktreeMode,
@@ -92,7 +96,7 @@ function parseStatus(output: string): { head: string; entries: GitEntry[] } {
   return { head, entries };
 }
 
-function hashBlob(format: GitObjectFormat, content: Buffer): string {
+export function hashGitBlob(format: GitObjectFormat, content: Buffer): string {
   return createHash(format).update(`blob ${content.length}\0`).update(content).digest("hex");
 }
 
@@ -111,7 +115,7 @@ async function fingerprintWorktreeFile(
     if (stat.isSymbolicLink()) {
       return {
         mode: "symlink",
-        blob: hashBlob(format, await readlink(filename, { encoding: "buffer" })),
+        blob: hashGitBlob(format, await readlink(filename, { encoding: "buffer" })),
       };
     }
     if (!stat.isFile()) return;
@@ -148,7 +152,7 @@ async function fingerprintWorktreeFile(
       // Windows files may have CRLF on disk even when the index stores LF.
       const lfBlob =
         content && content.includes("\r\n") && !content.includes(0) && isUtf8(content)
-          ? hashBlob(format, Buffer.from(content.toString("utf8").replaceAll("\r\n", "\n")))
+          ? hashGitBlob(format, Buffer.from(content.toString("utf8").replaceAll("\r\n", "\n")))
           : undefined;
       return { mode: "file", blob, lfBlob };
     } finally {
@@ -274,7 +278,7 @@ export async function captureGitSnapshot(directory: string | undefined): Promise
         }),
       );
     }
-    return { root, head, entries };
+    return { root, head, format, entries };
   } catch (error) {
     const { code, stderr } = error as ExecFileException & { stderr?: string };
     if (

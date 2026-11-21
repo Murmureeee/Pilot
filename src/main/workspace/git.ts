@@ -8,6 +8,10 @@ import { createToolPathResolver } from "./paths";
 const run = promisify(execFile);
 
 export async function readGit(cwd: string, args: string[]): Promise<string> {
+  return (await readGitBuffer(cwd, args)).toString("utf8");
+}
+
+export async function readGitBuffer(cwd: string, args: string[]): Promise<Buffer> {
   const { stdout } = await run(
     "git",
     ["--no-optional-locks", "-c", "core.fsmonitor=false", ...args],
@@ -16,6 +20,7 @@ export async function readGit(cwd: string, args: string[]): Promise<string> {
       windowsHide: true,
       timeout: GIT_STATUS_TIMEOUT_MS,
       maxBuffer: GIT_STATUS_MAX_BYTES,
+      encoding: "buffer",
       env: {
         ...process.env,
         LC_ALL: "C",
@@ -25,6 +30,7 @@ export async function readGit(cwd: string, args: string[]): Promise<string> {
         GIT_INDEX_FILE: undefined,
         GIT_OBJECT_DIRECTORY: undefined,
         GIT_ALTERNATE_OBJECT_DIRECTORIES: undefined,
+        GIT_NO_LAZY_FETCH: "1",
       },
     },
   );

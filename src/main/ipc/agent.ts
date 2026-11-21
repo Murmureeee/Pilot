@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog } from "electron";
 import { IPC } from "../../shared/contract";
 import { runAgentSmoke } from "../agent-host/smoke";
 import { NATIVE_DIALOG_TITLES } from "../constants";
+import { openVsCodeAtLine } from "../workspace/editor";
 import { readProjectGitHead } from "../workspace/git";
 import { previewWorkspaceReference } from "../workspace/reference";
 import { searchWorkspace } from "../workspace/search";
@@ -58,6 +59,22 @@ export function registerAgentRoutes({ host }: Pick<IpcContext, "host">): void {
     directory === host.getProjectDirectory() ? readProjectGitHead(directory) : null,
   );
   handle(IPC.sessionGitChanges, (_event, composerId) => host.getGitChanges(composerId));
+  handle(IPC.sessionGitDiff, (_event, composerId, request) =>
+    host.getGitFileDiff(composerId, request),
+  );
+  handle(IPC.sessionGitCheckpointDiff, (_event, composerId, id, path) =>
+    host.getGitCheckpointDiff(composerId, id, path),
+  );
+  handle(IPC.sessionPreviewGitRollback, (_event, composerId, selection) =>
+    host.previewGitRollback(composerId, selection),
+  );
+  handle(IPC.sessionApplyGitRollback, (_event, composerId, token) =>
+    host.applyGitRollback(composerId, token),
+  );
+  handle(IPC.sessionOpenGitLine, async (_event, composerId, request, line) => {
+    const path = await host.getGitEditorPath(composerId, request, line);
+    await openVsCodeAtLine(path, line);
+  });
   handle(IPC.sessionLoad, (_event, id, record) => host.loadSession(id, record));
   handle(IPC.sessionRename, (_event, id, title) =>
     host.renameSession(id, title.trim().slice(0, 100)),

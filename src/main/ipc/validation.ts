@@ -43,6 +43,16 @@ const session = z.tuple([z.uuid()]);
 const runRef = z.strictObject({ sessionId: z.uuid(), runId: z.uuid() });
 const sessionFlag = z.tuple([z.uuid(), z.boolean()]);
 const sessionChange = z.tuple([z.uuid(), z.uuid()]);
+const gitDiffRequest = z.strictObject({
+  path: mentionId,
+  area: z.enum(["staged", "unstaged", "untracked"]),
+});
+const gitRollbackSelection = z.strictObject({
+  checkpointId: z.uuid(),
+  path: mentionId,
+  revision: z.uuid(),
+  hunks: z.array(z.number().int().nonnegative()).min(1).max(700).optional(),
+});
 const approvalMode = z.enum(["standard", "read-only", "full-access"]);
 const provider = z.strictObject({
   id,
@@ -163,6 +173,11 @@ const inputs = {
   [IPC.sessionUseRecentProject]: z.tuple([nonBlank, z.uuid().optional()]),
   [IPC.sessionGitHead]: z.tuple([nonBlank]),
   [IPC.sessionGitChanges]: session,
+  [IPC.sessionGitDiff]: z.tuple([z.uuid(), gitDiffRequest]),
+  [IPC.sessionGitCheckpointDiff]: z.tuple([z.uuid(), z.uuid(), mentionId]),
+  [IPC.sessionPreviewGitRollback]: z.tuple([z.uuid(), gitRollbackSelection]),
+  [IPC.sessionApplyGitRollback]: sessionChange,
+  [IPC.sessionOpenGitLine]: z.tuple([z.uuid(), gitDiffRequest, z.number().int().positive()]),
   [IPC.sessionLoad]: z.tuple([z.uuid(), z.boolean().optional()]),
   [IPC.sessionRename]: z.tuple([z.uuid(), nonBlank]),
   [IPC.sessionDelete]: session,

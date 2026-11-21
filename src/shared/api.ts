@@ -6,7 +6,12 @@ import type {
   AppInfo,
   ComposerDraft,
   FileDiff,
+  GitCheckpointDiff,
   GitChangesView,
+  GitDiffRequest,
+  GitFileDiff,
+  GitRollbackPreview,
+  GitRollbackSelection,
   Locale,
   LogLevel,
   MenuAction,
@@ -78,6 +83,18 @@ export interface PiApi {
   sessionUseRecentProject(directory: string, sessionId?: string): Promise<Snapshot>;
   sessionGitHead(directory: string): Promise<ProjectGitHead | null>;
   sessionGitChanges(composerId: string): Promise<GitChangesView | null>;
+  sessionGitDiff(composerId: string, request: GitDiffRequest): Promise<GitFileDiff>;
+  sessionGitCheckpointDiff(
+    composerId: string,
+    checkpointId: string,
+    path: string,
+  ): Promise<GitCheckpointDiff>;
+  sessionPreviewGitRollback(
+    composerId: string,
+    selection: GitRollbackSelection,
+  ): Promise<GitRollbackPreview>;
+  sessionApplyGitRollback(composerId: string, token: string): Promise<void>;
+  sessionOpenGitLine(composerId: string, request: GitDiffRequest, line: number): Promise<void>;
   sessionLoad(id: string, record?: boolean): Promise<Snapshot>;
   sessionRename(id: string, title: string): Promise<SessionMeta[]>;
   sessionDelete(id: string): Promise<Snapshot>;

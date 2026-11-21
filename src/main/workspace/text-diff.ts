@@ -74,12 +74,16 @@ function myers(before: string[], after: string[]): FileDiffLine["kind"][] | unde
   return undefined;
 }
 
+export function textLines(text: string | null): string[] {
+  return text?.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+}
+
 export function buildTextDiff(
   before: string | null,
   after: string,
 ): { stats: NonNullable<FileChangeSummary["stats"]>; diff: FileDiff } {
-  const original = before?.match(/[^\n]*\n|[^\n]+$/g) ?? [];
-  const modified = after.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+  const original = textLines(before);
+  const modified = textLines(after);
   let prefix = 0;
   let suffix = 0;
   const common = Math.min(original.length, modified.length);

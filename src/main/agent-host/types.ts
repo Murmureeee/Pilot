@@ -10,7 +10,12 @@ import type {
   SessionMeta,
   UiUserPart,
 } from "@shared/contract";
-import type { GitSnapshot } from "../workspace/types";
+import type {
+  GitCheckpointBase,
+  GitCommandObservation,
+  GitSnapshot,
+  GitTaskCheckpoint,
+} from "../workspace/types";
 import type { PermissionManager } from "./permissions";
 
 export interface RunningTask {
@@ -23,6 +28,8 @@ export interface RunningTask {
   previousActions: ReadonlySet<string>;
   resumed: boolean;
   gitBaseline: Promise<GitSnapshot>;
+  gitFilesBefore?: GitCheckpointBase;
+  commandObservations: GitCommandObservation[];
   gitChangesAtEnd?: Promise<GitChangesView | null>;
   persistError?: unknown;
 }
@@ -41,6 +48,7 @@ export interface SavedGitChanges {
   type: "pilot_git_changes";
   workingDirectory: string | null;
   view: GitChangesView;
+  checkpoint?: GitTaskCheckpoint;
 }
 
 export interface SessionRecord {
