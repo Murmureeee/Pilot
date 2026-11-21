@@ -6,6 +6,7 @@
 
 ### 2026-11-21
 
+- **Git 变更。** 任务启动前记录暂存区、工作树和未跟踪文件的基线，并在会话标题旁显示变更清单。Windows 隔离实例通过本地模型接口桩运行了内置编辑、写入和 PowerShell 命令，核对了新增、修改、删除、暂存与未暂存的重命名，以及已有和新增内容重叠时的混合标记。验收逐字节核对 Git 索引，原有暂存和用户内容均得到保留。复核了 720 px 窄窗和重启后恢复本轮清单。八步验证通过，204 项测试通过。[提交 0566317](https://github.com/Murmureeee/Pilot/commit/0566317825091f51526c941f525dbffe2159b19b)
 - **Pilot v0.2.1 发布。** 发布 Windows x64 安装包、更新清单与 blockmap，以及 Linux x64 AppImage 和 `.deb`。Windows 新装默认启动 `%LOCALAPPDATA%\Programs\pilot\pilot.exe`。公开 HTTPS 更新验收从 `0.1.0` 升到 `0.2.1`，校验了安装包摘要，并在重启后核对了原会话、设置、语言、主题和技能。发版验收脚本会等 NSIS 卸载进程退出后再继续安装。八步验证和 200 项测试通过。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.2.1) · [发版提交 4f920e8](https://github.com/Murmureeee/Pilot/commit/4f920e8) · [打包验收](https://github.com/Murmureeee/Pilot/actions/runs/44856566335) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/44857460780)
 - **内部包名迁移。** Windows 新装默认使用 `%LOCALAPPDATA%\Programs\pilot\pilot.exe`，应用配置迁移到 `Pilot` 目录，Linux `.deb` 包名为 `pilot`。Windows 隔离验收通过了新装、卸载、旧版 HTTPS 升级和自定义目录内的静默覆盖安装。原会话转录、设置、语言、主题和已启用的技能都能恢复。Linux AppImage 和 `.deb` 均通过启动与 Agent 冒烟，且 `.deb` 声明替换旧包。八步验证通过，200 项测试通过。[提交 14b4710](https://github.com/Murmureeee/Pilot/commit/14b4710) · [安装与打包验收](https://github.com/Murmureeee/Pilot/actions/runs/44853929278)
 - **项目指令。** 会话标题旁的「指令」显示项目根目录实际加载的 `AGENTS.md` 路径和指令优先级。Windows 隔离 Electron 验收使用两个指令不同的项目，通过本地模型接口桩核对请求内容和顺序。A 使用会话指令，B 使用全局个性化，两者都在项目指令之后加载技能。运行时切换会话仍显示各自的来源，修改 A 的文件后下一次请求发送新内容。八步验证通过，197 项测试通过。[提交 0455dd5](https://github.com/Murmureeee/Pilot/commit/0455dd5)
