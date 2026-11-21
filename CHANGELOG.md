@@ -2,6 +2,14 @@
 
 发布前，在 `## v版本号` 二级标题下记录当版的新增功能、改进与修复。Desktop CI 准备发布草稿时，会把对应版本的中文正文写入 GitHub Release。
 
+## v0.2.1
+
+- 修正 Windows 安装包的内部名称。新装默认使用 `%LOCALAPPDATA%\Programs\pilot`，程序文件名为 `pilot.exe`。
+- 从旧版升级时，Pilot 会迁移旧的默认安装目录和用户配置，保留会话、设置、语言、主题和已启用的技能。通过应用内更新时，自定义安装位置会保留。
+- Linux 的 Debian 包名统一为 `pilot`，可替换已安装的旧包。
+
+已安装的 Windows 用户可在「帮助 → 关于 Pilot」检查更新。[下载 Windows x64 安装包](https://github.com/Murmureeee/Pilot/releases/download/v0.2.1/pilot-0.2.1-x64-setup.exe)
+
 ## v0.2.0
 
 Pilot 现在可以在多个本地项目之间切换，并在重启后继续中断的任务。
