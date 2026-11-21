@@ -4,6 +4,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash, X509Certificate } from "node:crypto";
 import { on, once } from "node:events";
 import {
+  copyFileSync,
   existsSync,
   createReadStream,
   mkdirSync,
@@ -62,7 +63,14 @@ async function uninstall(directory) {
   if (!exe) return;
   const uninstaller = join(directory, `Uninstall ${basename(exe, ".exe")}.exe`);
   assert.ok(existsSync(uninstaller), "The installation must create an uninstaller");
-  runInstaller(uninstaller, directory);
+  // NSIS normally relaunches from a temporary location and exits before it removes the install registration.
+  const uninstallerCopy = join(root, "uninstall.exe");
+  copyFileSync(uninstaller, uninstallerCopy);
+  try {
+    runInstaller(uninstallerCopy, root, ["/S", `_?=${directory}`]);
+  } finally {
+    rmSync(uninstallerCopy, { force: true });
+  }
   await waitFor("uninstallation", () => !installedExecutable(directory) && !existsSync(uninstaller));
 }
 
