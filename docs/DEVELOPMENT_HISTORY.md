@@ -6,6 +6,7 @@
 
 ### 2026-11-21
 
+- **差异与撤销。** Git 面板支持逐行差异和 VS Code 行号跳转。任务检查点显示选中的反向差异，并在确认时复核当前文件和暂存条目。Windows 隔离验收在同一个文件中保留了暂存和未暂存的用户改动，先撤销所选区块，再按文件撤销其余任务改动。Git 索引逐字节一致，CRLF 原样保留。归属冲突和预览后的编辑会保留文件。复核了带空格和 `#` 的文件名跳转、720 px 窄窗和重启后恢复检查点。八步验证通过，207 项测试通过。[提交 0749a83](https://github.com/Murmureeee/Pilot/commit/0749a83c86b5c10614e37468603412e9e44391a0)
 - **Git 变更。** 任务启动前记录暂存区、工作树和未跟踪文件的基线，并在会话标题旁显示变更清单。Windows 隔离实例通过本地模型接口桩运行了内置编辑、写入和 PowerShell 命令，核对了新增、修改、删除、暂存与未暂存的重命名，以及已有和新增内容重叠时的混合标记。验收逐字节核对 Git 索引，原有暂存和用户内容均得到保留。复核了 720 px 窄窗和重启后恢复本轮清单。八步验证通过，204 项测试通过。[提交 0566317](https://github.com/Murmureeee/Pilot/commit/0566317825091f51526c941f525dbffe2159b19b)
 - **Pilot v0.2.1 发布。** 发布 Windows x64 安装包、更新清单与 blockmap，以及 Linux x64 AppImage 和 `.deb`。Windows 新装默认启动 `%LOCALAPPDATA%\Programs\pilot\pilot.exe`。公开 HTTPS 更新验收从 `0.1.0` 升到 `0.2.1`，校验了安装包摘要，并在重启后核对了原会话、设置、语言、主题和技能。发版验收脚本会等 NSIS 卸载进程退出后再继续安装。八步验证和 200 项测试通过。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.2.1) · [发版提交 4f920e8](https://github.com/Murmureeee/Pilot/commit/4f920e8) · [打包验收](https://github.com/Murmureeee/Pilot/actions/runs/44856566335) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/44857460780)
 - **内部包名迁移。** Windows 新装默认使用 `%LOCALAPPDATA%\Programs\pilot\pilot.exe`，应用配置迁移到 `Pilot` 目录，Linux `.deb` 包名为 `pilot`。Windows 隔离验收通过了新装、卸载、旧版 HTTPS 升级和自定义目录内的静默覆盖安装。原会话转录、设置、语言、主题和已启用的技能都能恢复。Linux AppImage 和 `.deb` 均通过启动与 Agent 冒烟，且 `.deb` 声明替换旧包。八步验证通过，200 项测试通过。[提交 14b4710](https://github.com/Murmureeee/Pilot/commit/14b4710) · [安装与打包验收](https://github.com/Murmureeee/Pilot/actions/runs/44853929278)
