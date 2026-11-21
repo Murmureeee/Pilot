@@ -159,7 +159,9 @@ it("reverts selected task hunks and whole files while preserving user work and t
         { kind: "added", after: 19, text: "first task hunk" },
       ]),
     );
-    expect(await host.getGitEditorPath(composerId, request, 19)).toBe(join(project, name));
+    expect(await host.getGitEditorPath(composerId, request, 19)).toBe(
+      join(realpathSync.native(project), name),
+    );
 
     expect(detail(name)).toMatchObject({ wholeFile: true, hunks: [true, true], canOpen: true });
     const first = await preview(name, [0]);

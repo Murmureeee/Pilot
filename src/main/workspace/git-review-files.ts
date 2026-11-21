@@ -18,7 +18,7 @@ import {
   MAX_GIT_CHECKPOINT_BYTES,
 } from "./constants";
 import { readFileSnapshot, textSnapshot } from "./file-changes";
-import { readGit, readGitBuffer } from "./git";
+import { readGit, readGitBuffer, resolveGitDirectory } from "./git";
 import { hashGitBlob } from "./git-changes";
 import { createToolPathResolver, isWithinDirectory } from "./paths";
 import { buildTextDiff } from "./text-diff";
@@ -31,15 +31,16 @@ import type {
 } from "./types";
 
 export function gitFilePath(directory: string, root: string, path: string): string {
+  const project = resolveGitDirectory(directory);
   const filename = join(root, path);
   if (
     !path ||
     isAbsolute(path) ||
     path.split("/").some((part) => part === ".." || part.toLowerCase() === ".git") ||
     (process.platform === "win32" && /[:\\]/.test(path)) ||
-    filename === directory ||
-    !isWithinDirectory(directory, filename) ||
-    createToolPathResolver(directory)(filename) !== filename
+    filename === project ||
+    !isWithinDirectory(project, filename) ||
+    createToolPathResolver(project)(filename) !== filename
   ) {
     throw new Error("文件位置已变更，无法撤销。");
   }

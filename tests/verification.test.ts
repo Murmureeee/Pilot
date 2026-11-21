@@ -185,7 +185,7 @@ it("streams and saves successful, failed and stopped runs under the original cha
       await vi.waitFor(() => expect(restartedManager.result(retry).status).toBe("success"), {
         timeout: 10_000,
       });
-      expect(restartedManager.result(retry).output).toContain("CWD=" + a);
+      expect(restartedManager.result(retry).output).toContain("CWD=" + realpathSync.native(a));
     } finally {
       await restartedManager.close();
     }

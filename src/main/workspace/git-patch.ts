@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import type { FileDiffLine, GitChange, GitPatchSelection } from "@shared/contract";
 import { MAX_DIFF_PREVIEW_LINES } from "./constants";
-import { readGitBuffer } from "./git";
+import { readGitBuffer, resolveGitDirectory } from "./git";
 import { isWithinDirectory } from "./paths";
 import type { GitCommandOptions, GitPatchHunk, GitSelectionReview, GitWorktree } from "./types";
 
@@ -115,6 +115,7 @@ export async function readGitSelection(
   change: GitChange,
   options?: GitCommandOptions,
 ): Promise<GitSelectionReview> {
+  const project = resolveGitDirectory(directory);
   const paths = change.previousPath ? [change.previousPath, change.path] : [change.path];
   const valid = paths.every(
     (path) =>
@@ -124,8 +125,8 @@ export async function readGitSelection(
         .split("/")
         .some((part) => !part || part === "." || part === ".." || /^\.git$/i.test(part)) &&
       !(process.platform === "win32" && /[:\\]/.test(path)) &&
-      resolve(snapshot.root, path) !== directory &&
-      isWithinDirectory(directory, join(snapshot.root, path)),
+      resolve(snapshot.root, path) !== project &&
+      isWithinDirectory(project, join(snapshot.root, path)),
   );
   if (!valid || change.kind === "conflicted" || change.resolved)
     return { paths, patch: Buffer.alloc(0) };

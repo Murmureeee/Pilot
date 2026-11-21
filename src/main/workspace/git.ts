@@ -1,12 +1,35 @@
 // @env node
 import { execFile, type ExecFileException } from "node:child_process";
+import { realpathSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 import { promisify } from "node:util";
 import type { ProjectGitHead } from "@shared/contract";
 import { GIT_STATUS_MAX_BYTES, GIT_STATUS_TIMEOUT_MS } from "./constants";
-import { createToolPathResolver } from "./paths";
+import { createToolPathResolver, isWithinDirectory } from "./paths";
 import type { GitCommandOptions } from "./types";
 
 const run = promisify(execFile);
+
+export function resolveGitDirectory(directory: string): string {
+  // Git reports long paths even when the selected Windows directory uses a short name.
+  return realpathSync.native(createToolPathResolver(directory)("."));
+}
+
+export function relativeGitPath(
+  directory: string | undefined,
+  root: string,
+  filename: string,
+): string {
+  let path = filename;
+  if (directory && isWithinDirectory(directory, filename)) {
+    try {
+      path = join(resolveGitDirectory(directory), relative(directory, filename));
+    } catch {
+      // Recorded tool metadata can outlive the working directory.
+    }
+  }
+  return relative(root, path).split(sep).join("/");
+}
 
 export async function readGit(
   cwd: string,

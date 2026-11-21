@@ -2,7 +2,6 @@
 // Agent 宿主：Agent 实例生命周期、pi 事件 → UI 事件映射（含工具/用量/队列）、
 // 权限门接线、steer 插话路由、会话恢复与落盘。
 import { randomUUID } from "node:crypto";
-import { relative, sep } from "node:path";
 import {
   Agent,
   type AgentEvent,
@@ -48,6 +47,7 @@ import { toPublicSettings } from "../settings";
 import { decryptSecret } from "../settings/secrets";
 import type { ProviderConfig, Settings } from "../settings/types";
 import { readFileChange, restoreFileChange } from "../workspace/file-changes";
+import { relativeGitPath } from "../workspace/git";
 import { captureGitSnapshot, compareGitSnapshots } from "../workspace/git-changes";
 import {
   createGitTaskCheckpoint,
@@ -660,6 +660,7 @@ export class AgentHost {
   }
 
   private recordedGitChanges(
+    directory: string,
     root: string,
     messages: AgentMessage[],
   ): Map<string, RecordedFileChange[]> {
@@ -668,7 +669,7 @@ export class AgentHost {
       if (message.role !== "toolResult") continue;
       const change = readFileChange(message.toolName, message.details);
       if (!change) continue;
-      const path = relative(root, change.absolutePath).split(sep).join("/");
+      const path = relativeGitPath(directory, root, change.absolutePath);
       const changes = files.get(path) ?? [];
       changes.push(change);
       files.set(path, changes);
@@ -695,7 +696,11 @@ export class AgentHost {
               current,
               run.gitFilesBefore,
               view,
-              this.recordedGitChanges(current.root, messages.slice(run.checkpoint.startIndex)),
+              this.recordedGitChanges(
+                workingDirectory,
+                current.root,
+                messages.slice(run.checkpoint.startIndex),
+              ),
               run.commandObservations,
             )
           : undefined;
@@ -1585,7 +1590,7 @@ export class AgentHost {
     const directory = this.getWorkingDirectory();
     const checkpoint = this.gitRecord(sessionId, directory)?.checkpoint;
     const path =
-      checkpoint && relative(checkpoint.snapshot.root, change.absolutePath).split(sep).join("/");
+      checkpoint && relativeGitPath(directory, checkpoint.snapshot.root, change.absolutePath);
     if (checkpoint?.files.some((file) => file.path === path))
       throw new Error("请从 Git 任务检查点预览并撤销此文件。");
     restoreFileChange(change, directory);

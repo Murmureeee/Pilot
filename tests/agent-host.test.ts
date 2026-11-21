@@ -922,7 +922,7 @@ it("reviews built-in tools and shell changes against the run's original Git inde
     try {
       await Promise.race([firstTool.promise, running]);
       expect(new SessionStore(sessions).checkpoint(composerId)?.gitBaseline).toMatchObject({
-        root: project,
+        root: realpathSync.native(project),
         entries: expect.arrayContaining([
           expect.objectContaining({
             path: "user note.txt",
