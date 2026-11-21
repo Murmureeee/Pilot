@@ -15,6 +15,7 @@ import type {
   AgentStatus,
   ComposerDraft,
   FileDiff,
+  GitChangesView,
   InterruptedRun,
   PermissionDecision,
   PromptInput,
@@ -35,6 +36,7 @@ import { toPublicSettings } from "../settings";
 import { decryptSecret } from "../settings/secrets";
 import type { ProviderConfig, Settings } from "../settings/types";
 import { readFileChange, restoreFileChange } from "../workspace/file-changes";
+import { captureGitSnapshot, compareGitSnapshots } from "../workspace/git-changes";
 import { createToolPathResolver, normalizeWorkingDirectory } from "../workspace/paths";
 import { getCommandShell } from "../workspace/shell";
 import type { RecordedFileChange } from "../workspace/types";
@@ -589,8 +591,18 @@ export class AgentHost {
     }
   }
 
-  private settle(sessionId: string, messages: AgentMessage[]): void {
-    this.deps.store.save(sessionId, messages);
+  private async settle(run: RunningTask, messages: AgentMessage[]): Promise<void> {
+    const { sessionId, workingDirectory } = run.state;
+    run.gitChangesAtEnd = captureGitSnapshot(workingDirectory ?? undefined).then((current) =>
+      compareGitSnapshots(run.checkpoint.gitBaseline, current, "finished", run.resumed),
+    );
+    const view = await run.gitChangesAtEnd;
+    this.deps.store.save(
+      sessionId,
+      messages,
+      undefined,
+      view ? { type: "pilot_git_changes", workingDirectory, view } : null,
+    );
     this.uiMessages = toUiMessages(messages, "s", (name) => this.toolLabel(name));
     this.nextId = this.uiMessages.length;
     this.send({ type: "messages", messages: this.uiMessages });
@@ -648,7 +660,12 @@ export class AgentHost {
   ): Promise<void> | ActiveRun {
     if (composerId !== undefined) this.checkComposerId(composerId);
     const active = this.run?.state;
-    if (active && (active.sessionId !== this.sessionId || active.status === "stopping")) {
+    if (
+      active &&
+      (active.sessionId !== this.sessionId ||
+        active.status === "stopping" ||
+        this.run?.gitChangesAtEnd)
+    ) {
       return active;
     }
     if (expectedDirectory !== undefined) this.checkWorkingDirectory(expectedDirectory);
@@ -725,6 +742,7 @@ export class AgentHost {
       startIndex: previous?.startIndex ?? agent.state.messages.length,
       pending: message ? [message] : [],
       actions: previous?.actions ?? [],
+      gitBaseline: previous?.gitBaseline,
     };
     this.deps.store.save(sessionId, agent.state.messages, checkpoint);
     if (clearDraftFor !== undefined) this.deps.store.saveDraft(clearDraftFor, []);
@@ -747,6 +765,12 @@ export class AgentHost {
       initialMessage: message,
       finishedTools: new Map(),
       previousActions: new Set(previous?.actions),
+      resumed: previous !== undefined,
+      gitBaseline: previous
+        ? Promise.resolve(
+            previous.gitBaseline === undefined ? { unavailable: true } : previous.gitBaseline,
+          )
+        : captureGitSnapshot(workingDirectory),
       permissions: new PermissionManager(
         (request) => {
           this.sendStatus("waiting_approval");
@@ -790,16 +814,21 @@ export class AgentHost {
     try {
       this.deps.broadcast({ type: "run_started", run: run.state });
       this.sendSessions();
-      const externalTools = await this.deps.mcp
-        .tools(run.state.workingDirectory ?? undefined, preparation.signal)
-        .catch((error: unknown) => {
-          if (preparation.signal.aborted) return [];
-          throw error;
-        });
+      const gitBaseline = await run.gitBaseline;
+      if (run.checkpoint.gitBaseline === undefined)
+        this.checkpointRun(run, { ...run.checkpoint, gitBaseline });
+      const externalTools = preparation.signal.aborted
+        ? []
+        : await this.deps.mcp
+            .tools(run.state.workingDirectory ?? undefined, preparation.signal)
+            .catch((error: unknown) => {
+              if (preparation.signal.aborted) return [];
+              throw error;
+            });
       if (preparation.signal.aborted) {
         const messages = message ? [...agent.state.messages, message] : agent.state.messages;
         agent.state.messages = messages;
-        this.settle(run.state.sessionId, messages);
+        await this.settle(run, messages);
         return;
       }
       // pi snapshots tool declarations as it starts the prompt, before preparing the request.
@@ -809,7 +838,7 @@ export class AgentHost {
       else await agent.continue();
       if (run.persistError) throw run.persistError;
       agent.state.messages = completeToolResults(agent.state.messages);
-      this.settle(run.state.sessionId, agent.state.messages);
+      await this.settle(run, agent.state.messages);
     } catch (error) {
       if (started || !preparation.signal.aborted) {
         this.send({
@@ -1011,6 +1040,30 @@ export class AgentHost {
       if (change?.summary.id === changeId) return { messages, index, message, change };
     }
     throw new Error("找不到这条文件变更。");
+  }
+
+  async getGitChanges(composerId: string): Promise<GitChangesView | null> {
+    this.checkComposerId(composerId);
+    const sessionId = this.sessionId;
+    const run = this.run?.state.sessionId === sessionId ? this.run : undefined;
+    const directory = this.getWorkingDirectory();
+    if (run?.gitChangesAtEnd) return run.gitChangesAtEnd;
+    const interrupted = !run && sessionId ? this.deps.store.checkpoint(sessionId) : undefined;
+    if (!run && !interrupted && sessionId) {
+      const saved = this.deps.store.lastGitChanges(sessionId);
+      if (saved?.workingDirectory === (directory ?? null)) return saved.view;
+    }
+
+    const baseline = run ? await run.gitBaseline : interrupted?.gitBaseline;
+    const current = await captureGitSnapshot(directory);
+    this.checkComposerId(composerId);
+    if (run?.gitChangesAtEnd) return run.gitChangesAtEnd;
+    return compareGitSnapshots(
+      baseline,
+      current,
+      run ? "running" : interrupted ? "interrupted" : "workspace",
+      Boolean(interrupted || run?.resumed),
+    );
   }
 
   getFileDiff(sessionId: string, changeId: string): FileDiff {

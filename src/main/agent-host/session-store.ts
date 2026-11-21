@@ -22,6 +22,7 @@ import { readPlanSteps } from "./tools/plan";
 import type {
   ReferencedUserMessage,
   RunCheckpoint,
+  SavedGitChanges,
   SessionIndex,
   SessionRecord,
   TimedAssistantMessage,
@@ -154,6 +155,7 @@ export function toUiMessages(
 export class SessionStore {
   private index: SessionIndex = { sessions: [] };
   private readonly checkpoints = new Map<string, RunCheckpoint | null>();
+  private readonly gitChanges = new Map<string, SavedGitChanges | null>();
 
   constructor(private readonly dir: string) {
     mkdirSync(dir, { recursive: true });
@@ -332,9 +334,12 @@ export class SessionStore {
   fork(id: string): SessionMeta | null {
     const origin = this.index.sessions.find((s) => s.id === id);
     if (!origin) return null;
-    const messages = this.load(id);
+    const { messages, checkpoint, gitChanges } = this.read(id);
+    const transcript = checkpoint
+      ? [...completeToolResults(messages), ...checkpoint.pending]
+      : messages;
     const meta = this.create(origin.workingDirectory);
-    if (messages.length > 0) this.save(meta.id, messages);
+    if (transcript.length > 0) this.save(meta.id, transcript, undefined, gitChanges);
     return this.rename(meta.id, `分叉：${origin.title.slice(0, 21)}`);
   }
 
@@ -359,6 +364,7 @@ export class SessionStore {
     if (existsSync(path)) rmSync(path, { force: true });
     rmSync(this.draftPath(id), { force: true });
     this.checkpoints.delete(id);
+    this.gitChanges.delete(id);
     this.index.sessions = this.index.sessions.filter((s) => s.id !== id);
     this.writeIndex();
   }
@@ -373,27 +379,40 @@ export class SessionStore {
     return this.checkpoints.get(id) ?? undefined;
   }
 
+  lastGitChanges(id: string): SavedGitChanges | undefined {
+    if (!this.gitChanges.has(id)) return this.read(id).gitChanges;
+    return this.gitChanges.get(id) ?? undefined;
+  }
+
   read(id: string): SessionRecord {
     const path = this.filePath(id);
     const lines = existsSync(path) ? readFileSync(path, "utf-8").split("\n") : [];
     const messages: AgentMessage[] = [];
     let checkpoint: RunCheckpoint | undefined;
+    let gitChanges: SavedGitChanges | undefined;
     for (const line of lines) {
       if (!line.trim()) continue;
       try {
-        const value = JSON.parse(line) as RunCheckpoint | AgentMessage;
+        const value = JSON.parse(line) as RunCheckpoint | SavedGitChanges | AgentMessage;
         if ("role" in value) messages.push(value);
         else if (value.type === "pilot_run_checkpoint") checkpoint = value;
+        else if (value.type === "pilot_git_changes") gitChanges = value;
       } catch {
         console.error(`[session] 跳过损坏行: ${id}`);
       }
     }
     this.checkpoints.set(id, checkpoint ?? null);
-    return { messages, checkpoint };
+    this.gitChanges.set(id, gitChanges ?? null);
+    return { messages, checkpoint, gitChanges };
   }
 
-  save(id: string, messages: AgentMessage[], checkpoint?: RunCheckpoint): SessionMeta {
-    this.writeTranscript(id, messages, checkpoint);
+  save(
+    id: string,
+    messages: AgentMessage[],
+    checkpoint?: RunCheckpoint,
+    gitChanges?: SavedGitChanges | null,
+  ): SessionMeta {
+    this.writeTranscript(id, messages, checkpoint, gitChanges);
     const firstUser = messages.find((m) => m.role === "user") ?? checkpoint?.pending[0];
     const title = firstUser
       ? visibleMessageText(messageParts(firstUser)).slice(0, 24) || "新会话"
@@ -415,15 +434,25 @@ export class SessionStore {
     return meta ?? { id, title, createdAt: Date.now(), updatedAt: Date.now() };
   }
 
-  writeTranscript(id: string, messages: AgentMessage[], checkpoint?: RunCheckpoint): void {
+  writeTranscript(
+    id: string,
+    messages: AgentMessage[],
+    checkpoint?: RunCheckpoint,
+    gitChanges = this.lastGitChanges(id) ?? null,
+  ): void {
     // The checkpoint and its transcript commit together, including the transition to a finished run.
-    const records = checkpoint ? [checkpoint, ...messages] : messages;
+    const records = [
+      ...(checkpoint ? [checkpoint] : []),
+      ...(gitChanges ? [gitChanges] : []),
+      ...messages,
+    ];
     const path = this.filePath(id);
     const tmp = `${path}.tmp`;
     const contents = records.map((record) => JSON.stringify(record) + "\n").join("");
     writeFileSync(tmp, contents, { encoding: "utf-8", flush: true });
     renameSync(tmp, path);
     this.checkpoints.set(id, checkpoint ?? null);
+    this.gitChanges.set(id, gitChanges);
   }
 }
 

@@ -162,6 +162,7 @@ const inputs = {
   [IPC.sessionSelectProject]: z.tuple([z.enum(SUPPORTED_LOCALES), z.uuid().optional()]),
   [IPC.sessionUseRecentProject]: z.tuple([nonBlank, z.uuid().optional()]),
   [IPC.sessionGitHead]: z.tuple([nonBlank]),
+  [IPC.sessionGitChanges]: session,
   [IPC.sessionLoad]: z.tuple([z.uuid(), z.boolean().optional()]),
   [IPC.sessionRename]: z.tuple([z.uuid(), nonBlank]),
   [IPC.sessionDelete]: session,

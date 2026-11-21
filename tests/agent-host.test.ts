@@ -7,10 +7,19 @@ import {
   realpathSync,
   writeFileSync,
 } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
+import {
+  createModels,
+  fauxAssistantMessage,
+  fauxProvider,
+  fauxText,
+  fauxToolCall,
+  getCurrentSystemPrompt,
+  getCurrentTools,
+} from "@earendil-works/pi-ai";
 import { obj } from "@earendil-works/pi-schema";
 import { expect, it, vi } from "vitest";
 import { AgentHost } from "../src/main/agent-host/host";
@@ -348,7 +357,7 @@ it("keeps the original run, approval, and transcript while another project is se
   const ref = host.getSnapshot().activeRun!;
   const invalid = { sessionId: a, runId: b };
   try {
-    expect(tools).toHaveBeenCalledWith(original, expect.any(AbortSignal));
+    await vi.waitFor(() => expect(tools).toHaveBeenCalledWith(original, expect.any(AbortSignal)));
     expect(host.loadSession(b)).toMatchObject({
       status: "idle",
       sessionId: b,
@@ -801,4 +810,178 @@ it("streams and restores a timed trace and reverts a recorded workspace edit", a
       .flatMap((message) => message.parts)
       .find((part) => part.type === "tool"),
   ).toMatchObject({ fileChange: { reverted: true } });
+});
+
+it("reviews built-in tools and shell changes against the run's original Git index and worktree", async () => {
+  using fixture = mkdtempDisposableSync(join(tmpdir(), "pilot-agent-git-"));
+  const root = realpathSync(fixture.path);
+  const project = join(root, "project");
+  mkdirSync(project);
+  const git = (...args: string[]): string =>
+    execFileSync("git", ["--no-optional-locks", ...args], {
+      cwd: project,
+      encoding: "utf8",
+      windowsHide: true,
+    }).trimEnd();
+  const write = (path: string, text: string): void => writeFileSync(join(project, path), text);
+  const read = (path: string): string => readFileSync(join(project, path), "utf8");
+  git("init", "-q");
+  git("config", "core.autocrlf", "false");
+  write("dual.txt", "base\n");
+  write("delete.txt", "delete this file\n");
+  write("move.txt", "move this file\n");
+  write("untouched.txt", "base text\n");
+  write("shell.txt", "base text\n");
+  git("add", ".");
+  git(
+    "-c",
+    "user.name=Pilot",
+    "-c",
+    "user.email=pilot@example.invalid",
+    "-c",
+    "commit.gpgsign=false",
+    "commit",
+    "-qm",
+    "Git test fixture",
+  );
+  write("dual.txt", "user staged\n");
+  git("add", "dual.txt");
+  const indexPath = join(project, ".git", "index");
+  const originalIndex = readFileSync(indexPath);
+  write("dual.txt", "user staged\nuser unstaged\n");
+  write("untouched.txt", "user unstaged only\n");
+  write("user note.txt", "user untracked\n");
+
+  const command =
+    process.platform === "win32"
+      ? "$ErrorActionPreference = 'Stop'\nMove-Item -LiteralPath move.txt -Destination 'moved file.txt'\nRemove-Item -LiteralPath delete.txt\nSet-Content -LiteralPath shell.txt -Value 'command edit'"
+      : "mv move.txt 'moved file.txt' && rm delete.txt && printf 'command edit\\n' > shell.txt";
+  const faux = fauxProvider({ tokensPerSecond: 100_000 });
+  faux.appendResponses([
+    fauxAssistantMessage(
+      [
+        fauxToolCall("edit_file", {
+          path: "dual.txt",
+          oldText: "user unstaged\n",
+          newText: "user unstaged\ntask edit\n",
+        }),
+        fauxToolCall("write_file", { path: "tool.txt", content: "task addition\n" }),
+        fauxToolCall("bash", { command }),
+      ],
+      { stopReason: "toolUse" },
+    ),
+    fauxAssistantMessage([fauxText("Reviewed the project.")]),
+  ]);
+  const catalog = createModels();
+  catalog.setProvider(faux.provider);
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = {
+    providers: [provider],
+    activeProviderId: provider.id,
+    approvalMode: "full-access",
+  };
+  const sessions = join(root, "sessions");
+  const events: UiAgentEvent[] = [];
+  const firstTool = Promise.withResolvers<void>();
+  const modelFinishing = Promise.withResolvers<void>();
+  // Keep the run open after its tools so the live and persisted views can be checked separately.
+  const resolveModel = vi.spyOn(models, "resolveModel").mockReturnValue({
+    model: faux.getModel()!,
+    streamFn: async (model, context, options) => {
+      if (context.messages.at(-1)?.role === "toolResult") await modelFinishing.promise;
+      return catalog.streamSimple(model, context, options);
+    },
+  });
+  const createHost = (): AgentHost =>
+    new AgentHost({
+      getSettings: () => settings,
+      saveSettings: vi.fn<(value: Settings) => void>(),
+      broadcast: (event) => {
+        events.push(event);
+        if (event.type === "tool_end") firstTool.resolve();
+      },
+      store: new SessionStore(sessions),
+      skillsDir: join(root, "skills"),
+      mcp: new McpManager(() => settings, "0.0.0"),
+    });
+  const host = createHost();
+  const { composerId } = host.openProject(project);
+
+  try {
+    const baseline = await host.getGitChanges(composerId);
+    expect(baseline).toMatchObject({
+      phase: "workspace",
+      changes: [
+        { path: "dual.txt", area: "staged", kind: "modified", origin: "existing" },
+        { path: "dual.txt", area: "unstaged", kind: "modified", origin: "existing" },
+        { path: "untouched.txt", area: "unstaged", kind: "modified", origin: "existing" },
+        { path: "user note.txt", area: "untracked", kind: "added", origin: "existing" },
+      ],
+    });
+    const running = host.prompt("Edit this project", composerId);
+    try {
+      await Promise.race([firstTool.promise, running]);
+      expect(new SessionStore(sessions).checkpoint(composerId)?.gitBaseline).toMatchObject({
+        root: project,
+        entries: expect.arrayContaining([
+          expect.objectContaining({
+            path: "user note.txt",
+            area: "untracked",
+            fingerprint: expect.any(String),
+          }),
+          expect.objectContaining({
+            path: "dual.txt",
+            area: "staged",
+            fingerprint: expect.any(String),
+          }),
+        ]),
+      });
+      expect(await host.getGitChanges(composerId)).toMatchObject({ phase: "running" });
+    } finally {
+      modelFinishing.resolve();
+      await running;
+    }
+    const finished = await host.getGitChanges(composerId);
+    expect(finished).toEqual({
+      phase: "finished",
+      changes: [
+        { path: "delete.txt", area: "unstaged", kind: "deleted", origin: "task" },
+        { path: "dual.txt", area: "staged", kind: "modified", origin: "existing" },
+        { path: "dual.txt", area: "unstaged", kind: "modified", origin: "mixed" },
+        {
+          path: "moved file.txt",
+          previousPath: "move.txt",
+          area: "unstaged",
+          kind: "renamed",
+          origin: "task",
+        },
+        { path: "shell.txt", area: "unstaged", kind: "modified", origin: "task" },
+        { path: "tool.txt", area: "untracked", kind: "added", origin: "task" },
+        { path: "untouched.txt", area: "unstaged", kind: "modified", origin: "existing" },
+        { path: "user note.txt", area: "untracked", kind: "added", origin: "existing" },
+      ],
+    });
+    expect(events.filter((event) => event.type === "tool_end").map(({ state }) => state)).toEqual([
+      "success",
+      "success",
+      "success",
+    ]);
+    expect(readFileSync(indexPath)).toEqual(originalIndex);
+    expect(git("show", ":dual.txt")).toBe("user staged");
+    expect(read("dual.txt")).toBe("user staged\nuser unstaged\ntask edit\n");
+    expect(read("untouched.txt")).toBe("user unstaged only\n");
+    expect(read("user note.txt")).toBe("user untracked\n");
+    expect(read("moved file.txt")).toBe("move this file\n");
+    expect(existsSync(join(project, "delete.txt"))).toBe(false);
+
+    write("after task.txt", "subsequent user edit\n");
+    const restarted = createHost();
+    restarted.loadSession(composerId);
+    expect(await restarted.getGitChanges(composerId)).toEqual(finished);
+    const another = restarted.newSession();
+    await expect(restarted.getGitChanges(composerId)).rejects.toThrow("会话已切换");
+    expect(await restarted.getGitChanges(another.composerId)).toMatchObject({ phase: "workspace" });
+  } finally {
+    resolveModel.mockRestore();
+  }
 });

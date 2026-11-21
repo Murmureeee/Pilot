@@ -205,7 +205,7 @@ export function AppRail({
 
 export function SidebarPanel({
   width,
-  dragging,
+  animateWidth,
   onResize,
   onDragStart,
   onDragEnd,
@@ -213,7 +213,7 @@ export function SidebarPanel({
   collapsed,
 }: {
   width: number;
-  dragging: boolean;
+  animateWidth: boolean;
   onResize(width: number): void;
   onDragStart(): void;
   onDragEnd(): void;
@@ -448,7 +448,8 @@ export function SidebarPanel({
       inert={collapsed}
       className={cn(
         "bg-sidebar text-sidebar-foreground after:bg-sidebar-border relative flex h-full max-w-[max(220px,calc(100vw-400px))] shrink-0 flex-col overflow-hidden after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-px",
-        !dragging && "motion-safe:transition-[width] motion-safe:duration-200 motion-safe:ease-out",
+        animateWidth &&
+          "motion-safe:transition-[width] motion-safe:duration-200 motion-safe:ease-out",
       )}
       style={{ width: collapsed ? 0 : width }}
     >

@@ -35,6 +35,7 @@ describe("IPC contract", () => {
     expect(IPC.sessionUpdateSettings).toBe("session:update-settings");
     expect(IPC.sessionUseRecentProject).toBe("session:use-recent-project");
     expect(IPC.sessionGitHead).toBe("session:git-head");
+    expect(IPC.sessionGitChanges).toBe("session:git-changes");
     expect(IPC.agentClearQueue).toBe("agent:clear-queue");
     expect(IPC.agentResume).toBe("agent:resume");
     expect(IPC.agentSearchWorkspace).toBe("agent:search-workspace");

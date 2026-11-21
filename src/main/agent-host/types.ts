@@ -3,12 +3,14 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 import type {
   ActiveRun,
+  GitChangesView,
   PermissionDecision,
   PermissionRequest,
   SessionInstructionSources,
   SessionMeta,
   UiUserPart,
 } from "@shared/contract";
+import type { GitSnapshot } from "../workspace/types";
 import type { PermissionManager } from "./permissions";
 
 export interface RunningTask {
@@ -19,6 +21,9 @@ export interface RunningTask {
   initialMessage?: ReferencedUserMessage;
   finishedTools: Map<string, ToolResultMessage>;
   previousActions: ReadonlySet<string>;
+  resumed: boolean;
+  gitBaseline: Promise<GitSnapshot>;
+  gitChangesAtEnd?: Promise<GitChangesView | null>;
   persistError?: unknown;
 }
 
@@ -29,11 +34,19 @@ export interface RunCheckpoint {
   startIndex: number;
   pending: ReferencedUserMessage[];
   actions: string[];
+  gitBaseline?: GitSnapshot;
+}
+
+export interface SavedGitChanges {
+  type: "pilot_git_changes";
+  workingDirectory: string | null;
+  view: GitChangesView;
 }
 
 export interface SessionRecord {
   messages: AgentMessage[];
   checkpoint?: RunCheckpoint;
+  gitChanges?: SavedGitChanges;
 }
 
 export interface AgentInstructions {

@@ -6,6 +6,7 @@ import type {
   AppInfo,
   ComposerDraft,
   FileDiff,
+  GitChangesView,
   Locale,
   LogLevel,
   MenuAction,
@@ -76,6 +77,7 @@ export interface PiApi {
   sessionSelectProject(locale: Locale, sessionId?: string): Promise<Snapshot | null>;
   sessionUseRecentProject(directory: string, sessionId?: string): Promise<Snapshot>;
   sessionGitHead(directory: string): Promise<ProjectGitHead | null>;
+  sessionGitChanges(composerId: string): Promise<GitChangesView | null>;
   sessionLoad(id: string, record?: boolean): Promise<Snapshot>;
   sessionRename(id: string, title: string): Promise<SessionMeta[]>;
   sessionDelete(id: string): Promise<Snapshot>;

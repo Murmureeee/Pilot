@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type JSX } from "react";
 import { FolderIcon, MessageSquareIcon } from "lucide-react";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
 import { FileChangesPanel } from "@renderer/components/ai/file-changes-panel";
+import { GitChangesPanel } from "@renderer/components/ai/git-changes-panel";
 import { InstructionSources } from "@renderer/components/ai/instruction-sources";
 import { ProjectBranch, ProjectChooser } from "@renderer/components/ai/project-controls";
 import { TopBar } from "@renderer/components/ai/top-bar";
@@ -42,14 +43,17 @@ export default function App(): JSX.Element {
   const review = useFileChangesStore((state) => state.review);
   const closeReview = useFileChangesStore((state) => state.close);
   const visibleReview = view === "chat" && review?.sessionId === sessionId ? review : null;
+  const gitComposerId = useFileChangesStore((state) => state.gitComposerId);
+  const visibleGitReview = view === "chat" && composerId === gitComposerId ? gitComposerId : null;
   const reference = useWorkspaceReferenceStore((state) => state.reference);
   const visibleReference = view === "chat" && reference?.sessionId === sessionId ? reference : null;
   const reviewMinWidth =
-    visibleReview && !visibleReference
+    (visibleReview || visibleGitReview) && !visibleReference
       ? FILE_CHANGES_MIN_WINDOW_WIDTH
       : FILE_REVIEW_MIN_WINDOW_WIDTH;
   const compactReview =
-    !!(visibleReview || visibleReference) && windowWidth < reviewMinWidth + sidebarWidth;
+    !!(visibleReview || visibleGitReview || visibleReference) &&
+    windowWidth < reviewMinWidth + sidebarWidth;
   const sidebarCollapsed = collapsed || compactReview;
 
   const expandSidebar = useCallback((): void => {
@@ -132,7 +136,7 @@ export default function App(): JSX.Element {
         <div className="border-sidebar-border bg-background flex min-w-0 flex-1 overflow-hidden rounded-xl border">
           <SidebarPanel
             width={sidebarWidth}
-            dragging={dragging}
+            animateWidth={!dragging && !compactReview}
             onResize={setSidebarWidth}
             onDragStart={() => setDragging(true)}
             onDragEnd={() => setDragging(false)}
@@ -170,8 +174,13 @@ export default function App(): JSX.Element {
                         </div>
                       )}
                     </div>
-                    {projectDirectory ? (
-                      <ProjectBranch key={projectDirectory} directory={projectDirectory} />
+                    {projectDirectory && composerId ? (
+                      <ProjectBranch
+                        key={projectDirectory}
+                        directory={projectDirectory}
+                        composerId={composerId}
+                        reviewOpen={Boolean(visibleGitReview && !visibleReference)}
+                      />
                     ) : (
                       <ProjectChooser sessionId={sessionId} />
                     )}
@@ -185,6 +194,8 @@ export default function App(): JSX.Element {
             </main>
             {visibleReference ? (
               <WorkspaceReferencePanel reference={visibleReference} />
+            ) : visibleGitReview ? (
+              <GitChangesPanel key={visibleGitReview} composerId={visibleGitReview} />
             ) : (
               visibleReview && <FileChangesPanel review={visibleReview} />
             )}

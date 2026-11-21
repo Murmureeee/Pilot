@@ -57,6 +57,7 @@ export function registerAgentRoutes({ host }: Pick<IpcContext, "host">): void {
   handle(IPC.sessionGitHead, (_event, directory) =>
     directory === host.getProjectDirectory() ? readProjectGitHead(directory) : null,
   );
+  handle(IPC.sessionGitChanges, (_event, composerId) => host.getGitChanges(composerId));
   handle(IPC.sessionLoad, (_event, id, record) => host.loadSession(id, record));
   handle(IPC.sessionRename, (_event, id, title) =>
     host.renameSession(id, title.trim().slice(0, 100)),

@@ -1,6 +1,13 @@
 // @env browser
 import { ArchiveIcon, CpuIcon, PlugIcon, ShieldCheckIcon, SquarePenIcon } from "lucide-react";
-import type { ApprovalMode, LogLevel, ProviderKind, ThemeSetting } from "@shared/contract";
+import type {
+  ApprovalMode,
+  GitChange,
+  GitChangesView,
+  LogLevel,
+  ProviderKind,
+  ThemeSetting,
+} from "@shared/contract";
 import type { ExternalImportKind } from "@shared/imports";
 import type { ComposerCommand, SettingsSection } from "./types";
 
@@ -136,5 +143,32 @@ export const COMPOSER_SURFACE_CLASS =
 export const FILE_REVIEW_MIN_WINDOW_WIDTH = 700;
 export const FILE_CHANGES_MIN_WINDOW_WIDTH = 900;
 export const FILE_CHANGES_TREE_MIN_WIDTH = 500;
+export const FILE_CHANGES_PANEL_CLASS =
+  "border-border bg-background flex min-w-0 shrink-0 flex-col border-s [width:min(62%,56rem,calc(100%_-_21rem))]";
+
+export const GIT_CHANGE_AREAS = ["staged", "unstaged", "untracked"] as const;
+export const GIT_CHANGE_AREA_LABELS: Record<GitChange["area"], string> = {
+  staged: "暂存区",
+  unstaged: "未暂存",
+  untracked: "未跟踪",
+};
+export const GIT_CHANGE_KIND_LABELS: Record<GitChange["kind"], string> = {
+  added: "新增文件",
+  modified: "修改文件",
+  deleted: "删除文件",
+  renamed: "重命名文件",
+  conflicted: "合并冲突",
+};
+export const GIT_CHANGE_ORIGIN_LABELS: Record<GitChange["origin"], string> = {
+  existing: "已有改动",
+  task: "任务期间",
+  mixed: "混合变更",
+};
+export const GIT_REVIEW_PHASE_LABELS: Record<GitChangesView["phase"], string> = {
+  workspace: "当前工作区",
+  running: "当前任务",
+  interrupted: "已中断的任务",
+  finished: "最近一次任务结束时",
+};
 export const WORKSPACE_LINK_PREFIX = "#pilot-workspace-reference=";
 export const SANITIZED_WORKSPACE_LINK_PREFIX = "#user-content-" + WORKSPACE_LINK_PREFIX.slice(1);

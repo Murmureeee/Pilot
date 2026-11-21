@@ -147,7 +147,9 @@ export type FileChangeNode =
 
 export interface FileChangesStore {
   review: FileChangesReview | null;
+  gitComposerId: string | null;
   open(request: OpenFileChanges): void;
+  openGit(composerId: string): void;
   close(): void;
   toggleFile(id: string): void;
   collapseFiles(): void;

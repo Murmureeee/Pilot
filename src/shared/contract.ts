@@ -25,6 +25,7 @@ export const IPC = {
   sessionSelectProject: "session:select-project",
   sessionUseRecentProject: "session:use-recent-project",
   sessionGitHead: "session:git-head",
+  sessionGitChanges: "session:git-changes",
   sessionLoad: "session:load",
   sessionRename: "session:rename",
   sessionDelete: "session:delete",
@@ -351,6 +352,20 @@ export interface SessionMeta extends SessionSettings {
 }
 
 export type ProjectGitHead = { branch: string } | { detachedAt: string };
+
+export interface GitChange {
+  path: string;
+  previousPath?: string;
+  area: "staged" | "unstaged" | "untracked";
+  kind: "added" | "modified" | "deleted" | "renamed" | "conflicted";
+  origin: "existing" | "task" | "mixed";
+  resolved?: true;
+}
+
+export interface GitChangesView {
+  phase: "workspace" | "running" | "interrupted" | "finished";
+  changes: GitChange[] | null;
+}
 
 /** 主题（FR-5.5）：亮 / 暗 / 跟随系统；渲染层本地存储，切换时同步原生标题栏颜色 */
 export type ThemeSetting = "light" | "dark" | "system";

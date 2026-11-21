@@ -9,7 +9,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
-import { FILE_CHANGES_TREE_MIN_WIDTH } from "@renderer/lib/constants";
+import { FILE_CHANGES_PANEL_CLASS, FILE_CHANGES_TREE_MIN_WIDTH } from "@renderer/lib/constants";
 import { changesForReply, fileChangeLabel, summarizeChanges } from "@renderer/lib/file-changes";
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { FileChangesReview } from "@renderer/lib/types";
@@ -164,7 +164,7 @@ export function FileChangesPanel({ review }: { review: FileChangesReview }): JSX
       ref={panel}
       data-file-changes-panel
       aria-label={t("文件更改", locale)}
-      className="border-border bg-background flex min-w-0 shrink-0 flex-col border-s [width:min(62%,56rem,calc(100%_-_21rem))]"
+      className={FILE_CHANGES_PANEL_CLASS}
       onKeyDown={(event) => {
         if (event.key !== "Escape") return;
         event.stopPropagation();
