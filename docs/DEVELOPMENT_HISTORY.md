@@ -6,6 +6,7 @@
 
 ### 2026-11-21
 
+- **Pilot v0.3.0 发布。** 交付里程碑 2 的 Git 审查、撤销、验证、暂存与提交，以及 Windows 应用内更新入口。GitHub Releases 提供 Windows x64 安装包、更新清单、blockmap 和 Linux x64 AppImage、Debian `.deb`。Windows 从公开 HTTPS 更新源将 `0.1.0` 升级到 `0.3.0`，安装包 SHA-512 与 `latest.yml` 一致，升级后核对了会话转录、设置、语言、主题和启用的技能。八步验证通过，219 项测试通过。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.3.0) · [发版提交 573244e](https://github.com/Murmureeee/Pilot/commit/573244e18c03adf895557161a47249f1e10ac7db) · [打包验收](https://github.com/Murmureeee/Pilot/actions/runs/44891669880) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/44892640787)
 - **Windows 短路径兼容。** Git 审查用同一目录的长路径判断项目范围，并将工具改动归入对应的 Git 文件。用 NTFS 短路径复现 GitHub Windows CI 的 7 项失败，修复后差异、撤销、暂存、提交与验证重跑的 19 项测试通过。使用默认路径复跑八步验证，219 项测试通过。[提交 57060a6](https://github.com/Murmureeee/Pilot/commit/57060a61e7efb40ea55d3abf359c5869f52dffb6)
 - **应用内更新入口。** 「帮助 → 检查更新…」显示检查结果，侧栏设置上方显示下载进度，下载完成后点击「更新并重启」即可安装。Agent 执行期间可查看状态，任务结束后可安装。Windows 用本地更新源和两个隔离 NSIS 测试包，从 0.2.1 更新到 0.2.2 并自动打开新版。复核了检查失败后的重试、中英文、浅色与 720 px 深色折叠侧栏。会话转录逐字节一致，语言和主题保留。八步验证通过，219 项测试通过。[提交 e8250c4](https://github.com/Murmureeee/Pilot/commit/e8250c49af1cf2930daa9bed4c0d22dd3e6c0f84)
 - **暂存与提交。** Git 变更面板支持按文件或文本区块暂存。用户在暂存区选择提交范围、查看完整差异并填写提交信息，提交后可查看提交号、分支和更新后的清单。Windows 隔离 Electron 验收在同一文件中混合用户已暂存、未暂存和任务改动，只提交了选中的任务区块。`git show` 与预览逐字一致，索引和 CRLF 工作树文件在提交前后逐字节一致。复核了整文件暂存、720 px 窄窗、暂存区变化后拒绝旧预览，以及从面板打开任务记录和检查点。八步验证通过，219 项测试通过。[提交 2817f80](https://github.com/Murmureeee/Pilot/commit/2817f80bd7ec1ced8e1f4e1901f86ae0afd7181c)

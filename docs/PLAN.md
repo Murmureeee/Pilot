@@ -9,12 +9,12 @@ Pilot 是基于 pi SDK 的本地 AI 编程桌面客户端。面向开发者的�
 | 范围 | 已有能力 | 下一步 |
 | --- | --- | --- |
 | 对话与上下文 | 流式 Markdown、思考与工具轨迹、停止和插话、任务计划、最近项目、按项目分组的会话、Git 分支显示、会话模型与权限模式、草稿与 JSONL 会话恢复、切换会话时保留原运行、异常退出后的任务续跑、项目指令与来源查看、会话标题搜索、`@` 文件引用和 `/` 快捷命令。 | 全文检索、长会话压缩和图片附件。 |
-| 权限与文件 | 三种权限模式、可撤销的授权规则、按运行绑定的输入区审批卡。支持依次处理多个请求，处理后恢复草稿。Git 面板展示暂存、未暂存和未跟踪文件的逐行差异，并可从任务检查点按文件或区块预览和撤销可确认的改动。普通文件夹支持内置工具差异与逐文件撤销。会话可运行测试、类型检查和构建并保存每次结果。 | 按文件或区块选择暂存内容并提交。 |
+| 权限与文件 | 三种权限模式、可撤销的授权规则、按运行绑定的输入区审批卡。支持依次处理多个请求，处理后恢复草稿。Git 面板显示暂存、未暂存和未跟踪文件的逐行差异。可按文件或区块暂存和提交，也可从任务检查点预览并撤销可确认的改动。普通文件夹支持内置工具差异与逐文件撤销。会话可运行测试、类型检查和构建并保存每次结果。 | 验收审批、审查、撤销和运行测试的键盘流程。 |
 | 模型与集成 | Anthropic、OpenAI Responses、OpenAI 兼容端点和内置演示模型。已有模型目录、连通性测试、Ollama / LM Studio 预设、本地技能、stdio 和 Streamable HTTP MCP，以及 Codex / Claude Code 技能和 MCP 导入。 | 验收真实本地模型的流式回复和工具调用，补齐模型能力提示与连接错误处理。 |
-| 桌面与发行 | 简体中文和 English、亮色与暗色、本地诊断日志。`v0.2.1` 已发布 Windows x64 安装包、Linux x64 AppImage 和 `.deb`。Windows 默认安装目录为 `%LOCALAPPDATA%\Programs\pilot`，程序文件名为 `pilot.exe`。 | 复验 Linux 桌面安装与升级，交付 macOS 安装包和平台签名。 |
+| 桌面与发行 | 简体中文和 English、亮色与暗色、本地诊断日志。`v0.3.0` 已发布 Windows x64 安装包、Linux x64 AppImage 和 `.deb`。Windows 安装版可从帮助菜单检查更新，下载完成后可从侧栏安装并重启。默认安装目录为 `%LOCALAPPDATA%\Programs\pilot`，程序文件名为 `pilot.exe`。 | 复验 Linux 桌面安装与升级，交付 macOS 安装包和平台签名。 |
 
 - 已在 Windows 隔离实例中验证输入区审批卡的命令展开、键盘允许与拒绝、草稿恢复，以及浅色和 720 px 深色布局。[审批卡实现](../src/renderer/src/components/ai/permission-card.tsx)
-- Windows `v0.2.1` 发布及升级记录。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.2.1) · [安装验收](https://github.com/Murmureeee/Pilot/actions/runs/44856566335) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/44857460780)
+- Pilot `v0.3.0` 的安装包和升级验收。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.3.0) · [安装验收](https://github.com/Murmureeee/Pilot/actions/runs/44891669880) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/44892640787)
 - Linux `.deb` 的现有启动验收从解包后的程序执行。Ollama 与 LM Studio 的现有验证使用本地协议桩。[Linux 打包验证](https://github.com/Murmureeee/Pilot/actions/runs/44669912414)
 
 ## 开发顺序
