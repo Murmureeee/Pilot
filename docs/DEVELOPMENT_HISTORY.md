@@ -6,6 +6,7 @@
 
 ### 2026-11-21
 
+- **内部包名迁移。** Windows 新装默认使用 `%LOCALAPPDATA%\Programs\pilot\pilot.exe`，应用配置迁移到 `Pilot` 目录，Linux `.deb` 包名为 `pilot`。Windows 隔离验收通过了新装、卸载、旧版 HTTPS 升级和自定义目录内的静默覆盖安装。原会话转录、设置、语言、主题和已启用的技能都能恢复。Linux AppImage 和 `.deb` 均通过启动与 Agent 冒烟，且 `.deb` 声明替换旧包。八步验证通过，200 项测试通过。[提交 14b4710](https://github.com/Murmureeee/Pilot/commit/14b4710) · [安装与打包验收](https://github.com/Murmureeee/Pilot/actions/runs/44853929278)
 - **项目指令。** 会话标题旁的「指令」显示项目根目录实际加载的 `AGENTS.md` 路径和指令优先级。Windows 隔离 Electron 验收使用两个指令不同的项目，通过本地模型接口桩核对请求内容和顺序。A 使用会话指令，B 使用全局个性化，两者都在项目指令之后加载技能。运行时切换会话仍显示各自的来源，修改 A 的文件后下一次请求发送新内容。八步验证通过，197 项测试通过。[提交 0455dd5](https://github.com/Murmureeee/Pilot/commit/0455dd5)
 - **在途保存与恢复。** Windows 隔离 Electron 实例通过强制结束进程，分别验证了首段回复、两个工具步骤完成后及命令执行中退出。重启可从原工作目录打开「已中断」任务。模型接口桩在续跑请求中收到已保存的消息和工具结果，并尝试重复调用。文件修改时间和命令追加日志确认原写入和命令各执行一次，结果未落盘的步骤也保留了未知结果提示。完成后再次重启仍显示完整转录。八步验证通过，196 项测试通过。[提交 ca2cc71](https://github.com/Murmureeee/Pilot/commit/ca2cc71)
 - **运行归属。** 同一时间只运行一项任务。切换会话时，原任务继续使用发起时的目录、模型和权限。其他会话保留自己的草稿，发送受阻时显示任务所在会话，并可直接返回。Windows 隔离 Electron 实例通过本地模型接口桩和真实 PowerShell 工具验证了流式回复、工具执行和待审批时切换 A、B 会话，回到 A 允许或停止任务，以及后台结束时消息与工具结果写回 A。重启后复查 A 历史和 B 草稿，并从 B 用自己的模型成功发送。八步验证通过，193 项测试通过。[提交 ce94a7b](https://github.com/Murmureeee/Pilot/commit/ce94a7b)
@@ -172,7 +173,7 @@
 #### FR-8 · 打包与分发（Phase 4）
 
 - [x] FR-8.1 (P0/Ph0) **Node 兼容验证**：✅ Electron 45 内置 Node 24.22.3 ≥ 22.19，pi 冒烟通过，sidecar 方案取消
-- [x] FR-8.3 (P1/Ph4) Windows 安装版支持自动检查、下载和退出安装。设置 `PI_UPDATE_URL` 后运行 `pnpm package:win` 会在 `dist/release` 生成安装包、blockmap 和 `latest.yml`。
+- [x] FR-8.3 (P1/Ph4) Windows 安装版支持自动检查、下载和退出安装。设置 `PILOT_UPDATE_URL` 后运行 `pnpm package:win` 会在 `dist/release` 生成安装包、blockmap 和 `latest.yml`。
 - [x] FR-8.5 (P1/Ph4) 云端 Windows 验证流水线与手动生成的 Windows 和 Linux 测试安装包。
 - [x] FR-8.6 (P1/Ph4) GitHub Releases 公开更新源已上线，Windows 0.1.0 → 0.1.1 升级通过验收。
 
