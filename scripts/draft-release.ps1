@@ -11,7 +11,7 @@ if (!$releaseNotes) { throw "Add Chinese release notes under '## $tag' in CHANGE
 
 $repo = $env:GITHUB_REPOSITORY
 $directory = Join-Path $env:RUNNER_TEMP 'pilot-release'
-$installer = "pi-desktop-${version}-x64-setup.exe"
+$installer = "pilot-${version}-x64-setup.exe"
 $files = @(
   $installer
   "$installer.blockmap"

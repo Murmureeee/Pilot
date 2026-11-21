@@ -219,7 +219,7 @@ function serveUpdateFiles(request, response) {
   const filename = /^(?:\/releases\/latest\/download|\/assets)\/([a-zA-Z0-9._-]+)$/.exec(path)?.[1];
   if (
     !filename ||
-    !/^(?:latest\.yml|pi-desktop-[\w.-]+-x64-setup\.exe(?:\.blockmap)?)$/.test(filename)
+    !/^(?:latest\.yml|(?:pilot|pi-desktop)-[\w.-]+-x64-setup\.exe(?:\.blockmap)?)$/.test(filename)
   ) {
     response.writeHead(404).end();
     return;

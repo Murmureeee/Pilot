@@ -15,7 +15,7 @@ win:
   # Existing shortcuts and in-place upgrades target this executable.
   executableName: pi Desktop
 nsis:
-  artifactName: ${name}-${version}-${arch}-setup.${ext}
+  artifactName: pilot-${version}-${arch}-setup.${ext}
   oneClick: false
   perMachine: false
   allowElevation: false

@@ -10,7 +10,7 @@ Pilot 是基于 pi 的桌面 AI 工作台。你可以从一次对话开始，让
 
 | 平台 | 发行文件 |
 | --- | --- |
-| Windows x64 | `pi-desktop-<版本号>-x64-setup.exe` |
+| Windows x64 | `pilot-<版本号>-x64-setup.exe` |
 | Linux x64 | `pilot-<版本号>-linux-x86_64.AppImage` 或 `pilot-<版本号>-linux-amd64.deb` |
 
 Linux 文件随启用该构建流程的正式版提供。AppImage 添加执行权限后运行。Debian、Ubuntu 及其衍生发行版可使用 `sudo apt install ./pilot-<版本号>-linux-amd64.deb` 安装。

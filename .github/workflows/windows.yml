@@ -153,7 +153,7 @@ jobs:
             $password = ConvertTo-SecureString $env:PILOT_UPDATE_TEST_PASSPHRASE -AsPlainText -Force
             Export-Certificate -Cert $certificate -FilePath $env:PILOT_UPDATE_TEST_CERT | Out-Null
             Export-PfxCertificate -Cert $certificate -FilePath $env:PILOT_UPDATE_TEST_PFX -Password $password | Out-Null
-            node scripts/verify-windows-installation.mjs '.pilot-baseline/dist/release/pi-desktop-0.1.0-x64-setup.exe' "dist/release/pi-desktop-${env:PILOT_CANDIDATE_VERSION}-x64-setup.exe" $env:PILOT_CANDIDATE_VERSION
+            node scripts/verify-windows-installation.mjs '.pilot-baseline/dist/release/pi-desktop-0.1.0-x64-setup.exe' "dist/release/pilot-${env:PILOT_CANDIDATE_VERSION}-x64-setup.exe" $env:PILOT_CANDIDATE_VERSION
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           } finally {
             if ($certificate) { Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -DeleteKey }
@@ -178,8 +178,8 @@ jobs:
             $manifest = Get-Content -Raw -LiteralPath $manifestPath
             $version = [regex]::Match($manifest, '(?m)^version: (?<value>\d+\.\d+\.\d+)\r?$').Groups['value'].Value
             if (!$version) { throw 'Invalid version in the public update manifest.' }
-            $installerName = "pi-desktop-${version}-x64-setup.exe"
-            if ($manifest -notmatch ('(?m)^path: ' + [regex]::Escape($installerName) + '\r?$')) { throw 'Unexpected installer path in the public update manifest.' }
+            $installerName = [regex]::Match($manifest, '(?m)^path: (?<value>[^\r\n]+)\r?$').Groups['value'].Value
+            if ($installerName -cnotin @("pilot-${version}-x64-setup.exe", "pi-desktop-${version}-x64-setup.exe")) { throw 'Unexpected installer path in the public update manifest.' }
             foreach ($asset in @($installerName, "$installerName.blockmap")) {
               $file = Join-Path $downloads $asset
               Invoke-WebRequest -Uri "$baseUrl$asset" -OutFile $file -TimeoutSec 150 -MaximumRetryCount 2
@@ -224,8 +224,8 @@ jobs:
         with:
           name: ${{ steps.release_assets.outputs.name }}
           path: |
-            dist/release/pi-desktop-${{ steps.candidate.outputs.version }}-x64-setup.exe
-            dist/release/pi-desktop-${{ steps.candidate.outputs.version }}-x64-setup.exe.blockmap
+            dist/release/pilot-${{ steps.candidate.outputs.version }}-x64-setup.exe
+            dist/release/pilot-${{ steps.candidate.outputs.version }}-x64-setup.exe.blockmap
             dist/release/latest.yml
           if-no-files-found: error
           retention-days: 1

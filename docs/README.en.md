@@ -10,7 +10,7 @@ Download the package for your platform from **Assets**. Each release page descri
 
 | Platform | Release file |
 | --- | --- |
-| Windows x64 | `pi-desktop-<version>-x64-setup.exe` |
+| Windows x64 | `pilot-<version>-x64-setup.exe` |
 | Linux x64 | `pilot-<version>-linux-x86_64.AppImage` or `pilot-<version>-linux-amd64.deb` |
 
 Linux packages are available starting with the first release built by the Linux workflow. Make the AppImage executable before running it. On Debian, Ubuntu, or a derivative, install the Debian package with `sudo apt install ./pilot-<version>-linux-amd64.deb`.
