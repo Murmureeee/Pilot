@@ -83,6 +83,6 @@ export class DesktopUpdater {
   install(): void {
     if (this.status.state !== "ready") throw new Error("没有已下载的更新。");
     this.setStatus({ state: "installing", version: this.status.version });
-    autoUpdater.quitAndInstall(true, false);
+    autoUpdater.quitAndInstall(true, true);
   }
 }

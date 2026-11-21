@@ -21,6 +21,7 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
+import { useUpdateStore } from "@renderer/stores/update";
 import { canBack, canForward } from "@renderer/lib/nav";
 import { APP_NAME } from "@shared/constants";
 import type { AppInfo, MenuAction } from "@shared/contract";
@@ -83,16 +84,20 @@ export function TopBar({
   const setView = useAgentStore((s) => s.setView);
   const setPaletteOpen = useAgentStore((s) => s.setPaletteOpen);
   const menuAction = useAgentStore((s) => s.menuAction);
-  const [aboutOpen, setAboutOpen] = useState(false);
+  const dialog = useUpdateStore((s) => s.dialog);
+  const setDialog = useUpdateStore((s) => s.setDialog);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const sidebarLabel = t(collapsed ? "显示侧边栏" : "隐藏侧边栏", locale);
   const aboutLabel = t("关于 {0}", locale, [APP_NAME]);
+  const isAbout = dialog === "about";
   const SidebarIcon = collapsed ? PanelLeftOpenIcon : PanelLeftCloseIcon;
 
+  useEffect(() => useUpdateStore.getState().subscribe(), []);
+
   useEffect(() => {
-    if (!aboutOpen) return;
+    if (!isAbout) return;
     void window.pi.getAppInfo().then(setAppInfo);
-  }, [aboutOpen]);
+  }, [isAbout]);
 
   const run = (action: MenuAction): void => {
     void menuAction(action);
@@ -222,26 +227,37 @@ export function TopBar({
           <MenuButton label={t("帮助", locale)} />
           <DropdownMenuContent align="start">
             <DropdownMenuGroup>
-              <Item label={aboutLabel} onRun={() => setAboutOpen(true)} />
+              <Item
+                label={t("检查更新…", locale)}
+                onRun={() => {
+                  setDialog("update");
+                  void useUpdateStore.getState().check();
+                }}
+              />
+              <Item label={aboutLabel} onRun={() => setDialog("about")} />
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      <Dialog open={aboutOpen} onOpenChange={(o) => setAboutOpen(o)}>
-        <DialogContent closeLabel={t("关闭", locale)} className="max-w-sm">
+      <Dialog open={dialog !== null} onOpenChange={(open) => !open && setDialog(null)}>
+        <DialogContent closeLabel={t("关闭", locale)} className="gap-4 sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>{aboutLabel}</DialogTitle>
-            <DialogDescription>
-              {t("基于 pi（earendil-works/pi）构建的桌面 AI Agent 应用。", locale)}
-            </DialogDescription>
+            <DialogTitle>{isAbout ? aboutLabel : t("软件更新", locale)}</DialogTitle>
+            {isAbout && (
+              <DialogDescription>
+                {t("基于 pi（earendil-works/pi）构建的桌面 AI Agent 应用。", locale)}
+              </DialogDescription>
+            )}
           </DialogHeader>
-          <div className="text-muted-foreground font-mono text-xs">
-            <p>
-              {t("版本", locale)} {appInfo?.version ?? "…"}
-            </p>
-            {appInfo?.isDev && <p>{t("开发模式", locale)}</p>}
-          </div>
+          {isAbout && (
+            <div className="text-muted-foreground border-b pb-3 font-mono text-xs">
+              <p>
+                {t("版本", locale)} {appInfo?.version ?? "…"}
+              </p>
+              {appInfo?.isDev && <p>{t("开发模式", locale)}</p>}
+            </div>
+          )}
           <UpdatePanel locale={locale} />
         </DialogContent>
       </Dialog>

@@ -58,6 +58,7 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { Textarea } from "@renderer/components/ui/textarea";
 import { SessionDeleteDialog } from "@renderer/components/ai/session-delete-dialog";
+import { UpdateRailButton } from "@renderer/components/ai/update-panel";
 import { cn } from "cn";
 import { APP_NAME } from "@shared/constants";
 import type { SessionMeta } from "@shared/contract";
@@ -175,20 +176,23 @@ export function AppRail({
           </>
         )}
 
-        <Button
-          variant="ghost"
-          size="icon-lg"
-          className={cn(RAIL_CONTROL, "mt-auto")}
-          onClick={() => {
-            setView("settings");
-            if (collapsed) onExpand();
-          }}
-          aria-current={view === "settings" ? "page" : undefined}
-          aria-label={t("设置", locale)}
-          title={t("设置", locale)}
-        >
-          <SettingsIcon strokeWidth={1.7} />
-        </Button>
+        <div className="mt-auto flex flex-col items-center gap-1">
+          <UpdateRailButton locale={locale} />
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            className={RAIL_CONTROL}
+            onClick={() => {
+              setView("settings");
+              if (collapsed) onExpand();
+            }}
+            aria-current={view === "settings" ? "page" : undefined}
+            aria-label={t("设置", locale)}
+            title={t("设置", locale)}
+          >
+            <SettingsIcon strokeWidth={1.7} />
+          </Button>
+        </div>
       </nav>
 
       {collapsed && (

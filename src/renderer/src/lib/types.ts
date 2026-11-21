@@ -5,10 +5,21 @@ import type {
   FileChangeSummary,
   UiMessage,
   UiPart,
+  UpdateStatus,
   WorkspaceEntry,
   WorkspaceReferencePreview,
   WorkspaceReferenceRequest,
 } from "@shared/contract";
+
+export interface UpdateStore {
+  status: UpdateStatus | null;
+  actionFailed: boolean;
+  dialog: "about" | "update" | null;
+  setDialog(dialog: UpdateStore["dialog"]): void;
+  subscribe(): () => void;
+  check(): Promise<void>;
+  install(): Promise<void>;
+}
 
 export interface ComposerTrigger {
   kind: "command" | "mention";

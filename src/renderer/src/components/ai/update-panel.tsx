@@ -1,8 +1,11 @@
 // @env browser
-import { useEffect, useState, type JSX } from "react";
+import type { JSX } from "react";
+import { DownloadIcon, LoaderCircleIcon } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { t } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
+import { useUpdateStore } from "@renderer/stores/update";
 import type { Locale, UpdateStatus } from "@shared/contract";
 
 function describeStatus(status: UpdateStatus, locale: Locale): string {
@@ -26,55 +29,95 @@ function describeStatus(status: UpdateStatus, locale: Locale): string {
   }
 }
 
-export function UpdatePanel({ locale }: { locale: Locale }): JSX.Element | null {
-  const [status, setStatus] = useState<UpdateStatus | null>(null);
-  const agentBusy = useAgentStore((s) => s.status !== "idle");
-
-  useEffect(() => {
-    let pending = true;
-    const unsubscribe = window.pi.onUpdateStatus((next) => {
-      pending = false;
-      setStatus(next);
-    });
-    void window.pi.getUpdateStatus().then((initial) => {
-      if (pending) setStatus(initial);
-    });
-    return () => {
-      pending = false;
-      unsubscribe();
-    };
-  }, []);
-
-  if (!status) return null;
+export function UpdatePanel({ locale }: { locale: Locale }): JSX.Element {
+  const status = useUpdateStore((s) => s.status);
+  const actionFailed = useUpdateStore((s) => s.actionFailed);
+  const agentBusy = useAgentStore((s) => s.activeRun !== null || s.status !== "idle");
+  const state = status?.state;
   const canCheck =
-    status.state === "idle" || status.state === "current" || status.state === "error";
+    state === "idle" || state === "current" || state === "error" || (!status && actionFailed);
+  const description = status
+    ? describeStatus(status, locale)
+    : t(actionFailed ? "更新失败，请重试。" : "正在读取更新状态…", locale);
 
   return (
-    <div className="flex flex-col items-start gap-2 border-t pt-3">
+    <div className="flex flex-col items-start gap-2">
       <p role="status" className="text-muted-foreground text-xs">
-        {describeStatus(status, locale)}
+        {description}
       </p>
+      {actionFailed && status && state !== "error" && (
+        <p role="alert" className="text-destructive text-xs">
+          {t("更新失败，请重试。", locale)}
+        </p>
+      )}
       {canCheck && (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() =>
-            void window.pi.checkForUpdates().catch(() => setStatus({ state: "error" }))
-          }
-        >
+        <Button size="sm" variant="outline" onClick={() => void useUpdateStore.getState().check()}>
           {t("检查更新", locale)}
         </Button>
       )}
-      {status.state === "ready" && (
+      {state === "ready" && agentBusy && (
+        <p className="text-muted-foreground text-xs">
+          {t("请等待当前任务结束后再安装更新。", locale)}
+        </p>
+      )}
+      {state === "ready" && (
         <Button
           size="sm"
           disabled={agentBusy}
-          title={agentBusy ? t("请等待当前任务结束后再安装更新。", locale) : undefined}
-          onClick={() => void window.pi.installUpdate().catch(() => setStatus({ state: "error" }))}
+          onClick={() => void useUpdateStore.getState().install()}
         >
-          {t("退出并安装更新", locale)}
+          {t("更新并重启", locale)}
         </Button>
       )}
     </div>
+  );
+}
+
+export function UpdateRailButton({ locale }: { locale: Locale }): JSX.Element | null {
+  const status = useUpdateStore((s) => s.status);
+  const agentBusy = useAgentStore((s) => s.activeRun !== null || s.status !== "idle");
+  if (
+    status?.state !== "downloading" &&
+    status?.state !== "ready" &&
+    status?.state !== "installing"
+  )
+    return null;
+
+  const canInstall = status.state === "ready" && !agentBusy;
+  const label = canInstall ? t("更新并重启", locale) : describeStatus(status, locale);
+  const handleClick = (): void => {
+    const update = useUpdateStore.getState();
+    if (canInstall) void update.install();
+    else update.setDialog("update");
+  };
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant={canInstall ? "default" : "secondary"}
+            size="icon-lg"
+            className="flex-col gap-0.5 rounded-xl"
+            aria-label={label}
+            onClick={handleClick}
+          />
+        }
+      >
+        {status.state === "installing" ? (
+          <LoaderCircleIcon aria-hidden="true" className="motion-safe:animate-spin" />
+        ) : (
+          <DownloadIcon aria-hidden="true" strokeWidth={1.7} />
+        )}
+        {status.state === "downloading" && (
+          <span aria-hidden="true" className="text-[10px] leading-none tabular-nums">
+            {status.percent}%
+          </span>
+        )}
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={8}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
