@@ -4,6 +4,10 @@
 
 ## 近期交付
 
+### 2026-11-22
+
+- **设计规范与路线图调整。** 新增设计规范，定义窗口骨架、各区域职责、统一审查面板、状态模型、视觉与键盘规则，并列出从 `v0.3.0` 界面到目标结构的迁移清单。路线图把命令授权范围、危险命令、命令执行、失败重试和上下文压缩提前为里程碑 3，原桌面交互里程碑改写为按迁移清单拆分的工作台结构与反馈，新增并行任务里程碑。工程规范中的骨架描述改为与现有实现一致的窗框加工作卡片结构。本次只改文档，已核对内容与本地链接。[设计规范](./DESIGN.md) · [提交 5e141fb](https://github.com/Murmureeee/Pilot/commit/5e141fb)
+
 ### 2026-11-21
 
 - **Pilot v0.3.0 发布。** 交付里程碑 2 的 Git 审查、撤销、验证、暂存与提交，以及 Windows 应用内更新入口。GitHub Releases 提供 Windows x64 安装包、更新清单、blockmap 和 Linux x64 AppImage、Debian `.deb`。Windows 从公开 HTTPS 更新源将 `0.1.0` 升级到 `0.3.0`，安装包 SHA-512 与 `latest.yml` 一致，升级后核对了会话转录、设置、语言、主题和启用的技能。八步验证通过，219 项测试通过。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.3.0) · [发版提交 573244e](https://github.com/Murmureeee/Pilot/commit/573244e18c03adf895557161a47249f1e10ac7db) · [打包验收](https://github.com/Murmureeee/Pilot/actions/runs/44891669880) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/44892640787)
