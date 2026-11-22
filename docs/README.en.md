@@ -2,7 +2,7 @@
 
 Pilot is a desktop AI workspace built on pi. Start a chat to work with an agent on files and commands in a folder, then pick up where you left off from your conversation history.
 
-[简体中文](../README.md) · [Download the latest release](https://github.com/Murmureeee/Pilot/releases/latest) · [Changelog (Chinese)](../CHANGELOG.md) · [Roadmap (Chinese)](./PLAN.md) · [Development history (Chinese)](./DEVELOPMENT_HISTORY.md)
+[简体中文](../README.md) · [Download the latest release](https://github.com/Murmureeee/Pilot/releases/latest) · [Changelog (Chinese)](../CHANGELOG.md) · [Roadmap (Chinese)](./PLAN.md) · [Design guidelines (Chinese)](./DESIGN.md) · [Development history (Chinese)](./DEVELOPMENT_HISTORY.md)
 
 ## Download and update
 

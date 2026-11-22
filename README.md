@@ -2,7 +2,7 @@
 
 Pilot 是基于 pi 的桌面 AI 工作台。你可以从一次对话开始，让 Agent 与你一起处理工作目录中的文件和命令，并随时回到保存的会话继续工作。
 
-[English](./docs/README.en.md) · [下载最新版](https://github.com/Murmureeee/Pilot/releases/latest) · [中文更新记录](./CHANGELOG.md) · [开发路线图](./docs/PLAN.md) · [开发完成记录](./docs/DEVELOPMENT_HISTORY.md)
+[English](./docs/README.en.md) · [下载最新版](https://github.com/Murmureeee/Pilot/releases/latest) · [中文更新记录](./CHANGELOG.md) · [开发路线图](./docs/PLAN.md) · [设计规范](./docs/DESIGN.md) · [开发完成记录](./docs/DEVELOPMENT_HISTORY.md)
 
 ## 下载与更新
 
