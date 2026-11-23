@@ -507,6 +507,78 @@ export const EN_MESSAGES: Record<string, string> = {
   已完成: "Completed",
 
   // 设置与首次配置
+  外观: "Appearance",
+  存储与诊断: "Storage and diagnostics",
+  "输入方式和 Agent 默认的工作环境。":
+    "How you send messages and where the agent works by default.",
+  "主题和界面语言。": "Theme and interface language.",
+  "查看、恢复或永久删除已归档的聊天。": "View, restore, or permanently delete archived chats.",
+  "本地存储位置和诊断日志。": "Local storage locations and diagnostic logs.",
+  "技能是随任务加载的指令包。可从本地目录、Codex 或 Claude Code 导入，启用后在下一次请求生效。":
+    "Skills are instruction packs loaded for a task. Import them from a local folder, Codex, or Claude Code. Changes apply to the next request.",
+  "连接外部工具服务。可手动添加，也可从 Codex 或 Claude Code 导入，工具调用遵循权限设置。":
+    "Connect external tool servers. Add one manually or import from Codex or Claude Code. Tool calls follow your permission settings.",
+  "从 Codex 或 Claude Code 一次导入技能、MCP 服务和插件组件，并管理已导入的插件。":
+    "Import skills, MCP servers, and plugin components from Codex or Claude Code in one place, and manage imported plugins.",
+  "从 Codex 或 Claude Code 导入": "Import from Codex or Claude Code",
+  搜索设置: "Search settings",
+  没有匹配的设置: "No matching settings",
+  "跟随系统时，随系统的浅色和深色设置切换。":
+    "System follows your operating system's light or dark setting.",
+  "应用界面使用的语言。": "The language used in the app.",
+  "Agent 读写文件和运行命令的位置与方式。":
+    "Where and how the agent reads and writes files and runs commands.",
+  "设置、聊天记录和密钥都保存在这台电脑上。":
+    "Settings, chat history, and keys are stored on this computer.",
+  快捷键: "Keyboard shortcuts",
+  关于: "About",
+  "决定 Agent 写入文件、运行命令和调用 MCP 工具前是否需要你确认。":
+    "Choose whether the agent asks before it writes files, runs commands, or calls MCP tools.",
+  "管理模型服务、密钥和聊天中可选的模型。":
+    "Manage model services, keys, and the models available in chat.",
+  "告诉 Agent 你的偏好和约定，它会在每次任务中遵循。":
+    "Tell the agent your preferences and conventions. It follows them in every task.",
+  "当前可用的键盘操作。": "Keyboard actions available now.",
+  "版本信息、应用更新和反馈渠道。": "Version, app updates, and where to send feedback.",
+  "Enter 发送，Shift+Enter 换行": "Enter to send, Shift+Enter for a new line",
+  "Ctrl+Enter 发送，Enter 换行": "Ctrl+Enter to send, Enter for a new line",
+  全局: "Global",
+  输入框: "Composer",
+  审批: "Approvals",
+  窗口: "Window",
+  搜索与命令面板: "Search and command palette",
+  后退: "Back",
+  前进: "Forward",
+  显示或隐藏侧边栏: "Show or hide the sidebar",
+  "引用文件、文件夹或技能": "Mention a file, folder, or skill",
+  打开命令菜单: "Open the command menu",
+  在菜单中移动: "Move through a menu",
+  关闭菜单: "Close a menu",
+  退出: "Quit",
+  发送消息: "Send message",
+  换行: "New line",
+  更新记录: "Changelog",
+  全部版本: "All releases",
+  反馈问题: "Report an issue",
+  了解更多: "Learn more",
+  "没有单独选择模式的聊天都使用此模式，包括已有聊天。可在输入框为单个聊天单独选择。":
+    "Every chat without its own mode uses this one, including existing chats. You can choose a different one for a single chat in the composer.",
+  "在审批时选择「总是允许」会保存规则，命中规则的操作不再询问。撤销后下一次调用恢复询问。":
+    "Choosing “Always allow” on a request saves a rule, and matching actions run without asking. After you revoke a rule, the next call asks again.",
+  还没有保存的授权: "No saved approvals",
+  "此规则允许运行任何命令。": "This rule allows any command to run.",
+  对话: "Chat",
+  发送方式: "Send with",
+  "输入法组词时按 Enter 只确认候选词。":
+    "While an input method is composing, Enter only confirms the candidate.",
+  指令生效顺序: "Instruction order",
+  "内容冲突时，排在前面的优先。": "When instructions conflict, the earlier one wins.",
+  应用内置指令: "Built-in app instructions",
+  "安全与工具使用规则，始终优先。": "Safety and tool-use rules. Always first.",
+  "会话所在项目根目录的 AGENTS.md。": "AGENTS.md in the root of the chat's project.",
+  "未单独设置时使用上面的自定义指令。": "Falls back to the custom instructions above when not set.",
+  已启用的技能: "Enabled skills",
+  "按任务加载的技能说明。": "Skill instructions loaded for the task.",
   应用: "App",
   集成: "Integrations",
   常规: "General",
@@ -605,6 +677,10 @@ export const EN_MESSAGES: Record<string, string> = {
     "Keeps up to {0} local log files of {1} MiB each.",
   "无法保存日志级别。": "Could not save the log level.",
   "无法打开日志目录。": "Could not open the log folder.",
+  "无法打开技能目录。": "Could not open the skills folder.",
+  "所选目录不含 SKILL.md，不是有效技能":
+    "The selected folder has no SKILL.md, so it is not a skill.",
+  源目录不存在: "The source folder does not exist.",
   打开文件夹: "Open folder",
   "上下文 {0}K": "Context {0}K",
   搜索已归档的聊天: "Search archived chats",

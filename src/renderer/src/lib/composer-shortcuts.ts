@@ -1,7 +1,7 @@
 // @env browser
 import type { ComposerDraft, PromptInput } from "@shared/contract";
 import { mentionToken } from "../../../shared/mentions";
-import type { ComposerTrigger } from "./types";
+import type { ComposerTrigger, SendKey } from "./types";
 
 export function composerTrigger(text: string, start: number, end: number): ComposerTrigger | null {
   if (start !== end) return null;
@@ -64,4 +64,14 @@ export function trimPrompt(input: PromptInput): PromptInput {
       mention.offset === undefined ? mention : { ...mention, offset: mention.offset - removed },
     ),
   };
+}
+
+export function composerEnterAction(
+  event: { key: string; shiftKey: boolean; ctrlKey: boolean; metaKey: boolean },
+  sendKey: SendKey,
+): "send" | "newline" | null {
+  if (event.key !== "Enter") return null;
+  if (sendKey === "enter") return event.shiftKey ? null : "send";
+  if (event.ctrlKey || event.metaKey) return "send";
+  return event.shiftKey ? null : "newline";
 }

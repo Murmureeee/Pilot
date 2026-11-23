@@ -34,22 +34,28 @@ function toProviderInput(draft: DraftProvider): ProviderInput {
   };
 }
 
+function toDrafts(settings: PublicSettings): DraftProvider[] {
+  return settings.providers.map((provider) => ({
+    ...provider,
+    baseUrl: provider.baseUrl ?? "",
+    apiKeyInput: "",
+  }));
+}
+
 export function ProviderSettings({ settings }: { settings: PublicSettings }): JSX.Element {
   const locale = useLocale();
   const saveSettings = useAgentStore((state) => state.saveSettings);
-  const [drafts, setDrafts] = useState<DraftProvider[]>(() =>
-    settings.providers.map((provider) => ({
-      ...provider,
-      baseUrl: provider.baseUrl ?? "",
-      apiKeyInput: "",
-    })),
-  );
+  const [drafts, setDrafts] = useState<DraftProvider[]>(() => toDrafts(settings));
   const [activeId, setActiveId] = useState(settings.activeProviderId);
   const [editorId, setEditorId] = useState(settings.activeProviderId || drafts[0]?.id);
   const [levels, setLevels] = useState<ThinkingLevel[]>(settings.thinkingLevels);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editor = drafts.find(({ id }) => id === editorId);
+  const dirty =
+    JSON.stringify([drafts, activeId, levels]) !==
+    JSON.stringify([toDrafts(settings), settings.activeProviderId, settings.thinkingLevels]);
 
   const add = (): void => {
     const id = crypto.randomUUID();
@@ -85,6 +91,14 @@ export function ProviderSettings({ settings }: { settings: PublicSettings }): JS
       providers.find((provider) => provider.modelId);
     try {
       await saveSettings({ providers, activeProviderId: active?.id ?? "", thinkingLevels: levels });
+      // 以主进程落盘后的结果为准：清空已提交的密钥输入，并同步规范化后的名称与当前提供方。
+      const next = useAgentStore.getState().settings;
+      if (next) {
+        setDrafts(toDrafts(next));
+        setActiveId(next.activeProviderId);
+        setLevels(next.thinkingLevels);
+      }
+      setSaved(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -103,7 +117,7 @@ export function ProviderSettings({ settings }: { settings: PublicSettings }): JS
             <PlusIcon data-icon="inline-start" /> {t("添加提供方", locale)}
           </Button>
         </div>
-        <div className="settings-list max-h-52 overflow-y-auto [scrollbar-width:thin]">
+        <div className="settings-card max-h-52 overflow-y-auto [scrollbar-width:thin]">
           {drafts.length === 0 && (
             <p className="text-muted-foreground px-4 py-3.5 text-sm">
               {t("尚未配置 Provider", locale)}
@@ -153,10 +167,10 @@ export function ProviderSettings({ settings }: { settings: PublicSettings }): JS
           onRemove={() => remove(editor.id)}
         />
       )}
-      <section aria-labelledby="thinking-levels-heading" className="settings-list">
+      <section aria-labelledby="thinking-levels-heading" className="settings-card">
         <div className="settings-row gap-x-3">
           <div className="min-w-0 flex-1 basis-48">
-            <h2 id="thinking-levels-heading" className="text-sm">
+            <h2 id="thinking-levels-heading" className="text-sm font-medium">
               {t("可用思考强度", locale)}
             </h2>
             <p className="text-muted-foreground text-xs leading-5">
@@ -202,8 +216,11 @@ export function ProviderSettings({ settings }: { settings: PublicSettings }): JS
           {localizeError(error, locale)}
         </p>
       )}
-      <div className="flex justify-end">
-        <Button size="sm" disabled={saving} onClick={() => void save()}>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {saved && !dirty && (
+          <output className="text-muted-foreground text-xs">{t("已保存", locale)}</output>
+        )}
+        <Button size="sm" disabled={saving || !dirty} onClick={() => void save()}>
           <SaveIcon data-icon="inline-start" /> {t(saving ? "保存中…" : "保存", locale)}
         </Button>
       </div>

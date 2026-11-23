@@ -84,7 +84,7 @@ export function ProviderEditor({
   };
 
   return (
-    <section className="settings-list" aria-labelledby={uid + "-heading"}>
+    <section className="settings-card" aria-labelledby={uid + "-heading"}>
       <div className="settings-row gap-x-3">
         <h2 id={uid + "-heading"} className="min-w-0 flex-1 truncate text-sm font-medium">
           {displayProviderName(draft, locale) || t("新提供方", locale)}

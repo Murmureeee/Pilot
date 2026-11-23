@@ -62,11 +62,8 @@ export function ExternalImportSettings({
   };
 
   return (
-    <div className="grid gap-7">
+    <div className="grid gap-9">
       <div className="grid gap-3">
-        <p className="text-muted-foreground text-sm">
-          {t("从 Codex 或 Claude Code 选择要导入的内容。", locale)}
-        </p>
         <div className="settings-list">
           {(Object.keys(EXTERNAL_IMPORT_OPTIONS) as ExternalImportKind[]).map((kind) => {
             const option = EXTERNAL_IMPORT_OPTIONS[kind];
@@ -103,7 +100,7 @@ export function ExternalImportSettings({
             {plugins.map((plugin) => (
               <div key={plugin.id} className="settings-row">
                 <div className="min-w-0 flex-1 basis-44">
-                  <p className="wrap-anywhere text-sm">{plugin.name}</p>
+                  <p className="wrap-anywhere text-sm font-medium">{plugin.name}</p>
                   <p className="text-muted-foreground mt-0.5 text-xs leading-5">
                     {t("来自 {0}，包含 {1}", locale, [
                       IMPORT_SOURCE_LABELS[plugin.source],

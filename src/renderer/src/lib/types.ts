@@ -105,12 +105,24 @@ export type WorkspaceReferenceLoad =
 
 export type SettingsSection =
   | "general"
+  | "appearance"
+  | "permissions"
   | "providers"
   | "persona"
+  | "shortcuts"
+  | "archived"
   | "data"
+  | "about"
   | "skills"
   | "mcp"
   | "imports";
+
+export type SendKey = "enter" | "mod-enter";
+
+export interface ShortcutGroup {
+  label: string;
+  items: { label: string; keys: string }[];
+}
 
 export interface TurnPreview {
   id: string;

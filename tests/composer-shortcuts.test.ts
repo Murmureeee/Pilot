@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  composerEnterAction,
   composerTrigger,
   matchesComposerQuery,
   promptFromDraft,
@@ -82,5 +83,24 @@ describe("composer shortcuts", () => {
       text: prefix + "@[file:notes/report %5Bdraft%5D.md]",
       mentions: [{ ...file, offset: prefix.length }],
     });
+  });
+
+  it("maps Enter to send or newline by the send-key preference", () => {
+    const key = (
+      mods: Partial<Record<"shiftKey" | "ctrlKey" | "metaKey", boolean>> = {},
+    ): { key: string; shiftKey: boolean; ctrlKey: boolean; metaKey: boolean } => ({
+      key: "Enter",
+      shiftKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      ...mods,
+    });
+    expect(composerEnterAction(key(), "enter")).toBe("send");
+    expect(composerEnterAction(key({ shiftKey: true }), "enter")).toBeNull();
+    expect(composerEnterAction(key(), "mod-enter")).toBe("newline");
+    expect(composerEnterAction(key({ ctrlKey: true }), "mod-enter")).toBe("send");
+    expect(composerEnterAction(key({ metaKey: true }), "mod-enter")).toBe("send");
+    expect(composerEnterAction(key({ shiftKey: true }), "mod-enter")).toBeNull();
+    expect(composerEnterAction({ ...key(), key: "a" }, "mod-enter")).toBeNull();
   });
 });

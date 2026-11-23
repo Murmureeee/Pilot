@@ -11,33 +11,25 @@ import {
   ArchiveIcon,
   ArchiveRestoreIcon,
   ArrowLeftIcon,
-  BlocksIcon,
-  BotIcon,
   CheckIcon,
   CircleIcon,
   CopyIcon,
-  DownloadIcon,
   FolderIcon,
   FolderOpenIcon,
   GitForkIcon,
-  HardDriveIcon,
   HouseIcon,
   PencilIcon,
   PinIcon,
   PinOffIcon,
-  PlugIcon,
   ScrollTextIcon,
   SearchIcon,
   SettingsIcon,
   SquarePenIcon,
   SquareTerminalIcon,
   Trash2Icon,
-  UserRoundIcon,
 } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
-import { SETTINGS_SECTION_LABELS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
-import type { SettingsSection } from "@renderer/lib/types";
 import { referenceName } from "@renderer/lib/workspace-links";
 import {
   ContextMenu,
@@ -59,6 +51,7 @@ import { Input } from "@renderer/components/ui/input";
 import { Textarea } from "@renderer/components/ui/textarea";
 import { SessionDeleteDialog } from "@renderer/components/ai/session-delete-dialog";
 import { UpdateRailButton } from "@renderer/components/ai/update-panel";
+import { SettingsNav } from "@renderer/views/settings/SettingsNav";
 import { cn } from "cn";
 import { APP_NAME } from "@shared/constants";
 import type { SessionMeta } from "@shared/contract";
@@ -67,29 +60,6 @@ const SIDEBAR_MIN_WIDTH = 220;
 const SIDEBAR_MAX_WIDTH = 520;
 /** rail 右缘向右拖动超过此位移 → 动画展开 */
 const RAIL_EXPAND_THRESHOLD = 80;
-
-const SETTINGS_NAV: {
-  label: string;
-  items: { id: SettingsSection; icon: typeof BotIcon }[];
-}[] = [
-  {
-    label: "应用",
-    items: [
-      { id: "general", icon: SettingsIcon },
-      { id: "providers", icon: BotIcon },
-      { id: "persona", icon: UserRoundIcon },
-      { id: "data", icon: HardDriveIcon },
-    ],
-  },
-  {
-    label: "集成",
-    items: [
-      { id: "skills", icon: BlocksIcon },
-      { id: "mcp", icon: PlugIcon },
-      { id: "imports", icon: DownloadIcon },
-    ],
-  },
-];
 
 const RAIL_CONTROL =
   "text-sidebar-foreground/80 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground aria-[current=page]:bg-sidebar-foreground/10 aria-[current=page]:text-sidebar-foreground rounded-xl";
@@ -243,8 +213,6 @@ export function SidebarPanel({
   const setView = useAgentStore((s) => s.setView);
   const setPaletteOpen = useAgentStore((s) => s.setPaletteOpen);
   const view = useAgentStore((s) => s.view);
-  const settingsSection = useAgentStore((s) => s.settingsSection);
-  const setSettingsSection = useAgentStore((s) => s.setSettingsSection);
   // 重命名走 Dialog 弹窗（ChatGPT 同款）：显式「保存」提交，无行内编辑的焦点竞争问题；
   // Esc / 点击遮罩经 onOpenChange(false) 关闭
   const [renameTarget, setRenameTarget] = useState<SessionMeta | null>(null);
@@ -584,47 +552,7 @@ export function SidebarPanel({
           </nav>
         </>
       ) : (
-        <nav
-          aria-label={t("设置", locale)}
-          className="min-h-0 flex-1 overflow-y-auto px-3 pt-1 pb-3"
-        >
-          <div className="flex flex-col gap-3.5">
-            {SETTINGS_NAV.map((group) => (
-              <section key={group.label} className="grid gap-1.5">
-                <h3 className="text-sidebar-foreground/70 px-2.5 text-xs">
-                  {t(group.label, locale)}
-                </h3>
-                <div className="flex flex-col gap-0.5">
-                  {group.items.map(({ id, icon: Icon }) => {
-                    const selected = settingsSection === id;
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setSettingsSection(id)}
-                        aria-current={selected ? "page" : undefined}
-                        className={cn(
-                          "hover:bg-sidebar-accent/65 focus-visible:ring-sidebar-ring flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset",
-                          selected && "bg-sidebar-accent",
-                        )}
-                      >
-                        <Icon
-                          aria-hidden="true"
-                          className="text-sidebar-foreground/70 size-4 shrink-0"
-                          strokeWidth={1.7}
-                        />
-                        <span className="min-w-0 flex-1 truncate">
-                          {t(SETTINGS_SECTION_LABELS[id], locale)}
-                        </span>
-                        {selected && <CheckIcon aria-hidden="true" className="size-3.5 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
-        </nav>
+        <SettingsNav />
       )}
 
       {/* 重命名弹窗：标题 + 说明行（muted 次级）+ 输入 + 取消/保存 */}

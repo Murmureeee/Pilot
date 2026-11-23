@@ -1,4 +1,9 @@
 // @env browser
+import {
+  ExternalImportDialog,
+  ExternalImportResult,
+} from "@renderer/components/ai/external-import-dialog";
+import type { ImportReport } from "@shared/imports";
 import { useEffect, useState, type JSX } from "react";
 import { EllipsisIcon, PlusIcon } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
@@ -55,7 +60,14 @@ function readStringPairs(text: string, invalid: string): [string, string][] | un
   throw new Error(invalid);
 }
 
-export function McpSettings({ locale }: { locale: Locale }): JSX.Element {
+export function McpSettings({
+  locale,
+  workingDirectory,
+}: {
+  locale: Locale;
+  workingDirectory: string | null;
+}): JSX.Element {
+  const [report, setReport] = useState<ImportReport | null>(null);
   const [servers, setServers] = useState<McpServerInfo[]>([]);
   const [draft, setDraft] = useState<McpDraft | null>(null);
   const [args, setArgs] = useState("");
@@ -164,22 +176,34 @@ export function McpSettings({ locale }: { locale: Locale }): JSX.Element {
 
   return (
     <div className="grid gap-3">
-      <div>
+      <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={() => edit()} disabled={busy}>
           <PlusIcon data-icon="inline-start" />
           {t("添加 MCP 服务", locale)}
         </Button>
+        <ExternalImportDialog
+          kind="mcp"
+          label="从 Codex 或 Claude Code 导入"
+          locale={locale}
+          workingDirectory={workingDirectory}
+          disabled={busy}
+          onImported={(result) => {
+            setReport(result);
+            void run(() => window.pi.mcpList());
+          }}
+        />
       </div>
+      <ExternalImportResult report={report} locale={locale} />
       <div className="settings-list" aria-busy={busy}>
         {servers.length === 0 && (busy || !error) && (
-          <p role="status" className="text-muted-foreground px-4 py-3.5 text-sm">
+          <p role="status" className="text-muted-foreground py-4 text-sm">
             {t(busy ? "正在读取 MCP 状态…" : "还没有 MCP 服务", locale)}
           </p>
         )}
         {servers.map((server) => (
           <section key={server.id} className="settings-row flex-nowrap items-start gap-x-3">
             <div className="min-w-0 flex-1">
-              <h2 className="wrap-anywhere text-sm">{server.name}</h2>
+              <h2 className="wrap-anywhere text-sm font-medium">{server.name}</h2>
               <p className="text-muted-foreground truncate text-xs leading-5">
                 {server.transport.type === "stdio"
                   ? server.transport.command || "stdio"

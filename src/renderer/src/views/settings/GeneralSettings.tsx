@@ -1,12 +1,6 @@
 // @env browser
 import { useState, type JSX } from "react";
-import { ChevronDownIcon } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@renderer/components/ui/collapsible";
 import {
   Select,
   SelectContent,
@@ -15,126 +9,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import { APPROVAL_MODE_OPTIONS, THEME_LABELS } from "@renderer/lib/constants";
-import { localizeError, setLocale, t, useLocale } from "@renderer/lib/i18n";
-import { applyTheme, loadTheme } from "@renderer/lib/theme";
+import { COMMAND_SHELL_LABELS, SEND_KEY_LABELS } from "@renderer/lib/constants";
+import { localizeError, t, useLocale } from "@renderer/lib/i18n";
+import { loadSendKey, saveSendKey } from "@renderer/lib/preferences";
+import type { SendKey } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
-import { LOCALE_DETAILS, SUPPORTED_LOCALES } from "@shared/constants";
-import type {
-  ApprovalMode,
-  CommandShell,
-  Locale,
-  PublicSettings,
-  ThemeSetting,
-} from "@shared/contract";
-import { cn } from "cn";
-
-function PermissionSettings({ settings }: { settings: PublicSettings }): JSX.Element {
-  const locale = useLocale();
-  const setDefaultApprovalMode = useAgentStore((s) => s.setDefaultApprovalMode);
-  const removeToolRule = useAgentStore((s) => s.removeToolRule);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const mode = settings.approvalMode;
-  const rules = settings.toolRules ?? [];
-
-  const update = async (action: () => Promise<void>): Promise<void> => {
-    setSaving(true);
-    setError(null);
-    try {
-      await action();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <section className="grid gap-3" aria-labelledby="settings-permissions">
-      <h2 id="settings-permissions" className="text-sm font-medium">
-        {t("权限", locale)}
-      </h2>
-      <div className="settings-list">
-        <div className="settings-row">
-          <div className="min-w-0 flex-1 basis-52">
-            <label htmlFor="approval-mode" className="text-sm font-medium">
-              {t("默认权限模式", locale)}
-            </label>
-            <p id="approval-mode-help" className="text-muted-foreground mt-0.5 text-xs leading-5">
-              {t(APPROVAL_MODE_OPTIONS[mode].description, locale)}
-            </p>
-          </div>
-          <Select
-            value={mode}
-            disabled={saving}
-            onValueChange={(next: ApprovalMode | null) => {
-              if (next && next !== mode) void update(() => setDefaultApprovalMode(next));
-            }}
-          >
-            <SelectTrigger
-              id="approval-mode"
-              aria-describedby="approval-mode-help"
-              className={cn(mode === "full-access" && "text-amber-600 dark:text-amber-400")}
-            >
-              <SelectValue>{t(APPROVAL_MODE_OPTIONS[mode].label, locale)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent align="end" alignItemWithTrigger={false}>
-              <SelectGroup>
-                {(Object.keys(APPROVAL_MODE_OPTIONS) as ApprovalMode[]).map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {t(APPROVAL_MODE_OPTIONS[option].label, locale)}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
-        {rules.length > 0 && (
-          <Collapsible>
-            <CollapsibleTrigger className="settings-row group focus-visible:ring-ring w-full rounded-b-2xl text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset">
-              <span className="font-medium">{t("已保存的授权", locale)}</span>
-              <span className="text-muted-foreground flex items-center gap-2 text-xs">
-                {t(rules.length === 1 ? "1 条规则" : "{0} 条规则", locale, [rules.length])}
-                <ChevronDownIcon
-                  aria-hidden="true"
-                  className="size-4 group-aria-expanded:rotate-180"
-                />
-              </span>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="divide-border divide-y border-t">
-              {rules.map((rule) => (
-                <div key={JSON.stringify(rule)} className="settings-row">
-                  <div className="min-w-0 flex-1 basis-44">
-                    <p className="wrap-anywhere text-sm">{rule.toolName}</p>
-                    <p className="text-muted-foreground wrap-anywhere text-xs">
-                      {rule.pathPrefix
-                        ? t("仅路径前缀 {0}", locale, [rule.pathPrefix])
-                        : t("全部调用", locale)}
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={saving}
-                    onClick={() => void update(() => removeToolRule(rule))}
-                  >
-                    {t("撤销规则", locale)}
-                  </Button>
-                </div>
-              ))}
-            </CollapsibleContent>
-          </Collapsible>
-        )}
-      </div>
-      {error && (
-        <p role="alert" className="text-destructive text-sm">
-          {localizeError(error, locale)}
-        </p>
-      )}
-    </section>
-  );
-}
+import type { CommandShell, PublicSettings } from "@shared/contract";
+import { SettingsGroup, SettingsItem } from "./SettingsGroup";
 
 function ToolEnvironmentForm({
   settings,
@@ -191,10 +72,11 @@ function ToolEnvironmentForm({
   };
 
   return (
-    <section className="grid gap-3" aria-labelledby="settings-workspace">
-      <h2 id="settings-workspace" className="text-sm font-medium">
-        {t("工作环境", locale)}
-      </h2>
+    <SettingsGroup
+      id="settings-workspace"
+      title={t("工作环境", locale)}
+      description={t("Agent 读写文件和运行命令的位置与方式。", locale)}
+    >
       <div className="settings-list">
         <div className="settings-row">
           <div className="min-w-0 flex-1 basis-64">
@@ -256,12 +138,15 @@ function ToolEnvironmentForm({
                 id="command-shell"
                 aria-describedby={shell === "bash" ? "command-shell-help" : undefined}
               >
-                <SelectValue>{shell === "powershell" ? "PowerShell" : "Git Bash"}</SelectValue>
+                <SelectValue>{COMMAND_SHELL_LABELS[shell]}</SelectValue>
               </SelectTrigger>
               <SelectContent align="end" alignItemWithTrigger={false}>
                 <SelectGroup>
-                  <SelectItem value="powershell">PowerShell</SelectItem>
-                  <SelectItem value="bash">Git Bash</SelectItem>
+                  {(Object.keys(COMMAND_SHELL_LABELS) as CommandShell[]).map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {COMMAND_SHELL_LABELS[value]}
+                    </SelectItem>
+                  ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -285,7 +170,7 @@ function ToolEnvironmentForm({
           {localizeError(error, locale)}
         </p>
       )}
-    </section>
+    </SettingsGroup>
   );
 }
 
@@ -297,69 +182,42 @@ export function GeneralSettings({
   isWindows: boolean;
 }): JSX.Element {
   const locale = useLocale();
-  const [theme, setTheme] = useState<ThemeSetting>(loadTheme);
+  const [sendKey, setSendKey] = useState<SendKey>(loadSendKey);
 
   return (
-    <div className="grid gap-7">
-      <PermissionSettings settings={settings} />
-      <ToolEnvironmentForm settings={settings} isWindows={isWindows} />
-      <section className="grid gap-3" aria-labelledby="settings-appearance">
-        <h2 id="settings-appearance" className="text-sm font-medium">
-          {t("外观与语言", locale)}
-        </h2>
+    <div className="grid gap-9">
+      <SettingsGroup id="settings-conversation" title={t("对话", locale)}>
         <div className="settings-list">
-          <div className="settings-row">
-            <label htmlFor="settings-theme" className="text-sm font-medium">
-              {t("主题", locale)}
-            </label>
+          <SettingsItem
+            label={t("发送方式", locale)}
+            htmlFor="settings-send-key"
+            description={t("输入法组词时按 Enter 只确认候选词。", locale)}
+          >
             <Select
-              value={theme}
-              onValueChange={(value: ThemeSetting | null) => {
+              value={sendKey}
+              onValueChange={(value: SendKey | null) => {
                 if (!value) return;
-                setTheme(value);
-                applyTheme(value);
+                setSendKey(value);
+                saveSendKey(value);
               }}
             >
-              <SelectTrigger id="settings-theme">
-                <SelectValue>{t(THEME_LABELS[theme], locale)}</SelectValue>
+              <SelectTrigger id="settings-send-key">
+                <SelectValue>{t(SEND_KEY_LABELS[sendKey], locale)}</SelectValue>
               </SelectTrigger>
               <SelectContent align="end" alignItemWithTrigger={false}>
                 <SelectGroup>
-                  {(Object.keys(THEME_LABELS) as ThemeSetting[]).map((value) => (
+                  {(Object.keys(SEND_KEY_LABELS) as SendKey[]).map((value) => (
                     <SelectItem key={value} value={value}>
-                      {t(THEME_LABELS[value], locale)}
+                      {t(SEND_KEY_LABELS[value], locale)}
                     </SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
-          </div>
-          <div className="settings-row">
-            <label htmlFor="settings-language" className="text-sm font-medium">
-              {t("语言", locale)}
-            </label>
-            <Select
-              value={locale}
-              onValueChange={(value: Locale | null) => {
-                if (value) setLocale(value);
-              }}
-            >
-              <SelectTrigger id="settings-language">
-                <SelectValue>{LOCALE_DETAILS[locale].label}</SelectValue>
-              </SelectTrigger>
-              <SelectContent align="end" alignItemWithTrigger={false}>
-                <SelectGroup>
-                  {SUPPORTED_LOCALES.map((value) => (
-                    <SelectItem key={value} value={value} lang={LOCALE_DETAILS[value].htmlLang}>
-                      {LOCALE_DETAILS[value].label}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
+          </SettingsItem>
         </div>
-      </section>
+      </SettingsGroup>
+      <ToolEnvironmentForm settings={settings} isWindows={isWindows} />
     </div>
   );
 }

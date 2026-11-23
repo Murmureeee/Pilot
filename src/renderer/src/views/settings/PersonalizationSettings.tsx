@@ -4,6 +4,14 @@ import { Button } from "@renderer/components/ui/button";
 import { Textarea } from "@renderer/components/ui/textarea";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
+import { SettingsGroup } from "./SettingsGroup";
+
+const INSTRUCTION_ORDER = [
+  { label: "应用内置指令", description: "安全与工具使用规则，始终优先。" },
+  { label: "项目指令", description: "会话所在项目根目录的 AGENTS.md。" },
+  { label: "会话指令", description: "未单独设置时使用上面的自定义指令。" },
+  { label: "已启用的技能", description: "按任务加载的技能说明。" },
+] as const;
 
 export function PersonalizationSettings({
   savedInstructions,
@@ -31,45 +39,71 @@ export function PersonalizationSettings({
   };
 
   return (
-    <div className="grid gap-3">
-      <div>
-        <label htmlFor="custom-instructions" className="text-sm font-medium">
-          {t("自定义指令", locale)}
-        </label>
-        <p id="custom-instructions-help" className="text-muted-foreground mt-0.5 text-xs leading-5">
-          {t("默认用于所有会话。可通过会话菜单为单个聊天设置指令。", locale)}
-        </p>
+    <div className="grid gap-9">
+      <div className="grid gap-3">
+        <div>
+          <label htmlFor="custom-instructions" className="text-sm font-medium">
+            {t("自定义指令", locale)}
+          </label>
+          <p
+            id="custom-instructions-help"
+            className="text-muted-foreground mt-0.5 text-xs leading-5"
+          >
+            {t("默认用于所有会话。可通过会话菜单为单个聊天设置指令。", locale)}
+          </p>
+        </div>
+        <Textarea
+          id="custom-instructions"
+          aria-describedby="custom-instructions-help"
+          className="bg-card min-h-40 rounded-2xl px-4 py-3 leading-6"
+          value={draft}
+          disabled={saving}
+          onChange={(event) => setDraft(event.target.value)}
+          rows={8}
+        />
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={saving || !hasChanges}
+            onClick={() => {
+              setDraft(savedInstructions);
+              setError(null);
+            }}
+          >
+            {t("撤销修改", locale)}
+          </Button>
+          <Button size="sm" disabled={saving || !hasChanges} onClick={() => void save()}>
+            {t(saving ? "保存中…" : "保存", locale)}
+          </Button>
+        </div>
+        {error && (
+          <p role="alert" className="text-destructive text-sm">
+            {localizeError(error, locale)}
+          </p>
+        )}
       </div>
-      <Textarea
-        id="custom-instructions"
-        aria-describedby="custom-instructions-help"
-        className="bg-card min-h-40 rounded-2xl px-4 py-3 leading-6"
-        value={draft}
-        disabled={saving}
-        onChange={(event) => setDraft(event.target.value)}
-        rows={8}
-      />
-      <div className="flex items-center justify-end gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={saving || !hasChanges}
-          onClick={() => {
-            setDraft(savedInstructions);
-            setError(null);
-          }}
-        >
-          {t("撤销修改", locale)}
-        </Button>
-        <Button size="sm" disabled={saving || !hasChanges} onClick={() => void save()}>
-          {t(saving ? "保存中…" : "保存", locale)}
-        </Button>
-      </div>
-      {error && (
-        <p role="alert" className="text-destructive text-sm">
-          {localizeError(error, locale)}
-        </p>
-      )}
+      <SettingsGroup
+        id="settings-instruction-order"
+        title={t("指令生效顺序", locale)}
+        description={t("内容冲突时，排在前面的优先。", locale)}
+      >
+        <ol className="settings-list">
+          {INSTRUCTION_ORDER.map((item, index) => (
+            <li key={item.label} className="flex items-start gap-3 py-3.5">
+              <span className="text-muted-foreground mt-0.5 w-4 text-xs tabular-nums">
+                {index + 1}
+              </span>
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-sm font-medium">{t(item.label, locale)}</span>
+                <span className="text-muted-foreground text-xs leading-5">
+                  {t(item.description, locale)}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </SettingsGroup>
     </div>
   );
 }

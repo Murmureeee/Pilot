@@ -15,6 +15,7 @@ import { t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
 import { LOG_FILE_COUNT, LOG_FILE_MAX_BYTES, LOG_LEVELS } from "@shared/constants";
 import type { LogLevel } from "@shared/contract";
+import { SettingsGroup } from "./SettingsGroup";
 
 export function DiagnosticSettings(): JSX.Element {
   const locale = useLocale();
@@ -45,14 +46,11 @@ export function DiagnosticSettings(): JSX.Element {
   };
 
   return (
-    <section className="grid gap-3" aria-labelledby="settings-diagnostics">
-      <h2 id="settings-diagnostics" className="text-sm font-medium">
-        {t("诊断日志", locale)}
-      </h2>
+    <SettingsGroup id="settings-diagnostics" title={t("诊断日志", locale)}>
       <div className="settings-list">
         <div className="settings-row">
           <div className="min-w-0 flex-1 basis-52">
-            <label htmlFor="diagnostic-log-level" className="text-sm">
+            <label htmlFor="diagnostic-log-level" className="text-sm font-medium">
               {t("日志级别", locale)}
             </label>
             <p id="diagnostic-log-limit" className="text-muted-foreground text-xs leading-5">
@@ -84,7 +82,7 @@ export function DiagnosticSettings(): JSX.Element {
           </Select>
         </div>
         <div className="settings-row">
-          <p className="min-w-0 flex-1 text-sm">{t("日志目录", locale)}</p>
+          <p className="min-w-0 flex-1 text-sm font-medium">{t("日志目录", locale)}</p>
           <Button
             variant="outline"
             size="sm"
@@ -100,6 +98,6 @@ export function DiagnosticSettings(): JSX.Element {
           {t(error, locale)}
         </p>
       )}
-    </section>
+    </SettingsGroup>
   );
 }

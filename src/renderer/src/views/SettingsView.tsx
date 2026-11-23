@@ -1,38 +1,34 @@
 // @env browser
 import { useEffect, useRef, useState, type JSX } from "react";
-import { FolderOpenIcon, PlusIcon } from "lucide-react";
 import { ExternalImportSettings } from "@renderer/components/ai/external-import-settings";
 import { McpSettings } from "@renderer/components/ai/mcp-settings";
-import { Button } from "@renderer/components/ui/button";
-import { Switch } from "@renderer/components/ui/switch";
-import { SETTINGS_SECTION_LABELS } from "@renderer/lib/constants";
+import { SETTINGS_SECTION_DESCRIPTIONS, SETTINGS_SECTION_LABELS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { AppInfo } from "@shared/contract";
+import { AboutSettings } from "./settings/AboutSettings";
+import { AppearanceSettings } from "./settings/AppearanceSettings";
+import { ArchivedSettings } from "./settings/ArchivedSettings";
 import { DataSettings } from "./settings/DataSettings";
 import { GeneralSettings } from "./settings/GeneralSettings";
+import { PermissionSettings } from "./settings/PermissionSettings";
 import { PersonalizationSettings } from "./settings/PersonalizationSettings";
 import { ProviderSettings } from "./settings/ProviderSettings";
+import { ShortcutSettings } from "./settings/ShortcutSettings";
+import { SkillSettings } from "./settings/SkillSettings";
 
 export function SettingsView(): JSX.Element {
   const settings = useAgentStore((s) => s.settings);
-  const skills = useAgentStore((s) => s.skills);
-  const listSkills = useAgentStore((s) => s.listSkills);
-  const importSkills = useAgentStore((s) => s.importSkills);
-  const toggleSkill = useAgentStore((s) => s.toggleSkill);
   const locale = useLocale();
   const section = useAgentStore((s) => s.settingsSection);
   const scroller = useRef<HTMLDivElement>(null);
   const previousSection = useRef(section);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const workingDirectory = settings?.workingDirectory ?? null;
 
   useEffect(() => {
     void window.pi.getAppInfo().then(setAppInfo);
   }, []);
-
-  useEffect(() => {
-    if (section === "skills") void listSkills();
-  }, [listSkills, section]);
 
   useEffect(() => {
     if (previousSection.current !== section) scroller.current?.scrollTo(0, 0);
@@ -44,10 +40,15 @@ export function SettingsView(): JSX.Element {
       ref={scroller}
       className="settings-scroll min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]"
     >
-      <div className="workspace-column grid gap-7 pt-7 pb-10 sm:pt-9">
-        <h1 className="text-[clamp(1.375rem,2.5vw,1.75rem)] leading-tight font-semibold tracking-tight">
-          {t(SETTINGS_SECTION_LABELS[section], locale)}
-        </h1>
+      <div className="workspace-column grid gap-8 pt-8 pb-12 sm:pt-10">
+        <header className="grid gap-1.5">
+          <h1 className="text-[clamp(1.375rem,2.5vw,1.75rem)] leading-tight font-semibold tracking-tight">
+            {t(SETTINGS_SECTION_LABELS[section], locale)}
+          </h1>
+          <p className="text-muted-foreground text-sm leading-6">
+            {t(SETTINGS_SECTION_DESCRIPTIONS[section], locale)}
+          </p>
+        </header>
 
         {/* Keep in-progress edits when the settings page changes. */}
         <div hidden={section !== "general"}>
@@ -55,6 +56,10 @@ export function SettingsView(): JSX.Element {
             <GeneralSettings settings={settings} isWindows={appInfo?.isWindows ?? false} />
           )}
         </div>
+
+        {section === "appearance" && <AppearanceSettings />}
+
+        {section === "permissions" && settings && <PermissionSettings settings={settings} />}
 
         <div hidden={section !== "providers"}>
           {settings && <ProviderSettings settings={settings} />}
@@ -64,57 +69,20 @@ export function SettingsView(): JSX.Element {
           {settings && <PersonalizationSettings savedInstructions={settings.persona} />}
         </div>
 
-        <div hidden={section !== "data"}>
-          <DataSettings appInfo={appInfo} />
-        </div>
+        {section === "shortcuts" && <ShortcutSettings />}
 
-        {section === "skills" && (
-          <div className="grid gap-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" onClick={() => void importSkills()}>
-                <PlusIcon data-icon="inline-start" /> {t("导入技能目录", locale)}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => void window.pi.openPath("skills")}>
-                <FolderOpenIcon data-icon="inline-start" /> {t("打开技能目录", locale)}
-              </Button>
-            </div>
-            <div className="settings-list">
-              {skills.length === 0 && (
-                <p className="text-muted-foreground px-4 py-3.5 text-sm">
-                  {t("还没有技能", locale)}
-                </p>
-              )}
-              {skills.map((skill) => (
-                <div key={skill.id} className="settings-row flex-nowrap">
-                  <div className="min-w-0 flex-1">
-                    <p className="wrap-anywhere text-sm">{skill.name}</p>
-                    {skill.description && (
-                      <p
-                        className="text-muted-foreground line-clamp-2 text-xs leading-5"
-                        title={skill.description}
-                      >
-                        {skill.description}
-                      </p>
-                    )}
-                  </div>
-                  <Switch
-                    aria-label={skill.name}
-                    checked={skill.enabled}
-                    onCheckedChange={(checked) => void toggleSkill(skill.id, checked)}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {section === "archived" && <ArchivedSettings />}
 
-        {section === "mcp" && <McpSettings locale={locale} />}
+        {section === "data" && <DataSettings appInfo={appInfo} />}
+
+        {section === "about" && <AboutSettings appInfo={appInfo} />}
+
+        {section === "skills" && <SkillSettings workingDirectory={workingDirectory} />}
+
+        {section === "mcp" && <McpSettings locale={locale} workingDirectory={workingDirectory} />}
 
         {section === "imports" && (
-          <ExternalImportSettings
-            locale={locale}
-            workingDirectory={settings?.workingDirectory ?? null}
-          />
+          <ExternalImportSettings locale={locale} workingDirectory={workingDirectory} />
         )}
       </div>
     </div>

@@ -358,7 +358,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   saveSettings: async (input) => {
     const settings = await window.pi.settingsSave(input);
-    set({ settings, view: "chat" });
+    set({ settings });
   },
 
   setLogLevel: async (logLevel) => {

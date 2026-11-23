@@ -18,6 +18,7 @@ import {
   FILE_REVIEW_MIN_WINDOW_WIDTH,
 } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
+import { windowShortcutAction } from "@renderer/lib/window-shortcuts";
 import {
   selectProjectDirectory,
   selectWorkingDirectory,
@@ -88,12 +89,18 @@ export default function App(): JSX.Element {
     document.documentElement.lang = LOCALE_DETAILS[locale].htmlLang;
   }, [locale]);
 
-  // 全局快捷键：Ctrl+K 面板 / Ctrl+N 新聊天 / Ctrl+[ ] 导航 / Ctrl+, 设置 / Ctrl+Shift+S 侧栏
+  // 全局快捷键：Ctrl+K 面板 / Ctrl+N 新聊天 / Ctrl+[ ] 导航 / Ctrl+, 设置 / Ctrl+Shift+S 侧栏 / 窗口级动作
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
+      const store = useAgentStore.getState();
+      const windowAction = windowShortcutAction(event);
+      if (windowAction) {
+        event.preventDefault();
+        void store.menuAction(windowAction);
+        return;
+      }
       if (!(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
-      const store = useAgentStore.getState();
       if (key === "k") {
         event.preventDefault();
         setPaletteOpen(!store.paletteOpen);

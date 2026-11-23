@@ -50,10 +50,12 @@ import {
   selectComposerRange,
 } from "@renderer/lib/composer-editor";
 import {
+  composerEnterAction,
   matchesComposerQuery,
   promptFromDraft,
   trimPrompt,
 } from "@renderer/lib/composer-shortcuts";
+import { loadSendKey } from "@renderer/lib/preferences";
 import type { ComposerSelection } from "@renderer/lib/composer/types";
 import {
   APPROVAL_MODE_OPTIONS,
@@ -447,10 +449,12 @@ export function Composer({
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (composing || event.nativeEvent.isComposing || onSuggestionKey(event)) return;
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void send();
-    }
+    const action = composerEnterAction(event, loadSendKey());
+    if (!action) return;
+    event.preventDefault();
+    if (action === "send") void send();
+    // 与 Shift+Enter 的默认行为一致，草稿解析只认 <br> 换行。
+    else document.execCommand("insertLineBreak");
   };
 
   const statusLabel =

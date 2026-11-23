@@ -127,12 +127,14 @@ export function ExternalImportResult({
 
 export function ExternalImportDialog({
   kind,
+  label = "选择…",
   locale,
   workingDirectory,
   onImported,
   disabled,
 }: {
   kind: ExternalImportKind;
+  label?: string;
   locale: Locale;
   workingDirectory: string | null;
   onImported(report: ImportReport): void;
@@ -236,7 +238,7 @@ export function ExternalImportDialog({
           />
         }
       >
-        {t("选择…", locale)}
+        {t(label, locale)}
       </DialogTrigger>
       <DialogContent
         closeLabel={t("关闭", locale)}

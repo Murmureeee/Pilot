@@ -2,6 +2,7 @@
 import { ArchiveIcon, CpuIcon, PlugIcon, ShieldCheckIcon, SquarePenIcon } from "lucide-react";
 import type {
   ApprovalMode,
+  CommandShell,
   GitChange,
   GitChangesView,
   GitRollbackConflict,
@@ -12,7 +13,7 @@ import type {
   VerificationStatus,
 } from "@shared/contract";
 import type { ExternalImportKind } from "@shared/imports";
-import type { ComposerCommand, SettingsSection } from "./types";
+import type { ComposerCommand, SendKey, SettingsSection, ShortcutGroup } from "./types";
 
 export const COMPOSER_COMMANDS: readonly ComposerCommand[] = [
   {
@@ -55,13 +56,104 @@ export const COMPOSER_COMMANDS: readonly ComposerCommand[] = [
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   general: "常规",
+  appearance: "外观",
+  permissions: "权限",
   providers: "模型与提供方",
   persona: "个性化",
-  data: "数据管理",
+  shortcuts: "快捷键",
+  archived: "已归档的聊天",
+  data: "存储与诊断",
+  about: "关于",
   skills: "技能",
   mcp: "MCP 服务",
   imports: "导入",
 };
+
+export const SETTINGS_SECTION_DESCRIPTIONS: Record<SettingsSection, string> = {
+  general: "输入方式和 Agent 默认的工作环境。",
+  appearance: "主题和界面语言。",
+  permissions: "决定 Agent 写入文件、运行命令和调用 MCP 工具前是否需要你确认。",
+  providers: "管理模型服务、密钥和聊天中可选的模型。",
+  persona: "告诉 Agent 你的偏好和约定，它会在每次任务中遵循。",
+  shortcuts: "当前可用的键盘操作。",
+  archived: "查看、恢复或永久删除已归档的聊天。",
+  data: "本地存储位置和诊断日志。",
+  about: "版本信息、应用更新和反馈渠道。",
+  skills:
+    "技能是随任务加载的指令包。可从本地目录、Codex 或 Claude Code 导入，启用后在下一次请求生效。",
+  mcp: "连接外部工具服务。可手动添加，也可从 Codex 或 Claude Code 导入，工具调用遵循权限设置。",
+  imports: "从 Codex 或 Claude Code 一次导入技能、MCP 服务和插件组件，并管理已导入的插件。",
+};
+
+// 分区内设置项的名称，供导航搜索匹配；新增设置项时同步补上。
+export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[]> = {
+  general: ["发送方式", "Enter", "默认工作目录", "命令环境", "PowerShell", "Git Bash"],
+  appearance: ["主题", "亮色", "暗色", "跟随系统", "语言"],
+  permissions: ["默认权限模式", "确认模式", "只读", "完全访问", "已保存的授权", "撤销规则"],
+  providers: ["提供方", "API Key", "模型列表", "可用思考强度", "Anthropic", "OpenAI"],
+  persona: ["自定义指令", "指令生效顺序", "AGENTS.md"],
+  shortcuts: ["Ctrl", "发送消息", "换行"],
+  archived: ["取消归档", "永久删除"],
+  data: ["应用数据目录", "聊天记录目录", "日志级别", "日志目录"],
+  about: ["版本", "软件更新", "检查更新", "更新记录", "反馈问题"],
+  skills: ["导入技能目录", "打开技能目录"],
+  mcp: ["添加 MCP 服务", "stdio", "HTTP"],
+  imports: ["Codex", "Claude Code", "插件组件"],
+};
+
+export const SEND_KEY_LABELS: Record<SendKey, string> = {
+  enter: "Enter 发送，Shift+Enter 换行",
+  "mod-enter": "Ctrl+Enter 发送，Enter 换行",
+};
+
+export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
+  {
+    label: "全局",
+    items: [
+      { label: "搜索与命令面板", keys: "Ctrl+K" },
+      { label: "新聊天", keys: "Ctrl+N" },
+      { label: "打开项目…", keys: "Ctrl+O" },
+      { label: "设置", keys: "Ctrl+," },
+      { label: "后退", keys: "Ctrl+[" },
+      { label: "前进", keys: "Ctrl+]" },
+      { label: "显示或隐藏侧边栏", keys: "Ctrl+Shift+S" },
+    ],
+  },
+  {
+    label: "输入框",
+    items: [
+      { label: "引用文件、文件夹或技能", keys: "@" },
+      { label: "打开命令菜单", keys: "/" },
+      { label: "在菜单中移动", keys: "↑ ↓" },
+      { label: "关闭菜单", keys: "Esc" },
+    ],
+  },
+  {
+    label: "审批",
+    items: [
+      { label: "本次允许", keys: "Enter" },
+      { label: "拒绝", keys: "Esc" },
+    ],
+  },
+  {
+    label: "窗口",
+    items: [
+      { label: "放大", keys: "Ctrl+Shift+=" },
+      { label: "缩小", keys: "Ctrl+-" },
+      { label: "实际大小", keys: "Ctrl+0" },
+      { label: "切换全屏", keys: "F11" },
+      { label: "重新加载", keys: "Ctrl+R" },
+      { label: "关闭窗口", keys: "Ctrl+W" },
+      { label: "退出", keys: "Ctrl+Q" },
+    ],
+  },
+];
+
+export const APP_LINKS = [
+  { label: "更新记录", href: "https://github.com/Murmureeee/Pilot/blob/main/CHANGELOG.md" },
+  { label: "全部版本", href: "https://github.com/Murmureeee/Pilot/releases" },
+  { label: "反馈问题", href: "https://github.com/Murmureeee/Pilot/issues" },
+] as const;
 
 export const APPROVAL_MODE_OPTIONS: Record<ApprovalMode, { label: string; description: string }> = {
   standard: {
@@ -73,6 +165,18 @@ export const APPROVAL_MODE_OPTIONS: Record<ApprovalMode, { label: string; descri
     label: "完全访问",
     description: "允许写入和运行命令，MCP 服务可单独要求确认。",
   },
+};
+
+// 已保存授权里的内置工具名称，与主进程 TOOL_LABELS 的文案一致；MCP 工具显示原名。
+export const TOOL_RULE_LABELS: Readonly<Record<string, string>> = {
+  write_file: "写入文件",
+  edit_file: "编辑文件",
+  bash: "执行命令",
+};
+
+export const COMMAND_SHELL_LABELS: Record<CommandShell, string> = {
+  powershell: "PowerShell",
+  bash: "Git Bash",
 };
 
 export const THEME_LABELS: Record<ThemeSetting, string> = {
