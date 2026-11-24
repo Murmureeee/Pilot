@@ -86,6 +86,8 @@ interface AgentStore extends AgentUiState {
   navForward(): Promise<void>;
   saveSettings(input: SettingsInput): Promise<void>;
   setLogLevel(level: LogLevel): Promise<void>;
+  dismissSettingsRecovery(): Promise<void>;
+  retrySettingsRecovery(): Promise<void>;
   saveToolEnvironment(
     input: Pick<SettingsInput, "workingDirectory" | "commandShell">,
   ): Promise<void>;
@@ -364,6 +366,16 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   setLogLevel: async (logLevel) => {
     await window.pi.settingsSetLogLevel(logLevel);
     set(({ settings }) => (settings ? { settings: { ...settings, logLevel } } : {}));
+  },
+
+  dismissSettingsRecovery: async () => {
+    const settings = await window.pi.settingsDismissRecovery();
+    set({ settings });
+  },
+
+  retrySettingsRecovery: async () => {
+    const settings = await window.pi.settingsGet();
+    set({ settings });
   },
 
   saveToolEnvironment: async (input) => {

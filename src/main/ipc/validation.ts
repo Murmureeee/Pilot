@@ -241,6 +241,7 @@ const inputs = {
   [IPC.settingsSetLogLevel]: z.tuple([z.enum(LOG_LEVELS)]),
   [IPC.settingsSelectModel]: z.tuple([id, nonBlank]),
   [IPC.settingsSetThinkingLevel]: z.tuple([z.enum(THINKING_LEVELS)]),
+  [IPC.settingsDismissRecovery]: none,
   [IPC.settingsMcpList]: none,
   [IPC.settingsMcpSave]: z.tuple([mcpServer]),
   [IPC.settingsMcpReconnect]: z.tuple([z.uuid()]),

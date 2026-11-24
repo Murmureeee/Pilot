@@ -1,7 +1,16 @@
 // @env node
 // 会话持久化：JSONL（每会话一文件，每行一条 AgentMessage）+ index.json 元数据索引。
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type {
@@ -14,9 +23,17 @@ import type {
 } from "@shared/contract";
 import { visibleMessageText } from "../../shared/mentions";
 import { applyPlanUpdate } from "../../shared/plan";
+import {
+  SESSION_DRAFT_EXTENSION,
+  SESSION_FILE_ID,
+  SESSION_INDEX_SAVE_BLOCKED,
+  SESSION_TRANSCRIPT_EXTENSION,
+} from "../constants";
+import { backupCorruptFile } from "../corrupt-file";
 import { readFileChange } from "../workspace/file-changes";
 import { legacyMentionParts } from "./mentions";
 import { completeToolResults } from "./recovery";
+import { parseSessionIndex } from "./session-index";
 import { labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
@@ -154,6 +171,7 @@ export function toUiMessages(
 }
 
 export class SessionStore {
+  private indexBackupPending = false;
   private index: SessionIndex = { sessions: [] };
   private readonly checkpoints = new Map<string, RunCheckpoint | null>();
   private readonly gitChanges = new Map<string, SavedGitChanges | null>();
@@ -164,15 +182,76 @@ export class SessionStore {
   }
 
   private readIndex(): SessionIndex {
-    const path = this.indexPath();
+    let text: string | undefined;
     try {
-      return JSON.parse(readFileSync(path, "utf-8")) as SessionIndex;
-    } catch {
-      return { sessions: [] };
+      text = readFileSync(this.indexPath(), "utf-8");
+    } catch (error) {
+      this.indexBackupPending = (error as NodeJS.ErrnoException).code !== "ENOENT";
     }
+    const { index, damaged } =
+      text === undefined ? { index: { sessions: [] }, damaged: false } : parseSessionIndex(text);
+    if (text !== undefined && !damaged) return index;
+    this.indexBackupPending ||= damaged;
+    const rebuilt = this.rebuildIndex(index);
+    if (this.indexBackupPending || rebuilt.sessions.length) {
+      try {
+        this.writeIndex(rebuilt);
+      } catch {
+        // 仍可查看重建出的会话，恢复文件访问后再保存索引。
+        console.error("[session] 重建的会话索引暂时无法保存。");
+      }
+    }
+    return rebuilt;
+  }
+
+  private rebuildIndex(index: SessionIndex): SessionIndex {
+    const sessions = new Map(index.sessions.map((entry) => [entry.id, entry]));
+    const ids = new Set<string>();
+    for (const entry of readdirSync(this.dir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const extension = [SESSION_TRANSCRIPT_EXTENSION, SESSION_DRAFT_EXTENSION].find((suffix) =>
+        entry.name.endsWith(suffix),
+      );
+      if (!extension) continue;
+      const id = entry.name.slice(0, -extension.length);
+      if (SESSION_FILE_ID.test(id) && !sessions.has(id)) ids.add(id);
+    }
+    for (const id of ids) {
+      const file =
+        statSync(this.filePath(id), { throwIfNoEntry: false }) ??
+        statSync(this.draftPath(id), { throwIfNoEntry: false });
+      if (!file) continue;
+      const { messages, checkpoint, gitChanges } = this.read(id);
+      const started = (messages[0] ?? checkpoint?.pending?.[0])?.timestamp;
+      const workingDirectory = checkpoint?.workingDirectory ?? gitChanges?.workingDirectory;
+      sessions.set(id, {
+        id,
+        title: sessionTitle(messages, checkpoint),
+        createdAt: Math.round(
+          typeof started === "number" && Number.isFinite(started) ? started : file.birthtimeMs,
+        ),
+        updatedAt: Math.round(file.mtimeMs),
+        workingDirectory: typeof workingDirectory === "string" ? workingDirectory : undefined,
+      });
+    }
+    return { ...index, sessions: [...sessions.values()] };
+  }
+
+  private backUpIndexIfNeeded(): void {
+    if (!this.indexBackupPending) return;
+    try {
+      const backup = backupCorruptFile(this.indexPath());
+      console.warn(`[session] 已为重建会话索引保留原文件: ${backup}`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw new Error(SESSION_INDEX_SAVE_BLOCKED, { cause: error });
+      }
+    }
+    this.indexBackupPending = false;
   }
 
   private writeIndex(index = this.index): void {
+    this.backUpIndexIfNeeded();
     writeJsonAtomic(this.indexPath(), index);
     this.index = index;
   }
@@ -182,11 +261,11 @@ export class SessionStore {
   }
 
   private filePath(id: string): string {
-    return join(this.dir, `${id}.jsonl`);
+    return join(this.dir, `${id}${SESSION_TRANSCRIPT_EXTENSION}`);
   }
 
   private draftPath(id: string): string {
-    return join(this.dir, `${id}.draft.json`);
+    return join(this.dir, `${id}${SESSION_DRAFT_EXTENSION}`);
   }
 
   loadDraft(id: string): ComposerDraft {
@@ -361,6 +440,7 @@ export class SessionStore {
 
   /** 删除：移除转录文件与索引项（文件不存在也照常清索引） */
   remove(id: string): void {
+    this.backUpIndexIfNeeded();
     const path = this.filePath(id);
     if (existsSync(path)) rmSync(path, { force: true });
     rmSync(this.draftPath(id), { force: true });
@@ -415,10 +495,7 @@ export class SessionStore {
     lastTask?: VerificationTask,
   ): SessionMeta {
     this.writeTranscript(id, messages, checkpoint, gitChanges);
-    const firstUser = messages.find((m) => m.role === "user") ?? checkpoint?.pending[0];
-    const title = firstUser
-      ? visibleMessageText(messageParts(firstUser)).slice(0, 24) || "新会话"
-      : "新会话";
+    const title = sessionTitle(messages, checkpoint);
     const meta = this.index.sessions.find((s) => s.id === id);
     if (meta) {
       // 手动重命名过的会话：自动标题不覆盖（titleCustom 由 rename 置位）
@@ -458,6 +535,13 @@ export class SessionStore {
     this.checkpoints.set(id, checkpoint ?? null);
     this.gitChanges.set(id, gitChanges);
   }
+}
+
+function sessionTitle(messages: AgentMessage[], checkpoint?: RunCheckpoint): string {
+  const firstUser = messages.find((m) => m.role === "user") ?? checkpoint?.pending?.[0];
+  return firstUser
+    ? visibleMessageText(messageParts(firstUser)).slice(0, 24) || "新会话"
+    : "新会话";
 }
 
 function writeJsonAtomic(path: string, value: unknown): void {

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import { ExternalImportSettings } from "@renderer/components/ai/external-import-settings";
 import { McpSettings } from "@renderer/components/ai/mcp-settings";
+import { SettingsRecoveryNotice } from "@renderer/components/ai/settings-recovery-notice";
 import { SETTINGS_SECTION_DESCRIPTIONS, SETTINGS_SECTION_LABELS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
@@ -49,6 +50,8 @@ export function SettingsView(): JSX.Element {
             {t(SETTINGS_SECTION_DESCRIPTIONS[section], locale)}
           </p>
         </header>
+
+        {settings?.recovery && <SettingsRecoveryNotice recovery={settings.recovery} />}
 
         {/* Keep in-progress edits when the settings page changes. */}
         <div hidden={section !== "general"}>

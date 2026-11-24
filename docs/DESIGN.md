@@ -142,6 +142,8 @@
 
 侧栏换成设置导航：顶部是返回对话的入口和「搜索设置」输入框，下面按分组列出分区。搜索匹配分区标题、页头说明和分区内的设置项名称（`SETTINGS_SECTION_KEYWORDS`），按 `Enter` 跳到第一个结果，没有结果时显示「没有匹配的设置」。离开设置视图后搜索词清空。当前分区用 `bg-sidebar-accent` 底色表示，不加 ✓。[设置导航](../src/renderer/src/views/settings/SettingsNav.tsx) · [设置视图](../src/renderer/src/views/SettingsView.tsx)
 
+设置恢复提示放在对话主列顶部和设置页页头下方。备份成功时用橙色说明已启用默认设置，显示备份路径并提供「打开文件夹」和「知道了」。恢复受阻时用红色显示原文件路径，提供「重试恢复」。[恢复提示](../src/renderer/src/components/ai/settings-recovery-notice.tsx)
+
 | 分组 | 分区 | 内容 |
 | --- | --- | --- |
 | 应用 | 常规 | 对话（发送方式）、工作环境（默认工作目录、命令环境） |

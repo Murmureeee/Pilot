@@ -41,4 +41,8 @@ export interface Settings {
   skillsEnabled?: string[];
   mcpServers?: McpServerConfig[];
   importedPlugins?: ImportedPlugin[];
+  /** 用户在界面确认后清除。 */
+  recoveredFrom?: string;
+  /** 只在内存中保留，供用户修复文件访问后重试。 */
+  recoveryBlocked?: string;
 }

@@ -30,6 +30,11 @@ export function registerSettingsRoutes(
     ctx.saveSettings(settings);
     return toPublicSettings(settings);
   });
+  handle(IPC.settingsDismissRecovery, () => {
+    const { recoveredFrom, ...settings } = ctx.getSettings();
+    if (recoveredFrom) ctx.saveSettings(settings);
+    return toPublicSettings(settings);
+  });
   const skillList = () => {
     const settings = ctx.getSettings();
     return scanSkills(ctx.skillsDir, settings.skillsEnabled ?? []);

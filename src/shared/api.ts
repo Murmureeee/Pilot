@@ -139,6 +139,7 @@ export interface PiApi {
   settingsSetLogLevel(level: LogLevel): Promise<void>;
   settingsSelectModel(providerId: string, modelId: string): Promise<PublicSettings>;
   settingsSetThinkingLevel(level: ThinkingLevel): Promise<PublicSettings>;
+  settingsDismissRecovery(): Promise<PublicSettings>;
   mcpList(): Promise<McpServerInfo[]>;
   mcpSave(input: McpServerInput): Promise<McpServerInfo[]>;
   mcpReconnect(id: string): Promise<McpServerInfo[]>;

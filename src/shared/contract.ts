@@ -67,6 +67,7 @@ export const IPC = {
   settingsSetLogLevel: "settings:set-log-level",
   settingsSelectModel: "settings:select-model",
   settingsSetThinkingLevel: "settings:set-thinking-level",
+  settingsDismissRecovery: "settings:dismiss-recovery",
   settingsMcpList: "settings:mcp-list",
   settingsMcpSave: "settings:mcp-save",
   settingsMcpReconnect: "settings:mcp-reconnect",
@@ -554,6 +555,13 @@ export interface ProviderFields {
 
 /** 渲染层可见形态：明文/密文 key 永不出主进程，只有 hasKey 标志 */
 type PublicProvider = ProviderFields & { hasKey: boolean; models: ModelCatalogEntry[] };
+
+/** 成功时为备份路径，受阻时为原设置文件路径。 */
+export interface SettingsRecovery {
+  status: "recovered" | "blocked";
+  path: string;
+}
+
 export interface PublicSettings {
   providers: PublicProvider[];
   activeProviderId: string;
@@ -568,6 +576,7 @@ export interface PublicSettings {
   persona: string;
   /** 启用的技能 id 列表 */
   skillsEnabled: string[];
+  recovery?: SettingsRecovery;
 }
 
 /** 渲染层提交形态；apiKey 为明文（仅变更时携带），主进程负责加密落盘 */

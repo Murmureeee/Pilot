@@ -10,24 +10,28 @@ import {
 } from "../../shared/constants";
 import { isOpenAiProvider } from "../../shared/providers";
 import { selectThinkingLevel } from "../../shared/thinking";
+import { SETTINGS_FILE_NAME, SETTINGS_SAVE_BLOCKED } from "../constants";
+import { backupCorruptFile } from "../corrupt-file";
 import { normalizeWorkingDirectory } from "../workspace/paths";
 import { findGitBash, getCommandShell } from "../workspace/shell";
 import { encryptSecret } from "./secrets";
 import { getProviderModels, normalizeModelCatalog } from "./models";
+import { parseSettings } from "./schema";
 import type { ProviderConfig, Settings } from "./types";
 
-function readJson<T>(path: string): T | undefined {
+function readSettingsFile(path: string): Buffer | undefined {
   try {
-    return JSON.parse(readFileSync(path, "utf-8")) as T;
-  } catch {
-    return undefined;
+    return readFileSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
   }
 }
 
 function writeJsonAtomic(path: string, value: unknown): void {
   // NFR-4：临时文件 + rename 原子写，崩溃不丢已确认数据
   const tmp = `${path}.tmp`;
-  writeFileSync(tmp, JSON.stringify(value, null, 2), "utf-8");
+  writeFileSync(tmp, JSON.stringify(value, null, 2), { encoding: "utf8", flush: true });
   renameSync(tmp, path);
 }
 
@@ -42,11 +46,29 @@ function defaultSettings(): Settings {
   return { providers: [faux], activeProviderId: faux.id, thinkingLevel: DEFAULT_THINKING_LEVEL };
 }
 
-export function loadSettings(dir: string): Settings {
-  const data = readJson<Settings>(join(dir, "settings.json"));
-  if (!data || !Array.isArray(data.providers)) {
-    return defaultSettings();
+/** 设置文件读得到却解析不了：留下备份，用默认设置继续，并记下备份位置让界面告诉用户。 */
+function recoverSettings(path: string): Settings {
+  try {
+    const recoveredFrom = backupCorruptFile(path);
+    const settings = { ...defaultSettings(), recoveredFrom };
+    writeJsonAtomic(path, settings);
+    return settings;
+  } catch {
+    return { ...defaultSettings(), recoveryBlocked: path };
   }
+}
+
+export function loadSettings(dir: string): Settings {
+  const path = join(dir, SETTINGS_FILE_NAME);
+  let saved: Buffer | undefined;
+  try {
+    saved = readSettingsFile(path);
+  } catch {
+    return { ...defaultSettings(), recoveryBlocked: path };
+  }
+  if (!saved) return defaultSettings();
+  const data = parseSettings(saved);
+  if (!data) return recoverSettings(path);
   const thinkingLevels = enabledThinkingLevels(data.thinkingLevels);
   return {
     ...data,
@@ -61,7 +83,18 @@ export function loadSettings(dir: string): Settings {
 }
 
 export function saveSettings(dir: string, settings: Settings): void {
-  writeJsonAtomic(join(dir, "settings.json"), settings);
+  const path = join(dir, SETTINGS_FILE_NAME);
+  let existing: Buffer | undefined;
+  try {
+    existing = readSettingsFile(path);
+  } catch {
+    throw new Error(SETTINGS_SAVE_BLOCKED);
+  }
+  // 文件可能在本次读取设置后损坏或暂时失去访问权限。
+  if (settings.recoveryBlocked || (existing && !parseSettings(existing))) {
+    throw new Error(SETTINGS_SAVE_BLOCKED);
+  }
+  writeJsonAtomic(path, settings);
 }
 
 /** 渲染层提交 → 存储形态：新 key 加密，未变更的 key 保留原密文 */
@@ -108,11 +141,14 @@ export function mergeSettingsInput(current: Settings, input: SettingsInput): Set
     skillsEnabled: input.skillsEnabled ?? current.skillsEnabled ?? [],
     mcpServers: current.mcpServers,
     importedPlugins: current.importedPlugins,
+    recoveredFrom: current.recoveredFrom,
+    recoveryBlocked: current.recoveryBlocked,
   };
 }
 
 export function toPublicSettings(settings: Settings): PublicSettings {
   const thinkingLevels = enabledThinkingLevels(settings.thinkingLevels);
+  const recoveryPath = settings.recoveryBlocked ?? settings.recoveredFrom;
   return {
     providers: settings.providers.map((p) => ({
       id: p.id,
@@ -133,6 +169,9 @@ export function toPublicSettings(settings: Settings): PublicSettings {
     logLevel: getLogLevel(settings),
     persona: settings.persona ?? "",
     skillsEnabled: settings.skillsEnabled ?? [],
+    recovery: recoveryPath
+      ? { status: settings.recoveryBlocked ? "blocked" : "recovered", path: recoveryPath }
+      : undefined,
   };
 }
 

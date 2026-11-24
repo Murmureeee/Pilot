@@ -105,6 +105,7 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.settingsSetLogLevel]: ["debug"],
   [IPC.settingsSelectModel]: ["local", "example"],
   [IPC.settingsSetThinkingLevel]: ["high"],
+  [IPC.settingsDismissRecovery]: [],
   [IPC.settingsMcpList]: [],
   [IPC.settingsMcpSave]: [
     {

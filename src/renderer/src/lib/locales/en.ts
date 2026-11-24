@@ -719,6 +719,21 @@ export const EN_MESSAGES: Record<string, string> = {
     "The selected folder has no SKILL.md, so it is not a skill.",
   源目录不存在: "The source folder does not exist.",
   打开文件夹: "Open folder",
+  "设置文件损坏，已恢复默认设置": "Default settings restored after file corruption",
+  暂时无法恢复设置文件: "Could not recover the settings file",
+  "当前使用默认设置。请恢复原文件的访问权限后重试。":
+    "Pilot is using default settings. Restore access to the original file and try again.",
+  "请重新配置模型提供方、密钥和授权规则。":
+    "Set up your model providers, API keys, and approval rules again.",
+  "原设置文件 {0}": "Original settings file at {0}",
+  "原文件已另存为 {0}": "Backup saved at {0}",
+  "无法打开设置目录。": "Could not open the settings folder.",
+  "无法保存设置。请恢复原文件的访问权限后重试。":
+    "Could not save settings. Restore access to the original file and try again.",
+  "无法备份原会话索引，暂时不能保存会话索引。":
+    "Could not back up the original chat index. Changes to the index cannot be saved yet.",
+  重试恢复: "Retry recovery",
+  知道了: "Got it",
   "上下文 {0}K": "Context {0}K",
   搜索已归档的聊天: "Search archived chats",
   没有匹配的聊天: "No matching chats",

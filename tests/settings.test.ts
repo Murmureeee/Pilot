@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import { mkdtempDisposableSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +14,60 @@ import type { Settings } from "../src/main/settings/types";
 import { updateActiveModel } from "../src/main/settings/models";
 
 vi.mock("electron", () => ({ safeStorage: { isEncryptionAvailable: () => false } }));
+vi.mock("node:fs", { spy: true });
+
+describe("settings recovery", () => {
+  it.each([
+    Buffer.from('{"providers":[{"apiKey":"saved"}'),
+    Buffer.from('{"providers":[null],"activeProviderId":"saved"}'),
+  ])("backs up invalid settings and keeps the notice through saves and reloads", (original) => {
+    using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-settings-recovery-"));
+    const path = join(profile.path, "settings.json");
+    fs.writeFileSync(path, original);
+
+    const recovered = loadSettings(profile.path);
+    expect(recovered.providers.map(({ id }) => id)).toEqual(["faux-default"]);
+    const backup = recovered.recoveredFrom!;
+    expect(backup).toMatch(/settings\.corrupt-\d{8}-\d{6}\.json$/);
+    expect(fs.readFileSync(backup)).toEqual(original);
+    expect(toPublicSettings(recovered).recovery).toEqual({ status: "recovered", path: backup });
+
+    const edited = mergeSettingsInput(recovered, {
+      providers: recovered.providers,
+      activeProviderId: recovered.activeProviderId,
+      persona: "saved after recovery",
+    });
+    saveSettings(profile.path, edited);
+    expect(loadSettings(profile.path)).toMatchObject({
+      recoveredFrom: backup,
+      persona: edited.persona,
+    });
+    expect(fs.readdirSync(profile.path)).toHaveLength(2);
+  });
+
+  it("leaves the original intact and blocks saves until it can be backed up", () => {
+    using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-settings-blocked-"));
+    const path = join(profile.path, "settings.json");
+    const original = Buffer.from([0x7b, 0xff]);
+    fs.writeFileSync(path, original);
+    const backup = vi.mocked(fs.copyFileSync).mockImplementationOnce(() => {
+      throw new Error("Simulated backup failure");
+    });
+    try {
+      const defaults = loadSettings(profile.path);
+      expect(toPublicSettings(defaults).recovery).toEqual({ status: "blocked", path });
+      expect(() => saveSettings(profile.path, { providers: [], activeProviderId: "" })).toThrow(
+        /无法保存设置/,
+      );
+      expect(fs.readFileSync(path)).toEqual(original);
+      expect(fs.readdirSync(profile.path)).toEqual(["settings.json"]);
+    } finally {
+      backup.mockReset();
+    }
+    const recovered = loadSettings(profile.path);
+    expect(fs.readFileSync(recovered.recoveredFrom!)).toEqual(original);
+  });
+});
 
 describe("tool environment settings", () => {
   it("loads old settings, persists the folder and preserves it on unrelated saves", () => {

@@ -8,6 +8,7 @@ import { MessageJump } from "@renderer/components/ai/message-jump";
 import { OnboardingDialog } from "@renderer/components/ai/onboarding-dialog";
 import { PermissionCard } from "@renderer/components/ai/permission-card";
 import { PlanBar } from "@renderer/components/ai/plan-card";
+import { SettingsRecoveryNotice } from "@renderer/components/ai/settings-recovery-notice";
 import { InlineWorkspaceReference } from "@renderer/components/ai/workspace-reference";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -109,6 +110,11 @@ export function ChatView({
 
   return (
     <div className={cn("relative flex min-h-0 flex-1 flex-col", isEmpty && "overflow-y-auto")}>
+      {settings?.recovery && (
+        <div className="workspace-column shrink-0 pt-4 pb-2">
+          <SettingsRecoveryNotice recovery={settings.recovery} />
+        </div>
+      )}
       {!isEmpty && (
         <div className="relative flex min-h-0 flex-1 flex-col">
           <MessageJump

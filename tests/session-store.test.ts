@@ -1,7 +1,8 @@
+import * as fs from "node:fs";
 import { existsSync, mkdtempDisposableSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, onTestFinished } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   messageParts,
   messageText,
@@ -10,6 +11,8 @@ import {
 } from "../src/main/agent-host/session-store";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
+vi.mock("node:fs", { spy: true });
+
 function makeStore(): { store: SessionStore; dir: string } {
   const temp = mkdtempDisposableSync(join(tmpdir(), "pi-session-"));
   onTestFinished(() => temp.remove());
@@ -17,6 +20,61 @@ function makeStore(): { store: SessionStore; dir: string } {
 }
 
 describe("SessionStore", () => {
+  it("backs up a partially damaged index and recovers chats and drafts", () => {
+    const { store, dir } = makeStore();
+    const project = join(dir, "project");
+    const pinned = store.create(project);
+    store.rename(pinned.id, "Kept title");
+    store.setPinned(pinned.id, true);
+    const chat = store.create();
+    const messages: AgentMessage[] = [{ role: "user", content: "Recovered chat", timestamp: 1 }];
+    store.save(chat.id, messages);
+    const draft = store.create();
+    store.saveDraft(draft.id, ["Unsent draft"]);
+
+    const indexPath = join(dir, "index.json");
+    const original = JSON.stringify({
+      sessions: [store.getMeta(pinned.id), null],
+      recentProjects: [project, null],
+    });
+    writeFileSync(indexPath, original);
+
+    const restored = new SessionStore(dir);
+    expect(restored.list()).toHaveLength(3);
+    expect(restored.getMeta(pinned.id)).toMatchObject({ title: "Kept title", pinned: true });
+    expect(restored.getMeta(chat.id)).toMatchObject({ title: "Recovered chat", createdAt: 1 });
+    expect(restored.load(chat.id)).toEqual(messages);
+    expect(restored.loadDraft(draft.id)).toEqual(["Unsent draft"]);
+    expect(restored.listRecentProjects()).toEqual([project]);
+    const backup = fs.readdirSync(dir).find((name) => name.startsWith("index.corrupt-"))!;
+    expect(fs.readFileSync(join(dir, backup), "utf8")).toBe(original);
+    expect(new SessionStore(dir).list()).toEqual(restored.list());
+  });
+
+  it("keeps the damaged index while its backup is blocked and retries on the next write", () => {
+    const { store, dir } = makeStore();
+    const chat = store.create();
+    store.save(chat.id, [{ role: "user", content: "Available chat", timestamp: 1 }]);
+    const indexPath = join(dir, "index.json");
+    writeFileSync(indexPath, "{invalid-index");
+    const backup = vi.mocked(fs.copyFileSync).mockImplementation(() => {
+      throw new Error("Simulated index backup failure");
+    });
+    const project = join(dir, "project");
+    let restored: SessionStore;
+    try {
+      restored = new SessionStore(dir);
+      expect(restored.getMeta(chat.id)?.title).toBe("Available chat");
+      expect(() => restored.rememberProject(project)).toThrow(/无法备份原会话索引/);
+      expect(fs.readFileSync(indexPath, "utf8")).toBe("{invalid-index");
+    } finally {
+      backup.mockReset();
+    }
+    restored.rememberProject(project);
+    expect(new SessionStore(dir).listRecentProjects()).toEqual([project]);
+    expect(fs.readdirSync(dir).filter((name) => name.startsWith("index.corrupt-"))).toHaveLength(1);
+  });
+
   it("restores recent folders without chats and includes projects from old session indexes", () => {
     const { dir } = makeStore();
     const linked = join(dir, "older project");

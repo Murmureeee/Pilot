@@ -22,6 +22,10 @@ describe("IPC contract", () => {
     expect(IPC.settingsSetLogLevel).toBe("settings:set-log-level");
   });
 
+  it("uses the settings namespace for acknowledging a settings recovery", () => {
+    expect(IPC.settingsDismissRecovery).toBe("settings:dismiss-recovery");
+  });
+
   it("keeps focused model and thinking changes separate from editing providers", () => {
     expect(IPC.settingsSelectModel).toBe("settings:select-model");
     expect(IPC.settingsSetThinkingLevel).toBe("settings:set-thinking-level");
