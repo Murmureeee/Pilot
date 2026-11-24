@@ -356,7 +356,7 @@ try {
   await withApp(
     cleanInstall,
     async (evaluate) => {
-      await click(evaluate, "开始配置");
+      await click(evaluate, "配置模型");
       await click(evaluate, "下一步");
       await click(evaluate, "下一步");
       await click(evaluate, "完成配置");
