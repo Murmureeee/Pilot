@@ -70,6 +70,7 @@ import type {
 export class AgentRun {
   private currentState: ActiveRun;
   private checkpoint: RunCheckpoint;
+  private savedMessageCount: number;
   private readonly preparation = new AbortController();
   private readonly completion = Promise.withResolvers<void>();
   private readonly permissions: PermissionManager;
@@ -127,7 +128,9 @@ export class AgentRun {
       gitBaseline: previous?.gitBaseline,
       task,
     };
-    if (this.ownsCheckpoint) store.save(sessionId, agent.state.messages, this.checkpoint);
+    if (this.ownsCheckpoint)
+      store.startCheckpoint(sessionId, agent.state.messages, this.checkpoint);
+    this.savedMessageCount = agent.state.messages.length;
     if (clearDraftFor !== undefined) store.saveDraft(clearDraftFor, []);
     const approvalMode =
       store.getMeta(sessionId)?.approvalMode ?? deps.getSettings().approvalMode ?? "standard";
@@ -464,6 +467,7 @@ export class AgentRun {
       } else {
         store.addCompaction(this.state.sessionId, messages, compaction);
       }
+      this.savedMessageCount = agent.state.messages.length;
       this.latestCompaction = compaction;
       const contextTokens = contextSize(compactedContext(prepared, compaction, messages));
       this.deps.view.contextTokens = contextTokens;
@@ -679,7 +683,7 @@ export class AgentRun {
 
     if (event.type === "tool_execution_end") {
       // Parallel tools publish completion before pi adds their result messages to the transcript.
-      this.finishedTools.set(event.toolCallId, {
+      const completedTool: ToolResultMessage = {
         role: "toolResult",
         toolCallId: event.toolCallId,
         toolName: event.toolName,
@@ -689,8 +693,9 @@ export class AgentRun {
         durationMs: event.durationMs,
         isError: event.isError,
         timestamp: Date.now(),
-      });
-      this.saveCheckpoint();
+      };
+      this.finishedTools.set(event.toolCallId, completedTool);
+      this.saveCheckpoint(this.checkpoint, completedTool);
       if (event.toolName === PLAN_TOOL_NAME) {
         const steps = event.isError ? undefined : readPlanSteps(event.result.details);
         if (steps) this.send({ type: "plan", steps });
@@ -727,17 +732,30 @@ export class AgentRun {
     }
   }
 
-  private saveCheckpoint(checkpoint = this.checkpoint): void {
+  private saveCheckpoint(checkpoint = this.checkpoint, completedTool?: ToolResultMessage): void {
+    const { agent, store } = this.deps;
+    const { sessionId } = this.state;
+    const messages = agent.state.messages;
     try {
-      this.deps.store.writeTranscript(
-        this.state.sessionId,
-        [...this.deps.agent.state.messages, ...this.finishedTools.values()],
-        checkpoint,
-      );
+      if (this.persistError) {
+        store.writeTranscript(sessionId, [...messages, ...this.finishedTools.values()], checkpoint);
+      } else if (
+        messages.length > this.savedMessageCount ||
+        checkpoint !== this.checkpoint ||
+        completedTool
+      ) {
+        store.appendCheckpoint(
+          sessionId,
+          messages.slice(this.savedMessageCount),
+          checkpoint,
+          completedTool,
+        );
+      }
+      this.savedMessageCount = messages.length;
       this.checkpoint = checkpoint;
     } catch (error) {
       this.persistError = error;
-      this.deps.agent.abort();
+      agent.abort();
       throw error;
     }
   }

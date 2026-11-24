@@ -1,7 +1,8 @@
 // @env node
-// 会话持久化：JSONL（每会话一文件，每行一条 AgentMessage）+ index.json 元数据索引。
+// 会话持久化：每个会话一个 JSONL 文件，另存 index.json 元数据索引。
 import { randomUUID } from "node:crypto";
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -14,6 +15,7 @@ import {
 import { join } from "node:path";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { ToolResultMessage } from "@earendil-works/pi-ai";
 
 import type {
   ComposerDraft,
@@ -42,6 +44,7 @@ import { labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
 import type {
+  CheckpointAppend,
   ReferencedUserMessage,
   RunCheckpoint,
   SavedCompaction,
@@ -49,6 +52,7 @@ import type {
   SessionIndex,
   SessionRecord,
   TimedAssistantMessage,
+  TranscriptWriteState,
 } from "./types";
 
 export function messageText(message: AgentMessage): string {
@@ -182,6 +186,7 @@ export class SessionStore {
   private readonly checkpoints = new Map<string, RunCheckpoint | null>();
   private readonly gitChanges = new Map<string, SavedGitChanges | null>();
   private readonly contextCompactions = new Map<string, SavedCompaction[]>();
+  private readonly transcriptWrites = new Map<string, TranscriptWriteState>();
 
   constructor(private readonly dir: string) {
     mkdirSync(dir, { recursive: true });
@@ -455,6 +460,7 @@ export class SessionStore {
     this.checkpoints.delete(id);
     this.gitChanges.delete(id);
     this.contextCompactions.delete(id);
+    this.transcriptWrites.delete(id);
     this.index.sessions = this.index.sessions.filter((s) => s.id !== id);
     this.writeIndex();
   }
@@ -497,28 +503,99 @@ export class SessionStore {
     let checkpoint: RunCheckpoint | undefined;
     let gitChanges: SavedGitChanges | undefined;
     const compactions: SavedCompaction[] = [];
-    for (const line of lines) {
+    const completedTools = new Map<string, ToolResultMessage>();
+    for (const [index, line] of lines.entries()) {
       if (!line.trim()) continue;
       try {
         const value = JSON.parse(line) as
           | RunCheckpoint
+          | CheckpointAppend
           | SavedGitChanges
           | SavedCompaction
           | AgentMessage;
         if ("role" in value) messages.push(value);
         else if (value.type === "pilot_run_checkpoint") checkpoint = value;
-        else if (value.type === "pilot_git_changes") gitChanges = value;
+        else if (value.type === "pilot_checkpoint_append") {
+          // A partial write can leave valid JSON without its final newline.
+          if (index === lines.length - 1 || !validCheckpointAppend(value))
+            throw new Error("Invalid checkpoint append");
+          for (const message of value.messages) {
+            if (message.role === "toolResult") completedTools.delete(message.toolCallId);
+            messages.push(message);
+          }
+          if (value.completedTool)
+            completedTools.set(value.completedTool.toolCallId, value.completedTool);
+          checkpoint = value.checkpoint;
+        } else if (value.type === "pilot_git_changes") gitChanges = value;
         else if (value.type === "pilot_context_compaction" && validCompaction(value))
           compactions.push(value);
       } catch {
         console.error(`[session] 跳过损坏行: ${id}`);
       }
     }
+    for (const tool of completedTools.values()) messages.push(tool);
     this.checkpoints.set(id, checkpoint ?? null);
     this.gitChanges.set(id, gitChanges ?? null);
     const saved = compactions.filter(({ cutoff }) => cutoff <= messages.length);
     this.contextCompactions.set(id, saved);
+    this.transcriptWrites.set(id, {
+      messageCount: messages.length,
+      appendable: lines.length === 0 || lines.at(-1) === "",
+    });
     return { messages, checkpoint, gitChanges, compactions: saved };
+  }
+
+  startCheckpoint(id: string, messages: AgentMessage[], checkpoint: RunCheckpoint): void {
+    const state = this.transcriptWriteState(id);
+    if (
+      !state.appendable ||
+      this.checkpoint(id) ||
+      (state.messageCount !== 0 && state.messageCount !== messages.length)
+    ) {
+      // A resumed transcript can contain repaired tool results and accepted queued input.
+      this.writeTranscript(id, messages, checkpoint);
+    } else {
+      this.appendCheckpoint(id, state.messageCount === 0 ? messages : [], checkpoint);
+    }
+    this.saveSessionMeta(id, messages, checkpoint);
+  }
+
+  appendCheckpoint(
+    id: string,
+    messages: AgentMessage[],
+    checkpoint: RunCheckpoint,
+    completedTool?: ToolResultMessage,
+  ): void {
+    const state = this.transcriptWriteState(id);
+    if (!state.appendable) throw new Error("无法保存任务进度。");
+    const record: CheckpointAppend = {
+      type: "pilot_checkpoint_append",
+      checkpoint,
+      messages,
+      completedTool,
+    };
+    try {
+      appendFileSync(this.filePath(id), JSON.stringify(record) + "\n", {
+        encoding: "utf8",
+        flush: true,
+      });
+    } catch (error) {
+      // Replacing the file before writing again prevents replaying an uncertain append.
+      this.transcriptWrites.set(id, { ...state, appendable: false });
+      throw error;
+    }
+    this.checkpoints.set(id, checkpoint);
+    this.transcriptWrites.set(id, {
+      messageCount: state.messageCount + messages.length,
+      appendable: true,
+    });
+  }
+
+  private transcriptWriteState(id: string): TranscriptWriteState {
+    const state = this.transcriptWrites.get(id);
+    if (state) return state;
+    this.read(id);
+    return this.transcriptWrites.get(id)!;
   }
 
   save(
@@ -530,6 +607,15 @@ export class SessionStore {
     compactions?: SavedCompaction[],
   ): SessionMeta {
     this.writeTranscript(id, messages, checkpoint, gitChanges, compactions);
+    return this.saveSessionMeta(id, messages, checkpoint, lastTask);
+  }
+
+  private saveSessionMeta(
+    id: string,
+    messages: AgentMessage[],
+    checkpoint?: RunCheckpoint,
+    lastTask?: VerificationTask,
+  ): SessionMeta {
     const title = sessionTitle(messages, checkpoint);
     const meta = this.index.sessions.find((s) => s.id === id);
     if (meta) {
@@ -572,7 +658,39 @@ export class SessionStore {
     this.checkpoints.set(id, checkpoint ?? null);
     this.gitChanges.set(id, gitChanges);
     this.contextCompactions.set(id, compactions);
+    this.transcriptWrites.set(id, { messageCount: messages.length, appendable: true });
   }
+}
+
+function hasMessageRole(value: unknown): value is AgentMessage {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "role" in value &&
+    (value.role === "system" ||
+      value.role === "user" ||
+      value.role === "assistant" ||
+      value.role === "toolResult")
+  );
+}
+
+function validCheckpointAppend(value: CheckpointAppend): boolean {
+  const { checkpoint, messages, completedTool } = value;
+  return (
+    checkpoint?.type === "pilot_run_checkpoint" &&
+    typeof checkpoint.runId === "string" &&
+    Number.isSafeInteger(checkpoint.startIndex) &&
+    checkpoint.startIndex >= 0 &&
+    (checkpoint.workingDirectory === null || typeof checkpoint.workingDirectory === "string") &&
+    Array.isArray(checkpoint.pending) &&
+    checkpoint.pending.every((message) => hasMessageRole(message) && message.role === "user") &&
+    Array.isArray(checkpoint.actions) &&
+    checkpoint.actions.every((action) => typeof action === "string") &&
+    Array.isArray(messages) &&
+    messages.every(hasMessageRole) &&
+    (completedTool === undefined ||
+      (completedTool?.role === "toolResult" && typeof completedTool.toolCallId === "string"))
+  );
 }
 
 function validCompaction(value: SavedCompaction): boolean {

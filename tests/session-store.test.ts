@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 import {
@@ -12,6 +13,7 @@ import {
   SessionStore,
   toUiMessages,
 } from "../src/main/agent-host/session-store";
+import type { CheckpointAppend, RunCheckpoint } from "../src/main/agent-host/types";
 
 vi.mock("node:fs", { spy: true });
 
@@ -19,6 +21,18 @@ function makeStore(): { store: SessionStore; dir: string } {
   const temp = mkdtempDisposableSync(join(tmpdir(), "pi-session-"));
   onTestFinished(() => temp.remove());
   return { store: new SessionStore(temp.path), dir: temp.path };
+}
+
+function runningCheckpoint(dir: string, changes: Partial<RunCheckpoint> = {}): RunCheckpoint {
+  return {
+    type: "pilot_run_checkpoint",
+    runId: "in-flight",
+    workingDirectory: dir,
+    startIndex: 0,
+    pending: [],
+    actions: [],
+    ...changes,
+  };
 }
 
 describe("SessionStore", () => {
@@ -175,6 +189,164 @@ describe("SessionStore", () => {
     expect(recovered.at(-1)).toEqual(queued);
     restarted.save(session.id, recovered);
     expect(new SessionStore(dir).checkpoint(session.id)).toBeUndefined();
+  });
+
+  it("appends only new messages and the checkpoint to a saved transcript", () => {
+    const { store, dir } = makeStore();
+    const { id } = store.create(dir);
+    const before = [{ role: "user", content: "Earlier chat", timestamp: 1 }] as const;
+    const next = { role: "user", content: "Follow-up", timestamp: 2 } as const;
+    const pending = { role: "user", content: "Queued", timestamp: 3 } as const;
+    const active = runningCheckpoint(dir, { pending: [next] });
+    const queued = runningCheckpoint(dir, { pending: [pending] });
+    const path = join(dir, id + ".jsonl");
+    store.save(id, [...before]);
+    const snapshot = fs.readFileSync(path, "utf8");
+
+    store.startCheckpoint(id, [...before], active);
+    store.appendCheckpoint(id, [next], queued);
+
+    const contents = fs.readFileSync(path, "utf8");
+    expect(contents.slice(0, snapshot.length)).toBe(snapshot);
+    expect(
+      contents
+        .slice(snapshot.length)
+        .trimEnd()
+        .split("\n")
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      { type: "pilot_checkpoint_append", checkpoint: active, messages: [] },
+      { type: "pilot_checkpoint_append", checkpoint: queued, messages: [next] },
+    ]);
+    const restored = new SessionStore(dir);
+    expect(restored.checkpoint(id)).toEqual(queued);
+    expect(restored.load(id)).toEqual([...before, next, pending]);
+
+    store.save(id, [...before, next, pending]);
+    expect(fs.readFileSync(path, "utf8")).not.toContain("pilot_checkpoint_append");
+    expect(new SessionStore(dir).read(id)).toEqual({
+      messages: [...before, next, pending],
+      checkpoint: undefined,
+      gitChanges: undefined,
+      compactions: [],
+    });
+  });
+
+  it("preserves individual parallel results and accepts their final transcript order once", () => {
+    const { store, dir } = makeStore();
+    const { id } = store.create(dir);
+    const call = (toolCallId: string) => ({
+      type: "toolCall" as const,
+      id: toolCallId,
+      name: "read_file",
+      arguments: { path: "test.txt" },
+    });
+    const request: AssistantMessage = {
+      role: "assistant",
+      api: "faux",
+      provider: "faux",
+      model: "fixture",
+      content: [call("first"), call("second")],
+      stopReason: "toolUse",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      timestamp: 1,
+    };
+    const toolResult = (toolCallId: string, timestamp: number): ToolResultMessage => ({
+      role: "toolResult",
+      toolCallId,
+      toolName: "read_file",
+      content: [{ type: "text", text: "Content for " + toolCallId }],
+      isError: false,
+      timestamp,
+    });
+    const active = runningCheckpoint(dir, { actions: ["started-before-crash"] });
+    const second = toolResult("second", 2);
+    const first = toolResult("first", 3);
+    store.startCheckpoint(id, [request], active);
+    store.appendCheckpoint(id, [], active, second);
+
+    const interrupted = new SessionStore(dir);
+    expect(interrupted.load(id)).toMatchObject([
+      request,
+      second,
+      { role: "toolResult", toolCallId: "first", isError: true },
+    ]);
+    expect(interrupted.checkpoint(id)).toEqual(active);
+
+    store.appendCheckpoint(id, [], active, first);
+    const finalFirst = { ...first, timestamp: 4 };
+    const finalSecond = { ...second, timestamp: 5 };
+    store.appendCheckpoint(id, [finalFirst, finalSecond], active);
+    expect(new SessionStore(dir).load(id)).toEqual([request, finalFirst, finalSecond]);
+  });
+
+  it("skips damaged appends and recovers the latest complete transaction", () => {
+    const { store, dir } = makeStore();
+    const { id } = store.create(dir);
+    const before = { role: "user", content: "Earlier", timestamp: 1 } as const;
+    const accepted = { role: "user", content: "Accepted", timestamp: 2 } as const;
+    const incomplete = { role: "user", content: "Uncommitted", timestamp: 3 } as const;
+    const path = join(dir, id + ".jsonl");
+    const active = runningCheckpoint(dir, { actions: ["saved-action"] });
+    const good: CheckpointAppend = {
+      type: "pilot_checkpoint_append",
+      checkpoint: active,
+      messages: [accepted],
+    };
+    const torn: CheckpointAppend = {
+      ...good,
+      checkpoint: { ...active, actions: ["uncommitted-action"] },
+      messages: [incomplete],
+    };
+    store.save(id, [before]);
+    fs.appendFileSync(
+      path,
+      `{broken\n${JSON.stringify({ ...good, messages: [null, incomplete] })}\n${JSON.stringify(good)}\n${JSON.stringify(torn)}`,
+    );
+    const restored = new SessionStore(dir);
+    expect(restored.load(id)).toEqual([before, accepted]);
+    expect(restored.checkpoint(id)).toEqual(active);
+
+    const resumed = { ...active, runId: "retry" };
+    restored.startCheckpoint(id, restored.load(id), resumed);
+    restored.appendCheckpoint(id, [{ ...incomplete, content: "After restart" }], resumed);
+    expect(new SessionStore(dir).load(id).map(messageText)).toEqual([
+      "Earlier",
+      "Accepted",
+      "After restart",
+    ]);
+  });
+
+  it("keeps the prior checkpoint if a write fails after appending part of a record", () => {
+    const { store, dir } = makeStore();
+    const { id } = store.create(dir);
+    const before = { role: "user", content: "Saved", timestamp: 1 } as const;
+    const next = { role: "user", content: "Accepted after retry", timestamp: 2 } as const;
+    const active = runningCheckpoint(dir, { pending: [next] });
+    const accepted = { ...active, pending: [] };
+    const path = join(dir, id + ".jsonl");
+    store.startCheckpoint(id, [before], active);
+    vi.mocked(fs.appendFileSync).mockImplementationOnce(() => {
+      writeFileSync(path, '{"type":"pilot_checkpoint_append",', { flag: "a" });
+      throw new Error("Simulated interrupted write");
+    });
+    expect(() => store.appendCheckpoint(id, [next], accepted)).toThrow(
+      "Simulated interrupted write",
+    );
+    expect(store.checkpoint(id)).toEqual(active);
+    expect(new SessionStore(dir).load(id)).toEqual([before, next]);
+
+    store.startCheckpoint(id, [before, next], accepted);
+    store.save(id, [before, next]);
+    expect(new SessionStore(dir).load(id)).toEqual([before, next]);
+    expect(new SessionStore(dir).checkpoint(id)).toBeUndefined();
   });
 
   it("derives session title from the first user message", () => {

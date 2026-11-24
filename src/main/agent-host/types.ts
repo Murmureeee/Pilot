@@ -1,6 +1,6 @@
 // @env node
 import type { Agent, AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 
 import type {
   GitChangesView,
@@ -86,6 +86,18 @@ export interface RunCheckpoint {
   gitBaseline?: GitSnapshot;
   task?: VerificationTask;
   failure?: ModelFailure;
+}
+
+export interface CheckpointAppend {
+  type: "pilot_checkpoint_append";
+  checkpoint: RunCheckpoint;
+  messages: AgentMessage[];
+  completedTool?: ToolResultMessage;
+}
+
+export interface TranscriptWriteState {
+  messageCount: number;
+  appendable: boolean;
 }
 
 export interface ModelRetryCallbacks {
