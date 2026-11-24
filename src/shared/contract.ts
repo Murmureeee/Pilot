@@ -8,6 +8,7 @@ export const IPC = {
   appInfo: "app:info",
   menuAction: "app:menu-action",
   appOpenPath: "app:open-path",
+  appSetLocale: "app:set-locale",
   appSetTitlebarTheme: "app:set-titlebar-theme",
   appGetUpdateStatus: "app:get-update-status",
   appCheckForUpdates: "app:check-for-updates",

@@ -37,6 +37,8 @@ describe("main IPC routes", () => {
     const frame = {};
     const renderer = Object.assign(new EventEmitter(), {
       mainFrame: frame,
+      isDestroyed: vi.fn<() => boolean>(() => false),
+      isCrashed: vi.fn<() => boolean>(() => false),
       send: vi.fn<(channel: string, payload: unknown) => void>(),
     });
     const sender = renderer as unknown as WebContents;
@@ -58,11 +60,17 @@ describe("main IPC routes", () => {
       expect(invokeFrom(sender, frame, { payload: "ping" })).toBe("handled");
       sendToRenderers(AGENT_EVENT_CHANNEL, event);
       expect(renderer.send).toHaveBeenCalledExactlyOnceWith(AGENT_EVENT_CHANNEL, event);
+      renderer.isCrashed.mockReturnValue(true);
+      sendToRenderers(AGENT_EVENT_CHANNEL, event);
+      expect(renderer.send).toHaveBeenCalledTimes(1);
+      renderer.isCrashed.mockReturnValue(false);
+      sendToRenderers(AGENT_EVENT_CHANNEL, event);
+      expect(renderer.send).toHaveBeenCalledTimes(2);
     } finally {
       renderer.emit("destroyed");
     }
     sendToRenderers(AGENT_EVENT_CHANNEL, event);
-    expect(renderer.send).toHaveBeenCalledTimes(1);
+    expect(renderer.send).toHaveBeenCalledTimes(2);
     expect(() => invokeFrom(sender, frame, { payload: "ping" })).toThrow(/Invalid IPC sender/);
   });
 });

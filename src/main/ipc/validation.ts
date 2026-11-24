@@ -129,6 +129,7 @@ const inputs = {
   [IPC.runAgentSmoke]: none,
   [IPC.appInfo]: none,
   [IPC.appOpenPath]: z.tuple([z.enum(["settings", "sessions", "skills", "logs"])]),
+  [IPC.appSetLocale]: locale,
   [IPC.appSetTitlebarTheme]: z.tuple([z.enum(["light", "dark", "system"])]),
   [IPC.appGetUpdateStatus]: none,
   [IPC.appCheckForUpdates]: none,

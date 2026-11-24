@@ -24,6 +24,7 @@ const api: PiApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC.appInfo),
   menuAction: (action: MenuAction) => ipcRenderer.invoke(IPC.menuAction, action),
   openPath: (target: OpenPathTarget) => ipcRenderer.invoke(IPC.appOpenPath, target),
+  setLocale: (locale: Locale) => ipcRenderer.invoke(IPC.appSetLocale, locale),
   setTitlebarTheme: (theme: ThemeSetting) => ipcRenderer.invoke(IPC.appSetTitlebarTheme, theme),
   getUpdateStatus: () => ipcRenderer.invoke(IPC.appGetUpdateStatus),
   checkForUpdates: () => ipcRenderer.invoke(IPC.appCheckForUpdates),

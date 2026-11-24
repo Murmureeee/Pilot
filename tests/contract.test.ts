@@ -53,6 +53,7 @@ describe("IPC contract", () => {
     expect(IPC.agentSearchWorkspace).toBe("agent:search-workspace");
     expect(IPC.agentPreviewWorkspaceReference).toBe("agent:preview-workspace-reference");
     expect(IPC.appOpenPath).toBe("app:open-path");
+    expect(IPC.appSetLocale).toBe("app:set-locale");
     expect(IPC.appSetTitlebarTheme).toBe("app:set-titlebar-theme");
     expect(IPC.sessionPin).toBe("session:pin");
     expect(IPC.sessionArchive).toBe("session:archive");

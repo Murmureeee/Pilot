@@ -26,6 +26,12 @@ export const EN_MESSAGES: Record<string, string> = {
   缩小: "Zoom out",
   实际大小: "Actual size",
   重新加载: "Reload",
+  界面发生错误: "The interface encountered an error",
+  "无法确定错误原因。": "The cause could not be determined.",
+  "重新加载后可返回当前会话。正在运行的任务会继续。":
+    "Reload to return to this chat. Running tasks will continue.",
+  "无法重新加载界面。": "Could not reload the interface.",
+  查看日志: "View logs",
   切换全屏: "Toggle full screen",
   "关于 {0}": "About {0}",
   "后退 (Ctrl+[)": "Back (Ctrl+[)",

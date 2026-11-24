@@ -18,7 +18,7 @@ export function applyTheme(theme: ThemeSetting): void {
     theme === "dark" ||
     (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", dark);
-  void window.pi.setTitlebarTheme(theme);
+  void window.pi?.setTitlebarTheme(theme).catch(() => {});
 }
 
 /** 跟随系统时监听系统主题变化（返回退订函数） */

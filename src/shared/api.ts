@@ -63,6 +63,8 @@ export interface PiApi {
   menuAction(action: MenuAction): Promise<void>;
   /** 打开数据目录（设置/会话），主进程白名单校验 */
   openPath(target: OpenPathTarget): Promise<string>;
+  /** 同步界面语言供主进程的原生提示使用。 */
+  setLocale(locale: Locale): Promise<void>;
   /** 同步原生标题栏（窗控按钮）颜色到主题 */
   setTitlebarTheme(theme: ThemeSetting): Promise<void>;
   getUpdateStatus(): Promise<UpdateStatus>;

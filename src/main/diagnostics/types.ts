@@ -9,6 +9,6 @@ export interface LogDetails {
   errorName?: (typeof SAFE_ERROR_NAMES)[number];
   code?: (typeof SAFE_ERROR_CODES)[number] | number;
   line?: number;
-  reason?: RenderProcessGoneDetails["reason"];
+  reason?: RenderProcessGoneDetails["reason"] | "unresponsive";
   version?: string;
 }

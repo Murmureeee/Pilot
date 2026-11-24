@@ -16,6 +16,23 @@ export const TITLE_BAR_OVERLAY_COLORS = {
   dark: { color: "#161e28", symbolColor: "#e4ebf4" },
 } as const;
 
+export const RENDERER_RECOVERY_MESSAGES = {
+  zh: {
+    unresponsive: "Pilot 界面未响应",
+    crashed: "Pilot 界面进程已退出",
+    outOfMemory: "Pilot 界面内存不足",
+    detail: "重新加载界面后可以接着使用当前会话。正在运行的任务会继续。",
+    reload: "重新加载",
+  },
+  en: {
+    unresponsive: "Pilot is not responding",
+    crashed: "The Pilot interface process exited",
+    outOfMemory: "The Pilot interface ran out of memory",
+    detail: "Reload the interface to return to this chat. Running tasks will continue.",
+    reload: "Reload",
+  },
+} as const;
+
 export const NATIVE_DIALOG_TITLES = {
   zh: {
     skill: "选择技能目录（须含 SKILL.md）",

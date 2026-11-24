@@ -8,7 +8,7 @@ import {
   type PingResponse,
 } from "../../shared/contract";
 import { TITLE_BAR_OVERLAY_COLORS } from "../constants";
-import { handle } from "./transport";
+import { handle, setRendererLocale } from "./transport";
 import type { IpcContext } from "./types";
 
 /** 菜单动作白名单实现（渲染层传来的 action 必须命中此表） */
@@ -67,6 +67,7 @@ export function registerAppRoutes(
     if (target === "logs") mkdirSync(ctx.logsDir, { recursive: true, mode: 0o700 });
     return shell.openPath(dirs[target]);
   });
+  handle(IPC.appSetLocale, (event, locale) => setRendererLocale(event.sender, locale));
   handle(IPC.appSetTitlebarTheme, (event, theme) => {
     // 无边框窗口的原生窗控颜色跟随主题（Linux 无 titleBarOverlay，静默忽略）
     const win = BrowserWindow.fromWebContents(event.sender);

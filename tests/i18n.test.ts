@@ -6,6 +6,7 @@ import {
   restoreLocale,
   setLocale,
   t,
+  watchLocale,
 } from "../src/renderer/src/lib/i18n";
 import { relativeTime } from "../src/renderer/src/lib/relative-time";
 
@@ -49,6 +50,8 @@ describe("interface language", () => {
       getItem: (key: string) => values.get(key) ?? null,
       setItem: (key: string, value: string) => values.set(key, value),
     });
+    const reportLocale = vi.fn<(locale: string) => void>();
+    const unwatch = watchLocale(reportLocale);
     try {
       restoreLocale();
       expect(currentLocale()).toBe("en");
@@ -58,7 +61,9 @@ describe("interface language", () => {
       values.set("pilot-locale", "unknown");
       restoreLocale();
       expect(currentLocale()).toBe("zh");
+      expect(reportLocale.mock.calls).toEqual([["en"], ["zh"], ["zh"]]);
     } finally {
+      unwatch();
       vi.unstubAllGlobals();
     }
   });

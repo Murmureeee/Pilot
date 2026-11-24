@@ -19,6 +19,7 @@ import { prepareUserDataDirectory } from "./profile";
 import { DesktopUpdater } from "./updater";
 import { VerificationManager } from "./verification";
 import { revealWindow } from "./window";
+import { registerWindowRecovery } from "./window-recovery";
 
 const isDev = !app.isPackaged;
 
@@ -64,6 +65,7 @@ function createWindow(log: DiagnosticLog): BrowserWindow {
     },
   });
   registerRenderer(win.webContents);
+  registerWindowRecovery(win, log);
 
   // Dev startup checks consume the console marker. Packaged diagnostics store metadata only.
   win.webContents.on("console-message", (event) => {
@@ -73,14 +75,6 @@ function createWindow(log: DiagnosticLog): BrowserWindow {
   win.webContents.on("preload-error", (_event, _path, error) => {
     log.write("error", "renderer", "preload-error", errorDetails(error));
   });
-  win.webContents.on("render-process-gone", (_e, details) => {
-    log.write(details.reason === "clean-exit" ? "debug" : "error", "renderer", "process-gone", {
-      reason: details.reason,
-      code: details.exitCode,
-    });
-    console.error(`[renderer] process gone: ${details.reason}`);
-  });
-
   // dev 快捷键：F12 开关 DevTools（应用菜单已移除，默认快捷键失效）
   if (isDev) {
     win.webContents.on("before-input-event", (_event, input) => {

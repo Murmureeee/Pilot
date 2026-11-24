@@ -45,6 +45,12 @@ export function setLocale(locale: Locale): void {
   void i18n.changeLanguage(locale);
 }
 
+export function watchLocale(listener: (locale: Locale) => void): () => void {
+  const notify = (locale: string): void => listener(asLocale(locale));
+  i18n.on("languageChanged", notify);
+  return () => i18n.off("languageChanged", notify);
+}
+
 export function currentLocale(): Locale {
   return asLocale(i18n.language);
 }
