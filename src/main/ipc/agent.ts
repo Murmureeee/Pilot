@@ -32,10 +32,14 @@ export function registerAgentRoutes({
     const result = host.prompt(input, composerId, expectedDirectory);
     return result instanceof Promise ? null : result;
   });
-  handle(IPC.agentResume, (_event, run) => {
+  handle(IPC.agentResume, (_event, run, compact) => {
     exit.checkWorkAllowed();
-    const result = host.resume(run);
+    const result = host.resume(run, compact);
     return result instanceof Promise ? null : result;
+  });
+  handle(IPC.agentCompact, (_event, composerId, focus) => {
+    exit.checkWorkAllowed();
+    void host.compact(composerId, focus);
   });
   handle(IPC.agentAbort, (_event, run) => host.abort(run));
 

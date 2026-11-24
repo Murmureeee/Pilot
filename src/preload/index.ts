@@ -38,7 +38,8 @@ const api: PiApi = {
   getSnapshot: () => ipcRenderer.invoke(IPC.agentGetSnapshot),
   agentPrompt: (input, expectedDirectory, composerId) =>
     ipcRenderer.invoke(IPC.agentPrompt, input, expectedDirectory, composerId),
-  agentResume: (run) => ipcRenderer.invoke(IPC.agentResume, run),
+  agentResume: (run, compact) => ipcRenderer.invoke(IPC.agentResume, run, compact),
+  agentCompact: (composerId, focus) => ipcRenderer.invoke(IPC.agentCompact, composerId, focus),
   searchWorkspace: (query, expectedDirectory) =>
     ipcRenderer.invoke(IPC.agentSearchWorkspace, query, expectedDirectory),
   previewWorkspaceReference: (reference) =>

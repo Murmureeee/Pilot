@@ -68,6 +68,7 @@ import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { loadSendKey } from "@renderer/lib/preferences";
 import type { ComposerCommand, ComposerSuggestion, ComposerToolbarMenu } from "@renderer/lib/types";
 import { selectActiveSession, selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
+import { compactFocus } from "@shared/compact-command";
 import { APP_NAME, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
 import type { ActiveRun, ApprovalMode, PromptMention } from "@shared/contract";
 
@@ -278,6 +279,7 @@ export function Composer({
       await command.action({
         newChat: newSession,
         archiveChat: () => (sessionId ? archiveSession(sessionId, true) : Promise.resolve()),
+        compactContext: () => useAgentStore.getState().compactContext(composerId),
         openMenu: setToolbarMenu,
         openSettings: (section) => {
           setSettingsSection(section);
@@ -391,8 +393,12 @@ export function Composer({
   const commandPending =
     rawTrigger?.kind === "command" &&
     (!isDismissed || commands.length > 0 || matchedSkills.length > 0);
+  const isCompact = draft.mentions.length === 0 && compactFocus(draft.text) !== undefined;
   const canSend =
-    status !== "stopping" && !composing && draft.text.trim().length > 0 && !commandPending;
+    status !== "stopping" &&
+    !composing &&
+    draft.text.trim().length > 0 &&
+    (!commandPending || isCompact);
   const placeholder = busy ? t("输入插话消息…", locale) : t("给 {0} 发消息…", locale, [APP_NAME]);
 
   const send = async (): Promise<void> => {
@@ -451,8 +457,9 @@ export function Composer({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (composing || event.nativeEvent.isComposing || onSuggestionKey(event)) return;
+    if (composing || event.nativeEvent.isComposing) return;
     const action = composerEnterAction(event, loadSendKey());
+    if (!(isCompact && action === "send") && onSuggestionKey(event)) return;
     if (!action) return;
     event.preventDefault();
     if (action === "send") void send();
@@ -465,7 +472,9 @@ export function Composer({
       ? "正在停止…"
       : status === "waiting_approval"
         ? "等待操作审批…"
-        : "回复中…";
+        : ownRun?.compacting
+          ? "正在压缩上下文…"
+          : "回复中…";
   const runNotice =
     otherRun?.status === "waiting_approval"
       ? "会话「{0}」等待审批"
@@ -528,7 +537,9 @@ export function Composer({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 tabular-nums">
             <span>
               {usage.input + usage.output} tokens
-              {usage.cacheRead > 0 ? ` (${t("缓存", locale)} ${usage.cacheRead})` : ""}
+              {usage.cacheRead + usage.cacheWrite > 0
+                ? ` (${t("缓存", locale)} ${usage.cacheRead + usage.cacheWrite})`
+                : ""}
             </span>
             <span>${usage.costTotal.toFixed(4)}</span>
           </div>

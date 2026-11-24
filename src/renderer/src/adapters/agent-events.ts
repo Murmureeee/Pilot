@@ -23,7 +23,7 @@ export interface AgentUiState {
   sessionId: string | null;
   error: string | null;
   usage: UsageTotals & { costTotal: number };
-  /** 最近一轮的上下文占用 token 数（FR-4.7 状态栏显示占用百分比用） */
+  /** 当前模型上下文的 token 占用，压缩后可使用估算值。 */
   contextTokens: number;
   contextWindow: number | null;
   steerCount: number;
@@ -41,7 +41,7 @@ export function initialAgentUiState(): AgentUiState {
     messages: [],
     sessionId: null,
     error: null,
-    usage: { input: 0, output: 0, cacheRead: 0, costTotal: 0 },
+    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costTotal: 0 },
     contextTokens: 0,
     contextWindow: null,
     steerCount: 0,
@@ -73,6 +73,9 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
         activeRun: { ...active, retry: event.retry ?? undefined },
         messages: belongsToSelection ? applyMessageEvent(state.messages, event) : state.messages,
       };
+    }
+    if (event.type === "context_compacting") {
+      return { ...state, activeRun: { ...active, compacting: event.compacting } };
     }
     if (event.type === "status") {
       return {
@@ -110,6 +113,12 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
         usage: { ...event.tokens, costTotal: event.costTotal },
         contextTokens: event.contextTokens,
         contextWindow: event.contextWindow,
+      };
+    case "context_compacted":
+      return {
+        ...state,
+        contextTokens: event.contextTokens,
+        messages: applyMessageEvent(state.messages, event),
       };
     case "queue":
       return { ...state, steerCount: event.steerCount };

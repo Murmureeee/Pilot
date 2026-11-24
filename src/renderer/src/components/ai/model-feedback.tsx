@@ -43,6 +43,7 @@ const reasons: Record<ModelFailure["kind"], string> = {
   credentials: "模型凭据未通过验证",
   quota: "模型服务额度不足",
   capability: "模型不可用或不支持此请求",
+  "context-limit": "请求超出模型的上下文上限",
   other: "模型请求失败",
 };
 
@@ -78,7 +79,7 @@ export function ModelFailureCard({
             onClick={onRetry}
           >
             <RotateCcwIcon data-icon="inline-start" />
-            {t("重试", locale)}
+            {t(failure.kind === "context-limit" ? "压缩并重试" : "重试", locale)}
           </Button>
           <CollapsibleTrigger
             render={<Button size="xs" variant="ghost" className="group/details" />}

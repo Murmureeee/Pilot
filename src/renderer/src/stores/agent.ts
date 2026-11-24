@@ -63,7 +63,8 @@ interface AgentStore extends AgentUiState {
     workingDirectory: string | null,
     composerId: string,
   ): Promise<boolean | ActiveRun>;
-  resumeRun(run: RunRef): Promise<void>;
+  resumeRun(run: RunRef, compact?: boolean): Promise<void>;
+  compactContext(composerId: string): Promise<void>;
   saveDraft(composerId: string, draft: ComposerDraft): Promise<void>;
   updateSessionSettings(input: SessionSettingsInput): Promise<void>;
   abort(run: RunRef): void;
@@ -270,14 +271,23 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     return true;
   },
 
-  resumeRun: async ({ sessionId, runId }) => {
+  resumeRun: async ({ sessionId, runId }, compact) => {
     try {
-      await window.pi.agentResume({ sessionId, runId });
+      await window.pi.agentResume({ sessionId, runId }, compact);
     } catch (cause) {
       const { interruptedRun, failedRun } = get();
       if (interruptedRun?.runId === runId || failedRun?.runId === runId) {
         set({ error: cause instanceof Error ? cause.message : String(cause) });
       }
+    }
+  },
+
+  compactContext: async (composerId) => {
+    try {
+      await window.pi.agentCompact(composerId);
+    } catch (cause) {
+      if (get().composerId === composerId)
+        set({ error: cause instanceof Error ? cause.message : String(cause) });
     }
   },
 

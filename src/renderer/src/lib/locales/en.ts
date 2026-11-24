@@ -222,6 +222,7 @@ export const EN_MESSAGES: Record<string, string> = {
   "打开项目后，Agent 才能读取和修改其中的文件。":
     "Open a project so the agent can read and change its files.",
   "回复中…": "Responding…",
+  "正在压缩上下文…": "Compacting context…",
   "等待操作审批…": "Waiting for approval…",
   "正在停止…": "Stopping…",
   已中断: "Interrupted",
@@ -238,7 +239,24 @@ export const EN_MESSAGES: Record<string, string> = {
   上下文: "Context",
   "上下文占用 {0}": "Context usage {0}",
   回到最新消息: "Jump to the latest message",
-  最近一次请求: "Most recent request",
+  当前上下文: "Current context",
+  "会话累计 {0} tokens，{1}": "Chat total of {0} tokens, {1}",
+  压缩上下文: "Compact context",
+  "整理较早的对话，可在 /compact 后填写保留重点":
+    "Summarize earlier messages. Add a focus after /compact.",
+  已压缩上下文: "Context compacted",
+  "上下文中已缩短 {0} 条工具输出，可在对应工具步骤查看原文。":
+    "Shortened {0} tool outputs for the model. Open the tool steps to read the full output.",
+  "请在当前操作结束后压缩上下文。":
+    "Wait for the current operation to finish, then compact context.",
+  "没有足够的较早内容可压缩。": "There is too little earlier conversation to compact.",
+  "没有足够的较早内容可压缩。请缩短当前请求或换用上下文更大的模型。":
+    "There is too little earlier conversation to compact. Shorten the request or switch to a model with a larger context window.",
+  "该任务没有上下文超限错误。": "This task did not reach the context limit.",
+  "无法生成上下文摘要。请检查模型连接后重试。":
+    "Could not summarize the context. Check your model connection and try again.",
+  "模型未返回上下文摘要。请重试或更换模型。":
+    "The model returned no summary. Try again or switch models.",
   "已用 {0} / {1} tokens": "{0} of {1} tokens used",
   缓存: "cache",
   请求失败: "Request failed",
@@ -250,9 +268,11 @@ export const EN_MESSAGES: Record<string, string> = {
   模型凭据未通过验证: "Model credentials rejected",
   模型服务额度不足: "Model service quota exhausted",
   模型不可用或不支持此请求: "Model unavailable or request unsupported",
+  请求超出模型的上下文上限: "Request exceeds the model’s context limit",
   模型请求失败: "Model request failed",
   打开模型设置: "Open model settings",
   重试: "Retry",
+  压缩并重试: "Compact and retry",
   错误详情: "Error details",
   "检查网络连接或模型设置，然后重新发送消息。":
     "Check your connection or model settings, then send the message again.",

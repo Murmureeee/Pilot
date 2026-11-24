@@ -1,5 +1,12 @@
 // @env browser
-import { ArchiveIcon, CpuIcon, PlugIcon, ShieldCheckIcon, SquarePenIcon } from "lucide-react";
+import {
+  ArchiveIcon,
+  CpuIcon,
+  Minimize2Icon,
+  PlugIcon,
+  ShieldCheckIcon,
+  SquarePenIcon,
+} from "lucide-react";
 
 import type {
   ApprovalMode,
@@ -25,6 +32,14 @@ import type {
 } from "./types";
 
 export const COMPOSER_COMMANDS: readonly ComposerCommand[] = [
+  {
+    id: "compact",
+    label: "压缩上下文",
+    description: "整理较早的对话，可在 /compact 后填写保留重点",
+    icon: Minimize2Icon,
+    requiresSession: true,
+    action: (actions) => actions.compactContext(),
+  },
   {
     id: "new",
     label: "新聊天",

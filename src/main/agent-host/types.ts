@@ -4,6 +4,7 @@ import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
 
 import type {
   GitChangesView,
+  ContextCompaction,
   ModelFailure,
   ModelRetryProgress,
   PermissionDecision,
@@ -57,9 +58,21 @@ export interface AgentRunOptions extends Pick<
   initialMessage?: ReferencedUserMessage;
   skillInstructions?: readonly string[];
   clearDraftFor?: string;
+  compaction?: CompactionRequest;
   onStarted: () => void;
   onSessionUpdated: () => void;
   onFinished: () => void;
+}
+
+export type CompactionRequest = { mode: "manual"; focus: string } | { mode: "retry" };
+
+export interface SavedCompaction extends ContextCompaction {
+  type: "pilot_context_compaction";
+  timestamp: number;
+  cutoff: number;
+  trimBefore: number;
+  toolOutputLimit: number;
+  usage?: Snapshot["usage"];
 }
 
 export interface RunCheckpoint {
@@ -98,6 +111,7 @@ export interface SessionRecord {
   messages: AgentMessage[];
   checkpoint?: RunCheckpoint;
   gitChanges?: SavedGitChanges;
+  compactions: SavedCompaction[];
 }
 
 export interface AgentInstructions {

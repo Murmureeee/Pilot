@@ -78,7 +78,8 @@ export interface PiApi {
     expectedDirectory?: string | null,
     composerId?: string,
   ): Promise<ActiveRun | null>;
-  agentResume(run: RunRef): Promise<ActiveRun | null>;
+  agentResume(run: RunRef, compact?: boolean): Promise<ActiveRun | null>;
+  agentCompact(composerId: string, focus?: string): Promise<void>;
   searchWorkspace(query: string, expectedDirectory?: string): Promise<WorkspaceEntry[]>;
   previewWorkspaceReference(
     reference: WorkspaceReferenceRequest,

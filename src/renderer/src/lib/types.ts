@@ -32,6 +32,7 @@ export interface ComposerTrigger {
 interface ComposerCommandActions {
   newChat(): Promise<void>;
   archiveChat(): Promise<void>;
+  compactContext(): Promise<void>;
   openMenu(menu: ComposerToolbarMenu): void;
   openSettings(section: SettingsSection): void;
 }
@@ -141,6 +142,7 @@ export interface VisibleTurns {
 
 export type ChatRow =
   | { role: "user"; id: string; message: UiMessage }
+  | { role: "compaction"; id: string; part: Extract<UiPart, { type: "compaction" }> }
   | { role: "assistant"; id: string; messages: UiMessage[] };
 
 export interface ReplyEntry {

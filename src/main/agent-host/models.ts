@@ -22,7 +22,11 @@ import type { ModelCatalogEntry, ProviderInput, ProviderTestResult } from "@shar
 import { visibleMessageText } from "../../shared/mentions";
 import { isLocalOpenAiProvider } from "../../shared/providers";
 import type { ProviderConfig } from "../settings/types";
-import { DEFAULT_MODEL_CAPABILITIES, DEFAULT_MODEL_PRICING } from "./constants";
+import {
+  COMPACTION_SUMMARY_PROMPT,
+  DEFAULT_MODEL_CAPABILITIES,
+  DEFAULT_MODEL_PRICING,
+} from "./constants";
 import { legacyMentionParts } from "./mentions";
 import {
   applyModelCapabilities,
@@ -58,6 +62,16 @@ function resolveFaux(cfg: ProviderConfig): ResolvedModel {
     const parts = legacyMentionParts(withoutSkillBodies);
     const echoed = (parts ? visibleMessageText(parts) : text).slice(0, 200);
     const chinese = /\p{Script=Han}/u.test(echoed);
+
+    // Summary requests carry transcript text, including words that trigger tool demos.
+    if (messages[0]?.role === "system" && messageText(messages[0]) === COMPACTION_SUMMARY_PROMPT) {
+      const excerpt = text.slice(-160).trim();
+      const label = /\p{Script=Han}/u.test(excerpt)
+        ? "较早对话节选"
+        : "Excerpt from earlier messages";
+      faux.appendResponses([fauxAssistantMessage([fauxText(label + "\n\n" + excerpt)])]);
+      return inner(m, context, options);
+    }
 
     // 工具结果回填后的收尾响应
     if (last?.role === "toolResult") {

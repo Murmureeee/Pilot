@@ -11,6 +11,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { beforeEach, expect, it, vi } from "vitest";
 
+import { COMPACTION_SUMMARY_PROMPT } from "../src/main/agent-host/constants";
 import { AgentHost } from "../src/main/agent-host/host";
 import { McpManager } from "../src/main/agent-host/mcp";
 import { withModelRetry } from "../src/main/agent-host/model-retry";
@@ -243,4 +244,108 @@ it("reopens an exhausted task and continues from its saved tool result", async (
   });
   expect(statSync(marker).mtimeMs).toBe(written);
   expect(() => reopened.resume(failed)).toThrow("该任务已更新");
+});
+
+it("compacts and retries overflow from its checkpoint without repeating a completed write", async () => {
+  using fixture = mkdtempDisposableSync(join(tmpdir(), "pilot-overflow-retry-"));
+  const project = join(fixture.path, "project");
+  mkdirSync(project);
+  const sessions = join(fixture.path, "sessions");
+  const settings: Settings = {
+    providers: [provider],
+    activeProviderId: provider.id,
+    approvalMode: "full-access",
+  };
+  let cancelCompaction = false;
+  const makeHost = (): AgentHost => {
+    const host = new AgentHost({
+      store: new SessionStore(sessions),
+      getSettings: () => settings,
+      saveSettings: vi.fn<(settings: Settings) => void>(),
+      broadcast: (event) => {
+        if (cancelCompaction && event.type === "context_compacting" && event.compacting) {
+          host.abort(event.run);
+        }
+      },
+      skillsDir: join(fixture.path, "skills"),
+      mcp: new McpManager(() => settings, "0.0.0"),
+    });
+    return host;
+  };
+  const host = makeHost();
+  const { sessionId } = host.openProject(project);
+  const earlier = "Earlier discussion " + "archive ".repeat(800);
+  const queued = "Review the pending check";
+  const write = (id: string): Response =>
+    chatResponse(
+      {
+        tool_calls: [
+          {
+            index: 0,
+            id,
+            type: "function",
+            function: {
+              name: "write_file",
+              arguments: JSON.stringify({ path: "marker.txt", content: "written once" }),
+            },
+          },
+        ],
+      },
+      "tool_calls",
+    );
+  const requests: { role: string; content: string }[][] = [];
+  using fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (...args) => {
+    const body = (await new Request(...args).json()) as {
+      messages: { role: string; content: string }[];
+    };
+    if (body.messages[0]?.content === COMPACTION_SUMMARY_PROMPT)
+      return chatResponse({ content: "Keep the pending check and use the saved write." }, "stop");
+    requests.push(body.messages);
+    if (requests.length === 1) return chatResponse({ content: "Earlier reply" }, "stop");
+    if (requests.length === 2) return write("initial_write");
+    if (requests.length === 3) {
+      await host.prompt(queued);
+      return errorResponse(400, "Request exceeds the context window", "context_length_exceeded");
+    }
+    if (requests.length === 4) return write("attempted_repeat");
+    return chatResponse({ content: "Continued without writing again" }, "stop");
+  });
+
+  await host.prompt(earlier);
+  await host.prompt("Write the marker and continue");
+  const failed = host.getSnapshot().failedRun!;
+  expect(failed?.failure.kind).toBe("context-limit");
+  const marker = join(project, "marker.txt");
+  const written = statSync(marker).mtimeMs;
+  const before = new SessionStore(sessions).read(failed.sessionId);
+  expect(before.checkpoint?.pending.map(({ content }) => content)).toEqual([queued]);
+
+  const resumed = makeHost();
+  resumed.loadSession(sessionId ?? failed.sessionId);
+  cancelCompaction = true;
+  await resumed.resume(failed, true);
+  expect(new SessionStore(sessions).read(failed.sessionId)).toEqual(before);
+  expect(resumed.getSnapshot().failedRun).toEqual(failed);
+  cancelCompaction = false;
+
+  await resumed.resume(failed, true);
+  expect(resumed.getSnapshot().failedRun).toBeNull();
+  const reopened = makeHost().loadSession(failed.sessionId);
+  const serialized = JSON.stringify(reopened.messages);
+  expect(serialized).toContain(earlier);
+  expect(serialized).toContain("Continued without writing again");
+  expect(reopened.messages.filter(({ role }) => role === "system")).toHaveLength(1);
+  expect(serialized.match(new RegExp(queued, "g"))).toHaveLength(1);
+  expect(statSync(marker).mtimeMs).toBe(written);
+  expect(readFileSync(marker, "utf8")).toBe("written once");
+  expect(requests).toHaveLength(5);
+  expect(fetch.mock.calls.length).toBeGreaterThan(requests.length);
+  expect(JSON.stringify(requests[3]).length).toBeLessThan(JSON.stringify(requests[2]).length);
+  expect(requests[3]).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ role: "tool", content: expect.stringContaining("marker.txt") }),
+      expect.objectContaining({ role: "user", content: queued }),
+    ]),
+  );
+  expect(requests[4].at(-1)?.content).toContain("This operation was already started");
 });

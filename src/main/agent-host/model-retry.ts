@@ -27,9 +27,10 @@ function failureKind(result: AssistantMessage, status?: number): ModelFailure["k
     return "quota";
   if (status === 401 || /invalid[_ -]api[_ -]key|authentication_error|unauthorized/i.test(detail))
     return "credentials";
+  if (isContextOverflow(result) || /\bcontext_length_exceeded\b/i.test(detail))
+    return "context-limit";
   if (
     status === 404 ||
-    isContextOverflow(result) ||
     /model_not_found|unsupported_(?:model|parameter|value)|(?:model|model id).{0,80}(?:not found|does not exist|not supported)|(?:does not support|unsupported).{0,50}(?:tools|reasoning|vision|images|parameters)/i.test(
       detail,
     )

@@ -274,24 +274,48 @@ describe("agent-events adapter", () => {
     let state = initialRunUiState();
     state = applyRunEvent(state, {
       type: "usage",
-      tokens: { input: 10, output: 5, cacheRead: 2 },
+      tokens: { input: 10, output: 5, cacheRead: 2, cacheWrite: 1 },
       costTotal: 0.01,
       contextTokens: 17,
       contextWindow: 128_000,
     });
     state = applyRunEvent(state, {
       type: "usage",
-      tokens: { input: 30, output: 13, cacheRead: 6 },
+      tokens: { input: 30, output: 13, cacheRead: 6, cacheWrite: 2 },
       costTotal: 0.03,
       contextTokens: 49,
       contextWindow: 64_000,
     });
     state = applyRunEvent(state, { type: "queue", steerCount: 2 });
-    expect(state.usage).toEqual({ input: 30, output: 13, cacheRead: 6, costTotal: 0.03 });
+    expect(state.usage).toEqual({
+      input: 30,
+      output: 13,
+      cacheRead: 6,
+      cacheWrite: 2,
+      costTotal: 0.03,
+    });
     // 上下文占用同样是"最近一轮快照"语义：只替换、不累加
     expect(state.contextTokens).toBe(49);
     expect(state.contextWindow).toBe(64_000);
     expect(state.steerCount).toBe(2);
+  });
+
+  it("places compression markers between transcript messages without changing their IDs", () => {
+    const messages: UiMessage[] = [
+      { id: "first", role: "user", parts: [] },
+      { id: "second", role: "assistant", parts: [] },
+    ];
+    const compaction = { id: "summary", position: 1, summary: "Saved", trimmedTools: 1 };
+    let state = applyRunEvent(initialRunUiState(), { type: "messages", messages });
+    state = applyRunEvent(state, { type: "context_compacting", compacting: true });
+    expect(state.activeRun?.compacting).toBe(true);
+    const event = { type: "context_compacted", compaction, contextTokens: 1200 } as const;
+    const other = { ...state, sessionId: "other" };
+    expect(applyRunEvent(other, event)).toBe(other);
+    state = applyRunEvent(applyRunEvent(state, event), event);
+    expect(state.contextTokens).toBe(1200);
+    expect(state.messages.map(({ id }) => id)).toEqual(["first", "compaction-summary", "second"]);
+    expect(state.messages[1].parts).toEqual([{ type: "compaction", compaction }]);
   });
 
   it("refreshes the sessions list wholesale (自动标题/重命名/删除后)", () => {

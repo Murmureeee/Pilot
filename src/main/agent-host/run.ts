@@ -7,6 +7,7 @@ import type {
   AgentTool,
   BeforeToolCallContext,
   BeforeToolCallResult,
+  StreamFn,
 } from "@earendil-works/pi-agent-core";
 import type { AssistantMessageEvent, ToolResultMessage } from "@earendil-works/pi-ai";
 
@@ -19,6 +20,7 @@ import type {
   PermissionDecision,
   PermissionRequest,
   ToolRule,
+  Snapshot,
   VerificationTask,
 } from "@shared/contract";
 
@@ -36,6 +38,14 @@ import type {
   GitSnapshot,
   RecordedFileChange,
 } from "../workspace/types";
+import { CONTEXT_COMPACTION_RATIO } from "./constants";
+import {
+  assistantUsage,
+  compactContext,
+  compactedContext,
+  compactionMarker,
+  contextSize,
+} from "./context-compaction";
 import { capabilitiesFromModel } from "./model-capabilities";
 import { withModelRetry } from "./model-retry";
 import { PermissionManager } from "./permissions";
@@ -49,6 +59,7 @@ import type {
   AgentRunOptions,
   ReferencedUserMessage,
   RunCheckpoint,
+  SavedCompaction,
   SavedGitChanges,
   TimedAssistantMessage,
 } from "./types";
@@ -69,6 +80,9 @@ export class AgentRun {
   private finishedGitChanges?: Promise<GitChangesView | null>;
   private persistError?: unknown;
   private modelFailure?: ModelFailure;
+  private latestCompaction?: SavedCompaction;
+  private autoCompactionFailed = false;
+  private ownsCheckpoint: boolean;
   private interruptedForExit = false;
   private queuedMessages = 0;
   readonly resumed: boolean;
@@ -85,6 +99,8 @@ export class AgentRun {
       clearDraftFor,
     } = deps;
     const previous = store.checkpoint(sessionId);
+    this.latestCompaction = store.compactions(sessionId).at(-1);
+    this.ownsCheckpoint = deps.compaction === undefined;
     const { workingDirectory } = environment;
     const runId = randomUUID();
     const task: VerificationTask = {
@@ -114,7 +130,7 @@ export class AgentRun {
       gitBaseline: previous?.gitBaseline,
       task,
     };
-    store.save(sessionId, agent.state.messages, this.checkpoint);
+    if (this.ownsCheckpoint) store.save(sessionId, agent.state.messages, this.checkpoint);
     if (clearDraftFor !== undefined) store.saveDraft(clearDraftFor, []);
     if (initialMessage && skillInstructions?.length)
       this.promptSkillInstructions.set(initialMessage, skillInstructions);
@@ -138,12 +154,18 @@ export class AgentRun {
       ? Promise.resolve(
           previous.gitBaseline === undefined ? { unavailable: true } : previous.gitBaseline,
         )
-      : captureGitSnapshot(workingDirectory);
+      : deps.compaction?.mode === "manual"
+        ? Promise.resolve({ unavailable: true })
+        : captureGitSnapshot(workingDirectory);
     deps.view.error = null;
   }
 
   get state(): ActiveRun {
     return this.currentState;
+  }
+
+  get acceptsPrompts(): boolean {
+    return this.ownsCheckpoint;
   }
 
   get gitChangesAtEnd(): Promise<GitChangesView | null> | undefined {
@@ -276,9 +298,9 @@ export class AgentRun {
     const { signal } = this.preparation;
     const unsubscribe = agent.subscribe((event) => this.onAgentEvent(event));
     agent.beforeToolCall = (context, toolSignal) => this.beforeToolCall(context, toolSignal);
-    agent.transformContext = async (messages) =>
-      this.prepareRequestMessages(messages, this.deps.systemPrompt);
     const streamFunction = agent.streamFunction;
+    agent.transformContext = (messages, requestSignal) =>
+      this.prepareContext(messages, streamFunction, requestSignal ?? signal);
     agent.streamFunction = withModelRetry(streamFunction, {
       onRetry: (progress) => this.reportModelRetry(progress),
       onFailure: (failure) => {
@@ -290,6 +312,20 @@ export class AgentRun {
       this.deps.onStarted();
       this.deps.broadcast({ type: "run_started", run: this.state });
       this.deps.onSessionUpdated();
+      const compaction = this.deps.compaction;
+      if (compaction) {
+        const pending = store.checkpoint(sessionId)?.pending.length ?? 0;
+        const messages = agent.state.messages.slice(0, agent.state.messages.length - pending);
+        const focus = compaction.mode === "manual" ? compaction.focus : "";
+        const changed = await this.compact(messages, streamFunction, signal, true, focus);
+        if (compaction.mode === "manual") {
+          if (!changed && !signal.aborted) throw new Error("没有足够的较早内容可压缩。");
+          return;
+        }
+        signal.throwIfAborted();
+        if (!changed)
+          throw new Error("没有足够的较早内容可压缩。请缩短当前请求或换用上下文更大的模型。");
+      }
       const gitBaseline = await this.gitBaseline;
       const directory = this.deps.environment.workingDirectory;
       if (!this.resumed && !signal.aborted && directory && gitBaseline && "root" in gitBaseline)
@@ -336,7 +372,7 @@ export class AgentRun {
         });
       }
     } finally {
-      if (this.interruptedForExit) {
+      if (this.interruptedForExit && this.ownsCheckpoint) {
         try {
           this.saveCheckpoint();
           this.persistError = undefined;
@@ -370,6 +406,104 @@ export class AgentRun {
     const rules = settings.toolRules ?? [];
     if (!rules.some((candidate) => sameToolRule(candidate, rule)))
       this.deps.saveSettings({ ...settings, toolRules: [...rules, rule] });
+  }
+
+  private async prepareContext(
+    messages: AgentMessage[],
+    stream: StreamFn,
+    signal: AbortSignal,
+  ): Promise<AgentMessage[]> {
+    const prepared = this.prepareRequestMessages(messages, this.deps.systemPrompt);
+    const projected = compactedContext(prepared, this.latestCompaction, messages);
+    const { contextWindow } = this.deps.agent.state.model;
+    if (
+      this.autoCompactionFailed ||
+      contextSize(projected) < contextWindow * CONTEXT_COMPACTION_RATIO
+    )
+      return projected;
+    try {
+      if (await this.compact(messages, stream, signal, false, ""))
+        return compactedContext(prepared, this.latestCompaction, messages);
+    } catch {
+      signal.throwIfAborted();
+      this.autoCompactionFailed = true;
+    }
+    return projected;
+  }
+
+  private async compact(
+    messages: AgentMessage[],
+    stream: StreamFn,
+    signal: AbortSignal,
+    force: boolean,
+    focus: string,
+  ): Promise<boolean> {
+    signal.throwIfAborted();
+    const { agent, store } = this.deps;
+    const prepared = this.prepareRequestMessages(messages, this.deps.systemPrompt);
+    this.currentState = { ...this.state, compacting: true };
+    this.send({ type: "context_compacting", compacting: true });
+    try {
+      const compaction = await compactContext({
+        messages: prepared,
+        original: messages,
+        previous: this.latestCompaction,
+        model: agent.state.model,
+        stream,
+        signal,
+        force,
+        focus,
+        apiKey: await agent.getApiKey?.(agent.state.model.provider),
+      });
+      signal.throwIfAborted();
+      if (!compaction) return false;
+      if (this.deps.compaction?.mode === "retry" && !this.ownsCheckpoint) {
+        // Commit the smaller context and transfer the saved task in the same write.
+        store.addCompaction(
+          this.state.sessionId,
+          agent.state.messages,
+          compaction,
+          this.checkpoint,
+        );
+        this.ownsCheckpoint = true;
+      } else {
+        store.addCompaction(this.state.sessionId, messages, compaction);
+      }
+      this.latestCompaction = compaction;
+      const contextTokens = contextSize(compactedContext(prepared, compaction, messages));
+      this.deps.view.contextTokens = contextTokens;
+      if (compaction.usage) this.addUsage(compaction.usage);
+      this.send({
+        type: "context_compacted",
+        compaction: compactionMarker(compaction),
+        contextTokens,
+      });
+      return true;
+    } finally {
+      this.currentState = { ...this.state, compacting: false };
+      this.send({ type: "context_compacting", compacting: false });
+    }
+  }
+
+  private addUsage(usage: Snapshot["usage"]): void {
+    const view = this.deps.view;
+    view.usage.input += usage.input;
+    view.usage.output += usage.output;
+    view.usage.cacheRead += usage.cacheRead;
+    view.usage.cacheWrite += usage.cacheWrite;
+    view.usage.costTotal += usage.costTotal;
+    this.send({
+      type: "usage",
+      tokens: {
+        input: view.usage.input,
+        output: view.usage.output,
+        cacheRead: view.usage.cacheRead,
+        cacheWrite: view.usage.cacheWrite,
+      },
+      costTotal: view.usage.costTotal,
+      contextTokens: view.contextTokens,
+      contextWindow: view.contextWindow,
+    });
   }
 
   private prepareRequestMessages(messages: AgentMessage[], systemPrompt: string): AgentMessage[] {
@@ -509,25 +643,11 @@ export class AgentRun {
 
     if (event.type === "message_end" && event.message.role === "assistant") {
       const assistant: TimedAssistantMessage = event.message;
-      if (assistant.usage) {
-        this.deps.view.usage.input += assistant.usage.input;
-        this.deps.view.usage.output += assistant.usage.output;
-        this.deps.view.usage.cacheRead += assistant.usage.cacheRead;
-        this.deps.view.usage.costTotal += assistant.usage.cost?.total ?? 0;
+      if (assistant.usage && assistant.stopReason !== "error") {
         // 上下文占用 = 最近一轮（不是累计）：请求携带的 input/cache + 本轮输出
         const u = assistant.usage;
         this.deps.view.contextTokens = u.input + u.output + u.cacheRead + (u.cacheWrite ?? 0);
-        this.send({
-          type: "usage",
-          tokens: {
-            input: this.deps.view.usage.input,
-            output: this.deps.view.usage.output,
-            cacheRead: this.deps.view.usage.cacheRead,
-          },
-          costTotal: this.deps.view.usage.costTotal,
-          contextTokens: this.deps.view.contextTokens,
-          contextWindow: this.deps.view.contextWindow,
-        });
+        this.addUsage(assistantUsage(u));
       }
       const last = this.deps.view.messages.at(-1);
       if (last?.role === "assistant") {
@@ -697,8 +817,13 @@ export class AgentRun {
     if (this.interruptedForExit) return;
     const checkpoint = failure ? { ...this.checkpoint, failure } : undefined;
     this.deps.store.save(sessionId, messages, checkpoint, changes, this.checkpoint.task);
-    this.deps.view.messages = toUiMessages(messages, "s", (name) => this.toolLabel(name));
-    this.deps.view.nextId = this.deps.view.messages.length;
+    this.deps.view.messages = toUiMessages(
+      messages,
+      "s",
+      (name) => this.toolLabel(name),
+      this.deps.store.compactions(sessionId),
+    );
+    this.deps.view.nextId = this.deps.view.messages.filter(({ role }) => role !== "system").length;
     this.send({ type: "messages", messages: this.deps.view.messages });
     const last = messages.at(-1);
     if (last?.role === "assistant" && last.stopReason === "error") {

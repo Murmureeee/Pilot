@@ -31,6 +31,7 @@ import type {
   VerificationTask,
 } from "@shared/contract";
 
+import { compactFocus } from "../../shared/compact-command";
 import { APP_NAME, DEFAULT_THINKING_LEVEL } from "../../shared/constants";
 import { applyMessageEvent } from "../../shared/message-events";
 import { effectiveModelCapabilities } from "../../shared/model-capabilities";
@@ -67,6 +68,7 @@ import type {
   GitWorktree,
   RecordedFileChange,
 } from "../workspace/types";
+import { compactedContext, contextSize, transcriptUsage } from "./context-compaction";
 import { prepareMentionPrompt } from "./mentions";
 import { resolveModel } from "./models";
 import { loadProjectInstructions } from "./project-instructions";
@@ -79,6 +81,7 @@ import type { ToolEnvironment } from "./tools/types";
 import type {
   AgentInstructions,
   AgentSessionView,
+  CompactionRequest,
   HostDeps,
   GitCommitOperation,
   ReferencedUserMessage,
@@ -92,7 +95,7 @@ function createSessionView(): AgentSessionView {
     messages: [],
     nextId: 0,
     error: null,
-    usage: { input: 0, output: 0, cacheRead: 0, costTotal: 0 },
+    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costTotal: 0 },
     contextTokens: 0,
     contextWindow: null,
   };
@@ -294,9 +297,14 @@ export class AgentHost {
     this.agentProvider = active;
     this.agentInstructions = instructions;
     this.agentToolEnvironment = toolEnvironment;
-    this.view.messages = toUiMessages(agent.state.messages, "s");
+    const compactions = this.deps.store.compactions(sessionId);
+    this.view.messages = toUiMessages(agent.state.messages, "s", undefined, compactions);
     // id 计数只数 UI 可见消息（user/assistant），与事件侧计数保持一致
-    this.view.nextId = this.view.messages.length;
+    this.view.nextId = this.view.messages.filter(({ role }) => role !== "system").length;
+    this.view.usage = transcriptUsage(agent.state.messages, compactions);
+    this.view.contextTokens = contextSize(
+      compactedContext(agent.state.messages, compactions.at(-1)),
+    );
     return agent;
   }
 
@@ -367,11 +375,20 @@ export class AgentHost {
     if (this.applyingGitRollback) throw new Error("正在撤销 Git 变更，请稍后重试。");
     if (this.applyingGitSelection) throw new Error("正在更新 Git，请稍后重试。");
     if (composerId !== undefined) this.checkComposerId(composerId);
+    const focus =
+      typeof input === "string" || input.mentions.length === 0
+        ? compactFocus(typeof input === "string" ? input : input.text)
+        : undefined;
+    if (focus !== undefined) {
+      if (expectedDirectory !== undefined) this.checkWorkingDirectory(expectedDirectory);
+      return this.compact(composerId ?? this.composerId, focus, composerId);
+    }
     const run = this.run;
     if (
       run &&
       (run.state.sessionId !== this.sessionId ||
         run.state.status === "stopping" ||
+        !run.acceptsPrompts ||
         run.gitChangesAtEnd)
     ) {
       return run.state;
@@ -401,7 +418,7 @@ export class AgentHost {
     return this.beginRun(agent, message, prepared.skillInstructions, composerId);
   }
 
-  resume(ref: RunRef): Promise<void> | ActiveRun {
+  resume(ref: RunRef, compact = false): Promise<void> | ActiveRun {
     if (this.applyingGitRollback) throw new Error("正在撤销 Git 变更，请稍后重试。");
     if (this.applyingGitSelection) throw new Error("正在更新 Git，请稍后重试。");
     const active = this.run?.state;
@@ -411,6 +428,8 @@ export class AgentHost {
     if (checkpoint?.runId !== ref.runId) {
       throw new Error("该任务已更新，请重新打开会话。");
     }
+    if (compact && checkpoint.failure?.kind !== "context-limit")
+      throw new Error("该任务没有上下文超限错误。");
     const directory = checkpoint.workingDirectory ?? undefined;
     const agent = this.ensureAgent(directory);
     const last = agent.state.messages.at(-1);
@@ -422,7 +441,22 @@ export class AgentHost {
             timestamp: Date.now(),
           }
         : undefined;
-    return this.beginRun(agent, message);
+    return this.beginRun(
+      agent,
+      message,
+      undefined,
+      undefined,
+      compact ? { mode: "retry" } : undefined,
+    );
+  }
+
+  compact(composerId: string, focus = "", clearDraftFor?: string): Promise<void> {
+    this.checkComposerId(composerId);
+    if (this.applyingGitRollback || this.applyingGitSelection || this.run)
+      throw new Error("请在当前操作结束后压缩上下文。");
+    if (!this.sessionId) throw new Error("没有足够的较早内容可压缩。");
+    const agent = this.ensureAgent(this.getWorkingDirectory());
+    return this.beginRun(agent, undefined, undefined, clearDraftFor, { mode: "manual", focus });
   }
 
   private beginRun(
@@ -430,6 +464,7 @@ export class AgentHost {
     message?: ReferencedUserMessage,
     skillInstructions?: readonly string[],
     clearDraftFor?: string,
+    compaction?: CompactionRequest,
   ): Promise<void> {
     const sessionId = this.sessionId!;
     const sessionRules = this.sessionRules.get(sessionId) ?? [];
@@ -446,6 +481,7 @@ export class AgentHost {
       initialMessage: message,
       skillInstructions,
       clearDraftFor,
+      compaction,
       onStarted: () => this.deps.onActivityChanged?.(),
       onSessionUpdated: () => {
         this.sendSessions();
@@ -474,7 +510,8 @@ export class AgentHost {
   }
 
   clearQueue(ref: RunRef): void {
-    this.selectedRun(ref)?.clearQueue();
+    const run = this.selectedRun(ref);
+    if (run?.acceptsPrompts) run.clearQueue();
   }
 
   /** 手动重命名；返回刷新后的会话列表 */
@@ -1028,6 +1065,11 @@ export class AgentHost {
     const configured = selected
       ? effectiveModelCapabilities(selected.automatic, selected.overrides)
       : null;
+    const storedMessages =
+      this.sessionId && (!hasLiveMessages || checkpoint)
+        ? this.deps.store.load(this.sessionId)
+        : [];
+    const compactions = this.sessionId ? this.deps.store.compactions(this.sessionId) : [];
     return {
       sessionId: this.sessionId,
       composerId: this.composerId,
@@ -1039,7 +1081,7 @@ export class AgentHost {
         hasLiveMessages && !checkpoint
           ? this.view.messages
           : this.sessionId
-            ? toUiMessages(this.deps.store.load(this.sessionId), "s")
+            ? toUiMessages(storedMessages, "s", undefined, compactions)
             : [],
       status: ownRun?.state.status ?? "idle",
       activeRun,
@@ -1052,9 +1094,11 @@ export class AgentHost {
       settings,
       usage: hasLiveMessages
         ? { ...this.view.usage }
-        : { input: 0, output: 0, cacheRead: 0, costTotal: 0 },
+        : transcriptUsage(storedMessages, compactions),
       contextWindow: ownRun ? this.view.contextWindow : (configured?.contextWindow ?? null),
-      contextTokens: hasLiveMessages ? this.view.contextTokens : 0,
+      contextTokens: hasLiveMessages
+        ? this.view.contextTokens
+        : contextSize(compactedContext(storedMessages, compactions.at(-1))),
       steerCount: ownRun?.steerCount ?? 0,
     };
   }

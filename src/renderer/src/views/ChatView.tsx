@@ -4,6 +4,7 @@ import { ArrowDownIcon, RotateCcwIcon } from "lucide-react";
 import { Activity, Fragment, useEffect, useMemo, useRef, useState, type JSX } from "react";
 
 import { AssistantReply } from "@renderer/components/ai/assistant-reply";
+import { CompactionMarker } from "@renderer/components/ai/compaction-marker";
 import { Composer } from "@renderer/components/ai/composer";
 import { HomeStart } from "@renderer/components/ai/home-start";
 import { MessageJump } from "@renderer/components/ai/message-jump";
@@ -39,6 +40,9 @@ function chatRows(messages: UiMessage[]): ChatRow[] {
       const previous = rows.at(-1);
       if (previous?.role === "assistant") previous.messages.push(message);
       else rows.push({ id: message.id, role: "assistant", messages: [message] });
+    } else {
+      const part = message.parts.find((entry) => entry.type === "compaction");
+      if (part) rows.push({ id: message.id, role: "compaction", part });
     }
   }
   return rows;
@@ -69,7 +73,7 @@ export function ChatView({
   const isEmpty = rows.length === 0;
   // run_started 先于新的用户消息到达。这段间隙里上一回合仍是最后一行，但它已经结束，
   // 不能当作进行中，否则收起的轨迹会闪开、旧计划会跳到输入坞上。可继续的中断回合除外。
-  const lastRow = rows.at(-1);
+  const lastRow = rows.findLast(({ role }) => role !== "compaction");
   const idleRowKey =
     lastRow && interruptedRun?.sessionId !== sessionId ? sessionId + "/" + lastRow.id : null;
   const [finishedRowKey, setFinishedRowKey] = useState<string | null>(null);
@@ -78,10 +82,11 @@ export function ChatView({
     busy && lastRow && sessionId + "/" + lastRow.id !== finishedRowKey ? lastRow : undefined;
   const livePlan = useMemo(() => {
     if (liveRow?.role !== "assistant") return undefined;
-    return liveRow.messages
+    return messages
+      .slice(messages.findLastIndex(({ role }) => role === "user") + 1)
       .flatMap((message) => message.parts)
       .findLast((part): part is Extract<UiPart, { type: "plan" }> => part.type === "plan");
-  }, [liveRow]);
+  }, [liveRow, messages]);
   const needsSetup =
     isEmpty &&
     settings !== null &&
@@ -137,6 +142,13 @@ export function ChatView({
                   className="workspace-column gap-7 pt-7 pb-5"
                 >
                   {rows.map((row) => {
+                    if (row.role === "compaction") {
+                      return (
+                        <MessageScrollerItem key={row.id} messageId={row.id}>
+                          <CompactionMarker compaction={row.part.compaction} />
+                        </MessageScrollerItem>
+                      );
+                    }
                     const isUser = row.role === "user";
                     const live = row === liveRow;
                     if (
@@ -289,7 +301,7 @@ export function ChatView({
               composerColumn.current
                 ?.querySelector<HTMLElement>("[contenteditable=true]")
                 ?.focus({ preventScroll: true });
-              void resumeRun(failedRun);
+              void resumeRun(failedRun, failedRun.failure.kind === "context-limit");
             }}
           />
         )}

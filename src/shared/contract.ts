@@ -15,6 +15,7 @@ export const IPC = {
   appInstallUpdate: "app:install-update",
   agentPrompt: "agent:prompt",
   agentResume: "agent:resume",
+  agentCompact: "agent:compact",
   agentSearchWorkspace: "agent:search-workspace",
   agentPreviewWorkspaceReference: "agent:preview-workspace-reference",
   agentAbort: "agent:abort",
@@ -212,6 +213,7 @@ export type UiUserPart =
     };
 
 export type UiPart =
+  | { type: "compaction"; compaction: ContextCompaction }
   | UiUserPart
   | {
       type: "thinking";
@@ -249,6 +251,14 @@ export interface ActiveRun extends RunRef {
   workingDirectory: string | null;
   retry?: ModelRetryProgress;
   modelCapabilities?: ModelCapabilities;
+  compacting?: boolean;
+}
+
+export interface ContextCompaction {
+  id: string;
+  position: number;
+  summary: string;
+  trimmedTools: number;
 }
 
 export interface InterruptedRun extends RunRef {
@@ -262,7 +272,15 @@ export interface ModelRetryProgress {
 }
 
 export interface ModelFailure {
-  kind: "network" | "rate-limit" | "server" | "credentials" | "quota" | "capability" | "other";
+  kind:
+    | "network"
+    | "rate-limit"
+    | "server"
+    | "credentials"
+    | "quota"
+    | "capability"
+    | "context-limit"
+    | "other";
   detail: string;
 }
 
@@ -300,11 +318,14 @@ export interface UsageTotals {
   input: number;
   output: number;
   cacheRead: number;
+  cacheWrite: number;
 }
 
 export type AgentRunEvent =
   | { type: "status"; status: AgentStatus; interruptedRun?: InterruptedRun; failedRun?: FailedRun }
   | { type: "model_retry"; retry: ModelRetryProgress | null; resetReplyId?: string }
+  | { type: "context_compacting"; compacting: boolean }
+  | { type: "context_compacted"; compaction: ContextCompaction; contextTokens: number }
   | { type: "messages"; messages: UiMessage[] }
   | { type: "user_message"; message: UiMessage }
   | { type: "assistant_start"; id: string }

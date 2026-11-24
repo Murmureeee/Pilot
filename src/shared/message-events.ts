@@ -1,5 +1,5 @@
 // @env all
-import type { AgentRunEvent, UiMessage, UiPart } from "./contract";
+import type { AgentRunEvent, ContextCompaction, UiMessage, UiPart } from "./contract";
 import { applyPlanUpdate } from "./plan";
 
 type ToolPart = Extract<UiPart, { type: "tool" }>;
@@ -38,6 +38,8 @@ function updateTool(
 
 export function applyMessageEvent(messages: UiMessage[], event: AgentRunEvent): UiMessage[] {
   switch (event.type) {
+    case "context_compacted":
+      return insertCompactionMarker(messages, event.compaction);
     case "messages":
       return event.messages;
     case "user_message":
@@ -128,4 +130,22 @@ export function applyMessageEvent(messages: UiMessage[], event: AgentRunEvent): 
     default:
       return messages;
   }
+}
+
+export function insertCompactionMarker(
+  messages: UiMessage[],
+  compaction: ContextCompaction,
+): UiMessage[] {
+  const { id, position, summary, trimmedTools } = compaction;
+  const markerId = "compaction-" + id;
+  if (messages.some((message) => message.id === markerId)) return messages;
+  let visible = 0;
+  const next = messages.findIndex(
+    ({ role }) => (role === "user" || role === "assistant") && visible++ === position,
+  );
+  return messages.toSpliced(next < 0 ? messages.length : next, 0, {
+    id: markerId,
+    role: "system",
+    parts: [{ type: "compaction", compaction: { id, position, summary, trimmedTools } }],
+  });
 }

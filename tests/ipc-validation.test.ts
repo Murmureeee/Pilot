@@ -41,6 +41,7 @@ const valid: Record<IpcChannel, unknown[]> = {
   ],
   [IPC.agentAbort]: [run],
   [IPC.agentResume]: [run],
+  [IPC.agentCompact]: [sessionId],
   [IPC.agentClearQueue]: [run],
   [IPC.agentGetSnapshot]: [],
   [IPC.sessionNew]: [],
@@ -137,6 +138,14 @@ describe("IPC argument validation", () => {
         /Invalid IPC arguments/,
       );
     }
+  });
+
+  it("accepts a compaction focus and a context-overflow retry flag", () => {
+    expect(parseIpcArgs(IPC.agentCompact, [sessionId, "保留重点"])).toEqual([
+      sessionId,
+      "保留重点",
+    ]);
+    expect(parseIpcArgs(IPC.agentResume, [run, true])).toEqual([run, true]);
   });
 
   it("accepts Responses providers for catalog, connection tests, and settings", () => {

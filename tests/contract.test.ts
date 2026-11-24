@@ -55,6 +55,7 @@ describe("IPC contract", () => {
     expect(IPC.sessionOpenGitLine).toBe("session:open-git-line");
     expect(IPC.agentClearQueue).toBe("agent:clear-queue");
     expect(IPC.agentResume).toBe("agent:resume");
+    expect(IPC.agentCompact).toBe("agent:compact");
     expect(IPC.agentSearchWorkspace).toBe("agent:search-workspace");
     expect(IPC.agentPreviewWorkspaceReference).toBe("agent:preview-workspace-reference");
     expect(IPC.appOpenPath).toBe("app:open-path");

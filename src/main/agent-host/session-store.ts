@@ -25,6 +25,7 @@ import type {
 } from "@shared/contract";
 
 import { visibleMessageText } from "../../shared/mentions";
+import { insertCompactionMarker } from "../../shared/message-events";
 import { applyPlanUpdate } from "../../shared/plan";
 import {
   SESSION_DRAFT_EXTENSION,
@@ -43,6 +44,7 @@ import { readPlanSteps } from "./tools/plan";
 import type {
   ReferencedUserMessage,
   RunCheckpoint,
+  SavedCompaction,
   SavedGitChanges,
   SessionIndex,
   SessionRecord,
@@ -129,6 +131,7 @@ export function toUiMessages(
   messages: AgentMessage[],
   prefix: string,
   getToolLabel = labelOf,
+  compactions: readonly SavedCompaction[] = [],
 ): UiMessage[] {
   let uiMessages: UiMessage[] = [];
   const calls = new Map<string, Extract<UiPart, { type: "tool" }>>();
@@ -170,7 +173,7 @@ export function toUiMessages(
     part.state = "error";
     part.error = "工具未执行。";
   }
-  return uiMessages;
+  return compactions.reduce(insertCompactionMarker, uiMessages);
 }
 
 export class SessionStore {
@@ -178,6 +181,7 @@ export class SessionStore {
   private index: SessionIndex = { sessions: [] };
   private readonly checkpoints = new Map<string, RunCheckpoint | null>();
   private readonly gitChanges = new Map<string, SavedGitChanges | null>();
+  private readonly contextCompactions = new Map<string, SavedCompaction[]>();
 
   constructor(private readonly dir: string) {
     mkdirSync(dir, { recursive: true });
@@ -417,12 +421,13 @@ export class SessionStore {
   fork(id: string): SessionMeta | null {
     const origin = this.index.sessions.find((s) => s.id === id);
     if (!origin) return null;
-    const { messages, checkpoint, gitChanges } = this.read(id);
+    const { messages, checkpoint, gitChanges, compactions } = this.read(id);
     const transcript = checkpoint
       ? [...completeToolResults(messages), ...checkpoint.pending]
       : messages;
     const meta = this.create(origin.workingDirectory);
-    if (transcript.length > 0) this.save(meta.id, transcript, undefined, gitChanges);
+    if (transcript.length > 0)
+      this.save(meta.id, transcript, undefined, gitChanges, undefined, compactions);
     return this.rename(meta.id, `分叉：${origin.title.slice(0, 21)}`);
   }
 
@@ -449,6 +454,7 @@ export class SessionStore {
     rmSync(this.draftPath(id), { force: true });
     this.checkpoints.delete(id);
     this.gitChanges.delete(id);
+    this.contextCompactions.delete(id);
     this.index.sessions = this.index.sessions.filter((s) => s.id !== id);
     this.writeIndex();
   }
@@ -468,26 +474,51 @@ export class SessionStore {
     return this.gitChanges.get(id) ?? undefined;
   }
 
+  compactions(id: string): SavedCompaction[] {
+    return this.contextCompactions.get(id) ?? this.read(id).compactions;
+  }
+
+  addCompaction(
+    id: string,
+    messages: AgentMessage[],
+    compaction: SavedCompaction,
+    checkpoint = this.checkpoint(id),
+  ): void {
+    this.writeTranscript(id, messages, checkpoint, undefined, [
+      ...this.compactions(id),
+      compaction,
+    ]);
+  }
+
   read(id: string): SessionRecord {
     const path = this.filePath(id);
     const lines = existsSync(path) ? readFileSync(path, "utf-8").split("\n") : [];
     const messages: AgentMessage[] = [];
     let checkpoint: RunCheckpoint | undefined;
     let gitChanges: SavedGitChanges | undefined;
+    const compactions: SavedCompaction[] = [];
     for (const line of lines) {
       if (!line.trim()) continue;
       try {
-        const value = JSON.parse(line) as RunCheckpoint | SavedGitChanges | AgentMessage;
+        const value = JSON.parse(line) as
+          | RunCheckpoint
+          | SavedGitChanges
+          | SavedCompaction
+          | AgentMessage;
         if ("role" in value) messages.push(value);
         else if (value.type === "pilot_run_checkpoint") checkpoint = value;
         else if (value.type === "pilot_git_changes") gitChanges = value;
+        else if (value.type === "pilot_context_compaction" && validCompaction(value))
+          compactions.push(value);
       } catch {
         console.error(`[session] 跳过损坏行: ${id}`);
       }
     }
     this.checkpoints.set(id, checkpoint ?? null);
     this.gitChanges.set(id, gitChanges ?? null);
-    return { messages, checkpoint, gitChanges };
+    const saved = compactions.filter(({ cutoff }) => cutoff <= messages.length);
+    this.contextCompactions.set(id, saved);
+    return { messages, checkpoint, gitChanges, compactions: saved };
   }
 
   save(
@@ -496,8 +527,9 @@ export class SessionStore {
     checkpoint?: RunCheckpoint,
     gitChanges?: SavedGitChanges | null,
     lastTask?: VerificationTask,
+    compactions?: SavedCompaction[],
   ): SessionMeta {
-    this.writeTranscript(id, messages, checkpoint, gitChanges);
+    this.writeTranscript(id, messages, checkpoint, gitChanges, compactions);
     const title = sessionTitle(messages, checkpoint);
     const meta = this.index.sessions.find((s) => s.id === id);
     if (meta) {
@@ -523,11 +555,13 @@ export class SessionStore {
     messages: AgentMessage[],
     checkpoint?: RunCheckpoint,
     gitChanges = this.lastGitChanges(id) ?? null,
+    compactions = this.compactions(id),
   ): void {
     // The checkpoint and its transcript commit together, including the transition to a finished run.
     const records = [
       ...(checkpoint ? [checkpoint] : []),
       ...(gitChanges ? [gitChanges] : []),
+      ...compactions,
       ...messages,
     ];
     const path = this.filePath(id);
@@ -537,7 +571,20 @@ export class SessionStore {
     renameSync(tmp, path);
     this.checkpoints.set(id, checkpoint ?? null);
     this.gitChanges.set(id, gitChanges);
+    this.contextCompactions.set(id, compactions);
   }
+}
+
+function validCompaction(value: SavedCompaction): boolean {
+  return (
+    typeof value.id === "string" &&
+    typeof value.summary === "string" &&
+    [value.position, value.cutoff, value.trimBefore, value.trimmedTools, value.timestamp].every(
+      (n) => Number.isSafeInteger(n) && n >= 0,
+    ) &&
+    Number.isSafeInteger(value.toolOutputLimit) &&
+    value.toolOutputLimit > 0
+  );
 }
 
 function sessionTitle(messages: AgentMessage[], checkpoint?: RunCheckpoint): string {
