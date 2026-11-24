@@ -19,6 +19,7 @@ export class VerificationManager {
   constructor(
     directory: string,
     private readonly broadcast: (result: VerificationResult) => void,
+    private readonly onActivityChanged?: () => void,
   ) {
     this.history = new VerificationHistory(directory);
   }
@@ -67,6 +68,7 @@ export class VerificationManager {
       });
     }
     this.active.set(sessionId, entry);
+    this.onActivityChanged?.();
     this.broadcast(initial);
 
     const collect = (chunk: string): void => {
@@ -85,6 +87,7 @@ export class VerificationManager {
       if (this.active.get(sessionId) !== entry) return;
       this.active.delete(sessionId);
       clearTimeout(entry.update);
+      this.onActivityChanged?.();
       const status = entry.stopReason ?? (exitCode === 0 ? "success" : "failed");
       done.resolve(this.flush(entry, { status, exitCode, error }));
     };

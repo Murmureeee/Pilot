@@ -24,6 +24,7 @@ import {
 } from "./constants";
 import { DesktopExit } from "./desktop-exit";
 import { prepareUserDataDirectory } from "./profile";
+import { createSleepBlocker } from "./sleep-blocker";
 import { DesktopUpdater } from "./updater";
 import { VerificationManager } from "./verification";
 import { revealWindow } from "./window";
@@ -136,15 +137,23 @@ function startDesktop(): void {
   process.on("uncaughtExceptionMonitor", (error) => {
     log.write("error", "main", "uncaught-exception", errorDetails(error));
   });
-  app.once("will-quit", () => log.write("info", "main", "quit"));
+  const setSleepBlocked = createSleepBlocker(log);
+  app.once("will-quit", () => {
+    setSleepBlocked(false);
+    log.write("info", "main", "quit");
+  });
 
   const persistSettings = (settings: Settings): void => {
     saveSettings(userData, settings);
     log.setLevel(getLogLevel(settings));
   };
   const store = new SessionStore(sessionsDir);
-  const verification = new VerificationManager(join(sessionsDir, "verification"), (result) =>
-    sendToRenderers(AGENT_EVENT_CHANNEL, { type: "verification_updated", result }),
+  const syncSleepBlocker = (): void =>
+    setSleepBlocked(host.hasActiveRun() || verification.hasActiveRuns());
+  const verification = new VerificationManager(
+    join(sessionsDir, "verification"),
+    (result) => sendToRenderers(AGENT_EVENT_CHANNEL, { type: "verification_updated", result }),
+    syncSleepBlocker,
   );
   const mcp = new McpManager(getSettings, app.getVersion());
   const host = new AgentHost({
@@ -155,6 +164,7 @@ function startDesktop(): void {
       if (event.type === "error") log.write("error", "main", "agent-error");
       sendToRenderers(AGENT_EVENT_CHANNEL, event);
     },
+    onActivityChanged: syncSleepBlocker,
     skillsDir,
     mcp,
   });

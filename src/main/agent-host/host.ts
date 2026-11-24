@@ -112,6 +112,7 @@ export interface HostDeps {
   /** 持久化设置（供权限规则落盘） */
   saveSettings: (settings: Settings) => void;
   broadcast: Broadcast;
+  onActivityChanged?: () => void;
   /** 技能目录（userData/skills/），FR-5.8 注入源 */
   skillsDir: string;
   mcp: McpManager;
@@ -961,6 +962,7 @@ export class AgentHost {
     const { preparation } = run;
     let started = false;
     try {
+      this.deps.onActivityChanged?.();
       this.deps.broadcast({ type: "run_started", run: run.state });
       this.sendSessions();
       const gitBaseline = await run.gitBaseline;
@@ -1021,6 +1023,7 @@ export class AgentHost {
       this.steerCount = 0;
       this.run = undefined;
       this.runningPrompt = undefined;
+      this.deps.onActivityChanged?.();
       const { runId, sessionId } = run.state;
       this.deps.broadcast({
         type: "status",
