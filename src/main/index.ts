@@ -23,6 +23,7 @@ import { DiagnosticLog, errorDetails } from "./diagnostics";
 import { logRendererConsole } from "./diagnostics/renderer";
 import { registerIpc } from "./ipc";
 import { registerRenderer, sendToRenderers } from "./ipc/transport";
+import { createDesktopNetwork } from "./network";
 import { prepareUserDataDirectory } from "./profile";
 import { getLogLevel, loadSettings, saveSettings } from "./settings";
 import type { Settings } from "./settings/types";
@@ -157,7 +158,8 @@ function startDesktop(): void {
     (result) => sendToRenderers(AGENT_EVENT_CHANNEL, { type: "verification_updated", result }),
     syncSleepBlocker,
   );
-  const mcp = new McpManager(getSettings, app.getVersion());
+  const network = createDesktopNetwork(session.fromPartition("pilot-network", { cache: false }));
+  const mcp = new McpManager(getSettings, app.getVersion(), network.fetch);
   const host = new AgentHost({
     store,
     getSettings,
@@ -169,6 +171,7 @@ function startDesktop(): void {
     onActivityChanged: syncSleepBlocker,
     skillsDir,
     mcp,
+    request: network.fetch,
   });
 
   if (!isDev) {
@@ -179,7 +182,11 @@ function startDesktop(): void {
     });
   }
 
-  const updater = new DesktopUpdater((event) => sendToRenderers(UPDATE_STATUS_CHANNEL, event), log);
+  const updater = new DesktopUpdater(
+    (event) => sendToRenderers(UPDATE_STATUS_CHANNEL, event),
+    log,
+    network.configureProxy,
+  );
   let mainWindow: BrowserWindow | undefined;
   const exit = new DesktopExit({
     getWindow: () => mainWindow,
@@ -196,6 +203,7 @@ function startDesktop(): void {
     logsDir,
     getSettings,
     saveSettings: persistSettings,
+    request: network.fetch,
     host,
     mcp,
     updater,

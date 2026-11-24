@@ -9,6 +9,7 @@ import type { UpdateStatus } from "@shared/contract";
 
 import { UPDATE_NOT_READY_MESSAGE } from "./constants";
 import { errorDetails, type DiagnosticLog } from "./diagnostics";
+import type { DesktopNetwork } from "./types";
 
 export class DesktopUpdater {
   private status: UpdateStatus = { state: "unavailable" };
@@ -16,6 +17,7 @@ export class DesktopUpdater {
   constructor(
     private readonly publish: (status: UpdateStatus) => void,
     private readonly log: DiagnosticLog,
+    private readonly configureProxy: DesktopNetwork["configureProxy"],
   ) {
     if (
       !app.isPackaged ||
@@ -74,6 +76,7 @@ export class DesktopUpdater {
     if (state !== "idle" && state !== "current" && state !== "error") return this.status;
     this.setStatus({ state: "checking" });
     try {
+      await this.configureProxy(autoUpdater.netSession);
       const result = await autoUpdater.checkForUpdates();
       if (!result) this.setStatus({ state: "unavailable" });
       // Download errors emit the same updater error event as check failures.

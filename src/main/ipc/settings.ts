@@ -14,7 +14,7 @@ import { handle } from "./transport";
 import type { IpcContext } from "./types";
 
 export function registerSettingsRoutes(
-  ctx: Pick<IpcContext, "host" | "skillsDir" | "getSettings" | "saveSettings">,
+  ctx: Pick<IpcContext, "host" | "skillsDir" | "getSettings" | "saveSettings" | "request">,
 ): void {
   handle(IPC.settingsGet, () => toPublicSettings(ctx.getSettings()));
   handle(IPC.settingsSetLogLevel, (_event, logLevel) => {
@@ -107,11 +107,11 @@ export function registerSettingsRoutes(
   };
   handle(IPC.settingsModelCatalog, (_event, ref) => {
     const { cfg, key } = providerRef(ref);
-    return listModels(cfg, key);
+    return listModels(cfg, key, ctx.request);
   });
   handle(IPC.settingsTestProvider, (_event, ref) => {
     const { cfg, key } = providerRef(ref);
-    return testProvider(cfg, key);
+    return testProvider(cfg, key, ctx.request);
   });
   handle(IPC.settingsSave, (_event, input) => {
     const invalid = validateSettingsInput(input);

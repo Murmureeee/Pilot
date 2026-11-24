@@ -282,7 +282,7 @@ export class AgentHost {
 
     if (this.agentSessionId !== sessionId) this.resetAgent();
     const apiKey = decryptSecret(active.apiKey);
-    const { model, streamFn } = resolveModel(active, apiKey);
+    const { model, streamFn } = resolveModel(active, apiKey, this.deps.request);
     const { contextWindow } = model;
     this.view.contextWindow =
       Number.isFinite(contextWindow) && contextWindow > 0 ? contextWindow : null;

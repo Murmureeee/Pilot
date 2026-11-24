@@ -1,5 +1,5 @@
 // @env node
-import type { BrowserWindow, Rectangle } from "electron";
+import type { BrowserWindow, Rectangle, Session } from "electron";
 
 import type { AgentHost } from "./agent-host/host";
 import type { McpManager } from "./agent-host/mcp";
@@ -22,4 +22,9 @@ export interface DesktopExitDependencies {
 export interface WindowState {
   bounds: Rectangle;
   maximized: boolean;
+}
+
+export interface DesktopNetwork {
+  fetch: typeof globalThis.fetch;
+  configureProxy(session: Pick<Session, "setProxy">): Promise<void>;
 }

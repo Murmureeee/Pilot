@@ -66,9 +66,13 @@ function errorDetail(message: string | undefined, apiKey: string | undefined): s
     : redacted;
 }
 
-export function withModelRetry(streamFn: StreamFn, callbacks: ModelRetryCallbacks): StreamFn {
+export function withModelRetry(
+  streamFn: StreamFn,
+  callbacks: ModelRetryCallbacks,
+  defaultFetch?: typeof globalThis.fetch,
+): StreamFn {
   return (model, context, options) => {
-    const request = options?.fetch ?? globalThis.fetch;
+    const request = options?.fetch ?? defaultFetch ?? globalThis.fetch;
     const signal = options?.signal;
 
     async function* readAttempts(): AsyncGenerator<AssistantMessageEvent, AssistantMessage> {

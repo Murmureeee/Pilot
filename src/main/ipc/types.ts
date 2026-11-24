@@ -33,6 +33,7 @@ export interface IpcContext {
   sessionsDir: string;
   skillsDir: string;
   logsDir: string;
+  request: typeof globalThis.fetch;
   getSettings(): Settings;
   saveSettings(settings: Settings): void;
   host: AgentHost;

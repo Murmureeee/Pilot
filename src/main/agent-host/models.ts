@@ -164,15 +164,27 @@ function resolveFaux(cfg: ProviderConfig): ResolvedModel {
   return { model: applyModelCapabilities(cfg, model), streamFn };
 }
 
-function resolveAnthropic(cfg: ProviderConfig, apiKey: string): ResolvedModel {
+function resolveAnthropic(
+  cfg: ProviderConfig,
+  apiKey: string,
+  request?: typeof globalThis.fetch,
+): ResolvedModel {
   const model = bundledModel(cfg);
   if (!model) throw new Error(`未知 anthropic 模型: ${cfg.modelId}`);
   const streamFn: StreamFn = (m, context, options) =>
-    anthropicStreamSimple(m as Model<"anthropic-messages">, context, { ...options, apiKey });
+    anthropicStreamSimple(m as Model<"anthropic-messages">, context, {
+      ...options,
+      apiKey,
+      fetch: options?.fetch ?? request,
+    });
   return { model: applyModelCapabilities(cfg, model), streamFn };
 }
 
-function resolveOpenAi(cfg: ProviderConfig, apiKey: string): ResolvedModel {
+function resolveOpenAi(
+  cfg: ProviderConfig,
+  apiKey: string,
+  request?: typeof globalThis.fetch,
+): ResolvedModel {
   const baseUrl = cfg.baseUrl?.trim();
   if (!baseUrl) throw new Error("OpenAI 端点必须提供 baseUrl");
   const common: Omit<Model<Api>, "api" | "compat"> = {
@@ -195,7 +207,11 @@ function resolveOpenAi(cfg: ProviderConfig, apiKey: string): ResolvedModel {
       compat: { supportsDeveloperRole: false },
     };
     const streamFn: StreamFn = (m, context, options) =>
-      responsesStreamSimple(m as Model<"openai-responses">, context, { ...options, apiKey });
+      responsesStreamSimple(m as Model<"openai-responses">, context, {
+        ...options,
+        apiKey,
+        fetch: options?.fetch ?? request,
+      });
     return { model: applyModelCapabilities(cfg, model), streamFn };
   }
   const model: Model<"openai-completions"> = {
@@ -211,6 +227,7 @@ function resolveOpenAi(cfg: ProviderConfig, apiKey: string): ResolvedModel {
     chatCompletionsStreamSimple(m as Model<"openai-completions">, context, {
       ...options,
       apiKey,
+      fetch: options?.fetch ?? request,
     });
   return { model: applyModelCapabilities(cfg, model), streamFn };
 }
@@ -246,19 +263,23 @@ export function resolveProviderRef(
   };
 }
 
-export function resolveModel(cfg: ProviderConfig, apiKey: string | undefined): ResolvedModel {
+export function resolveModel(
+  cfg: ProviderConfig,
+  apiKey: string | undefined,
+  request?: typeof globalThis.fetch,
+): ResolvedModel {
   switch (cfg.kind) {
     case "faux":
       return resolveFaux(cfg);
     case "anthropic":
       if (!apiKey) throw new Error("anthropic provider 未配置 API key");
-      return resolveAnthropic(cfg, apiKey);
+      return resolveAnthropic(cfg, apiKey, request);
     case "openai-compatible":
     case "openai-responses": {
       // The OpenAI client requires a nonempty key even for servers with authentication disabled.
       const key = apiKey || (isLocalOpenAiProvider(cfg) ? "local" : undefined);
       if (!key) throw new Error("OpenAI 端点未配置 API key");
-      return resolveOpenAi(cfg, key);
+      return resolveOpenAi(cfg, key, request);
     }
     default:
       throw new Error(`未知 provider kind: ${String(cfg.kind)}`);
@@ -269,6 +290,7 @@ export function resolveModel(cfg: ProviderConfig, apiKey: string | undefined): R
 export async function listModels(
   cfg: ProviderConfig,
   apiKey: string | undefined,
+  request = globalThis.fetch,
 ): Promise<ModelCatalogEntry[]> {
   switch (cfg.kind) {
     case "faux":
@@ -284,7 +306,7 @@ export async function listModels(
       const baseUrl = cfg.baseUrl?.trim();
       if (!baseUrl) throw new Error("OpenAI 端点必须提供 baseUrl");
       const url = `${baseUrl.replace(/\/+$/, "")}/models`;
-      const response = await fetch(url, {
+      const response = await request(url, {
         headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
         signal: AbortSignal.timeout(15_000),
       });
@@ -307,10 +329,11 @@ export async function listModels(
 export async function testProvider(
   cfg: ProviderConfig,
   apiKey: string | undefined,
+  request?: typeof globalThis.fetch,
 ): Promise<ProviderTestResult> {
   const startedAt = Date.now();
   try {
-    const { model, streamFn } = resolveModel(cfg, apiKey);
+    const { model, streamFn } = resolveModel(cfg, apiKey, request);
     // TranscriptContext 带 brand，只能断言构造
     const context = {
       messages: [{ role: "user", content: "ping", timestamp: Date.now() }],

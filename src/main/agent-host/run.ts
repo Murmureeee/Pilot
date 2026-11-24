@@ -292,12 +292,16 @@ export class AgentRun {
     const streamFunction = agent.streamFunction;
     agent.transformContext = (messages, requestSignal) =>
       this.prepareContext(messages, streamFunction, requestSignal ?? signal);
-    agent.streamFunction = withModelRetry(streamFunction, {
-      onRetry: (progress) => this.reportModelRetry(progress),
-      onFailure: (failure) => {
-        this.modelFailure = failure;
+    agent.streamFunction = withModelRetry(
+      streamFunction,
+      {
+        onRetry: (progress) => this.reportModelRetry(progress),
+        onFailure: (failure) => {
+          this.modelFailure = failure;
+        },
       },
-    });
+      this.deps.request,
+    );
     let started = false;
     try {
       this.deps.onStarted();

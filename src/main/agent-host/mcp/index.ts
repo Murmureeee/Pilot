@@ -37,6 +37,7 @@ function createTransport(
   config: McpServerConfig,
   cwd?: string,
   imported?: ImportedMcpConnection,
+  request = globalThis.fetch,
 ): McpTransport {
   const envPairs = readEncrypted<[string, string][]>(config.encryptedEnv);
   const headerPairs = readEncrypted<[string, string][]>(config.encryptedHeaders);
@@ -57,8 +58,8 @@ function createTransport(
       // A redirected endpoint must never receive the previous server's private headers.
       fetch:
         headers && Object.keys(headers).length
-          ? (url, init) => fetch(url, { ...init, redirect: "error" })
-          : undefined,
+          ? (url, init) => request(url, { ...init, redirect: "error" })
+          : request,
     });
   }
   return new StdioTransport({
@@ -101,6 +102,7 @@ export class McpManager {
   constructor(
     private readonly getSettings: () => Settings,
     private readonly version: string,
+    private readonly request?: typeof globalThis.fetch,
   ) {}
 
   private sync(workingDirectory: string | undefined, reconnectId?: string): McpConnection[] {
@@ -164,7 +166,7 @@ export class McpManager {
     const { client, signature } = connection;
     try {
       const imported = readEncrypted<ImportedMcpConnection>(config.encryptedImport);
-      await client.connect(createTransport(config, cwd, imported));
+      await client.connect(createTransport(config, cwd, imported, this.request));
       const entries = client.serverCapabilities?.tools ? await client.listTools() : [];
       const include = imported?.includeTools ? new Set(imported.includeTools) : undefined;
       const exclude = new Set(imported?.excludeTools);

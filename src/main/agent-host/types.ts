@@ -34,6 +34,7 @@ export interface HostDeps {
   onActivityChanged?: () => void;
   skillsDir: string;
   mcp: McpManager;
+  request?: typeof globalThis.fetch;
 }
 
 export interface AgentSessionView {
@@ -47,7 +48,7 @@ export interface AgentSessionView {
 
 export interface AgentRunOptions extends Pick<
   HostDeps,
-  "store" | "mcp" | "broadcast" | "getSettings" | "saveSettings"
+  "store" | "mcp" | "broadcast" | "getSettings" | "saveSettings" | "request"
 > {
   agent: Agent;
   sessionId: string;

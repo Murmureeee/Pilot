@@ -54,6 +54,8 @@ export const EN_MESSAGES: Record<string, string> = {
   "检查更新…": "Check for updates…",
   更新并重启: "Update and restart",
   "没有已下载的更新。": "There is no downloaded update.",
+  "无法使用环境变量中的代理地址。请检查 HTTP_PROXY 或 HTTPS_PROXY 后重启 Pilot。":
+    "Pilot could not use the proxy address in the environment. Check HTTP_PROXY or HTTPS_PROXY and restart Pilot.",
   "API Key（本地可选）": "API key (optional for local models)",
   "MCP 服务": "MCP servers",
   "添加 MCP 服务": "Add MCP server",
