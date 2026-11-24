@@ -14,6 +14,8 @@ import type {
   ActiveRun,
   AgentRunEvent,
   GitChangesView,
+  ModelFailure,
+  ModelRetryProgress,
   PermissionDecision,
   PermissionRequest,
   ToolRule,
@@ -34,8 +36,9 @@ import type {
   GitSnapshot,
   RecordedFileChange,
 } from "../workspace/types";
+import { withModelRetry } from "./model-retry";
 import { PermissionManager } from "./permissions";
-import { actionFingerprint, completeToolResults, interruptedRunOf } from "./recovery";
+import { actionFingerprint, completeToolResults, failedRunOf, interruptedRunOf } from "./recovery";
 import { messageParts, messageText, toUiMessages } from "./session-store";
 import { loadSkillBody, skillSection } from "./skills";
 import { labelOf } from "./tools";
@@ -64,6 +67,7 @@ export class AgentRun {
   private gitFilesBefore?: GitCheckpointBase;
   private finishedGitChanges?: Promise<GitChangesView | null>;
   private persistError?: unknown;
+  private modelFailure?: ModelFailure;
   private interruptedForExit = false;
   private queuedMessages = 0;
   readonly resumed: boolean;
@@ -221,6 +225,19 @@ export class AgentRun {
     this.send({ type: "status", status });
   }
 
+  private reportModelRetry(retry: ModelRetryProgress | null): void {
+    this.currentState = { ...this.state, retry: retry ?? undefined };
+    const last = this.deps.view.messages.at(-1);
+    const waiting = retry !== null && retry.retryAt !== null;
+    const resetReplyId =
+      waiting && last?.role === "assistant" && last.streaming ? last.id : undefined;
+    if (resetReplyId) {
+      this.thinkingStarts.clear();
+      this.thinkingDurations = {};
+    }
+    this.send({ type: "model_retry", retry, resetReplyId });
+  }
+
   private async beforeToolCall(
     { toolCall, args }: BeforeToolCallContext,
     signal?: AbortSignal,
@@ -259,6 +276,13 @@ export class AgentRun {
     agent.beforeToolCall = (context, toolSignal) => this.beforeToolCall(context, toolSignal);
     agent.transformContext = async (messages) =>
       this.prepareRequestMessages(messages, this.deps.systemPrompt);
+    const streamFunction = agent.streamFunction;
+    agent.streamFunction = withModelRetry(streamFunction, {
+      onRetry: (progress) => this.reportModelRetry(progress),
+      onFailure: (failure) => {
+        this.modelFailure = failure;
+      },
+    });
     let started = false;
     try {
       this.deps.onStarted();
@@ -295,8 +319,13 @@ export class AgentRun {
       else await agent.continue();
       if (this.interruptedForExit) return;
       if (this.persistError) throw this.persistError;
-      agent.state.messages = completeToolResults(agent.state.messages);
-      await this.settle(agent.state.messages);
+      const messages = agent.state.messages;
+      const last = messages.at(-1);
+      const failure =
+        last?.role === "assistant" && last.stopReason === "error" ? this.modelFailure : undefined;
+      // Continue from the last user message or tool result when the user retries.
+      agent.state.messages = completeToolResults(failure ? messages.slice(0, -1) : messages);
+      await this.settle(agent.state.messages, failure);
     } catch (error) {
       if (started || !signal.aborted) {
         this.send({
@@ -318,15 +347,18 @@ export class AgentRun {
       unsubscribe();
       agent.beforeToolCall = undefined;
       agent.transformContext = undefined;
+      agent.streamFunction = streamFunction;
       agent.state.tools = tools;
       this.promptSkillInstructions.clear();
       this.queuedMessages = 0;
       this.deps.onFinished();
+      const checkpoint = store.checkpoint(sessionId);
       this.deps.broadcast({
         type: "status",
         status: "idle",
         run: { runId, sessionId },
-        interruptedRun: interruptedRunOf(sessionId, store.checkpoint(sessionId)),
+        interruptedRun: interruptedRunOf(sessionId, checkpoint),
+        failedRun: failedRunOf(sessionId, checkpoint),
       });
     }
   }
@@ -623,7 +655,7 @@ export class AgentRun {
     return files;
   }
 
-  private async settle(messages: AgentMessage[]): Promise<void> {
+  private async settle(messages: AgentMessage[], failure?: ModelFailure): Promise<void> {
     const { runId, sessionId, workingDirectory } = this.state;
     const reviewed = captureGitSnapshot(workingDirectory ?? undefined).then(async (current) => {
       const view = compareGitSnapshots(
@@ -661,7 +693,8 @@ export class AgentRun {
     this.finishedGitChanges = reviewed.then((saved) => (saved ? finishedGitView(saved) : null));
     const changes = await reviewed;
     if (this.interruptedForExit) return;
-    this.deps.store.save(sessionId, messages, undefined, changes, this.checkpoint.task);
+    const checkpoint = failure ? { ...this.checkpoint, failure } : undefined;
+    this.deps.store.save(sessionId, messages, checkpoint, changes, this.checkpoint.task);
     this.deps.view.messages = toUiMessages(messages, "s", (name) => this.toolLabel(name));
     this.deps.view.nextId = this.deps.view.messages.length;
     this.send({ type: "messages", messages: this.deps.view.messages });

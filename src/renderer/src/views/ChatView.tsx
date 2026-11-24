@@ -7,6 +7,7 @@ import { AssistantReply } from "@renderer/components/ai/assistant-reply";
 import { Composer } from "@renderer/components/ai/composer";
 import { HomeStart } from "@renderer/components/ai/home-start";
 import { MessageJump } from "@renderer/components/ai/message-jump";
+import { ModelFailureCard } from "@renderer/components/ai/model-feedback";
 import { OnboardingDialog } from "@renderer/components/ai/onboarding-dialog";
 import { PermissionCard } from "@renderer/components/ai/permission-card";
 import { PlanBar } from "@renderer/components/ai/plan-card";
@@ -58,6 +59,7 @@ export function ChatView({
   const permission = useAgentStore((s) => s.pendingPermissions[0]);
   const activeRun = useAgentStore((s) => s.activeRun);
   const interruptedRun = useAgentStore((s) => s.interruptedRun);
+  const failedRun = useAgentStore((s) => s.failedRun);
   const resumeRun = useAgentStore((s) => s.resumeRun);
   const error = useAgentStore((s) => s.error);
   const projectError = useAgentStore((s) => s.projectError);
@@ -273,6 +275,23 @@ export function ChatView({
               {t("继续任务", locale)}
             </Button>
           </div>
+        )}
+        {failedRun && (
+          <ModelFailureCard
+            key={failedRun.runId}
+            failure={failedRun.failure}
+            disabled={activeRun !== null}
+            onOpenSettings={() => {
+              useAgentStore.getState().setSettingsSection("providers");
+              setView("settings");
+            }}
+            onRetry={() => {
+              composerColumn.current
+                ?.querySelector<HTMLElement>("[contenteditable=true]")
+                ?.focus({ preventScroll: true });
+              void resumeRun(failedRun);
+            }}
+          />
         )}
         {livePlan && <PlanBar steps={livePlan.steps} />}
         {permission && activeRun && (

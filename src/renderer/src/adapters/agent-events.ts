@@ -3,6 +3,7 @@
 import type {
   ActiveRun,
   AgentStatus,
+  FailedRun,
   InterruptedRun,
   PermissionRequest,
   SessionMeta,
@@ -17,6 +18,7 @@ export interface AgentUiState {
   status: AgentStatus;
   activeRun: ActiveRun | null;
   interruptedRun: InterruptedRun | null;
+  failedRun: FailedRun | null;
   messages: UiMessage[];
   sessionId: string | null;
   error: string | null;
@@ -35,6 +37,7 @@ export function initialAgentUiState(): AgentUiState {
     status: "idle",
     activeRun: null,
     interruptedRun: null,
+    failedRun: null,
     messages: [],
     sessionId: null,
     error: null,
@@ -55,7 +58,7 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
       ...state,
       activeRun: event.run,
       ...(belongsToSelection
-        ? { status: event.run.status, error: null, interruptedRun: null }
+        ? { status: event.run.status, error: null, interruptedRun: null, failedRun: null }
         : {}),
     };
   }
@@ -64,6 +67,13 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
     const active = state.activeRun;
     if (active?.runId !== event.run.runId || active.sessionId !== event.run.sessionId) return state;
     const belongsToSelection = event.run.sessionId === state.sessionId;
+    if (event.type === "model_retry") {
+      return {
+        ...state,
+        activeRun: { ...active, retry: event.retry ?? undefined },
+        messages: belongsToSelection ? applyMessageEvent(state.messages, event) : state.messages,
+      };
+    }
     if (event.type === "status") {
       return {
         ...state,
@@ -72,6 +82,7 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
           ? {
               status: event.status,
               interruptedRun: event.status === "idle" ? (event.interruptedRun ?? null) : null,
+              failedRun: event.status === "idle" ? (event.failedRun ?? null) : null,
               pendingPermissions:
                 event.status === "waiting_approval" ? state.pendingPermissions : [],
               steerCount: event.status === "idle" ? 0 : state.steerCount,

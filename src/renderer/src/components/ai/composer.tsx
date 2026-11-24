@@ -22,6 +22,7 @@ import {
   type KeyboardEvent,
 } from "react";
 
+import { ModelRetryLabel } from "@renderer/components/ai/model-feedback";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -501,7 +502,15 @@ export function Composer({
               )}
             >
               <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
-              {t(statusLabel, locale)}
+              {status === "streaming" && ownRun.retry ? (
+                <ModelRetryLabel
+                  key={ownRun.retry.attempt + "/" + ownRun.retry.retryAt}
+                  retry={ownRun.retry}
+                  locale={locale}
+                />
+              ) : (
+                t(statusLabel, locale)
+              )}
             </output>
             {steerCount > 0 && (
               <>

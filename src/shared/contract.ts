@@ -247,10 +247,27 @@ export interface RunRef {
 export interface ActiveRun extends RunRef {
   status: Exclude<AgentStatus, "idle">;
   workingDirectory: string | null;
+  retry?: ModelRetryProgress;
 }
 
 export interface InterruptedRun extends RunRef {
   workingDirectory: string | null;
+}
+
+export interface ModelRetryProgress {
+  attempt: number;
+  maxAttempts: number;
+  retryAt: number | null;
+}
+
+export interface ModelFailure {
+  kind: "network" | "rate-limit" | "server" | "credentials" | "quota" | "capability" | "other";
+  detail: string;
+}
+
+export interface FailedRun extends RunRef {
+  workingDirectory: string | null;
+  failure: ModelFailure;
 }
 
 export type CommandDanger =
@@ -285,7 +302,8 @@ export interface UsageTotals {
 }
 
 export type AgentRunEvent =
-  | { type: "status"; status: AgentStatus; interruptedRun?: InterruptedRun }
+  | { type: "status"; status: AgentStatus; interruptedRun?: InterruptedRun; failedRun?: FailedRun }
+  | { type: "model_retry"; retry: ModelRetryProgress | null; resetReplyId?: string }
   | { type: "messages"; messages: UiMessage[] }
   | { type: "user_message"; message: UiMessage }
   | { type: "assistant_start"; id: string }
@@ -633,6 +651,7 @@ export interface Snapshot {
   status: AgentStatus;
   activeRun: ActiveRun | null;
   interruptedRun: InterruptedRun | null;
+  failedRun: FailedRun | null;
   pendingPermissions: PermissionRequest[];
   error: string | null;
   settings: PublicSettings;

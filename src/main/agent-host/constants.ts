@@ -1,6 +1,10 @@
 // @env node
 import type { CommandShell } from "@shared/contract";
 
+export const MODEL_RETRY_ATTEMPTS = 3;
+export const MODEL_RETRY_POLICY = { baseDelayMs: 1000, maxAgentDelayMs: 60_000 };
+export const MODEL_ERROR_DETAIL_LIMIT = 12_000;
+
 export const COMMAND_SCOPE_LIMIT = 32_768;
 export const COMMAND_SUBSTITUTION_LIMIT = 16;
 export const BASH_WORD_CHARACTER = /[a-zA-Z0-9_./:@%+,=-]/;

@@ -142,12 +142,19 @@ export function selectProjectDirectory(
 export function selectWorkingDirectory(
   state: Pick<
     AgentStore,
-    "sessionId" | "draftWorkingDirectory" | "sessions" | "settings" | "activeRun" | "interruptedRun"
+    | "sessionId"
+    | "draftWorkingDirectory"
+    | "sessions"
+    | "settings"
+    | "activeRun"
+    | "interruptedRun"
+    | "failedRun"
   >,
 ): string | null {
   if (state.activeRun?.sessionId === state.sessionId) return state.activeRun.workingDirectory;
   if (state.interruptedRun?.sessionId === state.sessionId)
     return state.interruptedRun.workingDirectory;
+  if (state.failedRun?.sessionId === state.sessionId) return state.failedRun.workingDirectory;
   return selectProjectDirectory(state) ?? state.settings?.workingDirectory ?? null;
 }
 
@@ -168,6 +175,7 @@ function sessionSnapshot(
     status: snapshot.status,
     activeRun: snapshot.activeRun,
     interruptedRun: snapshot.interruptedRun,
+    failedRun: snapshot.failedRun,
     settings: snapshot.settings,
     error: snapshot.error,
     usage: snapshot.usage,
@@ -265,7 +273,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     try {
       await window.pi.agentResume({ sessionId, runId });
     } catch (cause) {
-      if (get().interruptedRun?.runId === runId) {
+      const { interruptedRun, failedRun } = get();
+      if (interruptedRun?.runId === runId || failedRun?.runId === runId) {
         set({ error: cause instanceof Error ? cause.message : String(cause) });
       }
     }

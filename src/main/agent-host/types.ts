@@ -4,6 +4,8 @@ import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
 
 import type {
   GitChangesView,
+  ModelFailure,
+  ModelRetryProgress,
   PermissionDecision,
   PermissionRequest,
   SessionInstructionSources,
@@ -69,6 +71,12 @@ export interface RunCheckpoint {
   actions: string[];
   gitBaseline?: GitSnapshot;
   task?: VerificationTask;
+  failure?: ModelFailure;
+}
+
+export interface ModelRetryCallbacks {
+  onRetry(progress: ModelRetryProgress | null): void;
+  onFailure(failure: ModelFailure): void;
 }
 
 export interface SavedGitChanges {

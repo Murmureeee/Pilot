@@ -44,6 +44,10 @@ export function applyMessageEvent(messages: UiMessage[], event: AgentRunEvent): 
       return [...messages, event.message];
     case "assistant_start":
       return [...messages, { id: event.id, role: "assistant", parts: [], streaming: true }];
+    case "model_retry":
+      return event.resetReplyId === undefined
+        ? messages
+        : updateAssistant(messages, event.resetReplyId, (message) => ({ ...message, parts: [] }));
     case "assistant_delta":
       return updateAssistant(messages, event.id, (message) => {
         const last = message.parts.at(-1);

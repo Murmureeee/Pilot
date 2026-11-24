@@ -69,7 +69,7 @@ import type {
 import { prepareMentionPrompt } from "./mentions";
 import { resolveModel } from "./models";
 import { loadProjectInstructions } from "./project-instructions";
-import { interruptedRunOf } from "./recovery";
+import { failedRunOf, interruptedRunOf } from "./recovery";
 import { AgentRun, finishedGitView } from "./run";
 import { toUiMessages } from "./session-store";
 import { loadSkillBody, scanSkills, skillSection } from "./skills";
@@ -282,6 +282,7 @@ export class AgentHost {
         thinkingLevel: settings.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
       },
       streamFn,
+      getApiKey: () => apiKey,
     });
 
     this.agent = agent;
@@ -1016,10 +1017,8 @@ export class AgentHost {
     const activeRun = this.run?.state ?? null;
     const ownRun = activeRun?.sessionId === this.sessionId ? this.run : undefined;
     const hasLiveMessages = this.sessionId !== null && this.sessionId === this.agentSessionId;
-    const interruptedRun =
-      !ownRun && this.sessionId
-        ? interruptedRunOf(this.sessionId, this.deps.store.checkpoint(this.sessionId))
-        : undefined;
+    const checkpoint =
+      !ownRun && this.sessionId ? this.deps.store.checkpoint(this.sessionId) : undefined;
     return {
       sessionId: this.sessionId,
       composerId: this.composerId,
@@ -1028,14 +1027,17 @@ export class AgentHost {
       sessions,
       recentProjects: this.deps.store.listRecentProjects(sessions),
       messages:
-        hasLiveMessages && !interruptedRun
+        hasLiveMessages && !checkpoint
           ? this.view.messages
           : this.sessionId
             ? toUiMessages(this.deps.store.load(this.sessionId), "s")
             : [],
       status: ownRun?.state.status ?? "idle",
       activeRun,
-      interruptedRun: interruptedRun ?? null,
+      interruptedRun: this.sessionId
+        ? (interruptedRunOf(this.sessionId, checkpoint) ?? null)
+        : null,
+      failedRun: this.sessionId ? (failedRunOf(this.sessionId, checkpoint) ?? null) : null,
       pendingPermissions: ownRun?.pendingPermissions ?? [],
       error: hasLiveMessages ? this.view.error : null,
       settings: toPublicSettings(this.deps.getSettings()),

@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
 
-import type { InterruptedRun } from "@shared/contract";
+import type { FailedRun, InterruptedRun } from "@shared/contract";
 
 import type { RunCheckpoint } from "./types";
 
@@ -14,8 +14,22 @@ export function interruptedRunOf(
   sessionId: string,
   checkpoint: RunCheckpoint | undefined,
 ): InterruptedRun | undefined {
-  if (checkpoint) {
+  if (checkpoint && !checkpoint.failure) {
     return { sessionId, runId: checkpoint.runId, workingDirectory: checkpoint.workingDirectory };
+  }
+}
+
+export function failedRunOf(
+  sessionId: string,
+  checkpoint: RunCheckpoint | undefined,
+): FailedRun | undefined {
+  if (checkpoint?.failure) {
+    return {
+      sessionId,
+      runId: checkpoint.runId,
+      workingDirectory: checkpoint.workingDirectory,
+      failure: checkpoint.failure,
+    };
   }
 }
 

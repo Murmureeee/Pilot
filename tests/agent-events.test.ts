@@ -21,6 +21,37 @@ function applyRunEvent(state: AgentUiState, event: AgentRunEvent): AgentUiState 
 }
 
 describe("agent-events adapter", () => {
+  it("resets only the streaming reply on retry and clears the state when the task fails", () => {
+    const started = applyRunEvent(initialRunUiState(), { type: "assistant_start", id: "reply" });
+    const partial = applyRunEvent(started, {
+      type: "assistant_delta",
+      id: "reply",
+      delta: "Partial",
+    });
+    const retry = { attempt: 1, maxAttempts: 3, retryAt: 12_345 };
+    const event = { type: "model_retry", retry, resetReplyId: "reply" } as const;
+    const other = { ...partial, sessionId: "another" };
+    expect(applyRunEvent(other, event)).toMatchObject({
+      activeRun: { retry },
+      messages: other.messages,
+    });
+    const waiting = applyRunEvent(partial, event);
+    expect(waiting.activeRun?.retry).toEqual(retry);
+    expect(waiting.messages).toEqual([
+      { id: "reply", role: "assistant", parts: [], streaming: true },
+    ]);
+    expect(applyAgentEvent(waiting, { ...event, run: { ...run, runId: "stale" } })).toBe(waiting);
+    const failedRun = {
+      ...run,
+      workingDirectory: "E:/a",
+      failure: { kind: "server", detail: "503" },
+    } as const;
+    const ended = applyRunEvent(waiting, { type: "status", status: "idle", failedRun });
+    expect(ended).toMatchObject({ activeRun: null, interruptedRun: null, failedRun });
+    const next = { ...run, runId: "next", workingDirectory: "E:/a", status: "streaming" } as const;
+    expect(applyAgentEvent(ended, { type: "run_started", run: next }).failedRun).toBeNull();
+  });
+
   it("keeps verification output separate from agent messages and usage", () => {
     const state = initialRunUiState();
     expect(
