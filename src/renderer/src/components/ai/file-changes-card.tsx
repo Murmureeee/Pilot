@@ -65,7 +65,7 @@ export function FileChangesCard({
               data-review-file={change.id}
               disabled={!sessionId}
               onClick={() => show(change.id)}
-              className="hover:text-primary focus-visible:ring-ring/50 min-h-6 min-w-0 flex-1 truncate rounded-sm text-left font-mono text-xs outline-none hover:underline focus-visible:ring-2"
+              className="hover:text-brand focus-visible:ring-ring/50 min-h-6 min-w-0 flex-1 truncate rounded-sm text-left font-mono text-xs outline-none hover:underline focus-visible:ring-2"
             >
               {change.path}
             </button>

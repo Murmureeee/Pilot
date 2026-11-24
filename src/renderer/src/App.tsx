@@ -1,13 +1,10 @@
 // @env browser
 import { useCallback, useEffect, useState, type JSX } from "react";
-import { FolderIcon, MessageSquareIcon } from "lucide-react";
+import { ChatHeader } from "@renderer/components/ai/chat-header";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
 import { FileChangesPanel } from "@renderer/components/ai/file-changes-panel";
 import { GitChangesPanel } from "@renderer/components/ai/git-changes-panel";
-import { InstructionSources } from "@renderer/components/ai/instruction-sources";
-import { ProjectBranch, ProjectChooser } from "@renderer/components/ai/project-controls";
 import { TopBar } from "@renderer/components/ai/top-bar";
-import { VerificationControl } from "@renderer/components/ai/verification-dialog";
 import { WorkspaceReferencePanel } from "@renderer/components/ai/workspace-reference-panel";
 import { AppRail, SidebarPanel } from "@renderer/views/Sidebar";
 import { ChatView } from "@renderer/views/ChatView";
@@ -158,49 +155,17 @@ export default function App(): JSX.Element {
             <main className="flex min-h-0 min-w-0 flex-1 flex-col">
               {view === "chat" ? (
                 <>
-                  <header className="border-border/65 flex h-12 shrink-0 items-center gap-2.5 border-b px-5">
-                    <MessageSquareIcon
-                      className="text-muted-foreground size-3.5 shrink-0"
-                      aria-hidden="true"
-                    />
-                    <div className="flex min-w-0 flex-1 flex-col justify-center">
-                      <span className="truncate text-[13px] font-medium" title={title}>
-                        {title}
-                      </span>
-                      {workingDirectory && (
-                        <div
-                          className="text-muted-foreground flex min-w-0 items-center gap-1 text-xs"
-                          title={workingDirectory}
-                        >
-                          <FolderIcon className="size-3 shrink-0" aria-hidden="true" />
-                          {!projectDirectory && (
-                            <span className="shrink-0">{t("默认工作目录", locale)}</span>
-                          )}
-                          <span className="truncate [direction:rtl]">
-                            <bdi dir="ltr">{workingDirectory}</bdi>
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    {projectDirectory && composerId ? (
-                      <ProjectBranch
-                        key={projectDirectory}
-                        directory={projectDirectory}
-                        composerId={composerId}
-                        reviewOpen={Boolean(visibleGitReview && !visibleReference)}
-                      />
-                    ) : (
-                      <ProjectChooser sessionId={sessionId} />
-                    )}
-                    {composerId && (workingDirectory || sessionId) && (
-                      <VerificationControl
-                        key={"verification-" + composerId}
-                        composerId={composerId}
-                      />
-                    )}
-                    {composerId && <InstructionSources key={composerId} composerId={composerId} />}
-                  </header>
-                  <ChatView workingDirectory={workingDirectory} />
+                  <ChatHeader
+                    title={title}
+                    composerId={composerId}
+                    workingDirectory={workingDirectory}
+                    projectDirectory={projectDirectory}
+                    reviewOpen={Boolean(visibleGitReview && !visibleReference)}
+                  />
+                  <ChatView
+                    workingDirectory={workingDirectory}
+                    projectDirectory={projectDirectory}
+                  />
                 </>
               ) : (
                 <SettingsView />

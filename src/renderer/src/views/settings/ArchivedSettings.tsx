@@ -1,6 +1,7 @@
 // @env browser
 import { useMemo, useState, type JSX } from "react";
 import { SearchIcon, TrashIcon } from "lucide-react";
+import { ListEmpty } from "@renderer/components/ai/list-empty";
 import { SessionDeleteDialog } from "@renderer/components/ai/session-delete-dialog";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
@@ -34,15 +35,21 @@ export function ArchivedSettings(): JSX.Element {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("搜索已归档的聊天", locale)}
-            className="h-9 rounded-lg pl-9"
+            className="h-9 pl-9"
           />
         </div>
       )}
       <div className="settings-list">
-        {visible.length === 0 && (
-          <p className="text-muted-foreground py-4 text-sm">
-            {t(archived.length > 0 ? "没有匹配的聊天" : "没有已归档的聊天", locale)}
-          </p>
+        {archived.length === 0 && (
+          <ListEmpty
+            title={t("没有已归档的聊天", locale)}
+            description={t("在侧栏的聊天上选择归档，它会移到这里，可以随时恢复。", locale)}
+          />
+        )}
+        {archived.length > 0 && visible.length === 0 && (
+          <output className="text-muted-foreground block py-4 text-sm">
+            {t("没有匹配的聊天", locale)}
+          </output>
         )}
         {visible.map((session) => (
           <div key={session.id} className="settings-row gap-x-3">

@@ -15,7 +15,7 @@ export function SettingsGroup({
   return (
     <section className="grid gap-3" aria-labelledby={id}>
       <div className="min-w-0">
-        <h2 id={id} className="text-sm font-medium">
+        <h2 id={id} className="text-sm font-semibold">
           {title}
         </h2>
         {description && (

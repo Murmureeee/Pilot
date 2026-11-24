@@ -1,11 +1,13 @@
 // @env browser
 import { Activity, Fragment, useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { ArrowDownIcon, RotateCcwIcon, SquareTerminalIcon } from "lucide-react";
+import { ArrowDownIcon, RotateCcwIcon } from "lucide-react";
 import { AssistantReply } from "@renderer/components/ai/assistant-reply";
 import { Composer } from "@renderer/components/ai/composer";
+import { HomeStart } from "@renderer/components/ai/home-start";
 import { MessageJump } from "@renderer/components/ai/message-jump";
 import { OnboardingDialog } from "@renderer/components/ai/onboarding-dialog";
 import { PermissionCard } from "@renderer/components/ai/permission-card";
+import { PlanBar } from "@renderer/components/ai/plan-card";
 import { InlineWorkspaceReference } from "@renderer/components/ai/workspace-reference";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -22,7 +24,7 @@ import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { ChatRow } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
 import { cn } from "cn";
-import type { UiMessage } from "@shared/contract";
+import type { UiMessage, UiPart } from "@shared/contract";
 import { isLocalOpenAiProvider } from "@shared/providers";
 
 function chatRows(messages: UiMessage[]): ChatRow[] {
@@ -39,7 +41,13 @@ function chatRows(messages: UiMessage[]): ChatRow[] {
   return rows;
 }
 
-export function ChatView({ workingDirectory }: { workingDirectory: string | null }): JSX.Element {
+export function ChatView({
+  workingDirectory,
+  projectDirectory,
+}: {
+  workingDirectory: string | null;
+  projectDirectory: string | null;
+}): JSX.Element {
   const locale = useLocale();
   const messages = useAgentStore((s) => s.messages);
   const sessionId = useAgentStore((s) => s.sessionId);
@@ -55,6 +63,21 @@ export function ChatView({ workingDirectory }: { workingDirectory: string | null
   const setView = useAgentStore((s) => s.setView);
   const rows = useMemo(() => chatRows(messages), [messages]);
   const isEmpty = rows.length === 0;
+  // run_started 先于新的用户消息到达。这段间隙里上一回合仍是最后一行，但它已经结束，
+  // 不能当作进行中，否则收起的轨迹会闪开、旧计划会跳到输入坞上。可继续的中断回合除外。
+  const lastRow = rows.at(-1);
+  const idleRowKey =
+    lastRow && interruptedRun?.sessionId !== sessionId ? sessionId + "/" + lastRow.id : null;
+  const [finishedRowKey, setFinishedRowKey] = useState<string | null>(null);
+  if (!busy && finishedRowKey !== idleRowKey) setFinishedRowKey(idleRowKey);
+  const liveRow =
+    busy && lastRow && sessionId + "/" + lastRow.id !== finishedRowKey ? lastRow : undefined;
+  const livePlan = useMemo(() => {
+    if (liveRow?.role !== "assistant") return undefined;
+    return liveRow.messages
+      .flatMap((message) => message.parts)
+      .findLast((part): part is Extract<UiPart, { type: "plan" }> => part.type === "plan");
+  }, [liveRow]);
   const needsSetup =
     isEmpty &&
     settings !== null &&
@@ -74,6 +97,15 @@ export function ChatView({ workingDirectory }: { workingDirectory: string | null
       });
     }
   }, [permission]);
+
+  const fillDraft = (text: string): void => {
+    const editor = composerColumn.current?.querySelector<HTMLElement>("[contenteditable=true]");
+    if (!editor) return;
+    editor.focus();
+    // 走浏览器的编辑命令，输入框的 onInput 会接手草稿，Ctrl+Z 也能撤回。
+    document.execCommand("selectAll");
+    document.execCommand("insertText", false, text);
+  };
 
   return (
     <div className={cn("relative flex min-h-0 flex-1 flex-col", isEmpty && "overflow-y-auto")}>
@@ -95,9 +127,9 @@ export function ChatView({ workingDirectory }: { workingDirectory: string | null
                   ref={contentRef}
                   className="workspace-column gap-7 pt-7 pb-5"
                 >
-                  {rows.map((row, index) => {
+                  {rows.map((row) => {
                     const isUser = row.role === "user";
-                    const live = index === rows.length - 1 && busy;
+                    const live = row === liveRow;
                     if (
                       !isUser &&
                       !live &&
@@ -111,19 +143,11 @@ export function ChatView({ workingDirectory }: { workingDirectory: string | null
                         messageId={row.id}
                         className={isUser ? "message-scroller-user-item" : undefined}
                       >
-                        <Message align={isUser ? "end" : "start"} className="items-start gap-3">
-                          {!isUser && (
-                            <span
-                              aria-hidden="true"
-                              className="bg-secondary text-secondary-foreground mt-0.5 grid size-7 shrink-0 place-items-center rounded-[9px]"
-                            >
-                              <SquareTerminalIcon className="size-4" strokeWidth={1.65} />
-                            </span>
-                          )}
+                        <Message align={isUser ? "end" : "start"} className="items-start">
                           <MessageContent className="gap-3">
                             {isUser ? (
                               <Bubble align="end" variant="secondary" className="max-w-[88%]">
-                                <BubbleContent className="rounded-[18px] rounded-br-md px-4 py-2.5 text-[15px] leading-6 whitespace-pre-wrap">
+                                <BubbleContent className="rounded-[18px] rounded-br-md px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap">
                                   {row.message.parts.map((part, partIndex) => {
                                     if (part.type === "text")
                                       return <Fragment key={partIndex}>{part.text}</Fragment>;
@@ -178,7 +202,7 @@ export function ChatView({ workingDirectory }: { workingDirectory: string | null
         )}
       >
         {isEmpty && (
-          <h1 className="text-center text-[clamp(1.5rem,3vw,2rem)] leading-tight font-semibold tracking-tight text-balance">
+          <h1 className="text-center text-[clamp(1.375rem,2.5vw,1.75rem)] leading-tight font-semibold tracking-tight text-balance">
             {t("我们要做什么？", locale)}
           </h1>
         )}
@@ -202,7 +226,7 @@ export function ChatView({ workingDirectory }: { workingDirectory: string | null
                 {t("设置", locale)}
               </Button>
               <Button size="sm" onClick={() => setOnboardingOpen(true)}>
-                {t("开始配置", locale)}
+                {t("配置模型", locale)}
               </Button>
             </div>
           </div>
@@ -243,6 +267,7 @@ export function ChatView({ workingDirectory }: { workingDirectory: string | null
             </Button>
           </div>
         )}
+        {livePlan && <PlanBar steps={livePlan.steps} />}
         {permission && activeRun && (
           <PermissionCard key={permission.requestId} request={permission} run={activeRun} />
         )}
@@ -255,6 +280,15 @@ export function ChatView({ workingDirectory }: { workingDirectory: string | null
             />
           )}
         </Activity>
+        {isEmpty && !permission && !interruptedRun && (
+          <HomeStart
+            sessionId={sessionId}
+            projectDirectory={projectDirectory}
+            workingDirectory={workingDirectory}
+            needsSetup={needsSetup}
+            onPick={fillDraft}
+          />
+        )}
       </div>
       {isEmpty && (
         <OnboardingDialog open={onboardingOpen} onClose={() => setOnboardingOpen(false)} />

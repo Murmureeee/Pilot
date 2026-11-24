@@ -119,6 +119,8 @@ export type SettingsSection =
 
 export type SendKey = "enter" | "mod-enter";
 
+export type SessionRowStatus = "approval" | "running" | "stopping" | "interrupted" | "unread";
+
 export interface ShortcutGroup {
   label: string;
   items: { label: string; keys: string }[];

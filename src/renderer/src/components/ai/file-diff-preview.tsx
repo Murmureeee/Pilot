@@ -116,7 +116,7 @@ export function DiffLines({
                         type="button"
                         title={t("在 VS Code 中打开第 {0} 行", locale, [target])}
                         aria-label={t("在 VS Code 中打开第 {0} 行", locale, [target])}
-                        className="hover:text-primary focus-visible:ring-ring/50 rounded-sm underline underline-offset-2 outline-none focus-visible:ring-2"
+                        className="hover:text-brand focus-visible:ring-ring/50 rounded-sm underline underline-offset-2 outline-none focus-visible:ring-2"
                         onClick={() => onOpenLine(target)}
                       >
                         {line.after}

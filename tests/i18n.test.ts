@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { formatDuration } from "../src/renderer/src/lib/duration";
 import {
   currentLocale,
   localizeError,
@@ -32,6 +33,14 @@ describe("interface language", () => {
     expect(t("连接正常 · {0}ms", "en", [42])).toBe("Connected · 42 ms");
     expect(t("退出 {0}", "en", [])).toBe("Quit {0}");
     expect(t("退出 {0}", "en", ["$5 {0}"])).toBe("Quit $5 {0}");
+  });
+
+  it("formats step durations by length", () => {
+    expect(formatDuration(40, "zh")).toBe("0.1 秒");
+    expect(formatDuration(3_240, "zh")).toBe("3.2 秒");
+    expect(formatDuration(59_600, "zh")).toBe("1 分 0 秒");
+    expect(formatDuration(133_000, "zh")).toBe("2 分 13 秒");
+    expect(formatDuration(133_000, "en")).toBe("2m 13s");
   });
 
   it("migrates the legacy locale preference and uses the Pilot key", () => {

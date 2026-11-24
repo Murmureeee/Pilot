@@ -238,7 +238,7 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
         close();
       }}
     >
-      <div className="border-border/65 flex h-12 shrink-0 items-center justify-between gap-2 border-b px-3">
+      <div className="border-border/65 flex h-10 shrink-0 items-center justify-between gap-2 border-b pr-2 pl-3">
         <h2
           id="git-changes-heading"
           ref={heading}

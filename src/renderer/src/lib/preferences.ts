@@ -11,3 +11,20 @@ export function loadSendKey(): SendKey {
 export function saveSendKey(sendKey: SendKey): void {
   localStorage.setItem(SEND_KEY_STORAGE_KEY, sendKey);
 }
+
+const COLLAPSED_PROJECTS_STORAGE_KEY = "pilot-collapsed-projects";
+
+export function loadCollapsedProjects(): string[] {
+  try {
+    const stored: unknown = JSON.parse(
+      localStorage.getItem(COLLAPSED_PROJECTS_STORAGE_KEY) ?? "[]",
+    );
+    return Array.isArray(stored) ? stored.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCollapsedProjects(directories: readonly string[]): void {
+  localStorage.setItem(COLLAPSED_PROJECTS_STORAGE_KEY, JSON.stringify(directories));
+}

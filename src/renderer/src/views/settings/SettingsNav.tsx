@@ -97,7 +97,7 @@ export function SettingsNav(): JSX.Element {
             const first = groups[0]?.items[0];
             if (event.key === "Enter" && search && first) setSection(first.id);
           }}
-          className="h-8 rounded-lg pl-8 text-[13px]"
+          className="h-8 pl-8 text-[13px]"
         />
       </div>
       <div className="flex flex-col gap-3.5">

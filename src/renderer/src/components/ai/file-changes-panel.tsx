@@ -175,7 +175,7 @@ export function FileChangesPanel({ review }: { review: FileChangesReview }): JSX
         } else closePanel();
       }}
     >
-      <div className="border-border/65 bg-background flex h-12 shrink-0 items-center justify-between gap-2 border-b px-3">
+      <div className="border-border/65 bg-background flex h-10 shrink-0 items-center justify-between gap-2 border-b pr-2 pl-3">
         <div role="tablist" aria-label={t("工作区标签页", locale)}>
           <button
             ref={tab}

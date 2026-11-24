@@ -57,7 +57,7 @@ function SelectionRow({
       onCheckedChange={onChange}
       className="group flex min-h-9 w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring data-disabled:cursor-default data-disabled:text-muted-foreground data-disabled:hover:bg-transparent"
     >
-      <span className="border-muted-foreground/50 inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] border group-data-checked:border-primary group-data-checked:bg-primary group-data-checked:text-primary-foreground group-data-indeterminate:border-primary group-data-indeterminate:bg-primary group-data-indeterminate:text-primary-foreground group-data-disabled:opacity-50">
+      <span className="border-muted-foreground/50 inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] border group-data-checked:border-brand group-data-checked:bg-brand group-data-checked:text-background group-data-indeterminate:border-brand group-data-indeterminate:bg-brand group-data-indeterminate:text-background group-data-disabled:opacity-50">
         <Checkbox.Indicator>
           {mixed ? <MinusIcon className="size-3" /> : <CheckIcon className="size-3" />}
         </Checkbox.Indicator>

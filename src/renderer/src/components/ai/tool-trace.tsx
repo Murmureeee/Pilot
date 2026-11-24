@@ -14,10 +14,12 @@ import {
   TraceCollapsible,
   TraceCollapsibleContent,
   TraceCollapsibleTrigger,
+  TraceDescription,
   TraceIcon,
   TraceLine,
   TraceTitle,
 } from "@renderer/components/ui/trace";
+import { formatDuration } from "@renderer/lib/duration";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { parseToolFailure, stackDisplayPath, toolInput } from "@renderer/lib/tool-trace";
 import type { ToolFailure } from "@renderer/lib/types";
@@ -159,6 +161,10 @@ export function ToolTrace({ part }: { part: Extract<UiPart, { type: "tool" }> })
         )}
       </TraceIcon>
       <TraceTitle title={title}>{title}</TraceTitle>
+      {/* 不到一秒的步骤不标耗时，一排零点几秒只是噪音。 */}
+      {part.state === "success" && part.durationMs !== undefined && part.durationMs >= 1000 && (
+        <TraceDescription>{formatDuration(part.durationMs, locale)}</TraceDescription>
+      )}
     </TraceLine>
   );
 
@@ -166,8 +172,10 @@ export function ToolTrace({ part }: { part: Extract<UiPart, { type: "tool" }> })
 
   const showArguments =
     input.details && (failure || input.details !== input.preview || input.details.includes("\n"));
+  // 命令运行时跟着输出展开，成功后收起；失败始终展开。用户手动开合过就以用户为准。
+  const autoOpen = Boolean(failure || (shell && output && part.state === "running"));
   return (
-    <TraceCollapsible open={open ?? Boolean(failure || (shell && output))} onOpenChange={setOpen}>
+    <TraceCollapsible open={open ?? autoOpen} onOpenChange={setOpen}>
       <TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
       <TraceCollapsibleContent className="mt-1.5">
         <div className="flex min-w-0 flex-col gap-2">

@@ -95,7 +95,7 @@ export function ExternalImportSettings({
       )}
       {plugins.length > 0 && (
         <section className="grid min-w-0 gap-3" aria-busy={busy}>
-          <h2 className="text-sm font-medium">{t("已导入的插件组件", locale)}</h2>
+          <h2 className="text-sm font-semibold">{t("已导入的插件组件", locale)}</h2>
           <div className="settings-list">
             {plugins.map((plugin) => (
               <div key={plugin.id} className="settings-row">

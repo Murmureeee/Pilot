@@ -4,20 +4,20 @@ import {
   useMemo,
   useState,
   type JSX,
-  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
   ArrowLeftIcon,
-  CheckIcon,
+  ChevronRightIcon,
   CircleIcon,
   CopyIcon,
   FolderIcon,
   FolderOpenIcon,
   GitForkIcon,
   HouseIcon,
+  LoaderCircleIcon,
   PencilIcon,
   PinIcon,
   PinOffIcon,
@@ -29,7 +29,12 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
+import { SESSION_STATUS_LABELS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
+import { loadCollapsedProjects, saveCollapsedProjects } from "@renderer/lib/preferences";
+import { relativeTime } from "@renderer/lib/relative-time";
+import { projectParents as parentsOf, sessionRowStatus } from "@renderer/lib/sidebar";
+import type { SessionRowStatus } from "@renderer/lib/types";
 import { referenceName } from "@renderer/lib/workspace-links";
 import {
   ContextMenu,
@@ -39,17 +44,11 @@ import {
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
 import { selectProjectDirectory, useAgentStore } from "@renderer/stores/agent";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@renderer/components/ui/dialog";
-import { Input } from "@renderer/components/ui/input";
-import { Textarea } from "@renderer/components/ui/textarea";
 import { SessionDeleteDialog } from "@renderer/components/ai/session-delete-dialog";
+import {
+  SessionPersonaDialog,
+  SessionRenameDialog,
+} from "@renderer/components/ai/session-edit-dialogs";
 import { UpdateRailButton } from "@renderer/components/ai/update-panel";
 import { SettingsNav } from "@renderer/views/settings/SettingsNav";
 import { cn } from "cn";
@@ -63,6 +62,45 @@ const RAIL_EXPAND_THRESHOLD = 80;
 
 const RAIL_CONTROL =
   "text-sidebar-foreground/80 hover:bg-sidebar-foreground/8 hover:text-sidebar-foreground aria-[current=page]:bg-sidebar-foreground/10 aria-[current=page]:text-sidebar-foreground rounded-xl";
+
+const ROW_ACTION =
+  "hover:bg-foreground/10 hover:text-foreground text-muted-foreground rounded-sm p-1 transition-colors";
+
+/** 状态位始终占位，标题才能在有无状态的行之间对齐。 */
+function SessionStatusMark({ status }: { status: SessionRowStatus | null }): JSX.Element {
+  const locale = useLocale();
+  const spinning = status === "running" || status === "stopping";
+  return (
+    <span className="grid size-3 shrink-0 place-items-center">
+      {status && (
+        <>
+          {spinning ? (
+            <LoaderCircleIcon
+              aria-hidden="true"
+              className={cn(
+                "size-3 motion-safe:animate-spin",
+                status === "running"
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-muted-foreground",
+              )}
+            />
+          ) : (
+            <span
+              aria-hidden="true"
+              className={cn(
+                "size-2 rounded-full",
+                status === "approval" && "bg-amber-500",
+                status === "interrupted" && "border-muted-foreground border",
+                status === "unread" && "bg-brand",
+              )}
+            />
+          )}
+          <span className="sr-only">{t(SESSION_STATUS_LABELS[status], locale)}</span>
+        </>
+      )}
+    </span>
+  );
+}
 
 export function AppRail({
   collapsed,
@@ -203,41 +241,31 @@ export function SidebarPanel({
   const loadSession = useAgentStore((s) => s.loadSession);
   const selectProject = useAgentStore((s) => s.selectProject);
   const choosingProject = useAgentStore((s) => s.choosingProject);
-  const renameSession = useAgentStore((s) => s.renameSession);
   const setSessionPinned = useAgentStore((s) => s.setSessionPinned);
   const setSessionArchived = useAgentStore((s) => s.setSessionArchived);
   const setSessionUnread = useAgentStore((s) => s.setSessionUnread);
   const forkSession = useAgentStore((s) => s.forkSession);
   const copySession = useAgentStore((s) => s.copySession);
-  const setSessionPersona = useAgentStore((s) => s.setSessionPersona);
   const setView = useAgentStore((s) => s.setView);
   const setPaletteOpen = useAgentStore((s) => s.setPaletteOpen);
   const view = useAgentStore((s) => s.view);
-  // 重命名走 Dialog 弹窗（ChatGPT 同款）：显式「保存」提交，无行内编辑的焦点竞争问题；
-  // Esc / 点击遮罩经 onOpenChange(false) 关闭
   const [renameTarget, setRenameTarget] = useState<SessionMeta | null>(null);
-  const [renameValue, setRenameValue] = useState("");
   // 永久删除是不可恢复操作（转录文件从磁盘彻底清除），必须二次确认（共享弹窗组件）
   const [deleteTarget, setDeleteTarget] = useState<SessionMeta | null>(null);
-  // 会话级人设覆盖（FR-5.9 每会话粒度）：保存空文本 = 清除回落全局
   const [personaTarget, setPersonaTarget] = useState<SessionMeta | null>(null);
-  const [personaValue, setPersonaValue] = useState("");
+  const [collapsedProjects, setCollapsedProjects] = useState(loadCollapsedProjects);
+  const activeRun = useAgentStore((s) => s.activeRun);
+  const interruptedRun = useAgentStore((s) => s.interruptedRun);
+  const projectParents = useMemo(() => parentsOf(recentProjects), [recentProjects]);
+  const toggleProject = (directory: string): void => {
+    const next = collapsedProjects.includes(directory)
+      ? collapsedProjects.filter((item) => item !== directory)
+      : [...collapsedProjects, directory];
+    setCollapsedProjects(next);
+    saveCollapsedProjects(next);
+  };
   const inChat = view === "chat";
   const headerActionLabel = t(inChat ? "搜索" : "返回对话", locale);
-
-  const saveSessionPersona = (): void => {
-    const id = personaTarget?.id;
-    setPersonaTarget(null);
-    if (id) void setSessionPersona(id, personaValue.trim() || null);
-  };
-
-  const saveRename = (): void => {
-    const title = renameValue.trim();
-    setRenameTarget(null);
-    if (renameTarget && title.length > 0 && title !== renameTarget.title) {
-      void renameSession(renameTarget.id, title);
-    }
-  };
 
   const { active, archived } = useMemo(() => {
     const activeSessions = sessions
@@ -258,7 +286,7 @@ export function SidebarPanel({
     void loadSession(id);
   };
 
-  const renderSessionRow = (s: SessionMeta): JSX.Element => (
+  const renderSessionRow = (s: SessionMeta, nested = false): JSX.Element => (
     <ContextMenu key={s.id}>
       <ContextMenuTrigger
         render={
@@ -271,37 +299,36 @@ export function SidebarPanel({
             <button
               type="button"
               onClick={() => openSession(s.id)}
-              className="focus-visible:ring-sidebar-ring flex min-w-0 flex-1 items-center rounded-lg px-2.5 py-1.5 text-left text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-inset"
-              aria-current={s.id === sessionId ? "page" : undefined}
-              title={s.title}
-            >
-              {/* 未读：圆点 + 加粗标题，打开会话即清除（ChatGPT 同款） */}
-              {s.unread && (
-                <span className="bg-sidebar-foreground/80 mr-2 size-1.5 shrink-0 rounded-full" />
+              className={cn(
+                "focus-visible:ring-sidebar-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1.5 pr-2 text-left text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-inset",
+                nested ? "pl-7" : "pl-2.5",
               )}
+              aria-current={s.id === sessionId ? "page" : undefined}
+              title={s.title + "\n" + new Date(s.updatedAt).toLocaleString(locale)}
+            >
+              <SessionStatusMark status={sessionRowStatus(s, activeRun, interruptedRun)} />
               {s.pinned && !s.archived && (
                 <PinIcon
-                  className="text-muted-foreground me-1.5 size-3 shrink-0"
+                  className="text-muted-foreground -mr-0.5 size-3 shrink-0"
                   aria-label={t("置顶", locale)}
                 />
               )}
-              <span className={cn("truncate", s.unread && "font-semibold")}>{s.title}</span>
+              <span className={cn("min-w-0 flex-1 truncate", s.unread && "font-medium")}>
+                {s.title}
+              </span>
+              {/* 只认键盘焦点：鼠标点开会话后焦点留在行上，不该一直把时间换成按钮。 */}
+              <span className="text-muted-foreground shrink-0 text-xs group-hover:hidden group-has-[:focus-visible]:hidden">
+                {relativeTime(s.updatedAt, locale)}
+              </span>
             </button>
-            {s.id === sessionId && (
-              <CheckIcon
-                aria-hidden="true"
-                className="pointer-events-none absolute right-2.5 size-3.5 group-focus-within:opacity-0 group-hover:opacity-0"
-              />
-            )}
-            {/* Hover and keyboard focus share the space used by the selection indicator. */}
-            <div className="mr-1 flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+            <div className="mr-1 hidden shrink-0 items-center gap-0.5 group-hover:flex group-has-[:focus-visible]:flex">
               {!s.archived && (
                 <button
                   type="button"
                   aria-label={s.pinned ? t("取消置顶", locale) : t("置顶聊天", locale)}
                   title={s.pinned ? t("取消置顶", locale) : t("置顶聊天", locale)}
                   onClick={() => void setSessionPinned(s.id, !s.pinned)}
-                  className="hover:bg-foreground/10 hover:text-foreground text-muted-foreground rounded-sm p-1 transition-colors"
+                  className={ROW_ACTION}
                 >
                   {s.pinned ? (
                     <PinOffIcon className="size-3.5" />
@@ -316,7 +343,7 @@ export function SidebarPanel({
                   aria-label={t("取消归档", locale)}
                   title={t("取消归档", locale)}
                   onClick={() => void setSessionArchived(s.id, false)}
-                  className="hover:bg-foreground/10 hover:text-foreground text-muted-foreground rounded-sm p-1 transition-colors"
+                  className={ROW_ACTION}
                 >
                   <ArchiveRestoreIcon className="size-3.5" />
                 </button>
@@ -326,7 +353,7 @@ export function SidebarPanel({
                   aria-label={t("归档聊天", locale)}
                   title={t("归档聊天", locale)}
                   onClick={() => void setSessionArchived(s.id, true)}
-                  className="hover:bg-foreground/10 hover:text-foreground text-muted-foreground rounded-sm p-1 transition-colors"
+                  className={ROW_ACTION}
                 >
                   <ArchiveIcon className="size-3.5" />
                 </button>
@@ -336,12 +363,7 @@ export function SidebarPanel({
         }
       />
       <ContextMenuContent className="min-w-44">
-        <ContextMenuItem
-          onClick={() => {
-            setRenameValue(s.title);
-            setRenameTarget(s);
-          }}
-        >
+        <ContextMenuItem onClick={() => setRenameTarget(s)}>
           <PencilIcon className="size-4" /> {t("重命名", locale)}
         </ContextMenuItem>
         {!s.archived && (
@@ -368,12 +390,7 @@ export function SidebarPanel({
           {s.archived ? t("取消归档", locale) : t("归档", locale)}
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem
-          onClick={() => {
-            setPersonaValue(s.personaOverride ?? "");
-            setPersonaTarget(s);
-          }}
-        >
+        <ContextMenuItem onClick={() => setPersonaTarget(s)}>
           <ScrollTextIcon className="size-4" />{" "}
           {s.personaOverride ? t("会话指令（已覆盖）", locale) : t("会话指令…", locale)}
         </ContextMenuItem>
@@ -425,7 +442,7 @@ export function SidebarPanel({
       )}
       style={{ width: collapsed ? 0 : width }}
     >
-      <div className="flex h-12 shrink-0 items-center justify-between gap-2 pr-3 pl-4">
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 pr-3 pl-4">
         <h2 className="flex min-w-0 items-center gap-2.5 text-[15px] font-semibold tracking-tight">
           {inChat && (
             <span
@@ -479,40 +496,62 @@ export function SidebarPanel({
                   {t("最近项目", locale)}
                 </h3>
                 {recentProjects.map((directory) => {
-                  const selected = directory === projectDirectory;
                   const chats = active.get(directory);
+                  const expanded = Boolean(chats) && !collapsedProjects.includes(directory);
+                  // 草稿没有会话行可以高亮，用项目行表示当前位置。
+                  const current = !sessionId && directory === projectDirectory;
+                  const parent = projectParents.get(directory);
+                  const newChatLabel = t("在此项目新建聊天", locale);
+                  const Icon = chats ? ChevronRightIcon : FolderIcon;
                   return (
                     <section key={directory} aria-label={directory}>
-                      <Button
-                        variant="ghost"
-                        aria-current={selected ? "location" : undefined}
-                        title={directory}
-                        disabled={choosingProject}
-                        onClick={() => void selectProject({ directory })}
+                      <div
                         className={cn(
-                          "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground h-auto w-full min-w-0 items-start justify-start gap-2 rounded-lg px-2.5 py-1.5 text-left font-normal",
-                          selected && "bg-sidebar-accent",
+                          "group hover:bg-sidebar-accent/65 flex items-center rounded-lg transition-colors",
+                          current && "bg-sidebar-accent",
                         )}
                       >
-                        <FolderIcon
-                          className="text-muted-foreground mt-0.5"
-                          data-icon="inline-start"
-                        />
-                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className="truncate text-[13px] leading-5">
-                            {referenceName(directory)}
-                          </span>
-                          <span className="text-muted-foreground truncate text-xs leading-4 [direction:rtl] text-left">
-                            <bdi dir="ltr">{directory}</bdi>
-                          </span>
-                        </span>
-                        {selected && <CheckIcon className="mt-0.5" aria-hidden="true" />}
-                      </Button>
-                      {chats && (
-                        <div className="border-sidebar-border ms-4 border-s ps-1.5">
-                          {chats.map(renderSessionRow)}
-                        </div>
-                      )}
+                        <button
+                          type="button"
+                          aria-expanded={chats ? expanded : undefined}
+                          aria-current={current ? "location" : undefined}
+                          title={directory}
+                          disabled={!chats && choosingProject}
+                          // 没有聊天的项目没有可折叠的内容，点击直接在里面开始新聊天。
+                          onClick={() =>
+                            chats ? toggleProject(directory) : void selectProject({ directory })
+                          }
+                          className="focus-visible:ring-sidebar-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1.5 pr-2 pl-2.5 text-left text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                        >
+                          <Icon
+                            aria-hidden="true"
+                            className={cn(
+                              "text-muted-foreground size-4 shrink-0 motion-safe:transition-transform",
+                              expanded && "rotate-90",
+                            )}
+                          />
+                          <span className="truncate">{referenceName(directory)}</span>
+                          {parent && (
+                            <span className="text-muted-foreground min-w-0 shrink-[2] truncate text-xs">
+                              {parent}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={newChatLabel}
+                          title={newChatLabel}
+                          disabled={choosingProject}
+                          onClick={() => void selectProject({ directory })}
+                          className={cn(
+                            ROW_ACTION,
+                            "mr-1 hidden shrink-0 group-hover:block group-has-[:focus-visible]:block",
+                          )}
+                        >
+                          <SquarePenIcon className="size-3.5" />
+                        </button>
+                      </div>
+                      {expanded && chats?.map((chat) => renderSessionRow(chat, true))}
                     </section>
                   );
                 })}
@@ -523,13 +562,16 @@ export function SidebarPanel({
                 <h3 className="text-sidebar-foreground/70 px-2.5 py-1 text-xs">
                   {t("未关联项目", locale)}
                 </h3>
-                {unlinked.map(renderSessionRow)}
+                {unlinked.map((chat) => renderSessionRow(chat))}
               </section>
             )}
             {sessions.length === 0 && recentProjects.length === 0 && (
-              <p className="text-sidebar-foreground/70 px-2.5 py-1 text-xs">
-                {t("暂无会话", locale)}
-              </p>
+              <output className="flex flex-col gap-0.5 px-2.5 py-1">
+                <span className="text-[13px]">{t("还没有聊天", locale)}</span>
+                <span className="text-sidebar-foreground/70 text-xs leading-5">
+                  {t("打开项目或发送第一条消息后，聊天会出现在这里。", locale)}
+                </span>
+              </output>
             )}
             {archived.size > 0 && (
               <section>
@@ -544,7 +586,7 @@ export function SidebarPanel({
                     >
                       {directory ? referenceName(directory) : t("未关联项目", locale)}
                     </h4>
-                    {chats.map(renderSessionRow)}
+                    {chats.map((chat) => renderSessionRow(chat))}
                   </section>
                 ))}
               </section>
@@ -555,66 +597,12 @@ export function SidebarPanel({
         <SettingsNav />
       )}
 
-      {/* 重命名弹窗：标题 + 说明行（muted 次级）+ 输入 + 取消/保存 */}
-      <Dialog
-        open={renameTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setRenameTarget(null);
-        }}
-      >
-        <DialogContent closeLabel={t("关闭", locale)}>
-          <DialogHeader>
-            <DialogTitle>{t("重命名聊天", locale)}</DialogTitle>
-            <DialogDescription>{t("保持简短且易于识别", locale)}</DialogDescription>
-          </DialogHeader>
-          <Input
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onKeyDown={(e: ReactKeyboardEvent<HTMLInputElement>) => {
-              if (e.key === "Enter") saveRename();
-            }}
-            className="h-9 rounded-lg"
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameTarget(null)}>
-              {t("取消", locale)}
-            </Button>
-            <Button onClick={saveRename}>{t("保存", locale)}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SessionRenameDialog target={renameTarget} onClose={() => setRenameTarget(null)} />
 
       {/* 永久删除确认（面板级共享实例；弹窗放菜单内容里会随菜单关闭被卸载） */}
       <SessionDeleteDialog target={deleteTarget} onClose={() => setDeleteTarget(null)} />
 
-      {/* 会话指令（FR-5.9 每会话人设覆盖）：保存空文本 = 清除回落全局 */}
-      <Dialog
-        open={personaTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) setPersonaTarget(null);
-        }}
-      >
-        <DialogContent closeLabel={t("关闭", locale)}>
-          <DialogHeader>
-            <DialogTitle>{t("会话指令", locale)}</DialogTitle>
-            <DialogDescription>
-              {t("只对本会话生效，覆盖设置页的全局人设；留空保存 = 清除覆盖", locale)}
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            value={personaValue}
-            onChange={(e) => setPersonaValue(e.target.value)}
-            rows={5}
-            placeholder={t("例如：用英文回复；回答尽量带代码示例…", locale)}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPersonaTarget(null)}>
-              {t("取消", locale)}
-            </Button>
-            <Button onClick={saveSessionPersona}>{t("保存", locale)}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SessionPersonaDialog target={personaTarget} onClose={() => setPersonaTarget(null)} />
 
       {/* 拖拽手柄（拖宽 + 拖到阈值收起） */}
       <div

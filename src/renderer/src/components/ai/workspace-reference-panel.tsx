@@ -116,7 +116,7 @@ export function WorkspaceReferencePanel({
         close();
       }}
     >
-      <header className="border-border/65 flex h-12 shrink-0 items-center justify-between gap-2 border-b px-3">
+      <header className="border-border/65 flex h-10 shrink-0 items-center justify-between gap-2 border-b pr-2 pl-3">
         <h2
           title={path}
           className="bg-secondary text-secondary-foreground flex h-7 min-w-0 items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium"

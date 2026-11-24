@@ -1,6 +1,14 @@
 // @env browser
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
-import { CheckIcon, ListChecksIcon, PlayIcon, RotateCcwIcon, SquareIcon } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type JSX,
+  type RefObject,
+} from "react";
+import { CheckIcon, PlayIcon, RotateCcwIcon, SquareIcon } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
 import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block";
 import {
@@ -9,7 +17,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
 import { VERIFICATION_LABELS, VERIFICATION_STATUS_LABELS } from "@renderer/lib/constants";
@@ -303,7 +310,7 @@ function VerificationDialogBody({ composerId }: { composerId: string }): JSX.Ele
                 }
                 placeholder={t("输入验证命令", locale)}
                 maxLength={4096}
-                className="rounded-lg font-mono text-sm"
+                className="font-mono text-sm"
               />
             </label>
             <Button type="submit" size="sm" disabled={busy || pending || !command.trim()}>
@@ -386,19 +393,25 @@ function VerificationDialogBody({ composerId }: { composerId: string }): JSX.Ele
   );
 }
 
-export function VerificationControl({ composerId }: { composerId: string }): JSX.Element {
+export function VerificationDialog({
+  composerId,
+  open,
+  onOpenChange,
+  finalFocus,
+}: {
+  composerId: string;
+  open: boolean;
+  onOpenChange(open: boolean): void;
+  finalFocus: RefObject<HTMLElement | null>;
+}): JSX.Element {
   const locale = useLocale();
-  const [open, setOpen] = useState(false);
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button size="sm" variant="outline" id="verification-trigger" />}>
-        <ListChecksIcon data-icon="inline-start" />
-        {t("验证", locale)}
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       {open && (
         <DialogContent
           className="max-h-[calc(100dvh-2rem)] min-w-0 gap-3 overflow-y-auto overscroll-contain p-4 sm:max-w-3xl sm:p-5"
           closeLabel={t("关闭验证", locale)}
+          finalFocus={finalFocus}
           data-verification-dialog
         >
           <DialogHeader>

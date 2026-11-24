@@ -42,7 +42,7 @@ export function SettingsView(): JSX.Element {
     >
       <div className="workspace-column grid gap-8 pt-8 pb-12 sm:pt-10">
         <header className="grid gap-1.5">
-          <h1 className="text-[clamp(1.375rem,2.5vw,1.75rem)] leading-tight font-semibold tracking-tight">
+          <h1 className="text-xl leading-tight font-semibold tracking-tight">
             {t(SETTINGS_SECTION_LABELS[section], locale)}
           </h1>
           <p className="text-muted-foreground text-sm leading-6">

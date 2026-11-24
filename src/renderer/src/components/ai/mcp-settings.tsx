@@ -3,6 +3,7 @@ import {
   ExternalImportDialog,
   ExternalImportResult,
 } from "@renderer/components/ai/external-import-dialog";
+import { ListEmpty } from "@renderer/components/ai/list-empty";
 import type { ImportReport } from "@shared/imports";
 import { useEffect, useState, type JSX } from "react";
 import { EllipsisIcon, PlusIcon } from "lucide-react";
@@ -195,10 +196,16 @@ export function McpSettings({
       </div>
       <ExternalImportResult report={report} locale={locale} />
       <div className="settings-list" aria-busy={busy}>
-        {servers.length === 0 && (busy || !error) && (
+        {servers.length === 0 && busy && (
           <p role="status" className="text-muted-foreground py-4 text-sm">
-            {t(busy ? "正在读取 MCP 状态…" : "还没有 MCP 服务", locale)}
+            {t("正在读取 MCP 状态…", locale)}
           </p>
+        )}
+        {servers.length === 0 && !busy && !error && (
+          <ListEmpty
+            title={t("还没有 MCP 服务", locale)}
+            description={t("添加服务后，这里会显示连接状态和它提供的工具。", locale)}
+          />
         )}
         {servers.map((server) => (
           <section key={server.id} className="settings-row flex-nowrap items-start gap-x-3">

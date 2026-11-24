@@ -549,7 +549,7 @@ export function Composer({
           role="textbox"
           aria-multiline="true"
           data-slot="input-group-control"
-          className="composer-editor relative min-h-[3.75rem] max-h-[min(14rem,38dvh)] w-full overflow-y-auto px-4 pt-3.5 pb-2 text-[15px] leading-6 wrap-anywhere whitespace-pre-wrap outline-none"
+          className="composer-editor relative min-h-[3.75rem] max-h-[min(14rem,38dvh)] w-full overflow-y-auto px-4 pt-3.5 pb-2 text-sm leading-6 wrap-anywhere whitespace-pre-wrap outline-none"
           aria-label={t("消息", locale)}
           aria-placeholder={placeholder}
           aria-autocomplete="list"

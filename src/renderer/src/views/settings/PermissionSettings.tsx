@@ -1,6 +1,7 @@
 // @env browser
 import { useState, type JSX } from "react";
 import { CheckIcon, EyeIcon, ShieldCheckIcon, ZapIcon } from "lucide-react";
+import { ListEmpty } from "@renderer/components/ai/list-empty";
 import { Button } from "@renderer/components/ui/button";
 import { APPROVAL_MODE_OPTIONS, TOOL_RULE_LABELS } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
@@ -94,7 +95,10 @@ export function PermissionSettings({ settings }: { settings: PublicSettings }): 
       >
         <div className="settings-list">
           {rules.length === 0 && (
-            <p className="text-muted-foreground py-4 text-sm">{t("还没有保存的授权", locale)}</p>
+            <ListEmpty
+              title={t("还没有保存的授权", locale)}
+              description={t("保存的规则会列在这里，可以查看范围并撤销。", locale)}
+            />
           )}
           {rules.map((rule) => (
             <div key={JSON.stringify(rule)} className="settings-row">

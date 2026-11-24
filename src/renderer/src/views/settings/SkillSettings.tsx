@@ -5,6 +5,7 @@ import {
   ExternalImportDialog,
   ExternalImportResult,
 } from "@renderer/components/ai/external-import-dialog";
+import { ListEmpty } from "@renderer/components/ai/list-empty";
 import { Button } from "@renderer/components/ui/button";
 import { Switch } from "@renderer/components/ui/switch";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
@@ -74,7 +75,10 @@ export function SkillSettings({
       <ExternalImportResult report={report} locale={locale} />
       <div className="settings-list">
         {skills.length === 0 && (
-          <p className="text-muted-foreground py-4 text-sm">{t("还没有技能", locale)}</p>
+          <ListEmpty
+            title={t("还没有技能", locale)}
+            description={t("导入含 SKILL.md 的目录，启用后从下一次请求开始生效。", locale)}
+          />
         )}
         {skills.map((skill) => (
           <div key={skill.id} className="settings-row flex-nowrap">

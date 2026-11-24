@@ -63,7 +63,11 @@ export function PermissionCard({
         : preview;
 
   useEffect(() => {
-    if (document.activeElement === document.body) card.current?.focus({ preventScroll: true });
+    // 输入框随审批卡出现被隐藏，但浏览器要到下一帧才把它的焦点还给 body；
+    // 只看 body 会漏掉「发送后停在输入框里」这条最常见的路径，Enter / Esc 就失效了。
+    const active = document.activeElement;
+    if (!active || active === document.body || active.getClientRects().length === 0)
+      card.current?.focus({ preventScroll: true });
   }, []);
 
   useEffect(() => {

@@ -13,7 +13,13 @@ import type {
   VerificationStatus,
 } from "@shared/contract";
 import type { ExternalImportKind } from "@shared/imports";
-import type { ComposerCommand, SendKey, SettingsSection, ShortcutGroup } from "./types";
+import type {
+  ComposerCommand,
+  SendKey,
+  SessionRowStatus,
+  SettingsSection,
+  ShortcutGroup,
+} from "./types";
 
 export const COMPOSER_COMMANDS: readonly ComposerCommand[] = [
   {
@@ -53,6 +59,25 @@ export const COMPOSER_COMMANDS: readonly ComposerCommand[] = [
     action: (actions) => actions.archiveChat(),
   },
 ];
+
+// 首页的起步任务：label 是按钮文字，prompt 是填进输入框的草稿。
+export const STARTER_TASKS: readonly { label: string; prompt: string }[] = [
+  {
+    label: "梳理项目结构",
+    prompt: "梳理这个项目的结构：主要目录、入口和关键模块各自负责什么。",
+  },
+  { label: "运行测试并修复", prompt: "运行测试，找出失败项并修复。" },
+  { label: "审查未提交的改动", prompt: "审查当前未提交的改动，指出问题和风险。" },
+];
+export const HOME_RECENT_PROJECT_LIMIT = 5;
+
+export const SESSION_STATUS_LABELS: Record<SessionRowStatus, string> = {
+  approval: "等待审批",
+  running: "运行中",
+  stopping: "正在停止",
+  interrupted: "已中断",
+  unread: "未读",
+};
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   general: "常规",
@@ -138,7 +163,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   {
     label: "窗口",
     items: [
-      { label: "放大", keys: "Ctrl+Shift+=" },
+      { label: "放大", keys: "Ctrl+=" },
       { label: "缩小", keys: "Ctrl+-" },
       { label: "实际大小", keys: "Ctrl+0" },
       { label: "切换全屏", keys: "F11" },
