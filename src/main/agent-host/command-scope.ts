@@ -5,33 +5,38 @@ import {
   COMMAND_NAME,
   COMMAND_SCOPE_LIMIT,
   COMMAND_SUBSTITUTION_LIMIT,
+  INSPECTION_WORD_BOUNDARY,
   NON_LITERAL_CHARACTERS,
   POWERSHELL_SMART_QUOTES,
   POWERSHELL_WORD_CHARACTER,
+  REDIRECTION_OPERATOR,
+  SHELL_DYNAMIC_CHARACTER,
   SHELL_KEYWORDS,
+  SHELL_VARIABLE,
   WORD_BOUNDARY,
 } from "./constants";
-import type { ShellArgument } from "./types";
+import type { ShellArgument, ShellCommand, ShellPipeline } from "./types";
 
-/**
- * 只识别可以静态确定命令边界的 Shell 语法。展开、重定向和其他未识别语法需要逐次审批。
- */
-class CommandScopeParser {
+class ShellCommandParser {
   private offset = 0;
-  private readonly commands: ShellArgument[][] = [];
+  private readonly commands: ShellCommand[] = [];
   private readonly powershell: boolean;
   private readonly wordCharacter: RegExp;
+  private readonly wordBoundary: RegExp;
 
   constructor(
     private readonly source: string,
     private readonly shell: CommandShell,
+    private readonly inspecting: boolean,
   ) {
     this.powershell = shell === "powershell";
     this.wordCharacter = this.powershell ? POWERSHELL_WORD_CHARACTER : BASH_WORD_CHARACTER;
+    this.wordBoundary = inspecting ? INSPECTION_WORD_BOUNDARY : WORD_BOUNDARY;
   }
 
-  parse(): ShellArgument[][] | undefined {
-    return this.readList(0) && !this.peek() ? this.commands : undefined;
+  parse(): ShellCommand[] | undefined {
+    const complete = this.readList(0) && !this.peek();
+    return complete || this.inspecting ? this.commands : undefined;
   }
 
   private peek(): string {
@@ -43,81 +48,160 @@ class CommandScopeParser {
     while (whitespace.test(this.peek())) this.offset++;
   }
 
-  private readList(depth: number): boolean {
+  private readList(depth: number, closer = "", output?: ShellPipeline): boolean {
     if (depth > COMMAND_SUBSTITUTION_LIMIT) return false;
-    this.skipSpacing(true);
-    while (this.readCommand(depth)) {
+    let pipeline: ShellPipeline = { output };
+    this.skipListSpacing();
+    while (this.readCommand(depth, pipeline)) {
       const separator = this.peek();
-      if (!separator || (separator === ")" && depth > 0)) return true;
-      if (separator === "\n" || separator === ";") {
+      if (!separator || separator === closer) return true;
+      const pair = this.source.slice(this.offset, this.offset + 2);
+      if (
+        separator === "\n" ||
+        separator === ";" ||
+        (this.inspecting && !this.powershell && separator === "&" && pair !== "&&")
+      ) {
         this.offset++;
-        this.skipSpacing(true);
-        if (!this.peek() || (this.peek() === ")" && depth > 0)) return true;
+        pipeline = { output };
+        this.skipListSpacing();
+        if (!this.peek() || this.peek() === closer) return true;
         continue;
       }
-      const pair = this.source.slice(this.offset, this.offset + 2);
-      if (!this.powershell && (pair === "&&" || pair === "||" || pair === "|&")) {
+      if (
+        (!this.powershell || this.inspecting) &&
+        (pair === "&&" || pair === "||" || pair === "|&")
+      ) {
         this.offset += 2;
+        if (pair !== "|&") pipeline = { output };
       } else if (separator === "|" && pair !== "||" && pair !== "|&") {
         this.offset++;
       } else {
         return false;
       }
-      this.skipSpacing(true);
+      this.skipListSpacing();
     }
     return false;
   }
 
-  private readCommand(depth: number): boolean {
+  private skipListSpacing(): void {
+    this.skipSpacing(true);
+    while (this.inspecting && this.peek() === "#") {
+      this.skipComment();
+      this.skipSpacing(true);
+    }
+  }
+
+  private skipComment(): void {
+    const end = this.source.indexOf("\n", this.offset);
+    this.offset = end === -1 ? this.source.length : end;
+  }
+
+  private readCommand(depth: number, pipeline: ShellPipeline): boolean {
+    if (this.inspecting && this.powershell && this.peek() === "&") {
+      this.offset++;
+      this.skipSpacing();
+    }
+    if (this.inspecting && (this.peek() === "(" || this.peek() === "{")) {
+      if (!this.readGroup(depth, this.peek() === "(" ? ")" : "}", pipeline)) return false;
+      if (this.powershell && this.peek() === ".") this.readWord(depth);
+      this.skipSpacing();
+      return true;
+    }
     const start = this.offset;
     const head = this.readWord(depth);
+    if (head === undefined) return false;
     if (
-      !head ||
-      !COMMAND_NAME.test(head) ||
-      SHELL_KEYWORDS[this.shell].has(this.powershell ? head.toLowerCase() : head) ||
-      (this.powershell && head !== this.source.slice(start, this.offset))
+      !this.inspecting &&
+      (!head ||
+        !COMMAND_NAME.test(head) ||
+        SHELL_KEYWORDS[this.shell].has(this.powershell ? head.toLowerCase() : head) ||
+        (this.powershell && head !== this.source.slice(start, this.offset)))
     )
       return false;
 
     const args: ShellArgument[] = [head];
     this.skipSpacing();
     while (this.peek() && !WORD_BOUNDARY.test(this.peek())) {
+      const char = this.peek();
+      if (this.inspecting && char === "}") break;
+      if (this.inspecting && char === "#") {
+        this.skipComment();
+        break;
+      }
+      if (this.inspecting && (char === ">" || char === "<")) {
+        if (!this.readRedirection(depth)) break;
+        this.skipSpacing();
+        continue;
+      }
+      if (this.inspecting && (char === "(" || char === "{")) {
+        if (!this.readGroup(depth, char === "(" ? ")" : "}")) break;
+        args.push(null);
+        this.skipSpacing();
+        continue;
+      }
       const arg = this.readWord(depth);
-      if (arg === undefined) return false;
+      if (arg === undefined) {
+        if (!this.inspecting) return false;
+        args.push(null);
+        break;
+      }
       args.push(arg);
       this.skipSpacing();
     }
-    this.commands.push(args);
+    this.commands.push({ args, pipeline });
     return true;
+  }
+
+  private readRedirection(depth: number): boolean {
+    const operator = REDIRECTION_OPERATOR.exec(this.source.slice(this.offset))?.[0];
+    if (!operator) return false;
+    this.offset += operator.length;
+    this.skipSpacing();
+    return this.readWord(depth) !== undefined;
   }
 
   private readWord(depth: number): ShellArgument | undefined {
     const start = this.offset;
     let value = "";
     let dynamic = false;
-    while (this.peek() && !WORD_BOUNDARY.test(this.peek())) {
+    while (this.peek() && !this.wordBoundary.test(this.peek())) {
       const char = this.peek();
       if (char === "'" || char === '"' || char === "$") {
-        if (this.powershell && start !== this.offset) return undefined;
-        if (char === "$" && !this.readSubstitution(depth)) return undefined;
+        if (!this.inspecting && this.powershell && start !== this.offset) return undefined;
+        if (char === "$" && !this.readExpansion(depth)) return undefined;
         const part = char === "$" ? null : this.readQuoted(char, depth);
         if (part === undefined) return undefined;
         if (part === null) dynamic = true;
         else value += part;
-        if (this.powershell && this.peek() && !WORD_BOUNDARY.test(this.peek())) return undefined;
+        if (!this.inspecting && this.powershell && this.peek() && !WORD_BOUNDARY.test(this.peek()))
+          return undefined;
+      } else if (this.inspecting && this.powershell && char === "\x60") {
+        const next = this.source[this.offset + 1];
+        if (!next) return undefined;
+        if (next !== "\n") value += next;
+        this.offset += 2;
       } else if (!this.powershell && char === "\\") {
         const escaped = this.source[this.offset + 1];
+        if (this.inspecting && escaped === "\n") {
+          this.offset += 2;
+          continue;
+        }
         if (!escaped || NON_LITERAL_CHARACTERS.test(escaped)) return undefined;
         value += escaped;
         this.offset += 2;
       } else if (this.wordCharacter.test(char)) {
         value += char;
         this.offset++;
+      } else if (this.inspecting && !NON_LITERAL_CHARACTERS.test(char)) {
+        if (SHELL_DYNAMIC_CHARACTER.test(char) || (this.powershell && char === ",")) dynamic = true;
+        value += char;
+        this.offset++;
       } else {
         return undefined;
       }
     }
-    if (this.offset === start || (this.powershell && value === "--%")) return undefined;
+    if (this.offset === start || (!this.inspecting && this.powershell && value === "--%"))
+      return undefined;
     return dynamic ? null : value;
   }
 
@@ -133,12 +217,18 @@ class CommandScopeParser {
         this.offset++;
         if (!this.powershell || this.peek() !== quote) {
           // PowerShell distinguishes parameter syntax from quoted strings.
-          if (this.powershell && (value.startsWith("-") || value.includes('"'))) return undefined;
+          if (!this.inspecting && this.powershell && (value.startsWith("-") || value.includes('"')))
+            return undefined;
           return dynamic ? null : value;
         }
-      } else if (quote === '"' && (char === "$" || char === "\x60")) {
-        if (!this.readSubstitution(depth)) return undefined;
+      } else if (quote === '"' && char === "$") {
+        if (!this.readExpansion(depth)) return undefined;
         dynamic = true;
+        continue;
+      } else if (quote === '"' && char === "\x60") {
+        if (!this.inspecting || !this.powershell || !this.source[this.offset + 1]) return undefined;
+        value += this.source[this.offset + 1];
+        this.offset += 2;
         continue;
       } else if (!this.powershell && quote === '"' && char === "\\") {
         const escaped = this.source[this.offset + 1];
@@ -154,10 +244,21 @@ class CommandScopeParser {
     return undefined;
   }
 
-  private readSubstitution(depth: number): boolean {
-    if (!this.source.startsWith("$(", this.offset)) return false;
-    this.offset += 2;
-    if (!this.readList(depth + 1) || this.peek() !== ")") return false;
+  private readExpansion(depth: number): boolean {
+    if (this.source.startsWith("$(", this.offset)) {
+      this.offset++;
+      return this.readGroup(depth, ")");
+    }
+    if (!this.inspecting) return false;
+    const variable = SHELL_VARIABLE.exec(this.source.slice(this.offset))?.[0];
+    if (!variable) return false;
+    this.offset += variable.length;
+    return true;
+  }
+
+  private readGroup(depth: number, closer: string, output?: ShellPipeline): boolean {
+    this.offset++;
+    if (!this.readList(depth + 1, closer, output) || this.peek() !== closer) return false;
     this.offset++;
     return true;
   }
@@ -169,7 +270,15 @@ export function parseCommandScope(
 ): ShellArgument[][] | undefined {
   if (command.length > COMMAND_SCOPE_LIMIT) return undefined;
   const source = shell === "powershell" ? command.replace(/\r\n?/g, "\n") : command;
-  return new CommandScopeParser(source, shell).parse();
+  return new ShellCommandParser(source, shell, false).parse()?.map(({ args }) => args);
+}
+
+// 检查时保留已识别的命令，便于发现出现在展开或重定向旁边的危险操作。
+export function inspectShellCommand(command: string, shell: CommandShell): ShellCommand[] {
+  const lines = command.replace(/\r\n?/g, "\n");
+  const source =
+    shell === "powershell" ? lines.replace(/[‘’‚‛]/g, "'").replace(/[“”„‟]/g, '"') : lines;
+  return new ShellCommandParser(source, shell, true).parse() ?? [];
 }
 
 export function commandPrefixMatches(

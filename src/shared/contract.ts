@@ -253,6 +253,18 @@ export interface InterruptedRun extends RunRef {
   workingDirectory: string | null;
 }
 
+export type CommandDanger =
+  | "git-force-push"
+  | "git-hard-reset"
+  | "git-clean"
+  | "git-checkout-files"
+  | "git-dynamic"
+  | "download-and-execute"
+  | "disk-operation"
+  | "recursive-delete-outside-project"
+  | "forced-delete"
+  | "system-operation";
+
 export interface PermissionRequest {
   type: "permission_request";
   requestId: string;
@@ -260,6 +272,7 @@ export interface PermissionRequest {
   label: string;
   inputSummary: string;
   danger: boolean;
+  commandDanger?: CommandDanger;
   workingDirectory?: string;
   command?: string;
   rule?: ToolRule;
@@ -525,7 +538,7 @@ export interface StartVerification {
 
 export type ProviderKind = "anthropic" | "openai-compatible" | "openai-responses" | "faux";
 
-/** 权限模式（composer 徽章切换）：standard = 读放行写确认；full-access = 全放行；read-only = 写类直接拒绝 */
+/** 确认模式使用授权规则，完全访问放行常规操作，只读模式阻止写入与命令。危险命令始终需要单次确认。 */
 export type ApprovalMode = "standard" | "full-access" | "read-only";
 
 /** 模型思考强度（pi 的 7 档离散值，composer 滑块选择） */

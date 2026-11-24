@@ -2,6 +2,7 @@
 import { ArchiveIcon, CpuIcon, PlugIcon, ShieldCheckIcon, SquarePenIcon } from "lucide-react";
 import type {
   ApprovalMode,
+  CommandDanger,
   CommandShell,
   GitChange,
   GitChangesView,
@@ -196,8 +197,21 @@ export const APPROVAL_MODE_OPTIONS: Record<ApprovalMode, { label: string; descri
   "read-only": { label: "只读", description: "阻止文件写入、命令和 MCP 工具调用。" },
   "full-access": {
     label: "完全访问",
-    description: "允许写入和运行命令，MCP 服务可单独要求确认。",
+    description: "允许写入和运行命令。危险命令始终需要确认，MCP 服务可单独要求确认。",
   },
+};
+
+export const COMMAND_DANGER_DESCRIPTIONS: Record<CommandDanger, string> = {
+  "git-force-push": "强制推送可能覆盖远端提交。",
+  "git-hard-reset": "硬重置会丢弃工作区和暂存区的改动。",
+  "git-clean": "此命令可以删除未跟踪的文件和目录。",
+  "git-checkout-files": "检出文件可能覆盖项目中的本地改动。",
+  "git-dynamic": "Git 命令依赖运行时参数，可能覆盖或删除数据。",
+  "download-and-execute": "管道可能将下载内容交给解释器执行。",
+  "disk-operation": "此命令可以更改磁盘分区或文件系统。",
+  "recursive-delete-outside-project": "递归删除可能影响项目目录之外的文件。",
+  "forced-delete": "此命令可能强制删除文件或整个目录。",
+  "system-operation": "此命令可以修改系统设置或中断系统运行。",
 };
 
 // 已保存授权里的内置工具名称，与主进程 TOOL_LABELS 的文案一致；MCP 工具显示原名。

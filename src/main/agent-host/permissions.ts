@@ -14,33 +14,17 @@ import { isReadOnly, labelOf, pathOfArgs } from "./tools";
 import type { ToolEnvironment } from "./tools/types";
 import { createToolPathResolver, isWithinDirectory } from "../workspace/paths";
 import { getCommandShell } from "../workspace/shell";
+import { findCommandDanger } from "./command-danger";
 import { commandPrefixMatches, parseCommandScope } from "./command-scope";
 import type { PendingPermission } from "./types";
 
 type Broadcast = (request: PermissionRequest) => void;
 
-/** bash 危险命令特征（FR-7.5）：硬编码列表 + 弹窗红标，命中也不自动拒绝，只提升警示 */
-const DANGER_PATTERNS: RegExp[] = [
-  /\brm\s+(-[a-z]*r[a-z]*f|-[a-z]*f[a-z]*r)\b/i,
-  /remove-item\s+.*-recurse.*-force/i,
-  /\bdel\s+\/[sq]\b/i,
-  /format\s+[a-z]:/i,
-  /\bmkfs\b/i,
-  /\bshutdown\b|\brestart-computer\b/i,
-  /reg(\.exe)?\s+(delete|add)\s/i,
-  /\bdisable\b.*\bdefender\b/i,
-  /remove-itemproperty|set-itemproperty.*hkey_/i,
-];
-
-function isDangerous(toolName: string, args: unknown, command: string | undefined): boolean {
-  if (toolName === "bash") {
-    return command !== undefined && DANGER_PATTERNS.some((p) => p.test(command));
-  }
-  if (toolName === "write_file" || toolName === "edit_file") {
-    const path = pathOfArgs(args) ?? "";
-    return /^(c:\\windows|c:\\program files)/i.test(path);
-  }
-  return false;
+function isProtectedFile(toolName: string, args: unknown): boolean {
+  return (
+    (toolName === "write_file" || toolName === "edit_file") &&
+    /^(c:\\windows|c:\\program files)/i.test(pathOfArgs(args) ?? "")
+  );
 }
 
 function summarizeArgs(args: unknown): string {
@@ -86,7 +70,6 @@ export class PermissionManager {
 
     // 权限模式三档（composer 徽章切换）
     const mode = this.getApprovalMode();
-    if (mode === "full-access" && !policy?.requireConfirmation) return undefined;
     if (mode === "read-only") {
       return {
         block: true,
@@ -94,9 +77,6 @@ export class PermissionManager {
       };
     }
 
-    const rules = [...this.getGlobalRules(), ...this.sessionRules].filter(
-      (rule) => rule.toolName === toolName,
-    );
     const command =
       toolName === "bash" &&
       args &&
@@ -105,28 +85,36 @@ export class PermissionManager {
       typeof args.command === "string"
         ? args.command
         : undefined;
-    const danger = isDangerous(toolName, args, command);
-    let rule: ToolRule | undefined;
-    if (toolName === "bash") {
-      const { commandShell: shell } = environment;
-      const commands = command === undefined ? undefined : parseCommandScope(command, shell);
-      if (
-        commands?.every((words) =>
-          rules.some(
-            ({ commandPrefix }) =>
-              commandPrefix && commandPrefixMatches(commandPrefix, shell, words),
-          ),
-        )
-      )
-        return undefined;
+    const commandDanger =
+      command === undefined ? undefined : findCommandDanger(command, environment);
+    if (!commandDanger && mode === "full-access" && !policy?.requireConfirmation) return undefined;
 
-      // A single approval creates one prefix. Combined commands can use existing rules for every part.
-      if (!danger && commands?.length === 1 && commands[0].every((word) => word !== null)) {
-        rule = { toolName, commandPrefix: { shell, args: commands[0] } };
+    let rule: ToolRule | undefined;
+    if (!commandDanger) {
+      const rules = [...this.getGlobalRules(), ...this.sessionRules].filter(
+        (candidate) => candidate.toolName === toolName,
+      );
+      if (toolName === "bash") {
+        const { commandShell: shell } = environment;
+        const commands = command === undefined ? undefined : parseCommandScope(command, shell);
+        if (
+          commands?.every((words) =>
+            rules.some(
+              ({ commandPrefix }) =>
+                commandPrefix && commandPrefixMatches(commandPrefix, shell, words),
+            ),
+          )
+        )
+          return undefined;
+
+        // A single approval creates one prefix. Combined commands can use existing rules for every part.
+        if (commands?.length === 1 && commands[0].every((word) => word !== null)) {
+          rule = { toolName, commandPrefix: { shell, args: commands[0] } };
+        }
+      } else {
+        if (rules.some((candidate) => ruleMatches(candidate, args))) return undefined;
+        rule = ruleFor(toolName, args);
       }
-    } else {
-      if (rules.some((candidate) => ruleMatches(candidate, args))) return undefined;
-      rule = ruleFor(toolName, args);
     }
 
     const decision = await this.ask({
@@ -135,7 +123,8 @@ export class PermissionManager {
       toolName,
       label: policy?.label ?? labelOf(toolName),
       inputSummary: summarizeArgs(args),
-      danger,
+      danger: Boolean(commandDanger) || isProtectedFile(toolName, args),
+      commandDanger,
       workingDirectory: createToolPathResolver(environment.workingDirectory)("."),
       command,
       rule,

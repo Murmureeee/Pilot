@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { PermissionManager } from "../src/main/agent-host/permissions";
 import { homedir } from "node:os";
-import type { CommandShell, PermissionRequest, ToolRule } from "@shared/contract";
+import type { ApprovalMode, CommandShell, PermissionRequest, ToolRule } from "@shared/contract";
 
 /** 结算宏任务 */
 const flush = (): Promise<void> => new Promise((resolveP) => setTimeout(resolveP, 0));
 
-function makeManager(globalRules: ToolRule[] = []) {
+function makeManager(
+  globalRules: ToolRule[] = [],
+  mode: ApprovalMode = "standard",
+  sessionRules: ToolRule[] = [],
+) {
   const events: PermissionRequest[] = [];
   const addedGlobal: ToolRule[] = [];
   // 模拟真实持久化回路：addGlobalRule 落盘 → getGlobalRules 立即可见
@@ -18,6 +22,8 @@ function makeManager(globalRules: ToolRule[] = []) {
       addedGlobal.push(rule);
       allRules.push(rule);
     },
+    () => mode,
+    sessionRules,
   );
   return { manager, events, addedGlobal, allRules };
 }
@@ -75,13 +81,16 @@ describe("PermissionManager", () => {
     const promise = manager.gate("bash", { command: "rm -rf C:\\tmp\\x" });
     await flush();
     const request = events[0];
-    expect(request.type === "permission_request" && request.danger).toBe(true);
+    expect(request).toMatchObject({
+      danger: true,
+      commandDanger: "recursive-delete-outside-project",
+    });
     expect(request.rule).toBeUndefined();
     manager.respond((request as { requestId: string }).requestId, "deny");
     expect(await promise).toMatchObject({ block: true });
   });
 
-  it("full-access mode bypasses the gate entirely", async () => {
+  it("full-access mode allows ordinary commands", async () => {
     const events: PermissionRequest[] = [];
     const manager = new PermissionManager(
       (event) => events.push(event),
@@ -143,6 +152,47 @@ describe("PermissionManager", () => {
     expect(manager.listPending()).toEqual([]);
     await expect(second).resolves.toMatchObject({ block: true });
   });
+});
+
+it.each([
+  ["bash", "standard"],
+  ["bash", "full-access"],
+  ["powershell", "standard"],
+  ["powershell", "full-access"],
+] as const)("asks about %s danger in %s even after a saved grant", async (shell, mode) => {
+  const sessionRules = [commandRule(shell, "git", "clean")];
+  const { manager, events, addedGlobal } = makeManager(
+    [commandRule(shell, "git"), commandRule(shell, "pnpm", "test")],
+    mode,
+    sessionRules,
+  );
+  const command = shell === "bash" ? "pnpm test && git clean -n" : "pnpm test; git clean -n";
+  const ask = () => manager.gate("bash", { command }, undefined, { commandShell: shell });
+  const first = ask();
+  await flush();
+  expect(events[0]).toMatchObject({ danger: true, commandDanger: "git-clean", command });
+  expect(events[0].rule).toBeUndefined();
+  expect(() => manager.respond(events[0].requestId, "session")).toThrow("此操作需要逐次审批。");
+  expect(() => manager.respond(events[0].requestId, "global")).toThrow("此操作需要逐次审批。");
+  expect(manager.listPending()).toEqual([events[0]]);
+  manager.respond(events[0].requestId, "once");
+  await expect(first).resolves.toBeUndefined();
+
+  const second = ask();
+  await flush();
+  expect(events[1]).toMatchObject({ danger: true, commandDanger: "git-clean" });
+  manager.respond(events[1].requestId, "deny");
+  await expect(second).resolves.toMatchObject({ block: true });
+  expect(addedGlobal).toEqual([]);
+  expect(sessionRules).toEqual([commandRule(shell, "git", "clean")]);
+});
+
+it("blocks a dangerous command in read-only mode without asking", async () => {
+  const { manager, events } = makeManager([], "read-only");
+  await expect(manager.gate("bash", { command: "git clean -n" })).resolves.toMatchObject({
+    block: true,
+  });
+  expect(events).toEqual([]);
 });
 
 describe.each(["powershell", "bash"] as const)("%s command approval", (shell) => {

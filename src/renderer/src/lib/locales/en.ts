@@ -250,8 +250,8 @@ export const EN_MESSAGES: Record<string, string> = {
   "写入、命令和 MCP 调用需确认，已有授权可直接执行。":
     "Ask before writing files, running commands, or calling MCP tools unless already allowed.",
   "阻止文件写入、命令和 MCP 工具调用。": "Block file writes, commands, and MCP tool calls.",
-  "允许写入和运行命令，MCP 服务可单独要求确认。":
-    "Allow file writes and commands. Individual MCP servers can still require approval.",
+  "允许写入和运行命令。危险命令始终需要确认，MCP 服务可单独要求确认。":
+    "Allow file writes and commands. Dangerous commands always require approval, and individual MCP servers can require approval.",
   会话权限模式: "Chat approval mode",
   默认权限模式: "Default approval mode",
   跟随全局默认: "Use global default",
@@ -280,6 +280,23 @@ export const EN_MESSAGES: Record<string, string> = {
   清空排队: "Clear queue",
   "允许「{0}」？": 'Allow "{0}"?',
   "允许运行此命令？": "Allow this command to run?",
+  "允许运行危险命令？": "Run this dangerous command?",
+  "强制推送可能覆盖远端提交。": "A force push can overwrite remote commits.",
+  "硬重置会丢弃工作区和暂存区的改动。": "A hard reset discards working tree and staged changes.",
+  "此命令可以删除未跟踪的文件和目录。": "This command can remove untracked files and directories.",
+  "检出文件可能覆盖项目中的本地改动。":
+    "Checking out files can overwrite local changes in the project.",
+  "Git 命令依赖运行时参数，可能覆盖或删除数据。":
+    "This Git command depends on runtime arguments and could overwrite or delete data.",
+  "管道可能将下载内容交给解释器执行。":
+    "This pipeline can pass downloaded content to an interpreter.",
+  "此命令可以更改磁盘分区或文件系统。": "This command can change disk partitions or file systems.",
+  "递归删除可能影响项目目录之外的文件。":
+    "Recursive deletion could affect files outside the project.",
+  "此命令可能强制删除文件或整个目录。":
+    "This command can forcibly remove files or entire directories.",
+  "此命令可以修改系统设置或中断系统运行。":
+    "This command can change system settings or interrupt the operating system.",
   检测到可能造成破坏的操作: "Potentially destructive action",
   展开详情: "Show details",
   收起详情: "Hide details",

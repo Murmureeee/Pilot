@@ -18,7 +18,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
-import { COMPOSER_SURFACE_CLASS, PERMISSION_ATTENTION_TEXT } from "@renderer/lib/constants";
+import {
+  COMMAND_DANGER_DESCRIPTIONS,
+  COMPOSER_SURFACE_CLASS,
+  PERMISSION_ATTENTION_TEXT,
+} from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { describeToolScope } from "@renderer/lib/tool-rules";
 import { toolInput } from "@renderer/lib/tool-trace";
@@ -60,6 +64,9 @@ export function PermissionCard({
   const hasMore = !shell && preview !== input.details;
   const text = expanded ? input.details : preview;
   const scope = request.rule && describeToolScope(request.rule, locale);
+  const dangerReason = request.commandDanger
+    ? COMMAND_DANGER_DESCRIPTIONS[request.commandDanger]
+    : "检测到可能造成破坏的操作";
 
   useEffect(() => {
     // 输入框随审批卡出现被隐藏，但浏览器要到下一帧才把它的焦点还给 body；
@@ -147,7 +154,7 @@ export function PermissionCard({
             )}
           >
             {shell
-              ? t("允许运行此命令？", locale)
+              ? t(request.commandDanger ? "允许运行危险命令？" : "允许运行此命令？", locale)
               : t("允许「{0}」？", locale, [t(request.label, locale)])}
           </h2>
           {request.workingDirectory && (
@@ -156,7 +163,7 @@ export function PermissionCard({
             </p>
           )}
           {request.danger && (
-            <p className="text-muted-foreground text-xs">{t("检测到可能造成破坏的操作", locale)}</p>
+            <p className="text-muted-foreground text-xs">{t(dangerReason, locale)}</p>
           )}
         </div>
       </div>

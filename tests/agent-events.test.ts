@@ -295,11 +295,13 @@ describe("agent-events adapter", () => {
       label: "执行命令",
       inputSummary: "{}",
       danger: true,
+      commandDanger: "git-clean" as const,
     };
     const second: Extract<AgentRunEvent, { type: "permission_request" }> = {
       ...first,
       requestId: "r2",
       danger: false,
+      commandDanger: undefined,
       command: "pnpm test",
       workingDirectory: "E:/projects/Pilot",
       rule: { toolName: "bash", commandPrefix: { shell: "powershell", args: ["pnpm", "test"] } },

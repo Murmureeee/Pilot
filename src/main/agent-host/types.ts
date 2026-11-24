@@ -82,6 +82,15 @@ export interface PendingPermission {
 /** null 代表替换结果，其值不能用于匹配前缀。 */
 export type ShellArgument = string | null;
 
+export interface ShellCommand {
+  args: ShellArgument[];
+  pipeline: ShellPipeline;
+}
+
+export interface ShellPipeline {
+  output?: ShellPipeline;
+}
+
 export interface SessionIndex {
   sessions: SessionMeta[];
   recentProjects?: string[];
