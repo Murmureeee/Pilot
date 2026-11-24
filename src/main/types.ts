@@ -1,5 +1,5 @@
 // @env node
-import type { BrowserWindow } from "electron";
+import type { BrowserWindow, Rectangle } from "electron";
 import type { AgentHost } from "./agent-host/host";
 import type { McpManager } from "./agent-host/mcp";
 import type { DiagnosticLog } from "./diagnostics";
@@ -16,4 +16,9 @@ export interface DesktopExitDependencies {
   mcp: Pick<McpManager, "close">;
   updater: Pick<DesktopUpdater, "getStatus" | "install">;
   log: Pick<DiagnosticLog, "write">;
+}
+
+export interface WindowState {
+  bounds: Rectangle;
+  maximized: boolean;
 }

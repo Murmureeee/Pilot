@@ -9,6 +9,12 @@ export const SESSION_FILE_ID = /^[a-z\d_-]+$/i;
 export const SESSION_INDEX_SAVE_BLOCKED = "无法备份原会话索引，暂时不能保存会话索引。";
 export const SETTINGS_FILE_NAME = "settings.json";
 export const SETTINGS_SAVE_BLOCKED = "无法保存设置。请恢复原文件的访问权限后重试。";
+export const WINDOW_STATE_FILE_NAME = "window-state.json";
+export const DEFAULT_WINDOW_SIZE = { width: 1100, height: 750 } as const;
+export const MINIMUM_WINDOW_SIZE = { width: 720, height: 480 } as const;
+export const WINDOW_TITLE_BAR_HEIGHT = 38;
+export const MINIMUM_VISIBLE_TITLE_BAR = { width: 120, height: 24 } as const;
+export const WINDOW_STATE_SAVE_DELAY_MS = 250;
 
 // 原生窗控与 src/renderer/src/assets/main.css 的窗口底色对齐。
 export const TITLE_BAR_OVERLAY_COLORS = {

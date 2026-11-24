@@ -14,13 +14,21 @@ import { registerRenderer, sendToRenderers } from "./ipc/transport";
 import { getLogLevel, loadSettings, saveSettings } from "./settings";
 import type { Settings } from "./settings/types";
 import { runAgentSmoke } from "./agent-host/smoke";
-import { TITLE_BAR_OVERLAY_COLORS, WINDOWS_APP_ID } from "./constants";
+import {
+  DEFAULT_WINDOW_SIZE,
+  MINIMUM_WINDOW_SIZE,
+  TITLE_BAR_OVERLAY_COLORS,
+  WINDOWS_APP_ID,
+  WINDOW_STATE_FILE_NAME,
+  WINDOW_TITLE_BAR_HEIGHT,
+} from "./constants";
 import { DesktopExit } from "./desktop-exit";
 import { prepareUserDataDirectory } from "./profile";
 import { DesktopUpdater } from "./updater";
 import { VerificationManager } from "./verification";
 import { revealWindow } from "./window";
 import { registerWindowRecovery } from "./window-recovery";
+import { loadWindowState, rememberWindow } from "./window-state";
 
 const isDev = !app.isPackaged;
 
@@ -38,16 +46,16 @@ async function runSmoke(): Promise<void> {
 const CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'";
 
-function createWindow(log: DiagnosticLog): BrowserWindow {
+function createWindow(log: DiagnosticLog, stateFile: string): BrowserWindow {
   const iconDir = isDev ? join(app.getAppPath(), "resources") : process.resourcesPath;
   const iconPath = join(iconDir, "icon.png");
   const iconOptions = existsSync(iconPath) ? { icon: iconPath } : {};
+  const state = loadWindowState(stateFile);
 
   const win = new BrowserWindow({
-    width: 1100,
-    height: 750,
-    minWidth: 720,
-    minHeight: 480,
+    ...(state?.bounds ?? DEFAULT_WINDOW_SIZE),
+    minWidth: MINIMUM_WINDOW_SIZE.width,
+    minHeight: MINIMUM_WINDOW_SIZE.height,
     title: APP_NAME,
     backgroundColor: "#ffffff",
     ...iconOptions,
@@ -55,7 +63,7 @@ function createWindow(log: DiagnosticLog): BrowserWindow {
     titleBarStyle: "hidden",
     titleBarOverlay: {
       ...TITLE_BAR_OVERLAY_COLORS[nativeTheme.shouldUseDarkColors ? "dark" : "light"],
-      height: 38,
+      height: WINDOW_TITLE_BAR_HEIGHT,
     },
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
@@ -65,6 +73,8 @@ function createWindow(log: DiagnosticLog): BrowserWindow {
       webSecurity: true,
     },
   });
+  rememberWindow(win, stateFile, log);
+  if (state?.maximized) win.maximize();
   registerRenderer(win.webContents);
   registerWindowRecovery(win, log);
 
@@ -119,6 +129,7 @@ function startDesktop(): void {
   const sessionsDir = join(userData, "sessions");
   const skillsDir = join(userData, "skills");
   const logsDir = join(userData, "logs");
+  const windowState = join(userData, WINDOW_STATE_FILE_NAME);
   const getSettings = (): ReturnType<typeof loadSettings> => loadSettings(userData);
   const log = new DiagnosticLog(logsDir, getLogLevel(getSettings()));
   log.write("info", "main", "startup", { version: app.getVersion() });
@@ -182,7 +193,7 @@ function startDesktop(): void {
   });
   const getMainWindow = (): BrowserWindow => {
     if (!mainWindow || mainWindow.isDestroyed()) {
-      mainWindow = createWindow(log);
+      mainWindow = createWindow(log, windowState);
       exit.watchWindow(mainWindow);
     }
     return mainWindow;

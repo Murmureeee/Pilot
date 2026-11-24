@@ -29,7 +29,11 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
-import { SESSION_STATUS_LABELS } from "@renderer/lib/constants";
+import {
+  SESSION_STATUS_LABELS,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+} from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { loadCollapsedProjects, saveCollapsedProjects } from "@renderer/lib/preferences";
 import { relativeTime } from "@renderer/lib/relative-time";
@@ -55,8 +59,6 @@ import { cn } from "cn";
 import { APP_NAME } from "@shared/constants";
 import type { SessionMeta } from "@shared/contract";
 
-const SIDEBAR_MIN_WIDTH = 220;
-const SIDEBAR_MAX_WIDTH = 520;
 /** rail 右缘向右拖动超过此位移 → 动画展开 */
 const RAIL_EXPAND_THRESHOLD = 80;
 
@@ -228,7 +230,7 @@ export function SidebarPanel({
   animateWidth: boolean;
   onResize(width: number): void;
   onDragStart(): void;
-  onDragEnd(): void;
+  onDragEnd(width: number): void;
   onCollapse(): void;
   collapsed: boolean;
 }): JSX.Element {
@@ -407,23 +409,22 @@ export function SidebarPanel({
       onDragStart();
       const startX = event.clientX;
       const startWidth = event.currentTarget.parentElement?.clientWidth ?? width;
-      const cleanup = (): void => {
+      let nextWidth = width;
+      const onUp = (): void => {
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
+        onDragEnd(nextWidth);
       };
       const onMove = (ev: globalThis.MouseEvent): void => {
         const next = startWidth + (ev.clientX - startX);
         // 越过下界：立即打断拖拽并播放收起动画（不等松手）
         if (next < SIDEBAR_MIN_WIDTH) {
-          cleanup();
+          onUp();
           onCollapse();
           return;
         }
-        onResize(Math.min(SIDEBAR_MAX_WIDTH, next));
-      };
-      const onUp = (): void => {
-        cleanup();
-        onDragEnd();
+        nextWidth = Math.min(SIDEBAR_MAX_WIDTH, next);
+        onResize(nextWidth);
       };
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);

@@ -15,6 +15,12 @@ import {
   FILE_REVIEW_MIN_WINDOW_WIDTH,
 } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
+import {
+  loadSidebarCollapsed,
+  loadSidebarWidth,
+  saveSidebarCollapsed,
+  saveSidebarWidth,
+} from "@renderer/lib/preferences";
 import { windowShortcutAction } from "@renderer/lib/window-shortcuts";
 import {
   selectProjectDirectory,
@@ -35,8 +41,8 @@ export default function App(): JSX.Element {
   const projectDirectory = useAgentStore(selectProjectDirectory);
   const locale = useLocale();
   const setPaletteOpen = useAgentStore((s) => s.setPaletteOpen);
-  const [sidebarWidth, setSidebarWidth] = useState(262);
-  const [collapsed, setCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth);
+  const [collapsed, setCollapsed] = useState(loadSidebarCollapsed);
   const [dragging, setDragging] = useState(false);
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
   const review = useFileChangesStore((state) => state.review);
@@ -55,19 +61,24 @@ export default function App(): JSX.Element {
     windowWidth < reviewMinWidth + sidebarWidth;
   const sidebarCollapsed = collapsed || compactReview;
 
+  const rememberCollapsed = useCallback((value: boolean): void => {
+    setCollapsed(value);
+    saveSidebarCollapsed(value);
+  }, []);
+
   const expandSidebar = useCallback((): void => {
     if (compactReview && useAgentStore.getState().view === "chat") {
       useWorkspaceReferenceStore.getState().close();
       closeReview();
     }
-    setCollapsed(false);
-  }, [closeReview, compactReview]);
+    rememberCollapsed(false);
+  }, [closeReview, compactReview, rememberCollapsed]);
 
   const togglePanel = useCallback((): void => {
     setDragging(false);
     if (sidebarCollapsed) expandSidebar();
-    else setCollapsed(true);
-  }, [expandSidebar, sidebarCollapsed]);
+    else rememberCollapsed(true);
+  }, [expandSidebar, rememberCollapsed, sidebarCollapsed]);
 
   useEffect(() => {
     const resize = (): void => setWindowWidth(window.innerWidth);
@@ -144,10 +155,13 @@ export default function App(): JSX.Element {
             animateWidth={!dragging && !compactReview}
             onResize={setSidebarWidth}
             onDragStart={() => setDragging(true)}
-            onDragEnd={() => setDragging(false)}
+            onDragEnd={(width) => {
+              saveSidebarWidth(width);
+              setDragging(false);
+            }}
             onCollapse={() => {
               setDragging(false);
-              setCollapsed(true);
+              rememberCollapsed(true);
             }}
             collapsed={sidebarCollapsed}
           />
