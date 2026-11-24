@@ -7,6 +7,7 @@ import { NATIVE_DIALOG_TITLES } from "../constants";
 import { mergeSettingsInput, toPublicSettings, validateSettingsInput } from "../settings";
 import { updateActiveModel } from "../settings/models";
 import { decryptSecret } from "../settings/secrets";
+import { sameToolRule } from "../settings/tool-rules";
 import { handle } from "./transport";
 import type { IpcContext } from "./types";
 
@@ -33,6 +34,14 @@ export function registerSettingsRoutes(
   handle(IPC.settingsDismissRecovery, () => {
     const { recoveredFrom, ...settings } = ctx.getSettings();
     if (recoveredFrom) ctx.saveSettings(settings);
+    return toPublicSettings(settings);
+  });
+  handle(IPC.settingsRevokeToolRule, (_event, rule) => {
+    const current = ctx.getSettings();
+    const rules = current.toolRules ?? [];
+    const remaining = rules.filter((candidate) => !sameToolRule(candidate, rule));
+    const settings = { ...current, toolRules: remaining };
+    if (remaining.length !== rules.length) ctx.saveSettings(settings);
     return toPublicSettings(settings);
   });
   const skillList = () => {

@@ -68,6 +68,7 @@ export const IPC = {
   settingsSetLogLevel: "settings:set-log-level",
   settingsSelectModel: "settings:select-model",
   settingsSetThinkingLevel: "settings:set-thinking-level",
+  settingsRevokeToolRule: "settings:revoke-tool-rule",
   settingsDismissRecovery: "settings:dismiss-recovery",
   settingsMcpList: "settings:mcp-list",
   settingsMcpSave: "settings:mcp-save",
@@ -259,6 +260,9 @@ export interface PermissionRequest {
   label: string;
   inputSummary: string;
   danger: boolean;
+  workingDirectory?: string;
+  command?: string;
+  rule?: ToolRule;
 }
 
 export interface UsageTotals {
@@ -317,10 +321,16 @@ export type UiAgentEvent =
 
 export type PermissionDecision = "once" | "session" | "global" | "deny";
 
-/** 工具权限规则：pathPrefix 仅对文件类工具生效，缺省 = 匹配该工具全部调用 */
+export interface CommandPrefix {
+  shell: CommandShell;
+  args: string[];
+}
+
+/** 旧命令规则缺少 commandPrefix，保留在设置中供撤销。 */
 export interface ToolRule {
   toolName: string;
   pathPrefix?: string;
+  commandPrefix?: CommandPrefix;
 }
 
 export interface SessionModelSelection {
@@ -593,8 +603,6 @@ export interface SettingsInput {
   /** null 恢复主目录；缺省保留原设置 */
   workingDirectory?: string | null;
   commandShell?: CommandShell;
-  /** 整表替换工具授权规则（设置页撤销入口）；缺省 = 保持不变 */
-  toolRules?: ToolRule[];
   /** 全局人设/自定义指令（"" = 清空）；缺省 = 保持不变 */
   persona?: string;
   /** 启用技能 id 列表；缺省 = 保持不变 */

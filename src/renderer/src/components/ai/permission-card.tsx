@@ -14,11 +14,13 @@ import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
-import { COMPOSER_SURFACE_CLASS } from "@renderer/lib/constants";
+import { COMPOSER_SURFACE_CLASS, PERMISSION_ATTENTION_TEXT } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
+import { describeToolScope } from "@renderer/lib/tool-rules";
 import { toolInput } from "@renderer/lib/tool-trace";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { PermissionDecision, PermissionRequest, RunRef } from "@shared/contract";
@@ -53,14 +55,11 @@ export function PermissionCard({
         ? FilePenLineIcon
         : PlugIcon;
   const input = useMemo(() => toolInput(request.inputSummary), [request.inputSummary]);
-  const preview = input.preview === request.inputSummary ? input.details : input.preview;
-  const hasMore = preview !== input.details;
-  const text =
-    expanded && hasMore && shell
-      ? `${preview}\n\n${input.details}`
-      : expanded
-        ? input.details
-        : preview;
+  const preview =
+    request.command ?? (input.preview === request.inputSummary ? input.details : input.preview);
+  const hasMore = !shell && preview !== input.details;
+  const text = expanded ? input.details : preview;
+  const scope = request.rule && describeToolScope(request.rule, locale);
 
   useEffect(() => {
     // 输入框随审批卡出现被隐藏，但浏览器要到下一帧才把它的焦点还给 body；
@@ -72,13 +71,13 @@ export function PermissionCard({
 
   useEffect(() => {
     const content = code.current?.firstElementChild;
-    if (!content || expanded) return;
+    if (!content || expanded || shell) return;
     const measure = (): void => setClipped(content.scrollHeight > content.clientHeight + 1);
     const observer = new ResizeObserver(measure);
     observer.observe(content);
     measure();
     return () => observer.disconnect();
-  }, [expanded]);
+  }, [expanded, shell]);
 
   const respond = async (decision: PermissionDecision): Promise<void> => {
     if (responding) return;
@@ -124,7 +123,7 @@ export function PermissionCard({
       data-permission-card
       className={cn(
         COMPOSER_SURFACE_CLASS,
-        "focus-visible:ring-ring/35 flex min-w-0 flex-col gap-3 border px-4 py-3.5 outline-none focus-visible:ring-2",
+        "focus-visible:ring-ring flex min-w-0 flex-col gap-3 border px-4 py-3.5 outline-none focus-visible:ring-2",
       )}
     >
       <div className="flex min-w-0 items-start gap-2.5">
@@ -134,23 +133,28 @@ export function PermissionCard({
             "grid size-8 shrink-0 place-items-center rounded-lg",
             request.danger
               ? "bg-destructive/10 text-destructive"
-              : "bg-secondary text-secondary-foreground",
+              : "bg-amber-500/10 " + PERMISSION_ATTENTION_TEXT,
           )}
         >
           <Icon className="size-4" />
         </span>
-        <div className="min-w-0 self-center">
+        <div role="alert" className="min-w-0 self-center">
           <h2
             id={titleId}
             className={cn(
               "text-sm font-medium wrap-anywhere",
-              request.danger && "text-destructive",
+              request.danger ? "text-destructive" : PERMISSION_ATTENTION_TEXT,
             )}
           >
             {shell
               ? t("允许运行此命令？", locale)
               : t("允许「{0}」？", locale, [t(request.label, locale)])}
           </h2>
+          {request.workingDirectory && (
+            <p className="text-muted-foreground wrap-anywhere text-xs">
+              {t("工作目录", locale)} <bdi className="font-mono">{request.workingDirectory}</bdi>
+            </p>
+          )}
           {request.danger && (
             <p className="text-muted-foreground text-xs">{t("检测到可能造成破坏的操作", locale)}</p>
           )}
@@ -164,10 +168,14 @@ export function PermissionCard({
               ref={code}
               id={detailsId}
               wrap
-              tabIndex={expanded ? 0 : -1}
+              tabIndex={shell || expanded ? 0 : -1}
               className={cn(
-                "overscroll-contain",
-                expanded ? "max-h-[min(36vh,14rem)]" : "overflow-hidden [&>code]:line-clamp-3",
+                "focus-visible:ring-ring overscroll-contain focus-visible:ring-2 focus-visible:ring-inset",
+                shell
+                  ? "max-h-[min(23vh,11rem)]"
+                  : expanded
+                    ? "max-h-[min(36vh,14rem)]"
+                    : "overflow-hidden [&>code]:line-clamp-3",
               )}
             >
               {text}
@@ -189,6 +197,10 @@ export function PermissionCard({
         </div>
       )}
 
+      {shell && !scope && !request.danger && (
+        <p className="text-muted-foreground text-xs">{t("此命令需要逐次审批。", locale)}</p>
+      )}
+
       {error && (
         <p role="alert" className="text-destructive text-xs wrap-anywhere">
           {t("审批提交失败，请重试。", locale)} {error}
@@ -201,24 +213,44 @@ export function PermissionCard({
             <SquareIcon data-icon="inline-start" />
             {t("停止", locale)}
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button type="button" variant="ghost" size="icon-sm" />}
-              disabled={responding}
-              aria-label={t("更多授权选项", locale)}
-              title={t("更多授权选项", locale)}
-            >
-              <EllipsisIcon aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="top" align="start" sideOffset={8}>
-              <DropdownMenuItem onClick={() => void respond("session")}>
-                {t("本会话始终允许", locale)}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void respond("global")}>
-                {t("总是允许", locale)}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {scope && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<Button type="button" variant="ghost" size="icon-sm" />}
+                disabled={responding}
+                aria-label={t("更多授权选项", locale)}
+                title={t("更多授权选项", locale)}
+              >
+                <EllipsisIcon aria-hidden="true" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                side="top"
+                align="start"
+                sideOffset={8}
+                className="max-w-[min(25rem,calc(100vw-1.5rem))]"
+              >
+                <DropdownMenuGroup>
+                  {(
+                    [
+                      ["session", "本会话始终允许"],
+                      ["global", "总是允许"],
+                    ] as const
+                  ).map(([decision, title]) => (
+                    <DropdownMenuItem
+                      key={decision}
+                      className="items-start"
+                      onClick={() => void respond(decision)}
+                    >
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <span className="whitespace-nowrap">{t(title, locale)}</span>
+                        <span className="text-muted-foreground wrap-anywhere text-xs">{scope}</span>
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           {remaining > 0 && (
             <span className="text-muted-foreground text-xs">
               {t("另有 {0} 项待审批", locale, [remaining])}

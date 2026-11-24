@@ -416,16 +416,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     set({ settings });
   },
 
-  /** 设置页撤销授权规则（FR-5.4）：按 toolName+pathPrefix 匹配后整表提交 */
   removeToolRule: async (rule) => {
-    const s = get().settings;
-    if (!s) return;
-    const settings = await window.pi.settingsSave({
-      ...providerSelection(s),
-      toolRules: (s.toolRules ?? []).filter(
-        (r) => r.toolName !== rule.toolName || r.pathPrefix !== rule.pathPrefix,
-      ),
-    });
+    const settings = await window.pi.settingsRevokeToolRule(rule);
     set({ settings });
   },
 }));

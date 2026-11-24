@@ -286,6 +286,8 @@ export const EN_MESSAGES: Record<string, string> = {
   更多授权选项: "More approval options",
   "另有 {0} 项待审批": "{0} more awaiting approval",
   "审批提交失败，请重试。": "Could not submit approval. Try again.",
+  "此命令需要逐次审批。": "This command requires approval each time.",
+  "此操作需要逐次审批。": "This action requires approval each time.",
   拒绝: "Deny",
   本次允许: "Allow once",
   本会话始终允许: "Always allow in this chat",
@@ -607,10 +609,13 @@ export const EN_MESSAGES: Record<string, string> = {
   了解更多: "Learn more",
   "没有单独选择模式的聊天都使用此模式，包括已有聊天。可在输入框为单个聊天单独选择。":
     "Every chat without its own mode uses this one, including existing chats. You can choose a different one for a single chat in the composer.",
-  "在审批时选择「总是允许」会保存规则，命中规则的操作不再询问。撤销后下一次调用恢复询问。":
-    "Choosing “Always allow” on a request saves a rule, and matching actions run without asking. After you revoke a rule, the next call asks again.",
+  "在审批时选择「总是允许」会保存规则。确认模式下，匹配规则的操作直接运行。":
+    "Choose “Always allow” on a request to save a rule. Matching actions run without asking in Ask first mode.",
   还没有保存的授权: "No saved approvals",
-  "此规则允许运行任何命令。": "This rule allows any command to run.",
+  "旧命令授权已停用。下次运行时可重新授权。":
+    "Legacy command approval disabled. Approve the command again the next time it runs.",
+  "以 {1} 开头的 {0} 命令": "{0} commands starting with {1}",
+  命令前缀: "Command prefix",
   对话: "Chat",
   发送方式: "Send with",
   "输入法组词时按 Enter 只确认候选词。":

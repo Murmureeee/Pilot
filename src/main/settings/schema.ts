@@ -5,6 +5,19 @@ import { normalizeModelCatalog } from "./models";
 import type { Settings } from "./types";
 
 const optionalText = z.string().optional();
+const commandPrefix = z.strictObject({
+  shell: z.enum(["powershell", "bash"]),
+  args: z
+    .array(z.string())
+    .min(1)
+    .refine((args) => Boolean(args[0])),
+});
+export const toolRuleSchema = z.object({
+  toolName: z.string(),
+  pathPrefix: optionalText,
+  commandPrefix: commandPrefix.optional(),
+});
+
 const provider = z.looseObject({
   id: z.string().min(1),
   kind: z.enum(["anthropic", "openai-compatible", "openai-responses", "faux"]),
@@ -43,7 +56,9 @@ const importedPlugin = z.looseObject({
 const storedSettings = z.looseObject({
   providers: z.array(provider),
   activeProviderId: z.string().default(""),
-  toolRules: z.array(z.object({ toolName: z.string(), pathPrefix: optionalText })).optional(),
+  toolRules: z
+    .array(toolRuleSchema.extend({ commandPrefix: commandPrefix.optional().catch(undefined) }))
+    .optional(),
   approvalMode: z.enum(["standard", "read-only", "full-access"]).optional(),
   thinkingLevel: z.enum(THINKING_LEVELS).optional().catch(undefined),
   thinkingLevels: z

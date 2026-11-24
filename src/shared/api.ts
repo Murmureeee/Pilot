@@ -39,6 +39,7 @@ import type {
   StartVerification,
   ThemeSetting,
   ThinkingLevel,
+  ToolRule,
   UiAgentEvent,
   UpdateStatus,
   VerificationResult,
@@ -141,6 +142,7 @@ export interface PiApi {
   settingsSetLogLevel(level: LogLevel): Promise<void>;
   settingsSelectModel(providerId: string, modelId: string): Promise<PublicSettings>;
   settingsSetThinkingLevel(level: ThinkingLevel): Promise<PublicSettings>;
+  settingsRevokeToolRule(rule: ToolRule): Promise<PublicSettings>;
   settingsDismissRecovery(): Promise<PublicSettings>;
   mcpList(): Promise<McpServerInfo[]>;
   mcpSave(input: McpServerInput): Promise<McpServerInfo[]>;

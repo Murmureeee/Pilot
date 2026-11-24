@@ -105,6 +105,7 @@ const api: PiApi = {
   settingsSelectModel: (providerId, modelId) =>
     ipcRenderer.invoke(IPC.settingsSelectModel, providerId, modelId),
   settingsSetThinkingLevel: (level) => ipcRenderer.invoke(IPC.settingsSetThinkingLevel, level),
+  settingsRevokeToolRule: (rule) => ipcRenderer.invoke(IPC.settingsRevokeToolRule, rule),
   settingsDismissRecovery: () => ipcRenderer.invoke(IPC.settingsDismissRecovery),
   mcpList: () => ipcRenderer.invoke(IPC.settingsMcpList),
   mcpSave: (input) => ipcRenderer.invoke(IPC.settingsMcpSave, input),

@@ -94,6 +94,7 @@ import { createTools, labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
 import type { ToolEnvironment } from "./tools/types";
+import { sameToolRule } from "../settings/tool-rules";
 import type {
   AgentInstructions,
   GitCommitOperation,
@@ -162,7 +163,9 @@ export class AgentHost {
 
   private addGlobalRule(rule: ToolRule): void {
     const settings = this.deps.getSettings();
-    this.deps.saveSettings({ ...settings, toolRules: [...(settings.toolRules ?? []), rule] });
+    const rules = settings.toolRules ?? [];
+    if (!rules.some((candidate) => sameToolRule(candidate, rule)))
+      this.deps.saveSettings({ ...settings, toolRules: [...rules, rule] });
   }
 
   private selectedRun(ref: RunRef): RunningTask | undefined {
@@ -399,6 +402,7 @@ export class AgentHost {
           toolCall.name,
           args,
           this.deps.mcp.policyOf(toolCall.name),
+          toolEnvironment,
         );
         if (!result?.block && !signal?.aborted) {
           if (action && !run.checkpoint.actions.includes(action)) {
@@ -899,7 +903,6 @@ export class AgentHost {
     const settings = this.deps.getSettings();
     const approvalMode =
       this.getCurrentSession()?.approvalMode ?? settings.approvalMode ?? "standard";
-    const globalRules = [...(settings.toolRules ?? [])];
     const sessionRules = this.sessionRules.get(sessionId) ?? [];
     this.sessionRules.set(sessionId, sessionRules);
     const run: RunningTask = {
@@ -926,11 +929,8 @@ export class AgentHost {
           this.sendStatus("waiting_approval");
           this.send(request);
         },
-        () => globalRules,
-        (rule) => {
-          this.addGlobalRule(rule);
-          globalRules.push(rule);
-        },
+        () => this.deps.getSettings().toolRules ?? [],
+        (rule) => this.addGlobalRule(rule),
         () => approvalMode,
         sessionRules,
       ),

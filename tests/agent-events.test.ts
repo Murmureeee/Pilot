@@ -296,7 +296,14 @@ describe("agent-events adapter", () => {
       inputSummary: "{}",
       danger: true,
     };
-    const second = { ...first, requestId: "r2", danger: false };
+    const second: Extract<AgentRunEvent, { type: "permission_request" }> = {
+      ...first,
+      requestId: "r2",
+      danger: false,
+      command: "pnpm test",
+      workingDirectory: "E:/projects/Pilot",
+      rule: { toolName: "bash", commandPrefix: { shell: "powershell", args: ["pnpm", "test"] } },
+    };
     let state = applyRunEvent(initialRunUiState(), {
       type: "status",
       status: "waiting_approval",

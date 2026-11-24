@@ -114,7 +114,15 @@ export const SETTINGS_SECTION_DESCRIPTIONS: Record<SettingsSection, string> = {
 export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[]> = {
   general: ["发送方式", "Enter", "默认工作目录", "命令环境", "PowerShell", "Git Bash"],
   appearance: ["主题", "亮色", "暗色", "跟随系统", "语言"],
-  permissions: ["默认权限模式", "确认模式", "只读", "完全访问", "已保存的授权", "撤销规则"],
+  permissions: [
+    "默认权限模式",
+    "确认模式",
+    "只读",
+    "完全访问",
+    "已保存的授权",
+    "命令前缀",
+    "撤销规则",
+  ],
   providers: ["提供方", "API Key", "模型列表", "可用思考强度", "Anthropic", "OpenAI"],
   persona: ["自定义指令", "指令生效顺序", "AGENTS.md"],
   shortcuts: ["Ctrl", "发送消息", "换行"],
@@ -203,6 +211,8 @@ export const COMMAND_SHELL_LABELS: Record<CommandShell, string> = {
   powershell: "PowerShell",
   bash: "Git Bash",
 };
+
+export const PERMISSION_ATTENTION_TEXT = "text-amber-700 dark:text-amber-400";
 
 export const THEME_LABELS: Record<ThemeSetting, string> = {
   light: "亮色",

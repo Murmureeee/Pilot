@@ -11,7 +11,10 @@ import type {
 } from "@shared/contract";
 import type { McpToolPolicy } from "./mcp/types";
 import { isReadOnly, labelOf, pathOfArgs } from "./tools";
-import { isWithinDirectory } from "../workspace/paths";
+import type { ToolEnvironment } from "./tools/types";
+import { createToolPathResolver, isWithinDirectory } from "../workspace/paths";
+import { getCommandShell } from "../workspace/shell";
+import { commandPrefixMatches, parseCommandScope } from "./command-scope";
 import type { PendingPermission } from "./types";
 
 type Broadcast = (request: PermissionRequest) => void;
@@ -29,13 +32,9 @@ const DANGER_PATTERNS: RegExp[] = [
   /remove-itemproperty|set-itemproperty.*hkey_/i,
 ];
 
-function isDangerous(toolName: string, args: unknown): boolean {
+function isDangerous(toolName: string, args: unknown, command: string | undefined): boolean {
   if (toolName === "bash") {
-    const command =
-      args && typeof args === "object" && "command" in args
-        ? String((args as { command: unknown }).command)
-        : "";
-    return DANGER_PATTERNS.some((p) => p.test(command));
+    return command !== undefined && DANGER_PATTERNS.some((p) => p.test(command));
   }
   if (toolName === "write_file" || toolName === "edit_file") {
     const path = pathOfArgs(args) ?? "";
@@ -57,8 +56,7 @@ function ruleFor(toolName: string, args: unknown): ToolRule {
   return path ? { toolName, pathPrefix: path } : { toolName };
 }
 
-function ruleMatches(rule: ToolRule, toolName: string, args: unknown): boolean {
-  if (rule.toolName !== toolName) return false;
+function ruleMatches(rule: ToolRule, args: unknown): boolean {
   if (!rule.pathPrefix) return true;
   const path = pathOfArgs(args);
   if (path === undefined || isAbsolute(path) !== isAbsolute(rule.pathPrefix)) return false;
@@ -82,6 +80,7 @@ export class PermissionManager {
     toolName: string,
     args: unknown,
     policy?: McpToolPolicy,
+    environment: ToolEnvironment = { commandShell: getCommandShell() },
   ): Promise<BeforeToolCallResult | undefined> {
     if (isReadOnly(toolName)) return undefined;
 
@@ -95,36 +94,59 @@ export class PermissionManager {
       };
     }
 
-    const rules = [...this.getGlobalRules(), ...this.sessionRules];
-    if (rules.some((rule) => ruleMatches(rule, toolName, args))) return undefined;
+    const rules = [...this.getGlobalRules(), ...this.sessionRules].filter(
+      (rule) => rule.toolName === toolName,
+    );
+    const command =
+      toolName === "bash" &&
+      args &&
+      typeof args === "object" &&
+      "command" in args &&
+      typeof args.command === "string"
+        ? args.command
+        : undefined;
+    const danger = isDangerous(toolName, args, command);
+    let rule: ToolRule | undefined;
+    if (toolName === "bash") {
+      const { commandShell: shell } = environment;
+      const commands = command === undefined ? undefined : parseCommandScope(command, shell);
+      if (
+        commands?.every((words) =>
+          rules.some(
+            ({ commandPrefix }) =>
+              commandPrefix && commandPrefixMatches(commandPrefix, shell, words),
+          ),
+        )
+      )
+        return undefined;
 
-    const decision = await this.ask(toolName, args, policy?.label ?? labelOf(toolName));
-    switch (decision) {
-      case "deny":
-        return { block: true, reason: "用户拒绝了本次工具调用" };
-      case "session":
-        this.sessionRules.push(ruleFor(toolName, args));
-        return undefined;
-      case "global":
-        this.addGlobalRule(ruleFor(toolName, args));
-        return undefined;
-      default:
-        return undefined; // once
+      // A single approval creates one prefix. Combined commands can use existing rules for every part.
+      if (!danger && commands?.length === 1 && commands[0].every((word) => word !== null)) {
+        rule = { toolName, commandPrefix: { shell, args: commands[0] } };
+      }
+    } else {
+      if (rules.some((candidate) => ruleMatches(candidate, args))) return undefined;
+      rule = ruleFor(toolName, args);
     }
+
+    const decision = await this.ask({
+      type: "permission_request",
+      requestId: randomUUID(),
+      toolName,
+      label: policy?.label ?? labelOf(toolName),
+      inputSummary: summarizeArgs(args),
+      danger,
+      workingDirectory: createToolPathResolver(environment.workingDirectory)("."),
+      command,
+      rule,
+    });
+    if (decision === "deny") return { block: true, reason: "用户拒绝了本次工具调用" };
+    return undefined;
   }
 
-  private ask(toolName: string, args: unknown, label: string): Promise<PermissionDecision> {
-    const requestId = randomUUID();
-    const request: PermissionRequest = {
-      type: "permission_request",
-      requestId,
-      toolName,
-      label,
-      inputSummary: summarizeArgs(args),
-      danger: isDangerous(toolName, args),
-    };
+  private ask(request: PermissionRequest): Promise<PermissionDecision> {
     return new Promise<PermissionDecision>((resolve) => {
-      this.pending.set(requestId, { request, resolve });
+      this.pending.set(request.requestId, { request, resolve });
       this.broadcast(request);
     });
   }
@@ -132,6 +154,12 @@ export class PermissionManager {
   respond(requestId: string, decision: PermissionDecision): boolean {
     const pending = this.pending.get(requestId);
     if (!pending) return false;
+    if (decision === "session" || decision === "global") {
+      const { rule } = pending.request;
+      if (!rule) throw new Error("此操作需要逐次审批。");
+      if (decision === "global") this.addGlobalRule(rule);
+      else this.sessionRules.push(rule);
+    }
     this.pending.delete(requestId);
     pending.resolve(decision);
     return true;

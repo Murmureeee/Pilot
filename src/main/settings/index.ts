@@ -125,8 +125,7 @@ export function mergeSettingsInput(current: Settings, input: SettingsInput): Set
   return {
     providers: merged,
     activeProviderId: input.activeProviderId,
-    // 渲染层可整表提交 toolRules（设置页撤销授权）；缺省 = 保持不变
-    toolRules: input.toolRules ?? current.toolRules,
+    toolRules: current.toolRules,
     approvalMode: input.approvalMode ?? current.approvalMode ?? "standard",
     thinkingLevels,
     thinkingLevel: selectThinkingLevel(

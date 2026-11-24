@@ -26,6 +26,10 @@ describe("IPC contract", () => {
     expect(IPC.settingsDismissRecovery).toBe("settings:dismiss-recovery");
   });
 
+  it("uses a dedicated settings route for revoking an approval", () => {
+    expect(IPC.settingsRevokeToolRule).toBe("settings:revoke-tool-rule");
+  });
+
   it("keeps focused model and thinking changes separate from editing providers", () => {
     expect(IPC.settingsSelectModel).toBe("settings:select-model");
     expect(IPC.settingsSetThinkingLevel).toBe("settings:set-thinking-level");

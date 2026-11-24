@@ -18,7 +18,6 @@ const settings: SettingsInput = {
   activeProviderId: "local",
   workingDirectory: null,
   commandShell: "bash",
-  toolRules: [{ toolName: "write_file", pathPrefix: "example" }],
   persona: "",
   skillsEnabled: ["example-skill"],
 };
@@ -106,6 +105,9 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.settingsSetLogLevel]: ["debug"],
   [IPC.settingsSelectModel]: ["local", "example"],
   [IPC.settingsSetThinkingLevel]: ["high"],
+  [IPC.settingsRevokeToolRule]: [
+    { toolName: "bash", commandPrefix: { shell: "bash", args: ["git", "status"] } },
+  ],
   [IPC.settingsDismissRecovery]: [],
   [IPC.settingsMcpList]: [],
   [IPC.settingsMcpSave]: [
@@ -234,7 +236,12 @@ describe("IPC argument validation", () => {
     [IPC.settingsSelectModel, ["local", ""]],
     [IPC.settingsSetThinkingLevel, ["ultra"]],
     [IPC.settingsSave, [{ ...settings, thinkingLevels: [] }]],
-    [IPC.settingsSave, [{ ...settings, toolRules: [{ toolName: "write_file", pathPrefix: 7 }] }]],
+    [IPC.settingsSave, [{ ...settings, toolRules: [{ toolName: "bash" }] }]],
+    [IPC.settingsRevokeToolRule, [{ toolName: "write_file", pathPrefix: 7 }]],
+    [
+      IPC.settingsRevokeToolRule,
+      [{ toolName: "bash", commandPrefix: { shell: "bash", args: [] } }],
+    ],
     [IPC.settingsSave, [{ ...settings, providers: [null] }]],
     [IPC.settingsSave, [{ ...settings, providers: [{ ...draft, hasKey: true }] }]],
   ] satisfies [IpcChannel, unknown[]][])("rejects invalid arguments to %s", (channel, args) => {

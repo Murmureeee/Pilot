@@ -7,6 +7,7 @@ import {
   WORKSPACE_QUERY_LENGTH,
 } from "../../shared/constants";
 import { IPC, VERIFICATION_KINDS } from "../../shared/contract";
+import { toolRuleSchema } from "../settings/schema";
 import type { IpcChannel } from "./types";
 
 const none = z.tuple([]);
@@ -114,9 +115,6 @@ const settings = z.strictObject({
   thinkingLevels: z.array(z.enum(THINKING_LEVELS)).min(1).optional(),
   workingDirectory: z.string().nullable().optional(),
   commandShell: z.enum(["powershell", "bash"]).optional(),
-  toolRules: z
-    .array(z.strictObject({ toolName: id, pathPrefix: z.string().optional() }))
-    .optional(),
   persona: z.string().optional(),
   skillsEnabled: z.array(id).optional(),
 });
@@ -242,6 +240,7 @@ const inputs = {
   [IPC.settingsSetLogLevel]: z.tuple([z.enum(LOG_LEVELS)]),
   [IPC.settingsSelectModel]: z.tuple([id, nonBlank]),
   [IPC.settingsSetThinkingLevel]: z.tuple([z.enum(THINKING_LEVELS)]),
+  [IPC.settingsRevokeToolRule]: z.tuple([toolRuleSchema.extend({ toolName: id }).strict()]),
   [IPC.settingsDismissRecovery]: none,
   [IPC.settingsMcpList]: none,
   [IPC.settingsMcpSave]: z.tuple([mcpServer]),

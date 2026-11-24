@@ -112,6 +112,27 @@ describe("tool environment settings", () => {
     expect(toPublicSettings({ ...legacy, logLevel: "invalid" as never }).logLevel).toBe("info");
   });
 
+  it("round-trips shell-specific approvals and keeps legacy entries available to revoke", () => {
+    using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-command-rules-"));
+    const settings: Settings = {
+      providers: [],
+      activeProviderId: "",
+      toolRules: [
+        { toolName: "bash" },
+        { toolName: "bash", commandPrefix: { shell: "powershell", args: ["pnpm", "test"] } },
+        { toolName: "bash", commandPrefix: { shell: "bash", args: ["git", "status"] } },
+        { toolName: "edit_file", pathPrefix: "src/" },
+      ],
+    };
+    saveSettings(profile.path, settings);
+    const edited = mergeSettingsInput(loadSettings(profile.path), {
+      ...settings,
+      persona: "updated",
+    });
+    saveSettings(profile.path, edited);
+    expect(toPublicSettings(loadSettings(profile.path)).toolRules).toEqual(settings.toolRules);
+  });
+
   it("preserves a saved credential only while the provider type and endpoint stay the same", () => {
     const original: Settings = {
       activeProviderId: "compatible",

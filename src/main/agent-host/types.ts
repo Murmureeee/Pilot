@@ -79,6 +79,9 @@ export interface PendingPermission {
   resolve: (decision: PermissionDecision) => void;
 }
 
+/** null 代表替换结果，其值不能用于匹配前缀。 */
+export type ShellArgument = string | null;
+
 export interface SessionIndex {
   sessions: SessionMeta[];
   recentProjects?: string[];

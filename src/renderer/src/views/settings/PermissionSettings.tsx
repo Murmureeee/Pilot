@@ -1,10 +1,15 @@
 // @env browser
-import { useState, type JSX } from "react";
+import { useRef, useState, type JSX } from "react";
 import { CheckIcon, EyeIcon, ShieldCheckIcon, ZapIcon } from "lucide-react";
 import { ListEmpty } from "@renderer/components/ai/list-empty";
 import { Button } from "@renderer/components/ui/button";
-import { APPROVAL_MODE_OPTIONS, TOOL_RULE_LABELS } from "@renderer/lib/constants";
+import {
+  APPROVAL_MODE_OPTIONS,
+  PERMISSION_ATTENTION_TEXT,
+  TOOL_RULE_LABELS,
+} from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
+import { describeToolScope } from "@renderer/lib/tool-rules";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { ApprovalMode, PublicSettings } from "@shared/contract";
 import { cn } from "cn";
@@ -22,6 +27,7 @@ export function PermissionSettings({ settings }: { settings: PublicSettings }): 
   const locale = useLocale();
   const setDefaultApprovalMode = useAgentStore((s) => s.setDefaultApprovalMode);
   const removeToolRule = useAgentStore((s) => s.removeToolRule);
+  const rulesList = useRef<HTMLFieldSetElement>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mode = settings.approvalMode;
@@ -89,11 +95,16 @@ export function PermissionSettings({ settings }: { settings: PublicSettings }): 
         id="settings-saved-rules"
         title={t("已保存的授权", locale)}
         description={t(
-          "在审批时选择「总是允许」会保存规则，命中规则的操作不再询问。撤销后下一次调用恢复询问。",
+          "在审批时选择「总是允许」会保存规则。确认模式下，匹配规则的操作直接运行。",
           locale,
         )}
       >
-        <div className="settings-list">
+        <fieldset
+          ref={rulesList}
+          aria-labelledby="settings-saved-rules"
+          tabIndex={-1}
+          className="settings-list focus-visible:ring-ring min-w-0 outline-none focus-visible:ring-2"
+        >
           {rules.length === 0 && (
             <ListEmpty
               title={t("还没有保存的授权", locale)}
@@ -108,28 +119,31 @@ export function PermissionSettings({ settings }: { settings: PublicSettings }): 
                     ? t(TOOL_RULE_LABELS[rule.toolName], locale)
                     : rule.toolName}
                 </p>
-                <p className="text-muted-foreground wrap-anywhere text-xs leading-5">
-                  {rule.pathPrefix
-                    ? t("仅路径前缀 {0}", locale, [rule.pathPrefix])
-                    : t("全部调用", locale)}
+                <p
+                  className={cn(
+                    "wrap-anywhere text-xs leading-5",
+                    rule.toolName === "bash" && !rule.commandPrefix
+                      ? PERMISSION_ATTENTION_TEXT
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {describeToolScope(rule, locale)}
                 </p>
-                {rule.toolName === "bash" && !rule.pathPrefix && (
-                  <p className={cn("text-xs leading-5", RISK_TEXT)}>
-                    {t("此规则允许运行任何命令。", locale)}
-                  </p>
-                )}
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={saving}
-                onClick={() => void update(() => removeToolRule(rule))}
+                onClick={() => {
+                  rulesList.current?.focus({ preventScroll: true });
+                  void update(() => removeToolRule(rule));
+                }}
               >
                 {t("撤销规则", locale)}
               </Button>
             </div>
           ))}
-        </div>
+        </fieldset>
       </SettingsGroup>
       {error && (
         <p role="alert" className="text-destructive text-sm">
