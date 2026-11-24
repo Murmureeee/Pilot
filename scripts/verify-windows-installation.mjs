@@ -470,7 +470,7 @@ try {
       return {
         snapshot,
         transcript: await window.pi.sessionCopy(id),
-        skills: await window.pi.skillsList(),
+        skills: await window.pi.skillsList(snapshot.composerId),
         locale: localStorage.getItem(`${prefix}-locale`),
         theme: localStorage.getItem(`${prefix}-theme`),
       };
