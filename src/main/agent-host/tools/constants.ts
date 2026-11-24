@@ -1,6 +1,12 @@
 // @env node
 export const PLAN_TOOL_NAME = "update_plan";
 
+export const COMMAND_OUTPUT_LIMIT = 100_000;
+export const COMMAND_TIMEOUT_MIN_SEC = 1;
+export const COMMAND_TIMEOUT_DEFAULT_SEC = 60;
+export const COMMAND_TIMEOUT_MAX_SEC = 300;
+export const COMMAND_CLOSE_TIMEOUT_MS = 5_000;
+
 export const TOOL_LABELS: Readonly<Record<string, string>> = {
   read_file: "读取文件",
   write_file: "写入文件",

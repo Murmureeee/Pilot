@@ -9,7 +9,8 @@ import type {
   VerificationStatus,
 } from "@shared/contract";
 
-import { launchVerification, stopVerificationProcess, verificationCommands } from "./commands";
+import { stopProcessTree } from "../workspace/process";
+import { launchVerification, verificationCommands } from "./commands";
 import { VERIFICATION_OUTPUT_LIMIT, VERIFICATION_UPDATE_INTERVAL_MS } from "./constants";
 import { VerificationHistory } from "./history";
 import type { ActiveVerification, VerificationRequest } from "./types";
@@ -163,12 +164,17 @@ export class VerificationManager {
     entry.update = undefined;
     this.flush(entry, { status: "stopping", exitCode: null });
     try {
-      await stopVerificationProcess(entry.child);
-    } catch (error) {
-      if (this.active.get(entry.result.sessionId) !== entry) return entry.done.promise;
+      await stopProcessTree(entry.child);
+    } catch (cause) {
+      if (
+        this.active.get(entry.result.sessionId) !== entry ||
+        entry.child.exitCode !== null ||
+        entry.child.signalCode !== null
+      )
+        return entry.done.promise;
       entry.stopReason = undefined;
       this.flush(entry, { status: "running", exitCode: null });
-      throw error;
+      throw new Error("无法停止验证命令。", { cause });
     }
     return entry.done.promise;
   }

@@ -1,20 +1,31 @@
 // @env node
 import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { setTimeout as delay } from "node:timers/promises";
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { int, obj, opt, str } from "@earendil-works/pi-schema";
 
 import { createToolPathResolver } from "../../workspace/paths";
+import { stopProcessTree } from "../../workspace/process";
 import { shellExecutable } from "../../workspace/shell";
-import { TOOL_LABELS } from "./constants";
-import { truncate } from "./output";
+import {
+  COMMAND_CLOSE_TIMEOUT_MS,
+  COMMAND_TIMEOUT_DEFAULT_SEC,
+  COMMAND_TIMEOUT_MAX_SEC,
+  COMMAND_TIMEOUT_MIN_SEC,
+  TOOL_LABELS,
+} from "./constants";
+import { CommandOutput } from "./output";
 import type { ToolEnvironment } from "./types";
-
-const MAX_OUTPUT = 100_000;
 
 const bashParams = obj({
   command: str({ description: "Command in the configured shell syntax." }),
-  timeoutSec: opt(int({ description: "Timeout in seconds. Default 60, maximum 300." })),
+  timeoutSec: opt(
+    int({
+      description: `Timeout in seconds, clamped to ${COMMAND_TIMEOUT_MIN_SEC}–${COMMAND_TIMEOUT_MAX_SEC}. Default ${COMMAND_TIMEOUT_DEFAULT_SEC}.`,
+    }),
+  ),
 });
 
 export function createBashTool({
@@ -41,44 +52,67 @@ export function createBashTool({
             `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; ${params.command}`,
           ]
         : ["--noprofile", "--norc", "-c", params.command];
-      const timeoutSec = Math.min(params.timeoutSec ?? 60, 300);
-
-      return await new Promise<AgentToolResult>((resolveP, reject) => {
-        const child = spawn(executable, args, { cwd, windowsHide: true });
-        let output = "";
-        const collect = (chunk: string): void => {
-          output = (output + chunk).slice(-MAX_OUTPUT);
-          onUpdate?.({ content: [{ type: "text", text: output }], details: {} });
-        };
-        child.stdout.setEncoding("utf8").on("data", collect);
-        child.stderr.setEncoding("utf8").on("data", collect);
-
-        const stop = (message: string): void => {
-          clearTimeout(timer);
-          child.kill();
-          reject(new Error(truncate(`${message}\n输出:\n${output}`, 4000)));
-        };
-        const onAbort = (): void => stop("命令被用户中止");
-        const timer = setTimeout(() => stop(`命令超时（${timeoutSec}s）`), timeoutSec * 1000);
-        signal?.addEventListener("abort", onAbort, { once: true });
-
-        const cleanup = (): void => {
-          clearTimeout(timer);
-          signal?.removeEventListener("abort", onAbort);
-        };
-        child.on("error", (error) => {
-          cleanup();
-          reject(error);
-        });
-        child.on("close", (code) => {
-          cleanup();
-          if (code === 0) {
-            resolveP({ content: [{ type: "text", text: output || "(无输出)" }], details: {} });
-          } else {
-            reject(new Error(truncate(`命令失败（exit ${code}）\n输出:\n${output}`, 4000)));
-          }
-        });
+      const timeoutSec = Math.max(
+        COMMAND_TIMEOUT_MIN_SEC,
+        Math.min(params.timeoutSec ?? COMMAND_TIMEOUT_DEFAULT_SEC, COMMAND_TIMEOUT_MAX_SEC),
+      );
+      const started = performance.now();
+      const child = spawn(executable, args, {
+        cwd,
+        detached: process.platform !== "win32",
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
       });
+      const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
+      const output = new CommandOutput();
+      const collect = (chunk: string): void => {
+        output.append(chunk);
+        onUpdate?.({ content: [{ type: "text", text: output.text() }], details: {} });
+      };
+      child.stdout.setEncoding("utf8").on("data", collect);
+      child.stderr.setEncoding("utf8").on("data", collect);
+
+      const stop = Promise.withResolvers<"abort" | "timeout">();
+      const onAbort = (): void => stop.resolve("abort");
+      const timer = setTimeout(() => stop.resolve("timeout"), timeoutSec * 1000);
+      signal?.addEventListener("abort", onAbort, { once: true });
+      const failure = (message: string, cause?: unknown): Error =>
+        new Error(`${message}\n输出:\n${output.text() || "(无输出)"}`, { cause });
+
+      try {
+        const result = await Promise.race([closed, stop.promise]);
+        if (typeof result === "string") {
+          const elapsed = ((performance.now() - started) / 1000).toFixed(2);
+          const message =
+            result === "abort"
+              ? "命令被用户中止"
+              : `命令超时（已运行 ${elapsed} 秒，上限 ${timeoutSec} 秒）`;
+          const wait = new AbortController();
+          try {
+            await stopProcessTree(child);
+            await Promise.race([
+              closed,
+              delay(COMMAND_CLOSE_TIMEOUT_MS, undefined, { signal: wait.signal }).then(() => {
+                throw new Error("等待命令输出管道关闭超时。");
+              }),
+            ]);
+          } catch (cause) {
+            child.unref();
+            throw failure(`${message}，未能确认命令进程树已结束`, cause);
+          } finally {
+            wait.abort();
+          }
+          throw failure(message);
+        }
+        const [code, exitSignal] = result;
+        if (code !== 0) throw failure(`命令失败（${exitSignal ?? `exit ${code}`}）`);
+        return { content: [{ type: "text", text: output.text() || "(无输出)" }], details: {} };
+      } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
+        child.stdout.destroy();
+        child.stderr.destroy();
+      }
     },
   };
 }

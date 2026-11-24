@@ -1,8 +1,7 @@
 // @env node
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { promisify } from "node:util";
 
 import { VERIFICATION_KINDS, type VerificationKind } from "../../shared/contract";
 import { readFileSnapshot } from "../workspace/file-changes";
@@ -10,8 +9,6 @@ import { createToolPathResolver } from "../workspace/paths";
 import { shellExecutable } from "../workspace/shell";
 import { PACKAGE_MANAGER_LOCKS, VERIFICATION_SCRIPTS } from "./constants";
 import type { VerificationRequest } from "./types";
-
-const exec = promisify(execFile);
 
 function projectPackageManager(directory: string): string {
   let current = directory;
@@ -89,27 +86,4 @@ export function launchVerification({
   });
   child.stdin.end();
   return child;
-}
-
-export async function stopVerificationProcess(
-  child: ChildProcessWithoutNullStreams,
-): Promise<void> {
-  const pid = child.pid;
-  if (!pid || child.exitCode !== null || child.signalCode !== null) return;
-  try {
-    if (process.platform === "win32") {
-      const taskkill = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe");
-      await exec(taskkill, ["/PID", String(pid), "/T", "/F"], { windowsHide: true, timeout: 5000 });
-    } else {
-      process.kill(-pid, "SIGKILL");
-    }
-  } catch (cause) {
-    if (
-      child.exitCode !== null ||
-      child.signalCode !== null ||
-      (cause as NodeJS.ErrnoException).code === "ESRCH"
-    )
-      return;
-    throw new Error("无法停止验证命令。", { cause });
-  }
 }
