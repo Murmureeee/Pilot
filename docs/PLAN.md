@@ -11,10 +11,10 @@ Pilot 是基于 pi SDK 的本地 AI 编程桌面客户端。面向开发者的�
 | 对话与上下文 | 流式 Markdown、思考与工具轨迹、停止和插话、任务计划、最近项目、按项目分组的会话、Git 分支显示、会话模型与权限模式、草稿与 JSONL 会话恢复、切换会话时保留原运行、异常退出后的任务续跑、项目指令与来源查看、会话标题搜索、`@` 文件引用和 `/` 快捷命令。 | 失败重试、长会话压缩、消息级操作和对话流收敛。 |
 | 权限与文件 | 三种权限模式、可撤销的授权规则、按运行绑定的输入区审批卡。支持依次处理多个请求，处理后恢复草稿。Git 面板显示暂存、未暂存和未跟踪文件的逐行差异。可按文件或区块暂存和提交，也可从任务检查点预览并撤销可确认的改动。普通文件夹支持内置工具差异与逐文件撤销。会话可运行测试、类型检查和构建并保存每次结果。 | 收紧命令授权范围，危险命令始终询问，补齐命令执行的进程清理和失败输出。把变更、文件、验证合并到一个审查面板。 |
 | 模型与集成 | Anthropic、OpenAI Responses、OpenAI 兼容端点和内置演示模型。已有模型目录、连通性测试、Ollama / LM Studio 预设、本地技能、stdio 和 Streamable HTTP MCP，以及 Codex / Claude Code 技能和 MCP 导入。 | 验收真实本地模型的流式回复和工具调用，补齐模型能力提示与连接错误处理。技能改为按需加载，再支持从 Git 来源安装技能与插件。增加联网读取工具。 |
-| 桌面与发行 | 简体中文和 English、亮色与暗色、本地诊断日志。同一数据目录重复启动时唤醒已有窗口。设置损坏时先备份原文件，再恢复默认设置。界面崩溃后可以重新加载并接回当前会话。有任务或验证命令运行时，关窗、退出和更新重启会先确认。重启后恢复窗口位置、大小、最大化状态和侧栏布局。Agent 任务或验证命令运行时阻止系统自动睡眠。`v0.3.0` 已发布 Windows x64 安装包、Linux x64 AppImage 和 `.deb`。Windows 安装版可从帮助菜单检查更新，下载完成后可从侧栏安装并重启。默认安装目录为 `%LOCALAPPDATA%\Programs\pilot`，程序文件名为 `pilot.exe`。 | 系统通知与侧栏运行状态。复验 Linux 桌面安装与升级，交付 macOS 安装包和平台签名。 |
+| 桌面与发行 | 简体中文和 English、亮色与暗色、本地诊断日志。同一数据目录重复启动时唤醒已有窗口。设置损坏时先备份原文件，再恢复默认设置。界面崩溃后可以重新加载并接回当前会话。有任务或验证命令运行时，关窗、退出和更新重启会先确认。重启后恢复窗口位置、大小、最大化状态和侧栏布局。Agent 任务或验证命令运行时阻止系统自动睡眠。`v0.3.1` 已发布 Windows x64 安装包、Linux x64 AppImage 和 `.deb`。Windows 安装版可从帮助菜单检查更新，下载完成后可从侧栏安装并重启。默认安装目录为 `%LOCALAPPDATA%\Programs\pilot`，程序文件名为 `pilot.exe`。 | 系统通知与侧栏运行状态。复验 Linux 桌面安装与升级，交付 macOS 安装包和平台签名。 |
 
 - 已在 Windows 隔离实例中验证输入区审批卡的命令展开、键盘允许与拒绝、草稿恢复，以及浅色和 720 px 深色布局。[审批卡实现](../src/renderer/src/components/ai/permission-card.tsx)
-- Pilot `v0.3.0` 的安装包和升级验收。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.3.0) · [安装验收](https://github.com/Murmureeee/Pilot/actions/runs/44891669880) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/44892640787)
+- Pilot `v0.3.1` 的安装包和升级验收。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.3.1) · [打包与安装验收](https://github.com/Murmureeee/Pilot/actions/runs/45345620520) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/45346813398)
 - Linux `.deb` 的现有启动验收从解包后的程序执行。Ollama 与 LM Studio 的现有验证使用本地协议桩。[Linux 打包验证](https://github.com/Murmureeee/Pilot/actions/runs/44669912414)
 
 ## 开发顺序
