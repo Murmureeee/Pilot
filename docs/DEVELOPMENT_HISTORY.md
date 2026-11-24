@@ -4,6 +4,10 @@
 
 ## 近期交付
 
+### 2026-11-25
+
+- **Pilot v0.4.0 发布。** 交付里程碑 4「安全与可靠性」。GitHub Releases 提供 Windows x64 安装包、更新清单和 blockmap，以及 Linux x64 AppImage 和 Debian `.deb`。本地八步验证和 440 项测试通过。CI 验证了 Windows 新装、卸载、HTTPS 更新和自定义安装目录保留，并在隔离环境启动了两种 Linux 包。Windows 从公开 HTTPS 更新源由 `0.1.0` 升级到 `0.4.0`，安装包 SHA-512 与 `latest.yml` 一致，重启后保留了会话、设置、语言、主题和已启用的技能。另在 Windows 使用同一路径分别启动 `v0.3.1` 和 `v0.4.0` 正式安装包内的应用，确认原会话、设置、语言和主题得到保留，旧的无范围命令规则显示为停用且下次运行会重新询问。测试进程已退出，隔离目录已移入回收站。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.4.0) · [打包与安装验收](https://github.com/Murmureeee/Pilot/actions/runs/45429790005) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/45433991131) · [发版提交 599934d](https://github.com/Murmureeee/Pilot/commit/599934ddff3ad2593b700d4c94c3a71c6078cb12)
+
 ### 2026-11-24
 
 - **代理验证。** 模型流式请求和压缩摘要、模型目录、连通性测试、Streamable HTTP MCP 和 Windows 更新使用 Electron 的代理配置，支持系统代理及 `HTTP_PROXY`、`HTTPS_PROXY` 和 `NO_PROXY`。Windows 隔离打包对照中，原版在 Chromium 代理夹具下通过 1/5 项，仅设置 `HTTPS_PROXY` 时通过 0/5 项。修复后两种模式均通过 5/5 项，覆盖模型流式回复、模型目录、连通性测试、MCP 工具发现及更新清单与下载。更新下载的 SHA-512 均匹配，环回和 `NO_PROXY` 直连也通过。另用本机 Windows 系统代理访问公开仓库，响应为 HTTP 200。八步验证和 440 项测试通过，测试进程已退出，隔离目录已移入回收站。[开发路线图](./PLAN.md#4-安全与可靠性) · [提交 4aaf304](https://github.com/Murmureeee/Pilot/commit/4aaf3049f3380082571ac10088de29fd2ce2ba60)
