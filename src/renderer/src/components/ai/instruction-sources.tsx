@@ -81,7 +81,9 @@ function InstructionSourceList({ composerId }: { composerId: string }): JSX.Elem
             {sources.enabledSkills.join(", ")}
           </p>
         )}
-        <p className="text-xs text-muted-foreground">{t("包含随消息选择的技能。", locale)}</p>
+        <p className="text-xs text-muted-foreground">
+          {t("按需读取技能，也可在消息中指定。", locale)}
+        </p>
       </li>
     </ol>
   );

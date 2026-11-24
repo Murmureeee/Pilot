@@ -19,8 +19,10 @@ import type {
   ModelRetryProgress,
   PermissionDecision,
   PermissionRequest,
+  SkillMeta,
   ToolRule,
   Snapshot,
+  UiUserPart,
   VerificationTask,
 } from "@shared/contract";
 
@@ -51,10 +53,11 @@ import { withModelRetry } from "./model-retry";
 import { PermissionManager } from "./permissions";
 import { actionFingerprint, completeToolResults, failedRunOf, interruptedRunOf } from "./recovery";
 import { messageParts, messageText, toUiMessages } from "./session-store";
-import { loadSkillBody, skillSection } from "./skills";
+import { skillCatalog } from "./skills";
 import { labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
+import { createReadSkillTool } from "./tools/read-skill";
 import type {
   AgentRunOptions,
   ReferencedUserMessage,
@@ -73,7 +76,8 @@ export class AgentRun {
   private readonly previousActions: ReadonlySet<string>;
   private readonly finishedTools = new Map<string, ToolResultMessage>();
   private readonly commandObservations: GitCommandObservation[] = [];
-  private readonly promptSkillInstructions = new Map<AgentMessage, readonly string[]>();
+  private readonly listedSkills: ReadonlyMap<string, SkillMeta>;
+  private readonly selectedSkillIds = new Set<string>();
   private readonly thinkingStarts = new Map<number, number>();
   private thinkingDurations: Record<number, number> = {};
   private gitFilesBefore?: GitCheckpointBase;
@@ -89,15 +93,8 @@ export class AgentRun {
   readonly gitBaseline: Promise<GitSnapshot>;
 
   constructor(private readonly deps: AgentRunOptions) {
-    const {
-      agent,
-      sessionId,
-      environment,
-      store,
-      initialMessage,
-      skillInstructions,
-      clearDraftFor,
-    } = deps;
+    const { agent, sessionId, environment, store, initialMessage, clearDraftFor } = deps;
+    this.listedSkills = new Map(deps.skills.map((skill) => [skill.id, skill]));
     const previous = store.checkpoint(sessionId);
     this.latestCompaction = store.compactions(sessionId).at(-1);
     this.ownsCheckpoint = deps.compaction === undefined;
@@ -132,10 +129,6 @@ export class AgentRun {
     };
     if (this.ownsCheckpoint) store.save(sessionId, agent.state.messages, this.checkpoint);
     if (clearDraftFor !== undefined) store.saveDraft(clearDraftFor, []);
-    if (initialMessage && skillInstructions?.length)
-      this.promptSkillInstructions.set(initialMessage, skillInstructions);
-    if (previous) this.restoreSelectedSkills(agent.state.messages.slice(previous.startIndex));
-
     const approvalMode =
       store.getMeta(sessionId)?.approvalMode ?? deps.getSettings().approvalMode ?? "standard";
     this.permissions = new PermissionManager(
@@ -209,12 +202,7 @@ export class AgentRun {
     if (!this.permissions.hasPending()) this.sendStatus("streaming");
   }
 
-  enqueue(
-    message: ReferencedUserMessage,
-    skillInstructions: readonly string[],
-    clearDraftFor?: string,
-  ): void {
-    if (skillInstructions.length) this.promptSkillInstructions.set(message, skillInstructions);
+  enqueue(message: ReferencedUserMessage, clearDraftFor?: string): void {
     this.saveCheckpoint({ ...this.checkpoint, pending: [...this.checkpoint.pending, message] });
     this.deps.agent.steer(message);
     if (clearDraftFor !== undefined) this.deps.store.saveDraft(clearDraftFor, []);
@@ -351,6 +339,14 @@ export class AgentRun {
       const localTools = tools.map((tool) =>
         tool.name === "bash" ? this.observeGitCommand(tool) : tool,
       );
+      if (this.listedSkills.size) {
+        localTools.push(
+          createReadSkillTool((id) => {
+            const skill = this.listedSkills.get(id);
+            return skill?.enabled || this.selectedSkillIds.has(id) ? skill : undefined;
+          }),
+        );
+      }
       agent.state.tools = [...localTools, ...externalTools];
       started = true;
       if (initialMessage) await agent.prompt(initialMessage);
@@ -387,7 +383,6 @@ export class AgentRun {
       agent.transformContext = undefined;
       agent.streamFunction = streamFunction;
       agent.state.tools = tools;
-      this.promptSkillInstructions.clear();
       this.queuedMessages = 0;
       this.deps.onFinished();
       const checkpoint = store.checkpoint(sessionId);
@@ -507,7 +502,7 @@ export class AgentRun {
   }
 
   private prepareRequestMessages(messages: AgentMessage[], systemPrompt: string): AgentMessage[] {
-    // Apply explicit skills to the model request without putting their bodies in the transcript.
+    this.selectedSkillIds.clear();
     return messages.map((message, index) => {
       if (index === 0 && message.role === "system") {
         return { ...message, content: systemPrompt };
@@ -516,14 +511,15 @@ export class AgentRun {
         return { ...message, details: undefined };
       }
       if (message.role !== "user") return message;
-      const sections = this.promptSkillInstructions
-        .get(message)
-        ?.filter((section) => !systemPrompt.includes(section));
       const { pilotReference, ...providerMessage } = message as ReferencedUserMessage;
-      if (!pilotReference && !sections?.length) return message;
+      if (!pilotReference) return message;
       const content = [messageText(message)];
       if (typeof pilotReference?.context === "string") content.push(pilotReference.context);
-      if (sections?.length) content.push("## Skills selected for this request", ...sections);
+      if (index >= this.checkpoint.startIndex) {
+        const selected = this.collectSelectedSkills(pilotReference.parts ?? []);
+        if (selected.length)
+          content.push("## Skills selected for this request", skillCatalog(selected));
+      }
       return {
         ...providerMessage,
         content: content.join("\n\n"),
@@ -531,17 +527,21 @@ export class AgentRun {
     });
   }
 
-  private restoreSelectedSkills(messages: AgentMessage[]): void {
-    for (const message of messages) {
-      if (message.role !== "user") continue;
-      const sections = new Set<string>();
-      for (const part of (message as ReferencedUserMessage).pilotReference?.parts ?? []) {
-        if (part.type !== "mention" || part.kind !== "skill") continue;
-        const body = loadSkillBody(this.deps.skillsDir, part.id);
-        if (body) sections.add(skillSection(part.label, body));
-      }
-      if (sections.size) this.promptSkillInstructions.set(message, [...sections]);
+  private collectSelectedSkills(parts: readonly UiUserPart[]): SkillMeta[] {
+    const selected: SkillMeta[] = [];
+    for (const part of parts) {
+      if (part.type !== "mention" || part.kind !== "skill" || this.selectedSkillIds.has(part.id))
+        continue;
+      const skill = this.listedSkills.get(part.id);
+      if (
+        !skill ||
+        (skill.source !== "installed" && part.workingDirectory !== this.state.workingDirectory)
+      )
+        continue;
+      this.selectedSkillIds.add(part.id);
+      if (!skill.enabled) selected.push(skill);
     }
+    return selected;
   }
 
   private reportTool(

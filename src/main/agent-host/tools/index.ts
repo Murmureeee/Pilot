@@ -4,7 +4,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 
 import { createToolPathResolver } from "../../workspace/paths";
 import { createBashTool } from "./bash";
-import { PLAN_TOOL_NAME, TOOL_LABELS } from "./constants";
+import { PLAN_TOOL_NAME, READ_SKILL_TOOL_NAME, TOOL_LABELS } from "./constants";
 import { createEditFileTool, createReadFileTool, createWriteFileTool } from "./file-tools";
 import { planTool } from "./plan";
 import { createGlobTool, createGrepTool } from "./search-tools";
@@ -32,7 +32,13 @@ export function createTools(environment: ToolEnvironment): AgentTool[] {
 }
 
 /** 只读工具：权限门默认放行 */
-const READ_ONLY_TOOLS = new Set(["read_file", "glob", "grep", PLAN_TOOL_NAME]);
+const READ_ONLY_TOOLS = new Set([
+  "read_file",
+  "glob",
+  "grep",
+  PLAN_TOOL_NAME,
+  READ_SKILL_TOOL_NAME,
+]);
 
 export function labelOf(toolName: string): string {
   return Object.hasOwn(TOOL_LABELS, toolName) ? TOOL_LABELS[toolName] : toolName;

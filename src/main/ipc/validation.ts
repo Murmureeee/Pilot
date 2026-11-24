@@ -26,7 +26,7 @@ const skillMention = z.strictObject({
   type: z.literal("skill"),
   id: mentionId,
   label: id,
-  meta: z.strictObject({ description: z.string() }),
+  meta: z.strictObject({ description: z.string(), workingDirectory: nonBlank.optional() }),
 });
 const composerDraft = z.array(
   z.union([z.string(), z.discriminatedUnion("type", [fileMention, skillMention])]),
@@ -248,9 +248,11 @@ const inputs = {
   ]),
   [IPC.settingsImportedPlugins]: none,
   [IPC.settingsToggleImportedPlugin]: z.tuple([importId, z.boolean()]),
-  [IPC.skillsList]: none,
-  [IPC.skillsImport]: locale,
-  [IPC.skillsToggle]: z.tuple([id, z.boolean()]),
+  [IPC.skillsList]: session,
+  [IPC.skillsRead]: z.tuple([z.uuid(), mentionId, nonBlank]),
+  [IPC.skillsDelete]: z.tuple([z.uuid(), mentionId, nonBlank]),
+  [IPC.skillsImport]: z.tuple([z.enum(SUPPORTED_LOCALES), z.uuid()]),
+  [IPC.skillsToggle]: z.tuple([z.uuid(), mentionId, z.boolean()]),
   [IPC.settingsGet]: none,
   [IPC.settingsSave]: z.tuple([settings]),
   [IPC.settingsSetLogLevel]: z.tuple([z.enum(LOG_LEVELS)]),

@@ -10,6 +10,7 @@ import type {
   PermissionDecision,
   PermissionRequest,
   SessionInstructionSources,
+  SkillMeta,
   SessionMeta,
   Snapshot,
   ToolRule,
@@ -46,17 +47,17 @@ export interface AgentSessionView {
 
 export interface AgentRunOptions extends Pick<
   HostDeps,
-  "store" | "mcp" | "skillsDir" | "broadcast" | "getSettings" | "saveSettings"
+  "store" | "mcp" | "broadcast" | "getSettings" | "saveSettings"
 > {
   agent: Agent;
   sessionId: string;
   environment: ToolEnvironment;
   tools: AgentTool[];
+  skills: readonly SkillMeta[];
   systemPrompt: string;
   view: AgentSessionView;
   sessionRules: ToolRule[];
   initialMessage?: ReferencedUserMessage;
-  skillInstructions?: readonly string[];
   clearDraftFor?: string;
   compaction?: CompactionRequest;
   onStarted: () => void;
@@ -117,6 +118,7 @@ export interface SessionRecord {
 export interface AgentInstructions {
   prompt: string;
   sources: Omit<SessionInstructionSources, "running">;
+  skills: readonly SkillMeta[];
 }
 
 export interface PendingPermission {
@@ -147,7 +149,6 @@ export type TimedAssistantMessage = AssistantMessage & {
 
 export interface PreparedPrompt {
   text: string;
-  skillInstructions: string[];
   reference?: PromptReference;
 }
 

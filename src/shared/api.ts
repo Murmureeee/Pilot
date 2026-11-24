@@ -163,11 +163,13 @@ export interface PiApi {
   importedPlugins(): Promise<ImportedPluginInfo[]>;
   toggleImportedPlugin(id: string, enabled: boolean): Promise<ImportedPluginInfo[]>;
   /** 技能列表（FR-5.8）：扫描 userData/skills/ + 合并启停状态 */
-  skillsList(): Promise<SkillMeta[]>;
+  skillsList(composerId: string): Promise<SkillMeta[]>;
+  skillsRead(composerId: string, id: string, directory: string): Promise<string>;
+  skillsDelete(composerId: string, id: string, directory: string): Promise<SkillMeta[]>;
   /** 导入技能目录：主进程弹目录选择框，取消返回 null */
-  skillsImport(locale: Locale): Promise<SkillMeta[] | null>;
+  skillsImport(locale: Locale, composerId: string): Promise<SkillMeta[] | null>;
   /** 启停技能（持久化 settings.skillsEnabled），返回刷新后的列表 */
-  skillsToggle(id: string, enabled: boolean): Promise<SkillMeta[]>;
+  skillsToggle(composerId: string, id: string, enabled: boolean): Promise<SkillMeta[]>;
   /** 模型目录浏览（FR-5.2）：ref = 已保存 provider id 或未保存草稿（FR-5.7 向导） */
   modelCatalog(ref: string | ProviderInput): Promise<ModelCatalogEntry[]>;
   /** Provider 连通性测试（FR-5.1）：最小流式探测 */

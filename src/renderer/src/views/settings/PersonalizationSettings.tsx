@@ -12,7 +12,7 @@ const INSTRUCTION_ORDER = [
   { label: "应用内置指令", description: "安全与工具使用规则，始终优先。" },
   { label: "项目指令", description: "会话所在项目根目录的 AGENTS.md。" },
   { label: "会话指令", description: "未单独设置时使用上面的自定义指令。" },
-  { label: "已启用的技能", description: "按任务加载的技能说明。" },
+  { label: "已启用的技能", description: "任务需要时读取技能指令。" },
 ] as const;
 
 export function PersonalizationSettings({

@@ -26,6 +26,7 @@ import type {
   SessionInstructionSources,
   SessionSettings,
   SessionSettingsInput,
+  SkillMeta,
   Snapshot,
   ToolRule,
   VerificationTask,
@@ -68,6 +69,7 @@ import type {
   GitWorktree,
   RecordedFileChange,
 } from "../workspace/types";
+import { SKILL_CATALOG_INSTRUCTIONS } from "./constants";
 import { compactedContext, contextSize, transcriptUsage } from "./context-compaction";
 import { prepareMentionPrompt } from "./mentions";
 import { resolveModel } from "./models";
@@ -75,7 +77,7 @@ import { loadProjectInstructions } from "./project-instructions";
 import { failedRunOf, interruptedRunOf } from "./recovery";
 import { AgentRun, finishedGitView } from "./run";
 import { toUiMessages } from "./session-store";
-import { loadSkillBody, scanSkills, skillSection } from "./skills";
+import { scanSkills, skillCatalog } from "./skills";
 import { createTools } from "./tools";
 import type { ToolEnvironment } from "./tools/types";
 import type {
@@ -183,9 +185,23 @@ export class AgentHost {
     return { ...sources, running: false };
   }
 
+  listSkills(composerId: string): SkillMeta[] {
+    this.checkComposerId(composerId);
+    return scanSkills(
+      this.deps.skillsDir,
+      this.deps.getSettings().skillsEnabled ?? [],
+      this.getWorkingDirectory(),
+    );
+  }
+
   private loadInstructions(
     settings: Settings,
     workingDirectory: string | undefined,
+    skills: readonly SkillMeta[] = scanSkills(
+      this.deps.skillsDir,
+      settings.skillsEnabled ?? [],
+      workingDirectory,
+    ),
   ): AgentInstructions {
     const sections = [
       BASE_SYSTEM_PROMPT,
@@ -211,27 +227,23 @@ export class AgentHost {
       );
     }
 
-    const enabledSkills: string[] = [];
-    for (const skill of scanSkills(this.deps.skillsDir, settings.skillsEnabled ?? [])) {
-      if (!skill.enabled) continue;
-      const body = loadSkillBody(this.deps.skillsDir, skill.id);
-      if (body && body.length > 0) {
-        sections.push(skillSection(skill.name, body));
-        enabledSkills.push(skill.name);
-      }
-    }
+    const enabledSkills = skills.filter(({ enabled }) => enabled);
+    if (skills.length) sections.push(SKILL_CATALOG_INSTRUCTIONS);
+    if (enabledSkills.length)
+      sections.push("## Available skills\n\n" + skillCatalog(enabledSkills));
     return {
       prompt: sections.join("\n\n"),
+      skills,
       sources: {
         project: project.source,
         personalization: chatInstructions ? "session" : custom ? "global" : null,
-        enabledSkills,
+        enabledSkills: enabledSkills.map(({ name }) => name),
       },
     };
   }
 
   /** 确保当前会话有 Agent 实例；跨会话或 provider/模型/systemPrompt 变更时重建（转录从落盘恢复） */
-  private ensureAgent(workingDirectory: string | undefined): Agent {
+  private ensureAgent(workingDirectory: string | undefined, skills?: readonly SkillMeta[]): Agent {
     const settings = this.deps.getSettings();
     const selection = resolveSessionModel(settings, this.getCurrentSession()?.model);
     const provider = selection && settings.providers.find((p) => p.id === selection.providerId);
@@ -241,7 +253,7 @@ export class AgentHost {
 
     if (workingDirectory) createToolPathResolver(workingDirectory)(".");
     const sessionId = this.ensureSession(workingDirectory);
-    const instructions = this.loadInstructions(settings, workingDirectory);
+    const instructions = this.loadInstructions(settings, workingDirectory, skills);
     const toolEnvironment: ToolEnvironment = {
       workingDirectory,
       commandShell: getCommandShell(settings.commandShell),
@@ -395,15 +407,18 @@ export class AgentHost {
     }
     if (expectedDirectory !== undefined) this.checkWorkingDirectory(expectedDirectory);
     const workingDirectory = this.getWorkingDirectory();
+    const skills = run
+      ? this.agentInstructions!.skills
+      : scanSkills(
+          this.deps.skillsDir,
+          this.deps.getSettings().skillsEnabled ?? [],
+          workingDirectory,
+        );
     const prepared =
       typeof input === "string"
-        ? { text: input, skillInstructions: [] }
-        : prepareMentionPrompt(
-            input,
-            (directory) => directory === workingDirectory,
-            this.deps.skillsDir,
-          );
-    const agent = run && this.agent ? this.agent : this.ensureAgent(workingDirectory);
+        ? { text: input }
+        : prepareMentionPrompt(input, (directory) => directory === workingDirectory, skills);
+    const agent = run && this.agent ? this.agent : this.ensureAgent(workingDirectory, skills);
     const message: ReferencedUserMessage = {
       role: "user",
       content: prepared.text,
@@ -411,11 +426,11 @@ export class AgentHost {
       pilotReference: "reference" in prepared ? prepared.reference : undefined,
     };
     if (run) {
-      run.enqueue(message, prepared.skillInstructions, composerId);
+      run.enqueue(message, composerId);
       return Promise.resolve();
     }
 
-    return this.beginRun(agent, message, prepared.skillInstructions, composerId);
+    return this.beginRun(agent, message, composerId);
   }
 
   resume(ref: RunRef, compact = false): Promise<void> | ActiveRun {
@@ -441,13 +456,7 @@ export class AgentHost {
             timestamp: Date.now(),
           }
         : undefined;
-    return this.beginRun(
-      agent,
-      message,
-      undefined,
-      undefined,
-      compact ? { mode: "retry" } : undefined,
-    );
+    return this.beginRun(agent, message, undefined, compact ? { mode: "retry" } : undefined);
   }
 
   compact(composerId: string, focus = "", clearDraftFor?: string): Promise<void> {
@@ -456,13 +465,12 @@ export class AgentHost {
       throw new Error("请在当前操作结束后压缩上下文。");
     if (!this.sessionId) throw new Error("没有足够的较早内容可压缩。");
     const agent = this.ensureAgent(this.getWorkingDirectory());
-    return this.beginRun(agent, undefined, undefined, clearDraftFor, { mode: "manual", focus });
+    return this.beginRun(agent, undefined, clearDraftFor, { mode: "manual", focus });
   }
 
   private beginRun(
     agent: Agent,
     message?: ReferencedUserMessage,
-    skillInstructions?: readonly string[],
     clearDraftFor?: string,
     compaction?: CompactionRequest,
   ): Promise<void> {
@@ -475,11 +483,11 @@ export class AgentHost {
       sessionId,
       environment: this.agentToolEnvironment!,
       tools: this.localTools,
+      skills: this.agentInstructions!.skills,
       systemPrompt: this.agentInstructions!.prompt,
       view: this.view,
       sessionRules,
       initialMessage: message,
-      skillInstructions,
       clearDraftFor,
       compaction,
       onStarted: () => this.deps.onActivityChanged?.(),

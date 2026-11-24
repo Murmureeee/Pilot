@@ -24,6 +24,7 @@ export function SettingsView(): JSX.Element {
   const settings = useAgentStore((s) => s.settings);
   const locale = useLocale();
   const section = useAgentStore((s) => s.settingsSection);
+  const composerId = useAgentStore((s) => s.composerId);
   const scroller = useRef<HTMLDivElement>(null);
   const previousSection = useRef(section);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
@@ -82,7 +83,13 @@ export function SettingsView(): JSX.Element {
 
         {section === "about" && <AboutSettings appInfo={appInfo} />}
 
-        {section === "skills" && <SkillSettings workingDirectory={workingDirectory} />}
+        {section === "skills" && composerId && (
+          <SkillSettings
+            key={composerId}
+            composerId={composerId}
+            workingDirectory={workingDirectory}
+          />
+        )}
 
         {section === "mcp" && <McpSettings locale={locale} workingDirectory={workingDirectory} />}
 

@@ -1,9 +1,10 @@
 // @env node
 import { app, dialog } from "electron";
 
-import { IPC, type ProviderInput } from "../../shared/contract";
+import { IPC, type ProviderInput, type SkillMeta } from "../../shared/contract";
+import { SKILL_UNAVAILABLE } from "../agent-host/constants";
 import { listModels, resolveProviderRef, testProvider } from "../agent-host/models";
-import { importSkill, scanSkills } from "../agent-host/skills";
+import { deleteSkillDirectory, importSkill, readSkillFile } from "../agent-host/skills";
 import { NATIVE_DIALOG_TITLES } from "../constants";
 import { mergeSettingsInput, toPublicSettings, validateSettingsInput } from "../settings";
 import { updateActiveModel } from "../settings/models";
@@ -13,7 +14,7 @@ import { handle } from "./transport";
 import type { IpcContext } from "./types";
 
 export function registerSettingsRoutes(
-  ctx: Pick<IpcContext, "skillsDir" | "getSettings" | "saveSettings">,
+  ctx: Pick<IpcContext, "host" | "skillsDir" | "getSettings" | "saveSettings">,
 ): void {
   handle(IPC.settingsGet, () => toPublicSettings(ctx.getSettings()));
   handle(IPC.settingsSetLogLevel, (_event, logLevel) => {
@@ -45,28 +46,50 @@ export function registerSettingsRoutes(
     if (remaining.length !== rules.length) ctx.saveSettings(settings);
     return toPublicSettings(settings);
   });
-  const skillList = () => {
-    const settings = ctx.getSettings();
-    return scanSkills(ctx.skillsDir, settings.skillsEnabled ?? []);
+  const requireSkill = (composerId: string, id: string, directory?: string): SkillMeta => {
+    const skill = ctx.host.listSkills(composerId).find((entry) => entry.id === id);
+    if (!skill || (directory !== undefined && skill.directory !== directory))
+      throw new Error(SKILL_UNAVAILABLE);
+    return skill;
   };
-  handle(IPC.skillsList, () => skillList());
+  handle(IPC.skillsList, (_event, composerId) => ctx.host.listSkills(composerId));
+  handle(IPC.skillsRead, (_event, composerId, id, directory) =>
+    readSkillFile(requireSkill(composerId, id, directory)),
+  );
+  handle(IPC.skillsDelete, (_event, composerId, id, directory) => {
+    const skill = requireSkill(composerId, id, directory);
+    deleteSkillDirectory(skill);
+    if (skill.source === "installed") {
+      const settings = ctx.getSettings();
+      ctx.saveSettings({
+        ...settings,
+        skillsEnabled: settings.skillsEnabled?.filter((enabledId) => enabledId !== id),
+        importedPlugins: settings.importedPlugins?.map((plugin) => ({
+          ...plugin,
+          skillIds: plugin.skillIds.filter((skillId) => skillId !== id),
+        })),
+      });
+    }
+    return ctx.host.listSkills(composerId);
+  });
   // 主进程弹目录选择框（渲染层无文件系统权限），取消返回 null
-  handle(IPC.skillsImport, async (_event, locale) => {
+  handle(IPC.skillsImport, async (_event, locale, composerId) => {
     const result = await dialog.showOpenDialog({
       title: NATIVE_DIALOG_TITLES[locale].skill,
       properties: ["openDirectory"],
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     importSkill(result.filePaths[0], ctx.skillsDir);
-    return skillList();
+    return ctx.host.listSkills(composerId);
   });
-  handle(IPC.skillsToggle, (_event, id, enabled) => {
+  handle(IPC.skillsToggle, (_event, composerId, id, enabled) => {
+    if (requireSkill(composerId, id).source !== "installed") throw new Error(SKILL_UNAVAILABLE);
     const settings = ctx.getSettings();
     const current = new Set(settings.skillsEnabled ?? []);
     if (enabled) current.add(id);
     else current.delete(id);
     ctx.saveSettings({ ...settings, skillsEnabled: [...current] });
-    return skillList();
+    return ctx.host.listSkills(composerId);
   });
 
   handle(IPC.settingsPickWorkingDirectory, async (_event, locale) => {

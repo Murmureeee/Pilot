@@ -756,7 +756,13 @@ it("loads the selected project's instructions ahead of personalization and skill
   const fileB = join(beta, "AGENTS.md");
   writeFileSync(fileA, "ALPHA_PROJECT_GUIDANCE");
   writeFileSync(fileB, "BETA_PROJECT_GUIDANCE");
-  writeFileSync(join(skillsDir, "review", "SKILL.md"), "---\nname: Review\n---\nSKILL_GUIDANCE");
+  writeFileSync(
+    join(skillsDir, "review", "SKILL.md"),
+    "---\nname: Review\ndescription: REVIEW_DESCRIPTION\n---\nSKILL_GUIDANCE",
+  );
+  const projectSkill = join(alpha, ".agents", "skills", "checklist");
+  mkdirSync(projectSkill, { recursive: true });
+  writeFileSync(join(projectSkill, "SKILL.md"), "---\nname: Checklist\n---\nALPHA_SKILL_BODY");
   const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
   const settings: Settings = {
     providers: [provider],
@@ -794,14 +800,17 @@ it("loads the selected project's instructions ahead of personalization and skill
     expect(host.getInstructionSources(a.id)).toEqual({
       project: { status: "loaded", path: fileA },
       personalization: "session",
-      enabledSkills: ["Review"],
+      enabledSkills: ["Review", "Checklist"],
       running: true,
     });
     await running;
     expect(prompts[0]).toMatch(
-      /ALPHA_PROJECT_GUIDANCE[\s\S]*ALPHA_CHAT_GUIDANCE[\s\S]*SKILL_GUIDANCE/,
+      /ALPHA_PROJECT_GUIDANCE[\s\S]*ALPHA_CHAT_GUIDANCE[\s\S]*REVIEW_DESCRIPTION/,
     );
-    expect(prompts[0]).not.toMatch(/BETA_PROJECT_GUIDANCE|GLOBAL_GUIDANCE/);
+    expect(prompts[0]).toContain(".agents/skills/checklist");
+    expect(prompts[0]).not.toMatch(
+      /BETA_PROJECT_GUIDANCE|GLOBAL_GUIDANCE|SKILL_GUIDANCE|ALPHA_SKILL_BODY/,
+    );
     expect(JSON.stringify(store.load(a.id))).not.toContain("ALPHA_PROJECT_GUIDANCE");
 
     host.loadSession(b.id);
@@ -812,8 +821,10 @@ it("loads the selected project's instructions ahead of personalization and skill
       running: false,
     });
     await host.prompt("Hello from Beta");
-    expect(prompts[1]).toMatch(/BETA_PROJECT_GUIDANCE[\s\S]*GLOBAL_GUIDANCE[\s\S]*SKILL_GUIDANCE/);
-    expect(prompts[1]).not.toContain("ALPHA_PROJECT_GUIDANCE");
+    expect(prompts[1]).toMatch(
+      /BETA_PROJECT_GUIDANCE[\s\S]*GLOBAL_GUIDANCE[\s\S]*REVIEW_DESCRIPTION/,
+    );
+    expect(prompts[1]).not.toMatch(/ALPHA_PROJECT_GUIDANCE|Checklist/);
 
     writeFileSync(fileB, "UPDATED_BETA_GUIDANCE");
     await host.prompt("Read updated instructions");
@@ -830,7 +841,7 @@ it("loads the selected project's instructions ahead of personalization and skill
   }
 });
 
-it("applies an installed skill explicitly for one run and keeps its instructions out of history", async () => {
+it("reads an explicitly selected disabled skill only during the selected task", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-slash-skill-"));
   const skillsDir = join(profile.path, "skills");
   const reviewDir = join(skillsDir, "review");
@@ -854,13 +865,28 @@ it("applies an installed skill explicitly for one run and keeps its instructions
     skillsDir,
     mcp: new McpManager(() => settings, "0.0.0"),
   });
-  const original = models.resolveModel(provider, undefined);
-  const requests: string[] = [];
+  const faux = fauxProvider({ tokensPerSecond: 100_000 });
+  const catalog = createModels();
+  catalog.setProvider(faux.provider);
+  const read = fauxAssistantMessage([fauxToolCall("read_skill", { skillId: "review" })], {
+    stopReason: "toolUse",
+  });
+  faux.appendResponses([
+    read,
+    fauxAssistantMessage([fauxText("I read the skill.")]),
+    read,
+    fauxAssistantMessage([fauxText("The skill was unavailable.")]),
+    fauxAssistantMessage([fauxText("The skill is enabled.")]),
+  ]);
+  const requests: { system: string; last: string }[] = [];
   const resolveModel = vi.spyOn(models, "resolveModel").mockReturnValue({
-    model: original.model,
+    model: faux.getModel()!,
     streamFn: (model, context, options) => {
-      requests.push(JSON.stringify(context.messages));
-      return original.streamFn(model, context, options);
+      requests.push({
+        system: getCurrentSystemPrompt(context.messages),
+        last: JSON.stringify(context.messages.at(-1)),
+      });
+      return catalog.streamSimple(model, context, options);
     },
   });
   const prompt = {
@@ -874,18 +900,24 @@ it("applies an installed skill explicitly for one run and keeps its instructions
   try {
     await invokeSkill();
     await host.prompt("An ordinary message");
-    expect(requests).toHaveLength(2);
-    expect(requests[0]).toContain(instruction);
-    expect(requests[1]).not.toContain(instruction);
-    expect(JSON.stringify(store.load(host.getSnapshot().sessionId ?? ""))).not.toContain(
-      instruction,
-    );
+    expect(requests).toHaveLength(4);
+    expect(requests[0].last).toContain("Skills selected for this request");
+    expect(requests[0].last).not.toContain(instruction);
+    expect(requests[1].last).toContain(instruction);
+    expect(requests[2].system).not.toContain("Available skills");
+    expect(requests[3].last).toContain("所选技能已不可用");
+    const saved = store.load(host.getSnapshot().sessionId!);
+    expect(saved.find((entry) => entry.role === "toolResult")).toMatchObject({
+      toolName: "read_skill",
+    });
     expect(host.getSnapshot().settings.skillsEnabled).toEqual([]);
     expect(saveSettings).not.toHaveBeenCalled();
 
     settings.skillsEnabled = ["review"];
     await invokeSkill();
-    expect(requests[2].split(instruction)).toHaveLength(2);
+    expect(requests[4].system).toContain("Available skills");
+    expect(requests[4].system).not.toContain(instruction);
+    expect(requests[4].last).not.toContain("Skills selected for this request");
   } finally {
     resolveModel.mockRestore();
   }

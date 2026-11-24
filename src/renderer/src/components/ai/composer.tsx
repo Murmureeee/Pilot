@@ -70,7 +70,7 @@ import type { ComposerCommand, ComposerSuggestion, ComposerToolbarMenu } from "@
 import { selectActiveSession, selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
 import { compactFocus } from "@shared/compact-command";
 import { APP_NAME, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
-import type { ActiveRun, ApprovalMode, PromptMention } from "@shared/contract";
+import type { ActiveRun, ApprovalMode, PromptMention, SkillMeta } from "@shared/contract";
 
 import { ComposerModelControls } from "./composer-model-controls";
 import { ComposerCaretMenu, ComposerSuggestions } from "./composer-suggestions";
@@ -135,6 +135,7 @@ export function Composer({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
   const [skillError, setSkillError] = useState<string | null>(null);
+  const [skills, setSkills] = useState<SkillMeta[]>([]);
   const [loadingSkills, setLoadingSkills] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [blockedSend, setBlockedSend] = useState<ActiveRun | null>(null);
@@ -160,8 +161,6 @@ export function Composer({
   const selectProject = useAgentStore((s) => s.selectProject);
   const choosingProject = useAgentStore((s) => s.choosingProject);
   const projectError = useAgentStore((s) => s.projectError);
-  const skills = useAgentStore((s) => s.skills);
-  const listSkills = useAgentStore((s) => s.listSkills);
 
   const ownRun = activeRun?.sessionId === sessionId ? activeRun : null;
   const otherRun = activeRun && !ownRun ? activeRun : null;
@@ -173,7 +172,6 @@ export function Composer({
   const mode = useAgentStore(selectApprovalMode);
   const modeMeta = MODE_META[mode];
   const ModeIcon = modeMeta.icon;
-  const enabledSkills = settings?.skillsEnabled;
   const isDismissed =
     dismissed &&
     selection?.caret.startContainer === dismissed.startContainer &&
@@ -181,8 +179,7 @@ export function Composer({
   const rawTrigger = !composing && !pickerOpen && toolbarMenu === null ? selection?.trigger : null;
   const trigger = focused && !isDismissed ? rawTrigger : null;
   const mentionOpen = trigger?.kind === "mention";
-  const skillSearchOpen =
-    trigger?.kind === "command" || (mentionOpen && Boolean(enabledSkills?.length));
+  const skillSearchOpen = trigger?.kind === "command" || mentionOpen;
   const workspaceQuery = pickerOpen ? pickerQuery : mentionOpen ? trigger.query : null;
   const workspace = useWorkspaceSearch(workingDirectory, workspaceQuery);
 
@@ -211,7 +208,11 @@ export function Composer({
     let cancelled = false;
     setLoadingSkills(true);
     setSkillError(null);
-    void listSkills()
+    void window.pi
+      .skillsList(composerId)
+      .then((next) => {
+        if (!cancelled) setSkills(next);
+      })
       .catch((error: unknown) => {
         if (!cancelled) setSkillError(error instanceof Error ? error.message : String(error));
       })
@@ -221,7 +222,7 @@ export function Composer({
     return () => {
       cancelled = true;
     };
-  }, [skillSearchOpen, enabledSkills, listSkills]);
+  }, [composerId, skillSearchOpen, workingDirectory]);
 
   const readEditor = (): void => {
     if (!editor.current) return;
@@ -324,7 +325,7 @@ export function Composer({
       : [];
   const matchedSkills = rawTrigger
     ? skills.filter((skill) => {
-        const available = rawTrigger.kind === "command" || enabledSkills?.includes(skill.id);
+        const available = rawTrigger.kind === "command" || skill.enabled;
         return (
           available &&
           [skill.name, skill.id].some((label) => matchesComposerQuery(label, rawTrigger.query))
@@ -350,12 +351,18 @@ export function Composer({
           type: "skill",
           id: skill.id,
           label: skill.name,
-          meta: { description: skill.description },
+          meta: {
+            description: skill.description,
+            workingDirectory:
+              skill.source === "installed" ? undefined : (workingDirectory ?? undefined),
+          },
         },
-        skill.description,
+        [skill.description, skill.source === "installed" ? "" : skill.source]
+          .filter(Boolean)
+          .join(" · "),
         BlocksIcon,
         t("技能", locale),
-        trigger.kind === "command" ? "/" + skill.id : undefined,
+        trigger.kind === "command" ? "/" + (skill.id.split("/").at(-1) ?? skill.id) : undefined,
       );
     }
   }

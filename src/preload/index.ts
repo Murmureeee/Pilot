@@ -123,11 +123,16 @@ const api: PiApi = {
     ipcRenderer.invoke(IPC.settingsToggleImportedPlugin, id, enabled),
   pickWorkingDirectory: (locale: Locale) =>
     ipcRenderer.invoke(IPC.settingsPickWorkingDirectory, locale),
-  skillsList: () => ipcRenderer.invoke(IPC.skillsList) as Promise<SkillMeta[]>,
-  skillsImport: (locale: Locale) =>
-    ipcRenderer.invoke(IPC.skillsImport, locale) as Promise<SkillMeta[] | null>,
-  skillsToggle: (id: string, enabled: boolean) =>
-    ipcRenderer.invoke(IPC.skillsToggle, id, enabled) as Promise<SkillMeta[]>,
+  skillsList: (composerId) =>
+    ipcRenderer.invoke(IPC.skillsList, composerId) as Promise<SkillMeta[]>,
+  skillsRead: (composerId, id, directory) =>
+    ipcRenderer.invoke(IPC.skillsRead, composerId, id, directory) as Promise<string>,
+  skillsDelete: (composerId, id, directory) =>
+    ipcRenderer.invoke(IPC.skillsDelete, composerId, id, directory) as Promise<SkillMeta[]>,
+  skillsImport: (locale, composerId) =>
+    ipcRenderer.invoke(IPC.skillsImport, locale, composerId) as Promise<SkillMeta[] | null>,
+  skillsToggle: (composerId, id, enabled) =>
+    ipcRenderer.invoke(IPC.skillsToggle, composerId, id, enabled) as Promise<SkillMeta[]>,
   modelCatalog: (ref: string | ProviderInput) =>
     ipcRenderer.invoke(IPC.settingsModelCatalog, ref) as Promise<ModelCatalogEntry[]>,
   testProvider: (ref: string | ProviderInput) =>

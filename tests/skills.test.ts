@@ -1,13 +1,22 @@
-import { mkdirSync, mkdtempDisposableSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  linkSync,
+  mkdirSync,
+  mkdtempDisposableSync,
+  realpathSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import {
+  deleteSkillDirectory,
   importSkill,
-  loadSkillBody,
   parseSkillMarkdown,
+  readSkillFile,
   scanSkills,
 } from "../src/main/agent-host/skills";
 
@@ -56,8 +65,9 @@ describe("skills (FR-5.8)", () => {
     const id2 = importSkill(src.path, root.path);
     expect(id2.startsWith("pi-skills-src-")).toBe(true);
     expect(id2).not.toBe(id1);
-    expect(loadSkillBody(root.path, id2)).toBe("hello body");
-    expect(scanSkills(root.path, [id1]).find((s) => s.id === id1)?.enabled).toBe(true);
+    const list = scanSkills(root.path, [id1]);
+    expect(readSkillFile(list.find((entry) => entry.id === id2)!)).toBe("hello body");
+    expect(list.find((s) => s.id === id1)?.enabled).toBe(true);
   });
 
   it("rejects dirs without SKILL.md", () => {
@@ -80,14 +90,77 @@ describe("skills (FR-5.8)", () => {
 
     const destination = join(temp.path, "imported");
     expect(importSkill(linked, destination)).toBe("shared-skill");
-    expect(scanSkills(destination, ["shared-skill"])).toMatchObject([
-      { id: "shared-skill", enabled: true },
-    ]);
-    expect(loadSkillBody(destination, "shared-skill")).toBe("portable instructions");
+    const list = scanSkills(destination, ["shared-skill"]);
+    expect(list).toMatchObject([{ id: "shared-skill", enabled: true }]);
+    expect(readSkillFile(list[0])).toBe("portable instructions");
   });
 
-  it("returns null body for unknown skill ids", () => {
-    using root = mkdtempDisposableSync(join(tmpdir(), "pi-skills-none-"));
-    expect(loadSkillBody(root.path, "nope")).toBeNull();
+  it("discovers both project sources and distinguishes identical directory names", () => {
+    using fixture = mkdtempDisposableSync(join(tmpdir(), "pilot-skill-sources-"));
+    const root = realpathSync(fixture.path);
+    const installed = join(root, "installed");
+    const project = join(root, "project");
+    makeSkillDir(installed, "review", "Legacy body");
+    makeSkillDir(
+      join(project, ".agents", "skills"),
+      "review",
+      "\uFEFF---\r\nname: 'Agent Review'\r\ndescription: >-\r\n  Summarize\r\n  findings\r\n---\r\nAGENT_BODY",
+    );
+    makeSkillDir(join(project, ".claude", "skills"), "review", "CLAUDE_BODY");
+    expect(scanSkills(installed, [], project)).toMatchObject([
+      { id: "review", source: "installed", enabled: false, description: "" },
+      {
+        id: ".agents/skills/review",
+        source: ".agents/skills",
+        enabled: true,
+        name: "Agent Review",
+        description: "Summarize findings",
+      },
+      { id: ".claude/skills/review", source: ".claude/skills", enabled: true, description: "" },
+    ]);
+    expect(scanSkills(installed, ["review"], root)).toMatchObject([
+      { id: "review", enabled: true },
+    ]);
+  });
+
+  it("reads bundled files and rejects paths, hardlinks and junctions outside the selected skill", () => {
+    using fixture = mkdtempDisposableSync(join(tmpdir(), "pilot-skill-files-"));
+    const root = realpathSync(fixture.path);
+    const installed = join(root, "skills");
+    makeSkillDir(installed, "review", "Review instructions");
+    makeSkillDir(installed, "other", "Outside the selected skill");
+    const directory = join(installed, "review");
+    const outside = join(installed, "other");
+    mkdirSync(join(directory, "references"));
+    writeFileSync(join(directory, "references", "check.txt"), "checklist");
+    symlinkSync(outside, join(directory, "linked"), "junction");
+    linkSync(join(outside, "SKILL.md"), join(directory, "hardlink.md"));
+    const skill = scanSkills(installed, ["review"]).find(({ id }) => id === "review")!;
+    expect(readSkillFile(skill, "./references/check.txt")).toBe("checklist");
+    for (const path of [
+      "../other/SKILL.md",
+      "..\\other\\SKILL.md",
+      join(outside, "SKILL.md"),
+      "linked/SKILL.md",
+      "hardlink.md",
+      "references",
+      "C:SKILL.md",
+    ]) {
+      expect(() => readSkillFile(skill, path)).toThrow("无法读取技能文件");
+    }
+    deleteSkillDirectory(skill);
+    expect(existsSync(directory)).toBe(false);
+    expect(existsSync(join(outside, "SKILL.md"))).toBe(true);
+  });
+
+  it("skips a project library linked outside the project", () => {
+    using fixture = mkdtempDisposableSync(join(tmpdir(), "pilot-linked-project-skills-"));
+    const root = realpathSync(fixture.path);
+    const outside = join(root, "outside");
+    makeSkillDir(outside, "separate", "Private skill");
+    const project = join(root, "project");
+    mkdirSync(join(project, ".agents"), { recursive: true });
+    symlinkSync(outside, join(project, ".agents", "skills"), "junction");
+    expect(scanSkills(join(root, "installed"), [], project)).toEqual([]);
   });
 });

@@ -70,6 +70,8 @@ describe("IPC contract", () => {
     expect(IPC.settingsTestProvider).toBe("settings:test-provider");
     expect(IPC.settingsPickWorkingDirectory).toBe("settings:pick-working-directory");
     expect(IPC.skillsList).toBe("skills:list");
+    expect(IPC.skillsRead).toBe("skills:read");
+    expect(IPC.skillsDelete).toBe("skills:delete");
     expect(IPC.skillsImport).toBe("skills:import");
     expect(IPC.skillsToggle).toBe("skills:toggle");
     expect(IPC.sessionPersona).toBe("session:persona");

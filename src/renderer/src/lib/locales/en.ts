@@ -377,7 +377,8 @@ export const EN_MESSAGES: Record<string, string> = {
   "AGENTS.md 没有内容。": "AGENTS.md is empty.",
   "无法读取 AGENTS.md。": "Could not read AGENTS.md.",
   "未设置会话指令或全局个性化。": "No chat instructions or global personalization set.",
-  "包含随消息选择的技能。": "Includes skills selected in the message.",
+  "按需读取技能，也可在消息中指定。":
+    "Skills are read as needed. You can also select them in a message.",
   "选择其他文件夹…": "Choose another folder…",
   "找不到该最近项目。": "This project is no longer in the recent list.",
   "Git 分支 {0}": "Git branch {0}",
@@ -609,8 +610,8 @@ export const EN_MESSAGES: Record<string, string> = {
   "主题和界面语言。": "Theme and interface language.",
   "查看、恢复或永久删除已归档的聊天。": "View, restore, or permanently delete archived chats.",
   "本地存储位置和诊断日志。": "Local storage locations and diagnostic logs.",
-  "技能是随任务加载的指令包。可从本地目录、Codex 或 Claude Code 导入，启用后在下一次请求生效。":
-    "Skills are instruction packs loaded for a task. Import them from a local folder, Codex, or Claude Code. Changes apply to the next request.",
+  "查看本机和当前项目的技能。已启用的技能会在任务需要时读取。":
+    "Browse installed skills and skills from the current project. Enabled skills are read as needed.",
   "连接外部工具服务。可手动添加，也可从 Codex 或 Claude Code 导入，工具调用遵循权限设置。":
     "Connect external tool servers. Add one manually or import from Codex or Claude Code. Tool calls follow your permission settings.",
   "从 Codex 或 Claude Code 一次导入技能、MCP 服务和插件组件，并管理已导入的插件。":
@@ -676,7 +677,7 @@ export const EN_MESSAGES: Record<string, string> = {
   "会话所在项目根目录的 AGENTS.md。": "AGENTS.md in the root of the chat's project.",
   "未单独设置时使用上面的自定义指令。": "Falls back to the custom instructions above when not set.",
   已启用的技能: "Enabled skills",
-  "按任务加载的技能说明。": "Skill instructions loaded for the task.",
+  "任务需要时读取技能指令。": "Skill instructions are read when the task needs them.",
   应用: "App",
   集成: "Integrations",
   常规: "General",
@@ -777,6 +778,20 @@ export const EN_MESSAGES: Record<string, string> = {
   导入技能目录: "Import skill folder",
   打开技能目录: "Open skills folder",
   还没有技能: "No skills yet",
+  本机安装: "Installed locally",
+  "项目技能（{0}）": "Project skill ({0})",
+  查看: "View",
+  "查看技能 {0}": "View skill {0}",
+  "删除技能…": "Delete skill…",
+  "删除技能「{0}」？": "Delete skill “{0}”?",
+  "将从磁盘删除此目录及其文件。": "This will delete the folder and its files from disk.",
+  删除技能: "Delete skill",
+  "正在删除…": "Deleting…",
+  "无法删除技能。请检查目录权限后重试。":
+    "Could not delete the skill. Check folder permissions and try again.",
+  "无法读取技能文件。请检查文件是否存在并且位于技能目录内。":
+    "Could not read the skill file. Check that it exists inside the skill folder.",
+  读取技能: "Read skill",
   撤销规则: "Revoke rule",
   "仅路径前缀 {0}": "Only under {0}",
   全部调用: "All calls",

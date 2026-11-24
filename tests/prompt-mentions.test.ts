@@ -12,12 +12,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { legacyMentionParts, prepareMentionPrompt } from "../src/main/agent-host/mentions";
+import { scanSkills } from "../src/main/agent-host/skills";
 import { MENTION_CONTEXT_HEADING } from "../src/shared/constants";
 import type { PromptMention } from "../src/shared/contract";
 import { mentionToken } from "../src/shared/mentions";
 
 describe("agent prompt mentions", () => {
-  it("describes selected files and keeps installed skill instructions separate from text", () => {
+  it("describes selected files and skill references without reading skill instructions", () => {
     using fixture = mkdtempDisposableSync(join(tmpdir(), "pilot-prompt-mentions-"));
     const workspace = realpathSync(fixture.path);
     mkdirSync(join(workspace, "src"));
@@ -26,6 +27,7 @@ describe("agent prompt mentions", () => {
     const reviewDir = join(skillsDir, "review");
     mkdirSync(reviewDir, { recursive: true });
     writeFileSync(join(reviewDir, "SKILL.md"), "---\nname: Code review\n---\nReview the code.");
+    const skills = scanSkills(skillsDir, []);
     const file: PromptMention = {
       type: "file",
       id: "src/index.ts",
@@ -42,7 +44,7 @@ describe("agent prompt mentions", () => {
     const result = prepareMentionPrompt(
       { text, mentions: [file, skill, file, skill] },
       (dir) => dir === workspace,
-      skillsDir,
+      skills,
     );
     expect(result.text).toBe(text);
     const context = result.reference?.context;
@@ -71,14 +73,10 @@ describe("agent prompt mentions", () => {
       prepareMentionPrompt(
         { text: ordinary + mentionToken(file), mentions: [{ ...file, offset: ordinary.length }] },
         () => true,
-        skillsDir,
+        skills,
       ).reference?.parts,
     ).toEqual([{ type: "text", text: ordinary }, filePart]);
-    expect(result.skillInstructions).toEqual(["## 技能：Code review\n\nReview the code."]);
-    expect(prepareMentionPrompt({ text, mentions: [] }, () => false, skillsDir)).toEqual({
-      text,
-      skillInstructions: [],
-    });
+    expect(prepareMentionPrompt({ text, mentions: [] }, () => false, skills)).toEqual({ text });
   });
 
   it("restores chips from the generated legacy appendix and preserves ordinary prose", () => {
@@ -101,7 +99,6 @@ describe("agent prompt mentions", () => {
     using fixture = mkdtempDisposableSync(join(tmpdir(), "pilot-prompt-mention-scope-"));
     const workspace = join(realpathSync(fixture.path), "workspace");
     const outside = join(realpathSync(fixture.path), "outside");
-    const skillsDir = join(fixture.path, "skills");
     mkdirSync(workspace);
     mkdirSync(outside);
     writeFileSync(join(outside, "outside.txt"), "sample");
@@ -113,11 +110,7 @@ describe("agent prompt mentions", () => {
       meta: { workingDirectory: workspace },
     };
     const check = (mention: PromptMention, accepts = true): void => {
-      prepareMentionPrompt(
-        { text: mentionToken(mention), mentions: [mention] },
-        () => accepts,
-        skillsDir,
-      );
+      prepareMentionPrompt({ text: mentionToken(mention), mentions: [mention] }, () => accepts, []);
     };
     expect(() => check(file, false)).toThrow("工作目录已变更");
     for (const id of [
@@ -132,13 +125,13 @@ describe("agent prompt mentions", () => {
       check({ type: "skill", id: "missing", label: "Skill", meta: { description: "" } }),
     ).toThrow("所选技能已不可用");
     expect(() =>
-      prepareMentionPrompt({ text: "Text only", mentions: [file] }, () => true, skillsDir),
+      prepareMentionPrompt({ text: "Text only", mentions: [file] }, () => true, []),
     ).toThrow("消息中的引用已变更");
     expect(() =>
       prepareMentionPrompt(
         { text: mentionToken(file), mentions: [{ ...file, offset: 1 }] },
         () => true,
-        skillsDir,
+        [],
       ),
     ).toThrow("消息中的引用已变更");
   });

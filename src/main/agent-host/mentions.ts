@@ -2,12 +2,12 @@
 import { statSync } from "node:fs";
 import { parse } from "node:path";
 
-import type { PromptInput, PromptMention, UiUserPart } from "@shared/contract";
+import type { PromptInput, PromptMention, SkillMeta, UiUserPart } from "@shared/contract";
 
 import { MENTION_CONTEXT_HEADING } from "../../shared/constants";
 import { mentionToken } from "../../shared/mentions";
 import { createToolPathResolver } from "../workspace/paths";
-import { loadSkillBody, scanSkills, skillSection } from "./skills";
+import { SKILL_UNAVAILABLE } from "./constants";
 import type { DisplayMention, PreparedPrompt } from "./types";
 
 function tokenPositions(
@@ -92,15 +92,11 @@ function workspaceReference(mention: Exclude<PromptMention, { type: "skill" }>):
 export function prepareMentionPrompt(
   input: PromptInput,
   acceptsDirectory: (directory: string) => boolean,
-  skillsDir: string,
+  skills: readonly SkillMeta[],
 ): PreparedPrompt {
-  if (input.mentions.length === 0) return { text: input.text, skillInstructions: [] };
+  if (input.mentions.length === 0) return { text: input.text };
 
-  const skills = input.mentions.some(({ type }) => type === "skill")
-    ? scanSkills(skillsDir, [])
-    : [];
   const references = new Map<string, string>();
-  const skillInstructions: string[] = [];
   const anchored = new Map<number, DisplayMention>();
   const unanchored = new Map<string, DisplayMention["part"]>();
   for (const mention of input.mentions) {
@@ -121,13 +117,13 @@ export function prepareMentionPrompt(
     };
     if (mention.type === "skill") {
       const skill = skills.find(({ id }) => id === mention.id);
-      if (!skill) throw new Error("所选技能已不可用，请重新选择。");
+      const directory = mention.meta.workingDirectory;
+      if (!skill || (skill.source !== "installed" && (!directory || !acceptsDirectory(directory))))
+        throw new Error(SKILL_UNAVAILABLE);
       part.label = skill.name;
+      if (skill.source !== "installed") part.workingDirectory = directory;
       if (!references.has(token)) {
-        const body = loadSkillBody(skillsDir, skill.id);
-        if (!body) throw new Error("所选技能已不可用，请重新选择。");
         references.set(token, "Use skill " + JSON.stringify(skill.name));
-        skillInstructions.push(skillSection(skill.name, body));
       }
     } else {
       if (!acceptsDirectory(mention.meta.workingDirectory)) {
@@ -154,6 +150,5 @@ export function prepareMentionPrompt(
       ].join("\n"),
       parts: displayParts(input.text, mentions),
     },
-    skillInstructions,
   };
 }

@@ -14,7 +14,6 @@ import type {
   SessionMeta,
   SessionSettingsInput,
   SettingsInput,
-  SkillMeta,
   Snapshot,
   ThinkingLevel,
   ToolRule,
@@ -39,19 +38,11 @@ interface AgentStore extends AgentUiState {
   view: View;
   /** 设置页当前分区（侧栏导航与设置内容共用） */
   settingsSection: SettingsSection;
-  /** 技能列表（设置页「技能」分区；主进程扫描结果） */
-  skills: SkillMeta[];
   initialized: boolean;
   paletteOpen: boolean;
   nav: NavState;
   setPaletteOpen(open: boolean): void;
   setSettingsSection(section: SettingsSection): void;
-  /** 技能列表刷新（进设置页时拉取） */
-  listSkills(): Promise<void>;
-  /** 导入技能目录（主进程弹目录选择框；取消 = null 不更新） */
-  importSkills(): Promise<void>;
-  /** 启停技能（下一轮请求生效） */
-  toggleSkill(id: string, enabled: boolean): Promise<void>;
   /** 保存全局人设/自定义指令（"" = 清空） */
   savePersona(text: string): Promise<void>;
   /** 会话级人设覆盖（null = 清除回落全局） */
@@ -198,30 +189,12 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   projectError: null,
   view: "chat",
   settingsSection: "general",
-  skills: [],
   initialized: false,
   paletteOpen: false,
   nav: initialNavState(),
 
   setPaletteOpen: (open) => set({ paletteOpen: open }),
   setSettingsSection: (section) => set({ settingsSection: section }),
-
-  listSkills: async () => {
-    const skills = await window.pi.skillsList();
-    set({ skills });
-  },
-
-  importSkills: async () => {
-    const skills = await window.pi.skillsImport(currentLocale());
-    if (skills !== null) set({ skills });
-  },
-
-  toggleSkill: async (id, enabled) => {
-    const skills = await window.pi.skillsToggle(id, enabled);
-    // 启停状态持久化在 settings.skillsEnabled，一并刷新
-    const settings = await window.pi.settingsGet();
-    set({ skills, settings });
-  },
 
   savePersona: async (text) => {
     const s = get().settings;

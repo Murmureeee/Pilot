@@ -17,6 +17,14 @@ export const DEFAULT_MODEL_PRICING: ModelPricing = {
 export const MODEL_RETRY_ATTEMPTS = 3;
 export const MODEL_RETRY_POLICY = { baseDelayMs: 1000, maxAgentDelayMs: 60_000 };
 export const MODEL_ERROR_DETAIL_LIMIT = 12_000;
+export const SKILL_FILE_NAME = "SKILL.md";
+export const SKILL_HEADER_BYTES = 16_384;
+export const SKILL_FILE_BYTES = 2 * 1024 * 1024;
+export const PROJECT_SKILL_FOLDERS = [".agents/skills", ".claude/skills"] as const;
+export const SKILL_UNAVAILABLE = "所选技能已不可用，请重新选择。";
+export const SKILL_FILE_UNAVAILABLE = "无法读取技能文件。请检查文件是否存在并且位于技能目录内。";
+export const SKILL_CATALOG_INSTRUCTIONS =
+  "For a relevant skill or one explicitly selected by the user, call read_skill with its skillId to read SKILL.md before following the skill. For bundled files, pass a path relative to that skill directory. To run a bundled script, use the bash tool with its absolute path and follow the normal command approval rules.";
 export const CONTEXT_COMPACTION_RATIO = 0.8;
 export const CONTEXT_RETAIN_RATIO = 0.5;
 export const COMPACTION_SUMMARY_MAX_TOKENS = 2048;

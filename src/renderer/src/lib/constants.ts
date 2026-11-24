@@ -122,8 +122,7 @@ export const SETTINGS_SECTION_DESCRIPTIONS: Record<SettingsSection, string> = {
   archived: "查看、恢复或永久删除已归档的聊天。",
   data: "本地存储位置和诊断日志。",
   about: "版本信息、应用更新和反馈渠道。",
-  skills:
-    "技能是随任务加载的指令包。可从本地目录、Codex 或 Claude Code 导入，启用后在下一次请求生效。",
+  skills: "查看本机和当前项目的技能。已启用的技能会在任务需要时读取。",
   mcp: "连接外部工具服务。可手动添加，也可从 Codex 或 Claude Code 导入，工具调用遵循权限设置。",
   imports: "从 Codex 或 Claude Code 一次导入技能、MCP 服务和插件组件，并管理已导入的插件。",
 };
@@ -159,7 +158,7 @@ export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[
   archived: ["取消归档", "永久删除"],
   data: ["应用数据目录", "聊天记录目录", "日志级别", "日志目录"],
   about: ["版本", "软件更新", "检查更新", "更新记录", "反馈问题"],
-  skills: ["导入技能目录", "打开技能目录"],
+  skills: ["导入技能目录", "打开技能目录", "查看技能", "项目技能", "删除技能"],
   mcp: ["添加 MCP 服务", "stdio", "HTTP"],
   imports: ["Codex", "Claude Code", "插件组件"],
 };

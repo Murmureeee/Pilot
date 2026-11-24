@@ -62,6 +62,8 @@ export const IPC = {
   settingsImportedPlugins: "settings:imported-plugins",
   settingsToggleImportedPlugin: "settings:toggle-imported-plugin",
   skillsList: "skills:list",
+  skillsRead: "skills:read",
+  skillsDelete: "skills:delete",
   skillsImport: "skills:import",
   skillsToggle: "skills:toggle",
   settingsGet: "settings:get",
@@ -94,7 +96,12 @@ export type WorkspaceReferencePreview =
 
 export type PromptMention =
   | { type: WorkspaceEntry["kind"]; id: string; label: string; meta: { workingDirectory: string } }
-  | { type: "skill"; id: string; label: string; meta: { description: string } };
+  | {
+      type: "skill";
+      id: string;
+      label: string;
+      meta: { description: string; workingDirectory?: string };
+    };
 
 export type ComposerDraft = (string | PromptMention)[];
 
@@ -584,13 +591,13 @@ export type ApprovalMode = "standard" | "full-access" | "read-only";
 /** 模型思考强度（pi 的 7 档离散值，composer 滑块选择） */
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
-/** 技能元数据（SKILL.md 解析结果；path/body 不出主进程） */
 export interface SkillMeta {
-  /** 技能 id = 技能目录名（userData/skills/<id>/SKILL.md） */
   id: string;
   name: string;
   description: string;
-  /** 启用状态（持久化在 settings.skillsEnabled） */
+  directory: string;
+  source: "installed" | ".agents/skills" | ".claude/skills";
+  /** 已安装技能的启用状态保存到 settings.skillsEnabled。项目技能随项目生效。 */
   enabled: boolean;
 }
 
