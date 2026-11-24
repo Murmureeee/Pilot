@@ -33,7 +33,8 @@ import type {
 
 import { APP_NAME, DEFAULT_THINKING_LEVEL } from "../../shared/constants";
 import { applyMessageEvent } from "../../shared/message-events";
-import { hasSavedModel, resolveSessionModel } from "../../shared/providers";
+import { effectiveModelCapabilities } from "../../shared/model-capabilities";
+import { hasSavedModel, resolveSessionModel, selectedCatalogModel } from "../../shared/providers";
 import { toPublicSettings } from "../settings";
 import { decryptSecret } from "../settings/secrets";
 import type { ProviderConfig, Settings } from "../settings/types";
@@ -233,6 +234,7 @@ export class AgentHost {
     const provider = selection && settings.providers.find((p) => p.id === selection.providerId);
     if (!selection || !provider) throw new Error("尚未配置 provider，请先到设置页添加");
     const active = { ...provider, modelId: selection.modelId };
+    const entry = active.models?.find(({ id }) => id === active.modelId);
 
     if (workingDirectory) createToolPathResolver(workingDirectory)(".");
     const sessionId = this.ensureSession(workingDirectory);
@@ -252,6 +254,8 @@ export class AgentHost {
       this.agentProvider.modelId === active.modelId &&
       this.agentProvider.baseUrl === active.baseUrl &&
       this.agentProvider.apiKey === active.apiKey &&
+      JSON.stringify(this.agentProvider.models?.find(({ id }) => id === active.modelId)) ===
+        JSON.stringify(entry) &&
       this.agentInstructions?.prompt === instructions.prompt &&
       this.agentToolEnvironment?.workingDirectory === toolEnvironment.workingDirectory &&
       this.agentToolEnvironment?.commandShell === toolEnvironment.commandShell
@@ -1019,6 +1023,11 @@ export class AgentHost {
     const hasLiveMessages = this.sessionId !== null && this.sessionId === this.agentSessionId;
     const checkpoint =
       !ownRun && this.sessionId ? this.deps.store.checkpoint(this.sessionId) : undefined;
+    const settings = toPublicSettings(this.deps.getSettings());
+    const selected = selectedCatalogModel(settings, this.getCurrentSession()?.model);
+    const configured = selected
+      ? effectiveModelCapabilities(selected.automatic, selected.overrides)
+      : null;
     return {
       sessionId: this.sessionId,
       composerId: this.composerId,
@@ -1040,11 +1049,11 @@ export class AgentHost {
       failedRun: this.sessionId ? (failedRunOf(this.sessionId, checkpoint) ?? null) : null,
       pendingPermissions: ownRun?.pendingPermissions ?? [],
       error: hasLiveMessages ? this.view.error : null,
-      settings: toPublicSettings(this.deps.getSettings()),
+      settings,
       usage: hasLiveMessages
         ? { ...this.view.usage }
         : { input: 0, output: 0, cacheRead: 0, costTotal: 0 },
-      contextWindow: hasLiveMessages ? this.view.contextWindow : null,
+      contextWindow: ownRun ? this.view.contextWindow : (configured?.contextWindow ?? null),
       contextTokens: hasLiveMessages ? this.view.contextTokens : 0,
       steerCount: ownRun?.steerCount ?? 0,
     };

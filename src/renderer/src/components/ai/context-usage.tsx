@@ -7,13 +7,23 @@ import type { JSX } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { t, useLocale } from "@renderer/lib/i18n";
-import { useAgentStore } from "@renderer/stores/agent";
+import { selectActiveSession, useAgentStore } from "@renderer/stores/agent";
 import { LOCALE_DETAILS } from "@shared/constants";
+import { effectiveModelCapabilities } from "@shared/model-capabilities";
+import { selectedCatalogModel } from "@shared/providers";
 
 export function ContextUsage(): JSX.Element | null {
   const locale = useLocale();
   const tokens = useAgentStore((state) => state.contextTokens);
-  const capacity = useAgentStore((state) => state.contextWindow);
+  const capacity = useAgentStore((state) => {
+    if (state.activeRun && state.activeRun.sessionId === state.sessionId)
+      return state.activeRun.modelCapabilities?.contextWindow ?? state.contextWindow;
+    const model =
+      state.settings && selectedCatalogModel(state.settings, selectActiveSession(state)?.model);
+    return model
+      ? effectiveModelCapabilities(model.automatic, model.overrides).contextWindow
+      : null;
+  });
   if (capacity === null || capacity <= 0) return null;
 
   const language = LOCALE_DETAILS[locale].htmlLang;

@@ -63,6 +63,12 @@ const gitRollbackSelection = z.strictObject({
   hunks: z.array(z.number().int().nonnegative()).min(1).max(700).optional(),
 });
 const approvalMode = z.enum(["standard", "read-only", "full-access"]);
+const modelCapabilities = z.strictObject({
+  contextWindow: z.number().int().positive().optional(),
+  maxTokens: z.number().int().positive().optional(),
+  supportsImages: z.boolean().optional(),
+  supportsThinking: z.boolean().optional(),
+});
 const provider = z.strictObject({
   id,
   kind: z.enum(["anthropic", "openai-compatible", "openai-responses", "faux"]),
@@ -71,10 +77,18 @@ const provider = z.strictObject({
   modelId: z.string(),
   models: z
     .array(
-      z.strictObject({
+      modelCapabilities.extend({
         id: nonBlank,
         name: z.string(),
-        contextWindow: z.number().positive().optional(),
+        overrides: modelCapabilities.optional(),
+        cost: z
+          .strictObject({
+            input: z.number().nonnegative().optional(),
+            output: z.number().nonnegative().optional(),
+            cacheRead: z.number().nonnegative().optional(),
+            cacheWrite: z.number().nonnegative().optional(),
+          })
+          .optional(),
       }),
     )
     .optional(),

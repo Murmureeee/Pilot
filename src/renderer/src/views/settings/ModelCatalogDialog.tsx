@@ -20,7 +20,7 @@ import type { ModelCatalogDialogProps } from "./types";
 export function ModelCatalogDialog({
   catalog,
   savedModels,
-  onAdd,
+  onApply,
   onClose,
 }: ModelCatalogDialogProps): JSX.Element {
   const locale = useLocale();
@@ -33,6 +33,19 @@ export function ModelCatalogDialog({
       !search || id.toLowerCase().includes(search) || name.toLowerCase().includes(search),
   );
   const saved = new Set(savedModels.map(({ id }) => id));
+  const discovered = new Map(entries.map((entry) => [entry.id, entry]));
+  const refreshed = savedModels.map((model) => {
+    const entry = discovered.get(model.id);
+    if (!entry) return model;
+    const { overrides: _overrides, ...metadata } = entry;
+    const next = {
+      ...model,
+      ...metadata,
+      ...(entry.cost ? { cost: { ...model.cost, ...entry.cost } } : {}),
+    };
+    return JSON.stringify(model) === JSON.stringify(next) ? model : next;
+  });
+  const hasUpdates = refreshed.some((entry, index) => entry !== savedModels[index]);
   const addable = matches.filter(({ id }) => !saved.has(id));
   const allSelected = addable.length > 0 && addable.every(({ id }) => selected.includes(id));
 
@@ -46,7 +59,9 @@ export function ModelCatalogDialog({
       <DialogContent closeLabel={t("关闭", locale)} className="max-h-[min(35rem,85vh)] gap-4">
         <DialogHeader>
           <DialogTitle>{t("模型目录", locale)}</DialogTitle>
-          <DialogDescription>{t("勾选要加入此提供方的模型。", locale)}</DialogDescription>
+          <DialogDescription>
+            {t("选择要添加的模型，也可以更新已保存模型的目录数据。", locale)}
+          </DialogDescription>
         </DialogHeader>
         {catalog.state === "loading" && (
           <output className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
@@ -134,12 +149,17 @@ export function ModelCatalogDialog({
           </Button>
           <Button
             type="button"
-            disabled={selected.length === 0}
+            disabled={selected.length === 0 && !hasUpdates}
             onClick={() =>
-              onAdd(entries.filter(({ id }) => selected.includes(id) && !saved.has(id)))
+              onApply([
+                ...refreshed,
+                ...entries.filter(({ id }) => selected.includes(id) && !saved.has(id)),
+              ])
             }
           >
-            {t("添加 {0} 个模型", locale, [selected.length])}
+            {selected.length
+              ? t("添加 {0} 个模型", locale, [selected.length])
+              : t("更新目录数据", locale)}
           </Button>
         </DialogFooter>
       </DialogContent>

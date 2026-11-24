@@ -8,10 +8,12 @@ import {
   DEFAULT_LOG_LEVEL,
   DEFAULT_THINKING_LEVEL,
   LOG_LEVELS,
+  OPENAI_RESPONSES_MIN_TOKENS,
   THINKING_LEVELS,
 } from "../../shared/constants";
 import { isOpenAiProvider } from "../../shared/providers";
 import { selectThinkingLevel } from "../../shared/thinking";
+import { automaticModelCapabilities } from "../agent-host/model-capabilities";
 import { SETTINGS_FILE_NAME, SETTINGS_SAVE_BLOCKED } from "../constants";
 import { backupCorruptFile } from "../corrupt-file";
 import { normalizeWorkingDirectory } from "../workspace/paths";
@@ -157,7 +159,10 @@ export function toPublicSettings(settings: Settings): PublicSettings {
       name: p.name,
       baseUrl: p.baseUrl,
       modelId: p.modelId,
-      models: getProviderModels(p),
+      models: getProviderModels(p).map((entry) => ({
+        ...entry,
+        automatic: automaticModelCapabilities(p, entry),
+      })),
       hasKey: Boolean(p.apiKey),
     })),
     activeProviderId: settings.activeProviderId,
@@ -199,16 +204,26 @@ export function validateSettingsInput(input: SettingsInput): string | undefined 
     return "找不到 Git Bash。请安装 Git for Windows，或切换到 PowerShell。";
   }
   for (const p of input.providers) {
+    const models = normalizeModelCatalog(p.models);
     if (
       p.models !== undefined &&
       p.modelId.trim() &&
-      !normalizeModelCatalog(p.models).some(({ id }) => id === p.modelId.trim())
+      !models.some(({ id }) => id === p.modelId.trim())
     ) {
       return "请从已保存的模型中选择。";
     }
     if (isOpenAiProvider(p.kind) && !p.baseUrl?.trim()) {
       return "OpenAI 端点必须提供 baseUrl";
     }
+    if (
+      p.kind === "openai-responses" &&
+      models.some(
+        ({ overrides }) =>
+          (overrides?.contextWindow ?? OPENAI_RESPONSES_MIN_TOKENS) < OPENAI_RESPONSES_MIN_TOKENS ||
+          (overrides?.maxTokens ?? OPENAI_RESPONSES_MIN_TOKENS) < OPENAI_RESPONSES_MIN_TOKENS,
+      )
+    )
+      return "Responses API 的上下文长度和输出上限至少为 16。";
   }
   if (
     input.activeProviderId &&

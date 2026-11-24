@@ -16,11 +16,12 @@ import {
 } from "@renderer/components/ui/select";
 import { PROVIDER_KIND_LABELS } from "@renderer/lib/constants";
 import { displayProviderName, localizeError, t, useLocale } from "@renderer/lib/i18n";
-import type { ModelCatalogEntry, ProviderKind, ProviderTestResult } from "@shared/contract";
+import type { ProviderKind, ProviderTestResult } from "@shared/contract";
 import { isLocalOpenAiProvider, isOpenAiProvider } from "@shared/providers";
 
+import { ModelCapabilitiesDialog } from "./ModelCapabilitiesDialog";
 import { ModelCatalogDialog } from "./ModelCatalogDialog";
-import type { DraftProvider, ModelCatalogState, ProviderEditorProps } from "./types";
+import type { DraftModel, DraftProvider, ModelCatalogState, ProviderEditorProps } from "./types";
 
 export function ProviderEditor({
   draft,
@@ -46,11 +47,25 @@ export function ProviderEditor({
     onChange(patch);
   };
 
-  const replaceModels = (models: ModelCatalogEntry[]): void => {
+  const replaceModels = (models: DraftModel[]): void => {
     changeConnection({
       models,
       modelId: models.find(({ id }) => id === draft.modelId)?.id ?? models[0]?.id ?? "",
     });
+  };
+
+  const changeEndpoint = (patch: Pick<Partial<DraftProvider>, "kind" | "baseUrl">): void => {
+    const connectionChanged =
+      (patch.kind !== undefined && patch.kind !== draft.kind) ||
+      (patch.baseUrl !== undefined && patch.baseUrl.trim() !== draft.baseUrl.trim());
+    changeConnection(
+      connectionChanged
+        ? {
+            ...patch,
+            models: draft.models.map(({ id, name, overrides }) => ({ id, name, overrides })),
+          }
+        : patch,
+    );
   };
 
   const addManualModel = (): void => {
@@ -123,7 +138,7 @@ export function ProviderEditor({
             <Select
               value={draft.kind}
               onValueChange={(kind: ProviderKind | null) => {
-                if (kind && kind !== draft.kind) changeConnection({ kind });
+                if (kind && kind !== draft.kind) changeEndpoint({ kind });
               }}
             >
               <SelectTrigger id={uid + "-type"} className="w-full min-w-0">
@@ -152,10 +167,10 @@ export function ProviderEditor({
                   ? "https://api.openai.com/v1"
                   : "http://localhost:11434/v1"
               }
-              onChange={(event) => changeConnection({ baseUrl: event.target.value })}
+              onChange={(event) => changeEndpoint({ baseUrl: event.target.value })}
             />
             {draft.kind === "openai-compatible" && (
-              <LocalProviderPresets onSelect={(baseUrl) => changeConnection({ baseUrl })} />
+              <LocalProviderPresets onSelect={(baseUrl) => changeEndpoint({ baseUrl })} />
             )}
           </div>
         )}
@@ -214,6 +229,17 @@ export function ProviderEditor({
                     </span>
                     {chosen && <CheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />}
                   </button>
+                  <ModelCapabilitiesDialog
+                    model={model}
+                    kind={draft.kind}
+                    onApply={(overrides) =>
+                      replaceModels(
+                        draft.models.map((entry) =>
+                          entry.id === model.id ? { ...entry, overrides } : entry,
+                        ),
+                      )
+                    }
+                  />
                   <Button
                     variant="ghost"
                     size="icon-sm"
@@ -277,8 +303,8 @@ export function ProviderEditor({
           catalog={catalog}
           savedModels={draft.models}
           onClose={() => setCatalog(null)}
-          onAdd={(models) => {
-            replaceModels([...draft.models, ...models]);
+          onApply={(models) => {
+            replaceModels(models);
             setCatalog(null);
           }}
         />

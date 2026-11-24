@@ -699,6 +699,50 @@ it("declares the current MCP tools on the first request and refreshes a resumed 
   }
 });
 
+it("rebuilds the cached model after capability edits for the same saved model", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-capability-host-"));
+  const settings: Settings = {
+    activeProviderId: "demo",
+    providers: [
+      {
+        id: "demo",
+        kind: "faux",
+        name: "Demo",
+        modelId: "faux-default",
+        models: [{ id: "faux-default", name: "Demo" }],
+      },
+    ],
+  };
+  const provider = settings.providers[0];
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: vi.fn<(settings: Settings) => void>(),
+    broadcast: vi.fn<(event: UiAgentEvent) => void>(),
+    store: new SessionStore(join(profile.path, "sessions")),
+    skillsDir: join(profile.path, "skills"),
+    mcp: new McpManager(() => settings, "0.0.0"),
+  });
+  await host.prompt("First request");
+  const selection = host.getSnapshot();
+  expect(selection.contextWindow).toBe(128_000);
+  provider.models = [
+    {
+      id: "faux-default",
+      name: "Demo",
+      overrides: { contextWindow: 8192, maxTokens: 1024, supportsImages: false },
+    },
+  ];
+  expect(host.getSnapshot().contextWindow).toBe(8192);
+  const run = host.prompt("Second request");
+  expect(host.getSnapshot().activeRun?.modelCapabilities).toMatchObject({
+    contextWindow: 8192,
+    maxTokens: 1024,
+    supportsImages: false,
+  });
+  await run;
+  expect(host.getSnapshot().messages.filter((message) => message.role === "user")).toHaveLength(2);
+});
+
 it("loads the selected project's instructions ahead of personalization and skills", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-project-instructions-"));
   const root = realpathSync(profile.path);

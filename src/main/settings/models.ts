@@ -1,6 +1,34 @@
 // @env node
-import type { ModelCatalogEntry, ProviderFields } from "../../shared/contract";
+import type {
+  ModelCapabilities,
+  ModelCatalogEntry,
+  ModelPricing,
+  ProviderFields,
+} from "../../shared/contract";
+import { modelTokenLimit } from "../../shared/model-capabilities";
 import type { Settings } from "./types";
+
+function capabilityFields(entry?: Partial<ModelCapabilities> | null): Partial<ModelCapabilities> {
+  const contextWindow = modelTokenLimit(entry?.contextWindow);
+  const maxTokens = modelTokenLimit(entry?.maxTokens);
+  return {
+    ...(contextWindow === undefined ? {} : { contextWindow }),
+    ...(maxTokens === undefined ? {} : { maxTokens }),
+    ...(typeof entry?.supportsImages === "boolean" ? { supportsImages: entry.supportsImages } : {}),
+    ...(typeof entry?.supportsThinking === "boolean"
+      ? { supportsThinking: entry.supportsThinking }
+      : {}),
+  };
+}
+
+function pricingFields(entry?: Partial<ModelPricing> | null): Partial<ModelPricing> {
+  const pricing: Partial<ModelPricing> = {};
+  for (const field of ["input", "output", "cacheRead", "cacheWrite"] as const) {
+    const rate = entry?.[field];
+    if (typeof rate === "number" && Number.isFinite(rate) && rate >= 0) pricing[field] = rate;
+  }
+  return pricing;
+}
 
 export function normalizeModelCatalog(input: unknown): ModelCatalogEntry[] {
   if (!Array.isArray(input)) return [];
@@ -10,13 +38,14 @@ export function normalizeModelCatalog(input: unknown): ModelCatalogEntry[] {
     const id = typeof entry?.id === "string" ? entry.id.trim() : "";
     if (!id || models.has(id)) continue;
     const name = typeof entry?.name === "string" ? entry.name.trim() : "";
-    const contextWindow = entry?.contextWindow;
+    const overrides = capabilityFields(entry?.overrides);
+    const cost = pricingFields(entry?.cost);
     models.set(id, {
       id,
       name: name || id,
-      ...(typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0
-        ? { contextWindow }
-        : {}),
+      ...capabilityFields(entry),
+      ...(Object.keys(cost).length ? { cost } : {}),
+      ...(Object.keys(overrides).length ? { overrides } : {}),
     });
   }
   return [...models.values()];

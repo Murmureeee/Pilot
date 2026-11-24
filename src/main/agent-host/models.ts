@@ -16,16 +16,21 @@ import {
 import { streamSimple as anthropicStreamSimple } from "@earendil-works/pi-ai/api/anthropic-messages";
 import { streamSimple as chatCompletionsStreamSimple } from "@earendil-works/pi-ai/api/openai-completions";
 import { streamSimple as responsesStreamSimple } from "@earendil-works/pi-ai/api/openai-responses";
-import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
-import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 
 import type { ModelCatalogEntry, ProviderInput, ProviderTestResult } from "@shared/contract";
 
 import { visibleMessageText } from "../../shared/mentions";
 import { isLocalOpenAiProvider } from "../../shared/providers";
-import { normalizeModelCatalog } from "../settings/models";
 import type { ProviderConfig } from "../settings/types";
+import { DEFAULT_MODEL_CAPABILITIES, DEFAULT_MODEL_PRICING } from "./constants";
 import { legacyMentionParts } from "./mentions";
+import {
+  applyModelCapabilities,
+  bundledModel,
+  bundledModelEntries,
+  bundledOpenAiPricing,
+  normalizeEndpointModels,
+} from "./model-capabilities";
 import { messageText } from "./session-store";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
@@ -35,7 +40,7 @@ export interface ResolvedModel {
   streamFn: StreamFn;
 }
 
-function resolveFaux(): ResolvedModel {
+function resolveFaux(cfg: ProviderConfig): ResolvedModel {
   // 60 tok/s 限速让流式渲染肉眼可见；每次请求按上下文补一条脚本响应（faux 队列为空会报错）
   const faux = fauxProvider({ tokensPerSecond: 60 });
   const models = createModels();
@@ -142,17 +147,15 @@ function resolveFaux(): ResolvedModel {
     ]);
     return inner(m, context, options);
   };
-  return { model, streamFn };
+  return { model: applyModelCapabilities(cfg, model), streamFn };
 }
 
 function resolveAnthropic(cfg: ProviderConfig, apiKey: string): ResolvedModel {
-  const models = createModels();
-  models.setProvider(anthropicProvider());
-  const model = models.getModel("anthropic", cfg.modelId);
+  const model = bundledModel(cfg);
   if (!model) throw new Error(`未知 anthropic 模型: ${cfg.modelId}`);
   const streamFn: StreamFn = (m, context, options) =>
     anthropicStreamSimple(m as Model<"anthropic-messages">, context, { ...options, apiKey });
-  return { model, streamFn };
+  return { model: applyModelCapabilities(cfg, model), streamFn };
 }
 
 function resolveOpenAi(cfg: ProviderConfig, apiKey: string): ResolvedModel {
@@ -165,32 +168,29 @@ function resolveOpenAi(cfg: ProviderConfig, apiKey: string): ResolvedModel {
     baseUrl,
     reasoning: false,
     input: ["text"],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 128_000,
-    maxTokens: 8_192,
+    cost: bundledOpenAiPricing(cfg) ?? DEFAULT_MODEL_PRICING,
+    contextWindow: DEFAULT_MODEL_CAPABILITIES.contextWindow,
+    maxTokens: DEFAULT_MODEL_CAPABILITIES.maxTokens,
   };
+  const known = bundledModel(cfg);
   if (cfg.kind === "openai-responses") {
-    const models = createModels();
-    models.setProvider(openaiProvider());
-    const known = models.getModel("openai", cfg.modelId);
     const model: Model<"openai-responses"> = {
       ...common,
       api: "openai-responses",
-      reasoning: known?.reasoning ?? false,
       thinkingLevelMap: known?.thinkingLevelMap,
       compat: { supportsDeveloperRole: false },
     };
     const streamFn: StreamFn = (m, context, options) =>
       responsesStreamSimple(m as Model<"openai-responses">, context, { ...options, apiKey });
-    return { model, streamFn };
+    return { model: applyModelCapabilities(cfg, model), streamFn };
   }
   const model: Model<"openai-completions"> = {
     ...common,
     api: "openai-completions",
+    thinkingLevelMap: known?.thinkingLevelMap,
     compat: {
-      // Ollama / vLLM / 中转站等兼容端普遍不支持 developer 角色与 reasoning_effort
+      // Compatible endpoints can differ in how they accept reasoning settings.
       supportsDeveloperRole: false,
-      supportsReasoningEffort: false,
     },
   };
   const streamFn: StreamFn = (m, context, options) =>
@@ -198,7 +198,7 @@ function resolveOpenAi(cfg: ProviderConfig, apiKey: string): ResolvedModel {
       ...options,
       apiKey,
     });
-  return { model, streamFn };
+  return { model: applyModelCapabilities(cfg, model), streamFn };
 }
 
 /**
@@ -235,7 +235,7 @@ export function resolveProviderRef(
 export function resolveModel(cfg: ProviderConfig, apiKey: string | undefined): ResolvedModel {
   switch (cfg.kind) {
     case "faux":
-      return resolveFaux();
+      return resolveFaux(cfg);
     case "anthropic":
       if (!apiKey) throw new Error("anthropic provider 未配置 API key");
       return resolveAnthropic(cfg, apiKey);
@@ -258,14 +258,13 @@ export async function listModels(
 ): Promise<ModelCatalogEntry[]> {
   switch (cfg.kind) {
     case "faux":
-      return [{ id: "faux-default", name: "Faux 演示（无需 key）" }];
-    case "anthropic": {
-      const models = createModels();
-      models.setProvider(anthropicProvider());
-      return models
-        .getModels("anthropic")
-        .map((m) => ({ id: m.id, name: m.name, contextWindow: m.contextWindow }));
-    }
+      return bundledModelEntries(cfg).map((entry) => ({
+        ...entry,
+        id: "faux-default",
+        name: "Faux 演示（无需 key）",
+      }));
+    case "anthropic":
+      return bundledModelEntries(cfg);
     case "openai-compatible":
     case "openai-responses": {
       const baseUrl = cfg.baseUrl?.trim();
@@ -279,7 +278,7 @@ export async function listModels(
         throw new Error(`获取模型目录失败：HTTP ${response.status}`);
       }
       const json = (await response.json()) as { data?: unknown } | null;
-      const entries = normalizeModelCatalog(Array.isArray(json) ? json : json?.data).filter(
+      const entries = normalizeEndpointModels(Array.isArray(json) ? json : json?.data).filter(
         ({ id, name }) => !apiKey || (!id.includes(apiKey) && !name.includes(apiKey)),
       );
       if (entries.length === 0) throw new Error("端点返回了空模型目录");

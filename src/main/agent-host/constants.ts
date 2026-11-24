@@ -1,5 +1,18 @@
 // @env node
-import type { CommandShell } from "@shared/contract";
+import type { CommandShell, ModelCapabilities, ModelPricing } from "@shared/contract";
+
+export const DEFAULT_MODEL_CAPABILITIES: ModelCapabilities = {
+  contextWindow: 128_000,
+  maxTokens: 8_192,
+  supportsImages: false,
+  supportsThinking: false,
+};
+export const DEFAULT_MODEL_PRICING: ModelPricing = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+};
 
 export const MODEL_RETRY_ATTEMPTS = 3;
 export const MODEL_RETRY_POLICY = { baseDelayMs: 1000, maxAgentDelayMs: 60_000 };

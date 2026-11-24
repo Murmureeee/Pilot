@@ -19,7 +19,7 @@ import { levelLabel } from "@renderer/lib/thinking-level";
 import { useAgentStore } from "@renderer/stores/agent";
 import { THINKING_LEVELS } from "@shared/constants";
 import type { ProviderInput, PublicSettings, ThinkingLevel } from "@shared/contract";
-import { isOpenAiProvider } from "@shared/providers";
+import { isOpenAiProvider, modelCatalogInput } from "@shared/providers";
 
 import { ProviderEditor } from "./ProviderEditor";
 import type { DraftProvider } from "./types";
@@ -31,7 +31,7 @@ function toProviderInput(draft: DraftProvider): ProviderInput {
     name: draft.name.trim() || draft.id,
     baseUrl: isOpenAiProvider(draft.kind) ? draft.baseUrl.trim() : undefined,
     modelId: draft.modelId,
-    models: draft.models,
+    models: modelCatalogInput(draft.models),
     apiKey: draft.kind === "faux" ? undefined : draft.apiKeyInput.trim() || undefined,
   };
 }

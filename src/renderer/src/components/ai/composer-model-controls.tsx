@@ -20,6 +20,7 @@ import type { ComposerModelControlsProps } from "@renderer/lib/types";
 import { selectActiveSession, useAgentStore } from "@renderer/stores/agent";
 import { THINKING_LEVELS } from "@shared/constants";
 import type { SessionModelSelection, ThinkingLevel } from "@shared/contract";
+import { effectiveModelCapabilities } from "@shared/model-capabilities";
 import { hasSavedModel, resolveSessionModel } from "@shared/providers";
 import { selectThinkingLevel } from "@shared/thinking";
 
@@ -37,6 +38,9 @@ export function ComposerModelControls({
   const providers = settings?.providers.filter(({ models }) => models.length > 0) ?? [];
   const provider = providers.find(({ id }) => id === selection?.providerId);
   const activeModel = provider?.models.find(({ id }) => id === selection?.modelId);
+  const capabilities =
+    activeModel && effectiveModelCapabilities(activeModel.automatic, activeModel.overrides);
+  const supportsThinking = capabilities?.supportsThinking ?? false;
   const defaultProvider = providers.find(({ id }) => id === settings?.activeProviderId);
   const defaultModel = defaultProvider?.models.find(({ id }) => id === defaultProvider.modelId);
   const usingDefault = !sessionModel || !hasSavedModel(providers, sessionModel);
@@ -55,6 +59,7 @@ export function ComposerModelControls({
   const index = levels.indexOf(level);
   const thinkingTitle = t("思考强度", locale);
   const modelTitle = t("选择模型", locale);
+  const summaryTitle = supportsThinking ? thinkingTitle : modelTitle;
   const modelName = activeModel?.name ?? modelTitle;
   const effort = t(levelLabel(level), locale);
   const choosingModel = menu === "model";
@@ -136,14 +141,14 @@ export function ComposerModelControls({
     >
       <Popover.Trigger
         type="button"
-        aria-label={thinkingTitle}
-        aria-description={modelName + " " + effort}
-        title={thinkingTitle}
+        aria-label={summaryTitle}
+        aria-description={supportsThinking ? modelName + " " + effort : modelName}
+        title={summaryTitle}
         disabled={!settings}
         className="flex h-8 max-w-64 min-w-0 items-center gap-1.5 rounded-full bg-secondary/75 px-3 text-xs text-secondary-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/55 focus-visible:ring-inset disabled:opacity-60 data-popup-open:bg-accent"
       >
         <span className="truncate">{modelName}</span>
-        <span className="shrink-0 text-muted-foreground">{effort}</span>
+        {supportsThinking && <span className="shrink-0 text-muted-foreground">{effort}</span>}
         <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
       </Popover.Trigger>
       <Popover.Portal>
@@ -165,8 +170,8 @@ export function ComposerModelControls({
                     type="button"
                     size="icon-sm"
                     variant="ghost"
-                    aria-label={t("返回思考强度", locale)}
-                    title={t("返回思考强度", locale)}
+                    aria-label={t(supportsThinking ? "返回思考强度" : "返回当前模型", locale)}
+                    title={t(supportsThinking ? "返回思考强度" : "返回当前模型", locale)}
                     onClick={returnToThinking}
                   >
                     <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
@@ -248,6 +253,15 @@ export function ComposerModelControls({
                                   {model.id}
                                 </span>
                               )}
+                              <span className="text-xs leading-4 text-muted-foreground">
+                                {t(
+                                  effectiveModelCapabilities(model.automatic, model.overrides)
+                                    .supportsImages
+                                    ? "支持图像输入"
+                                    : "仅支持文本输入",
+                                  locale,
+                                )}
+                              </span>
                             </span>
                             {current && (
                               <CheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
@@ -268,19 +282,21 @@ export function ComposerModelControls({
               <div className="min-h-0 overflow-y-auto p-3">
                 <div className="flex items-center justify-between gap-2">
                   <Popover.Title className="text-xs text-muted-foreground">
-                    {thinkingTitle}
+                    {summaryTitle}
                   </Popover.Title>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label={t("恢复默认", locale)}
-                    title={t("恢复默认", locale)}
-                    disabled={level === defaultLevel || saving}
-                    onClick={() => commitLevel(defaultLevel)}
-                  >
-                    <RotateCcwIcon aria-hidden="true" className="size-3.5" />
-                  </Button>
+                  {supportsThinking && (
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label={t("恢复默认", locale)}
+                      title={t("恢复默认", locale)}
+                      disabled={level === defaultLevel || saving}
+                      onClick={() => commitLevel(defaultLevel)}
+                    >
+                      <RotateCcwIcon aria-hidden="true" className="size-3.5" />
+                    </Button>
+                  )}
                 </div>
                 <button
                   ref={modelLink}
@@ -294,13 +310,20 @@ export function ComposerModelControls({
                   }}
                   className="-mx-1 flex max-w-[calc(100%+0.5rem)] flex-col items-start gap-0.5 rounded-lg px-1.5 py-1 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/55 focus-visible:ring-inset"
                 >
-                  <span className="text-base leading-5 font-medium">{effort}</span>
+                  {supportsThinking && (
+                    <span className="text-base leading-5 font-medium">{effort}</span>
+                  )}
                   <span className="flex max-w-full items-center gap-1 text-xs leading-4 text-muted-foreground">
                     <span className="truncate">{modelName}</span>
                     <ChevronRightIcon aria-hidden="true" className="size-3 shrink-0" />
                   </span>
                 </button>
-                {levels.length > 1 && (
+                {capabilities && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t(capabilities.supportsImages ? "支持图像输入" : "仅支持文本输入", locale)}
+                  </p>
+                )}
+                {supportsThinking && levels.length > 1 && (
                   <Slider.Root
                     value={index}
                     max={levels.length - 1}
@@ -340,7 +363,7 @@ export function ComposerModelControls({
                     </Slider.Control>
                   </Slider.Root>
                 )}
-                {levels.length > 1 && (
+                {supportsThinking && levels.length > 1 && (
                   <div
                     className="flex justify-between px-0.5 text-xs text-muted-foreground"
                     aria-hidden="true"

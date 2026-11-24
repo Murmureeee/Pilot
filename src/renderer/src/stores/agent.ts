@@ -20,6 +20,7 @@ import type {
   ToolRule,
   UiAgentEvent,
 } from "@shared/contract";
+import { modelCatalogInput } from "@shared/providers";
 
 import { applyAgentEvent, initialAgentUiState, type AgentUiState } from "../adapters/agent-events";
 import { currentLocale } from "../lib/i18n";
@@ -112,7 +113,7 @@ function providerSelection(
       name,
       baseUrl,
       modelId,
-      models,
+      models: modelCatalogInput(models),
     })),
     activeProviderId: settings.activeProviderId,
   };

@@ -1,5 +1,13 @@
 // @env all
-import type { ProviderInput, ProviderKind, SessionModelSelection } from "./contract";
+import type {
+  ModelCapabilities,
+  ModelCatalogEntry,
+  ProviderInput,
+  ProviderKind,
+  PublicModelCatalogEntry,
+  PublicSettings,
+  SessionModelSelection,
+} from "./contract";
 
 export const LOCAL_OPENAI_PRESETS = [
   { name: "Ollama", baseUrl: "http://127.0.0.1:11434/v1" },
@@ -44,4 +52,19 @@ export function resolveSessionModel(
   const provider = settings.providers.find(({ id }) => id === settings.activeProviderId);
   if (provider?.modelId) return { providerId: provider.id, modelId: provider.modelId };
   return undefined;
+}
+
+export function selectedCatalogModel(
+  settings: Pick<PublicSettings, "providers" | "activeProviderId">,
+  selection?: SessionModelSelection,
+): PublicModelCatalogEntry | undefined {
+  const model = resolveSessionModel(settings, selection);
+  const provider = settings.providers.find(({ id }) => id === model?.providerId);
+  return provider?.models.find(({ id }) => id === model?.modelId);
+}
+
+export function modelCatalogInput(
+  models: readonly (ModelCatalogEntry & { automatic?: ModelCapabilities })[],
+): ModelCatalogEntry[] {
+  return models.map(({ automatic: _automatic, ...entry }) => entry);
 }

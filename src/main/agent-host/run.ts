@@ -36,6 +36,7 @@ import type {
   GitSnapshot,
   RecordedFileChange,
 } from "../workspace/types";
+import { capabilitiesFromModel } from "./model-capabilities";
 import { withModelRetry } from "./model-retry";
 import { PermissionManager } from "./permissions";
 import { actionFingerprint, completeToolResults, failedRunOf, interruptedRunOf } from "./recovery";
@@ -101,6 +102,7 @@ export class AgentRun {
       runId,
       workingDirectory: workingDirectory ?? null,
       status: "streaming",
+      modelCapabilities: capabilitiesFromModel(agent.state.model),
     };
     this.checkpoint = {
       type: "pilot_run_checkpoint",

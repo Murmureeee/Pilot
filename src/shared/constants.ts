@@ -4,6 +4,7 @@ export const WORKSPACE_QUERY_LENGTH = 512;
 export const MENTION_CONTEXT_HEADING =
   "Selected mentions (file and folder paths are relative to the workspace):";
 export const DEFAULT_THINKING_LEVEL = "medium";
+export const OPENAI_RESPONSES_MIN_TOKENS = 16;
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export const LOG_LEVELS = ["off", "error", "warn", "info", "debug"] as const;
 export const DEFAULT_LOG_LEVEL = "info";

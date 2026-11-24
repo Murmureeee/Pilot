@@ -248,6 +248,7 @@ export interface ActiveRun extends RunRef {
   status: Exclude<AgentStatus, "idle">;
   workingDirectory: string | null;
   retry?: ModelRetryProgress;
+  modelCapabilities?: ModelCapabilities;
 }
 
 export interface InterruptedRun extends RunRef {
@@ -572,11 +573,30 @@ export interface SkillMeta {
   enabled: boolean;
 }
 
-/** 模型目录条目（FR-5.2 浏览弹窗用） */
-export interface ModelCatalogEntry {
+export interface ModelCapabilities {
+  contextWindow: number;
+  maxTokens: number;
+  supportsImages: boolean;
+  supportsThinking: boolean;
+}
+
+/** USD per million tokens. */
+export interface ModelPricing {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+export interface ModelCatalogEntry extends Partial<ModelCapabilities> {
   id: string;
   name: string;
-  contextWindow?: number;
+  cost?: Partial<ModelPricing>;
+  overrides?: Partial<ModelCapabilities>;
+}
+
+export interface PublicModelCatalogEntry extends ModelCatalogEntry {
+  automatic: ModelCapabilities;
 }
 
 /** Provider 连通性测试结果（FR-5.1） */
@@ -596,7 +616,10 @@ export interface ProviderFields {
 }
 
 /** 渲染层可见形态：明文/密文 key 永不出主进程，只有 hasKey 标志 */
-type PublicProvider = ProviderFields & { hasKey: boolean; models: ModelCatalogEntry[] };
+type PublicProvider = Omit<ProviderFields, "models"> & {
+  hasKey: boolean;
+  models: PublicModelCatalogEntry[];
+};
 
 /** 成功时为备份路径，受阻时为原设置文件路径。 */
 export interface SettingsRecovery {

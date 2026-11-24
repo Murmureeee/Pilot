@@ -24,7 +24,7 @@ import type {
   ProviderKind,
   ProviderTestResult,
 } from "@shared/contract";
-import { isLocalOpenAiProvider, isOpenAiProvider } from "@shared/providers";
+import { isLocalOpenAiProvider, isOpenAiProvider, modelCatalogInput } from "@shared/providers";
 
 import { LocalProviderPresets } from "./local-provider-presets";
 
@@ -127,7 +127,7 @@ export function OnboardingDialog({
       name: p.name,
       baseUrl: p.baseUrl,
       modelId: p.modelId,
-      models: p.models,
+      models: modelCatalogInput(p.models),
     }));
     void saveSettings({
       providers: [...existing, d],

@@ -1,5 +1,14 @@
 // @env browser
-import type { ModelCatalogEntry, ProviderInput, ProviderKind } from "@shared/contract";
+import type {
+  ModelCapabilities,
+  ModelCatalogEntry,
+  ProviderInput,
+  ProviderKind,
+} from "@shared/contract";
+
+export interface DraftModel extends ModelCatalogEntry {
+  automatic?: ModelCapabilities;
+}
 
 export interface DraftProvider {
   id: string;
@@ -7,7 +16,7 @@ export interface DraftProvider {
   name: string;
   baseUrl: string;
   modelId: string;
-  models: ModelCatalogEntry[];
+  models: DraftModel[];
   hasKey: boolean;
   apiKeyInput: string;
 }
@@ -19,8 +28,8 @@ export type ModelCatalogState =
 
 export interface ModelCatalogDialogProps {
   catalog: ModelCatalogState;
-  savedModels: readonly ModelCatalogEntry[];
-  onAdd(models: ModelCatalogEntry[]): void;
+  savedModels: readonly DraftModel[];
+  onApply(models: DraftModel[]): void;
   onClose(): void;
 }
 

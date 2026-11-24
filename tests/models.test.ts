@@ -26,6 +26,48 @@ const responsesCfg: ProviderConfig = {
 };
 
 describe("model catalog (FR-5.2)", () => {
+  it("normalizes explicit endpoint capability data and per-token catalog pricing", async () => {
+    using request = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        data: [
+          {
+            id: "vision",
+            name: "Vision",
+            context_length: 32_768,
+            top_provider: { max_completion_tokens: 4096 },
+            architecture: { input_modalities: ["text", "image"] },
+            supported_parameters: ["reasoning"],
+            pricing: { prompt: "0.0000015", completion: "0.000003", input_cache_read: "-1" },
+            overrides: { maxTokens: 9999 },
+          },
+          {
+            id: "text",
+            context_window: -1,
+            max_output_tokens: 1.5,
+            supports_images: false,
+            supports_thinking: false,
+          },
+          { id: "legacy" },
+        ],
+      }),
+    );
+    const entries = await listModels(responsesCfg, undefined);
+    expect(entries).toEqual([
+      {
+        id: "vision",
+        name: "Vision",
+        contextWindow: 32_768,
+        maxTokens: 4096,
+        supportsImages: true,
+        supportsThinking: true,
+        cost: { input: 1.5, output: 3 },
+      },
+      { id: "text", name: "text", supportsImages: false, supportsThinking: false },
+      { id: "legacy", name: "legacy" },
+    ]);
+    expect(request).toHaveBeenCalledOnce();
+  });
+
   it("lists the faux model", async () => {
     const list = await listModels(fauxCfg, undefined);
     expect(list).toHaveLength(1);
@@ -75,6 +117,65 @@ describe("model catalog (FR-5.2)", () => {
 });
 
 describe("provider connectivity test (FR-5.1)", () => {
+  it("applies output, image and thinking capabilities to the compatible request", async () => {
+    const cfg: ProviderConfig = {
+      ...responsesCfg,
+      kind: "openai-compatible",
+      modelId: "vision",
+      models: [
+        {
+          id: "vision",
+          name: "Vision",
+          contextWindow: 32_768,
+          maxTokens: 4096,
+          supportsImages: true,
+          supportsThinking: false,
+          cost: { input: 1.5 },
+          overrides: { maxTokens: 320, supportsThinking: true },
+        },
+      ],
+    };
+    const { model, streamFn } = resolveModel(cfg, "test-key");
+    expect(model).toMatchObject({
+      contextWindow: 32_768,
+      maxTokens: 320,
+      reasoning: true,
+      input: ["text", "image"],
+      cost: { input: 1.5 },
+    });
+    const context = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "ping" },
+            { type: "image", mimeType: "image/png", data: "AA==" },
+          ],
+          timestamp: 0,
+        },
+      ],
+    } as TranscriptContext;
+    const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+      Response.json({ error: { message: "Fixture end" } }, { status: 400 }),
+    );
+    const stream = await streamFn(model, context, { fetch, reasoning: "medium", maxRetries: 0 });
+    await stream.result();
+    const request = new Request(...fetch.mock.calls[0]);
+    expect(await request.json()).toMatchObject({
+      max_completion_tokens: 320,
+      reasoning_effort: "medium",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "ping" },
+            { type: "image_url", image_url: { url: "data:image/png;base64,AA==" } },
+          ],
+        },
+      ],
+    });
+  });
+
   it("uses Pi reasoning metadata for a known Responses model", () => {
     const { model } = resolveModel({ ...responsesCfg, modelId: "gpt-6.1-terra" }, "test-key");
     expect(model.reasoning).toBe(true);

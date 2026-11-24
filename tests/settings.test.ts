@@ -14,6 +14,8 @@ import {
 } from "../src/main/settings";
 import { updateActiveModel } from "../src/main/settings/models";
 import type { Settings } from "../src/main/settings/types";
+import { effectiveModelCapabilities } from "../src/shared/model-capabilities";
+import { modelCatalogInput } from "../src/shared/providers";
 
 vi.mock("electron", () => ({ safeStorage: { isEncryptionAvailable: () => false } }));
 vi.mock("node:fs", { spy: true });
@@ -206,7 +208,16 @@ describe("saved models and thinking levels", () => {
     });
     const legacy = loadSettings(appData.path);
     expect(toPublicSettings(legacy).providers[0].models).toEqual([
-      { id: "legacy", name: "legacy" },
+      {
+        id: "legacy",
+        name: "legacy",
+        automatic: {
+          contextWindow: 128000,
+          maxTokens: 8192,
+          supportsImages: false,
+          supportsThinking: false,
+        },
+      },
     ]);
     const updated = mergeSettingsInput(legacy, {
       providers: [
@@ -262,5 +273,56 @@ describe("saved models and thinking levels", () => {
         activeProviderId: "s",
       }),
     ).toMatch(/至少一个模型/);
+  });
+
+  it("persists reported capabilities separately from explicit overrides and clearing them", () => {
+    using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-capability-settings-"));
+    const model = {
+      id: "vision",
+      name: "Vision",
+      contextWindow: 32_768,
+      maxTokens: 4096,
+      supportsImages: true,
+      supportsThinking: true,
+      cost: { input: 1.5 },
+      overrides: { contextWindow: 8192, supportsImages: false },
+    };
+    const settings: Settings = {
+      activeProviderId: "local",
+      providers: [
+        {
+          id: "local",
+          kind: "openai-compatible",
+          baseUrl: "http://localhost:1234/v1",
+          modelId: model.id,
+          name: "Local",
+          models: [model],
+        },
+      ],
+    };
+    saveSettings(profile.path, settings);
+    const loaded = loadSettings(profile.path);
+    const publicModel = toPublicSettings(loaded).providers[0].models[0];
+    expect(effectiveModelCapabilities(publicModel.automatic, publicModel.overrides)).toEqual({
+      contextWindow: 8192,
+      maxTokens: 4096,
+      supportsImages: false,
+      supportsThinking: true,
+    });
+    expect(modelCatalogInput([publicModel])).toEqual([model]);
+    const cleared = mergeSettingsInput(loaded, {
+      activeProviderId: "local",
+      providers: [{ ...loaded.providers[0], models: [{ ...model, overrides: undefined }] }],
+    });
+    saveSettings(profile.path, cleared);
+    const restored = toPublicSettings(loadSettings(profile.path)).providers[0].models[0];
+    expect(restored.overrides).toBeUndefined();
+    expect(restored.automatic).toEqual({
+      contextWindow: 32_768,
+      maxTokens: 4096,
+      supportsImages: true,
+      supportsThinking: true,
+    });
+    expect(restored.cost).toEqual({ input: 1.5 });
   });
 });
