@@ -1,5 +1,6 @@
 // @env browser
 import type { ActiveRun, InterruptedRun, SessionMeta } from "@shared/contract";
+
 import type { SessionRowStatus } from "./types";
 
 /** 侧栏状态位每行只显示优先级最高的一种，顺序与 DESIGN 的状态模型一致。 */

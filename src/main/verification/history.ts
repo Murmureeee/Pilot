@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+
 import type { RunRef, VerificationResult, VerificationRun } from "@shared/contract";
 
 export class VerificationHistory {

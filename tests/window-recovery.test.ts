@@ -1,7 +1,9 @@
 // @env node
 import { EventEmitter } from "node:events";
+
 import type { BrowserWindow, MessageBoxOptions, MessageBoxReturnValue } from "electron";
 import { beforeEach, expect, it, vi } from "vitest";
+
 import type { DiagnosticLog } from "../src/main/diagnostics";
 import { registerRenderer, setRendererLocale } from "../src/main/ipc/transport";
 import { registerWindowRecovery } from "../src/main/window-recovery";

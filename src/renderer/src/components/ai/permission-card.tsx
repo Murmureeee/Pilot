@@ -1,5 +1,5 @@
 // @env browser
-import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent } from "react";
+import { cn } from "cn";
 import {
   AlertTriangleIcon,
   CornerDownLeftIcon,
@@ -9,6 +9,8 @@ import {
   SquareIcon,
   TerminalIcon,
 } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block";
 import {
@@ -28,7 +30,6 @@ import { describeToolScope } from "@renderer/lib/tool-rules";
 import { toolInput } from "@renderer/lib/tool-trace";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { PermissionDecision, PermissionRequest, RunRef } from "@shared/contract";
-import { cn } from "cn";
 
 export function PermissionCard({
   request,
@@ -130,7 +131,7 @@ export function PermissionCard({
       data-permission-card
       className={cn(
         COMPOSER_SURFACE_CLASS,
-        "focus-visible:ring-ring flex min-w-0 flex-col gap-3 border px-4 py-3.5 outline-none focus-visible:ring-2",
+        "flex min-w-0 flex-col gap-3 border px-4 py-3.5 outline-none focus-visible:ring-2 focus-visible:ring-ring",
       )}
     >
       <div className="flex min-w-0 items-start gap-2.5">
@@ -158,12 +159,12 @@ export function PermissionCard({
               : t("允许「{0}」？", locale, [t(request.label, locale)])}
           </h2>
           {request.workingDirectory && (
-            <p className="text-muted-foreground wrap-anywhere text-xs">
+            <p className="text-xs wrap-anywhere text-muted-foreground">
               {t("工作目录", locale)} <bdi className="font-mono">{request.workingDirectory}</bdi>
             </p>
           )}
           {request.danger && (
-            <p className="text-muted-foreground text-xs">{t(dangerReason, locale)}</p>
+            <p className="text-xs text-muted-foreground">{t(dangerReason, locale)}</p>
           )}
         </div>
       </div>
@@ -177,7 +178,7 @@ export function PermissionCard({
               wrap
               tabIndex={shell || expanded ? 0 : -1}
               className={cn(
-                "focus-visible:ring-ring overscroll-contain focus-visible:ring-2 focus-visible:ring-inset",
+                "overscroll-contain focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                 shell
                   ? "max-h-[min(23vh,11rem)]"
                   : expanded
@@ -193,7 +194,7 @@ export function PermissionCard({
               type="button"
               variant="ghost"
               size="xs"
-              className="text-muted-foreground self-end"
+              className="self-end text-muted-foreground"
               aria-expanded={expanded}
               aria-controls={detailsId}
               onClick={() => setExpanded(!expanded)}
@@ -205,11 +206,11 @@ export function PermissionCard({
       )}
 
       {shell && !scope && !request.danger && (
-        <p className="text-muted-foreground text-xs">{t("此命令需要逐次审批。", locale)}</p>
+        <p className="text-xs text-muted-foreground">{t("此命令需要逐次审批。", locale)}</p>
       )}
 
       {error && (
-        <p role="alert" className="text-destructive text-xs wrap-anywhere">
+        <p role="alert" className="text-xs wrap-anywhere text-destructive">
           {t("审批提交失败，请重试。", locale)} {error}
         </p>
       )}
@@ -250,7 +251,7 @@ export function PermissionCard({
                     >
                       <span className="flex min-w-0 flex-col gap-0.5">
                         <span className="whitespace-nowrap">{t(title, locale)}</span>
-                        <span className="text-muted-foreground wrap-anywhere text-xs">{scope}</span>
+                        <span className="text-xs wrap-anywhere text-muted-foreground">{scope}</span>
                       </span>
                     </DropdownMenuItem>
                   ))}
@@ -259,7 +260,7 @@ export function PermissionCard({
             </DropdownMenu>
           )}
           {remaining > 0 && (
-            <span className="text-muted-foreground text-xs">
+            <span className="text-xs text-muted-foreground">
               {t("另有 {0} 项待审批", locale, [remaining])}
             </span>
           )}
@@ -277,7 +278,7 @@ export function PermissionCard({
             {t("拒绝", locale)}
             <kbd
               aria-hidden="true"
-              className="bg-muted rounded px-1 font-sans text-[10px] leading-4"
+              className="rounded bg-muted px-1 font-sans text-[10px] leading-4"
             >
               Esc
             </kbd>

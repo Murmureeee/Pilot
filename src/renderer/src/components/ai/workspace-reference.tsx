@@ -1,6 +1,7 @@
 // @env browser
-import type { JSX, ReactNode } from "react";
 import { cn } from "cn";
+import type { JSX, ReactNode } from "react";
+
 import { selectWorkingDirectory, useAgentStore } from "@renderer/stores/agent";
 import { useWorkspaceReferenceStore } from "@renderer/stores/workspace-reference";
 import type { PromptMention } from "@shared/contract";

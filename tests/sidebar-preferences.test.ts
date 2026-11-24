@@ -1,5 +1,6 @@
 // @env browser
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
 import {
   loadSidebarCollapsed,
   loadSidebarWidth,

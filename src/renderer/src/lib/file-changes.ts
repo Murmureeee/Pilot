@@ -1,5 +1,6 @@
 // @env browser
 import type { FileChangeSummary, UiMessage } from "@shared/contract";
+
 import type { FileChangeNode } from "./types";
 
 function fileLocation(path: string): {

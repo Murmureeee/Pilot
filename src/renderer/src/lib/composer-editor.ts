@@ -1,5 +1,6 @@
 // @env browser
 import type { ComposerDraft, PromptMention } from "@shared/contract";
+
 import { composerTrigger } from "./composer-shortcuts";
 import type { ComposerSelection } from "./composer/types";
 

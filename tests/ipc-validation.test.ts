@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import type { IpcChannel } from "../src/main/ipc/types";
 import { parseIpcArgs } from "../src/main/ipc/validation";
 import { IPC, type ProviderInput, type SettingsInput } from "../src/shared/contract";

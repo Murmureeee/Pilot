@@ -1,4 +1,5 @@
 // @env node
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -7,9 +8,9 @@ import {
   realpathSync,
   writeFileSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
   createModels,
@@ -22,6 +23,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { obj } from "@earendil-works/pi-schema";
 import { expect, it, vi } from "vitest";
+
 import { AgentHost } from "../src/main/agent-host/host";
 import { McpManager } from "../src/main/agent-host/mcp";
 import * as models from "../src/main/agent-host/models";

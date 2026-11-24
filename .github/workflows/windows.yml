@@ -67,10 +67,7 @@ jobs:
           pnpm install --frozen-lockfile
 
       - name: Check formatting
-        run: |
-          pnpm exec oxfmt --write src tests
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          git diff --exit-code -- src tests
+        run: pnpm format:check
 
       - name: Type check
         run: pnpm typecheck

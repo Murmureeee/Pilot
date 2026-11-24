@@ -1,11 +1,5 @@
 // @env browser
-import {
-  useCallback,
-  useMemo,
-  useState,
-  type JSX,
-  type MouseEvent as ReactMouseEvent,
-} from "react";
+import { cn } from "cn";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
@@ -28,7 +22,28 @@ import {
   SquareTerminalIcon,
   Trash2Icon,
 } from "lucide-react";
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type JSX,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
+
+import { SessionDeleteDialog } from "@renderer/components/ai/session-delete-dialog";
+import {
+  SessionPersonaDialog,
+  SessionRenameDialog,
+} from "@renderer/components/ai/session-edit-dialogs";
+import { UpdateRailButton } from "@renderer/components/ai/update-panel";
 import { Button } from "@renderer/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@renderer/components/ui/context-menu";
 import {
   SESSION_STATUS_LABELS,
   SIDEBAR_MAX_WIDTH,
@@ -40,22 +55,8 @@ import { relativeTime } from "@renderer/lib/relative-time";
 import { projectParents as parentsOf, sessionRowStatus } from "@renderer/lib/sidebar";
 import type { SessionRowStatus } from "@renderer/lib/types";
 import { referenceName } from "@renderer/lib/workspace-links";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@renderer/components/ui/context-menu";
 import { selectProjectDirectory, useAgentStore } from "@renderer/stores/agent";
-import { SessionDeleteDialog } from "@renderer/components/ai/session-delete-dialog";
-import {
-  SessionPersonaDialog,
-  SessionRenameDialog,
-} from "@renderer/components/ai/session-edit-dialogs";
-import { UpdateRailButton } from "@renderer/components/ai/update-panel";
 import { SettingsNav } from "@renderer/views/settings/SettingsNav";
-import { cn } from "cn";
 import { APP_NAME } from "@shared/constants";
 import type { SessionMeta } from "@shared/contract";
 
@@ -92,7 +93,7 @@ function SessionStatusMark({ status }: { status: SessionRowStatus | null }): JSX
               className={cn(
                 "size-2 rounded-full",
                 status === "approval" && "bg-amber-500",
-                status === "interrupted" && "border-muted-foreground border",
+                status === "interrupted" && "border border-muted-foreground",
                 status === "unread" && "bg-brand",
               )}
             />
@@ -209,7 +210,7 @@ export function AppRail({
         <div
           role="presentation"
           onMouseDown={startExpandDrag}
-          className="hover:bg-sidebar-ring/20 absolute inset-y-10 right-0 z-10 w-1.5 cursor-col-resize transition-colors"
+          className="absolute inset-y-10 right-0 z-10 w-1.5 cursor-col-resize transition-colors hover:bg-sidebar-ring/20"
           title={t("向右拖拽展开面板", locale)}
         />
       )}
@@ -294,7 +295,7 @@ export function SidebarPanel({
         render={
           <div
             className={cn(
-              "group hover:bg-sidebar-accent/65 relative flex items-center rounded-lg transition-colors",
+              "group relative flex items-center rounded-lg transition-colors hover:bg-sidebar-accent/65",
               s.id === sessionId && "bg-sidebar-accent",
             )}
           >
@@ -302,7 +303,7 @@ export function SidebarPanel({
               type="button"
               onClick={() => openSession(s.id)}
               className={cn(
-                "focus-visible:ring-sidebar-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1.5 pr-2 text-left text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-inset",
+                "flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1.5 pr-2 text-left text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-inset",
                 nested ? "pl-7" : "pl-2.5",
               )}
               aria-current={s.id === sessionId ? "page" : undefined}
@@ -311,7 +312,7 @@ export function SidebarPanel({
               <SessionStatusMark status={sessionRowStatus(s, activeRun, interruptedRun)} />
               {s.pinned && !s.archived && (
                 <PinIcon
-                  className="text-muted-foreground -mr-0.5 size-3 shrink-0"
+                  className="-mr-0.5 size-3 shrink-0 text-muted-foreground"
                   aria-label={t("置顶", locale)}
                 />
               )}
@@ -319,7 +320,7 @@ export function SidebarPanel({
                 {s.title}
               </span>
               {/* 只认键盘焦点：鼠标点开会话后焦点留在行上，不该一直把时间换成按钮。 */}
-              <span className="text-muted-foreground shrink-0 text-xs group-hover:hidden group-has-[:focus-visible]:hidden">
+              <span className="shrink-0 text-xs text-muted-foreground group-hover:hidden group-has-[:focus-visible]:hidden">
                 {relativeTime(s.updatedAt, locale)}
               </span>
             </button>
@@ -437,7 +438,7 @@ export function SidebarPanel({
       id="sidebar-panel"
       inert={collapsed}
       className={cn(
-        "bg-sidebar text-sidebar-foreground after:bg-sidebar-border relative flex h-full max-w-[max(220px,calc(100vw-400px))] shrink-0 flex-col overflow-hidden after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-px",
+        "relative flex h-full max-w-[max(220px,calc(100vw-400px))] shrink-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-sidebar-border",
         animateWidth &&
           "motion-safe:transition-[width] motion-safe:duration-200 motion-safe:ease-out",
       )}
@@ -447,7 +448,7 @@ export function SidebarPanel({
         <h2 className="flex min-w-0 items-center gap-2.5 text-[15px] font-semibold tracking-tight">
           {inChat && (
             <span
-              className="bg-sidebar-accent grid size-6 shrink-0 place-items-center rounded-lg"
+              className="grid size-6 shrink-0 place-items-center rounded-lg bg-sidebar-accent"
               aria-hidden="true"
             >
               <SquareTerminalIcon className="size-3.5" strokeWidth={1.75} />
@@ -458,7 +459,7 @@ export function SidebarPanel({
         <Button
           variant="ghost"
           size="icon-sm"
-          className="text-sidebar-foreground/75 hover:bg-sidebar-accent rounded-lg"
+          className="rounded-lg text-sidebar-foreground/75 hover:bg-sidebar-accent"
           onClick={inChat ? () => setPaletteOpen(true) : () => setView("chat")}
           aria-label={headerActionLabel}
           title={inChat ? t("搜索 (Ctrl+K)", locale) : headerActionLabel}
@@ -472,7 +473,7 @@ export function SidebarPanel({
           <div className="shrink-0 px-3 pb-3">
             <Button
               variant="ghost"
-              className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-sidebar-foreground w-full justify-start gap-2.5 rounded-lg text-[13px] font-normal"
+              className="w-full justify-start gap-2.5 rounded-lg text-[13px] font-normal text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               disabled={choosingProject}
               onClick={() => void selectProject()}
             >
@@ -480,7 +481,7 @@ export function SidebarPanel({
             </Button>
             <Button
               variant="ghost"
-              className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground text-sidebar-foreground w-full justify-start gap-2.5 rounded-lg text-[13px] font-normal"
+              className="w-full justify-start gap-2.5 rounded-lg text-[13px] font-normal text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               onClick={() => {
                 setView("chat");
                 void newSession();
@@ -493,7 +494,7 @@ export function SidebarPanel({
           <nav aria-label={t("聊天", locale)} className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
             {recentProjects.length > 0 && (
               <section className="flex flex-col gap-1 pb-3">
-                <h3 className="text-sidebar-foreground/70 px-2.5 py-1 text-xs">
+                <h3 className="px-2.5 py-1 text-xs text-sidebar-foreground/70">
                   {t("最近项目", locale)}
                 </h3>
                 {recentProjects.map((directory) => {
@@ -508,7 +509,7 @@ export function SidebarPanel({
                     <section key={directory} aria-label={directory}>
                       <div
                         className={cn(
-                          "group hover:bg-sidebar-accent/65 flex items-center rounded-lg transition-colors",
+                          "group flex items-center rounded-lg transition-colors hover:bg-sidebar-accent/65",
                           current && "bg-sidebar-accent",
                         )}
                       >
@@ -522,18 +523,18 @@ export function SidebarPanel({
                           onClick={() =>
                             chats ? toggleProject(directory) : void selectProject({ directory })
                           }
-                          className="focus-visible:ring-sidebar-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1.5 pr-2 pl-2.5 text-left text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1.5 pr-2 pl-2.5 text-left text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-inset"
                         >
                           <Icon
                             aria-hidden="true"
                             className={cn(
-                              "text-muted-foreground size-4 shrink-0 motion-safe:transition-transform",
+                              "size-4 shrink-0 text-muted-foreground motion-safe:transition-transform",
                               expanded && "rotate-90",
                             )}
                           />
                           <span className="truncate">{referenceName(directory)}</span>
                           {parent && (
-                            <span className="text-muted-foreground min-w-0 shrink-[2] truncate text-xs">
+                            <span className="min-w-0 shrink-[2] truncate text-xs text-muted-foreground">
                               {parent}
                             </span>
                           )}
@@ -560,7 +561,7 @@ export function SidebarPanel({
             )}
             {unlinked && (
               <section className="pb-3" aria-label={t("未关联项目", locale)}>
-                <h3 className="text-sidebar-foreground/70 px-2.5 py-1 text-xs">
+                <h3 className="px-2.5 py-1 text-xs text-sidebar-foreground/70">
                   {t("未关联项目", locale)}
                 </h3>
                 {unlinked.map((chat) => renderSessionRow(chat))}
@@ -569,20 +570,20 @@ export function SidebarPanel({
             {sessions.length === 0 && recentProjects.length === 0 && (
               <output className="flex flex-col gap-0.5 px-2.5 py-1">
                 <span className="text-[13px]">{t("还没有聊天", locale)}</span>
-                <span className="text-sidebar-foreground/70 text-xs leading-5">
+                <span className="text-xs leading-5 text-sidebar-foreground/70">
                   {t("打开项目或发送第一条消息后，聊天会出现在这里。", locale)}
                 </span>
               </output>
             )}
             {archived.size > 0 && (
               <section>
-                <h3 className="text-sidebar-foreground/70 px-2.5 py-1 text-xs">
+                <h3 className="px-2.5 py-1 text-xs text-sidebar-foreground/70">
                   {t("已归档", locale)}
                 </h3>
                 {[...archived].map(([directory, chats]) => (
                   <section key={directory ?? ""}>
                     <h4
-                      className="text-muted-foreground truncate px-2.5 py-1 text-xs"
+                      className="truncate px-2.5 py-1 text-xs text-muted-foreground"
                       title={directory ?? undefined}
                     >
                       {directory ? referenceName(directory) : t("未关联项目", locale)}
@@ -609,7 +610,7 @@ export function SidebarPanel({
       <div
         role="presentation"
         onMouseDown={startDrag}
-        className="hover:bg-sidebar-ring/20 absolute inset-y-10 right-0 z-10 w-1.5 cursor-col-resize transition-colors"
+        className="absolute inset-y-10 right-0 z-10 w-1.5 cursor-col-resize transition-colors hover:bg-sidebar-ring/20"
         title={t("拖拽调整宽度；向左拖到底收起面板", locale)}
       />
     </aside>

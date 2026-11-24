@@ -1,5 +1,6 @@
 // @env browser
 import type { Locale } from "@shared/contract";
+
 import { t } from "./i18n";
 
 export function importSummary(

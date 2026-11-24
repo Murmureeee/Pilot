@@ -3,8 +3,10 @@ import { EventEmitter } from "node:events";
 import { existsSync, mkdtempDisposableSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { screen, type BrowserWindow, type Rectangle } from "electron";
 import { beforeEach, expect, it, vi } from "vitest";
+
 import type { DiagnosticLog } from "../src/main/diagnostics";
 import { loadWindowState, rememberWindow } from "../src/main/window-state";
 

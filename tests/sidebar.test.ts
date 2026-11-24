@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { projectParents, sessionRowStatus } from "../src/renderer/src/lib/sidebar";
 import type { ActiveRun, InterruptedRun } from "../src/shared/contract";
 

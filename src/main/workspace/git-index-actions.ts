@@ -3,12 +3,14 @@ import type { ExecFileException } from "node:child_process";
 import { access, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+
 import type {
   GitChange,
   GitCommitResult,
   GitPatchSelection,
   GitStageSelection,
 } from "@shared/contract";
+
 import { GIT_COMMIT_TIMEOUT_MS } from "./constants";
 import { readGit, readGitBuffer } from "./git";
 import { captureGitSnapshot, compareGitSnapshots } from "./git-changes";

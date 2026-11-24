@@ -1,5 +1,6 @@
 // @env node
 import type { IpcMainInvokeEvent } from "electron";
+
 import type {
   AGENT_EVENT_CHANNEL,
   IPC,

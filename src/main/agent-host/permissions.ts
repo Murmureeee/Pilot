@@ -2,20 +2,23 @@
 // 权限门：读类默认放行；写类/命令按规则放行，未命中规则则广播确认请求并阻塞等待应答。
 import { randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
+
 import type { BeforeToolCallResult } from "@earendil-works/pi-agent-core";
+
 import type {
   ApprovalMode,
   PermissionDecision,
   PermissionRequest,
   ToolRule,
 } from "@shared/contract";
-import type { McpToolPolicy } from "./mcp/types";
-import { isReadOnly, labelOf, pathOfArgs } from "./tools";
-import type { ToolEnvironment } from "./tools/types";
+
 import { createToolPathResolver, isWithinDirectory } from "../workspace/paths";
 import { getCommandShell } from "../workspace/shell";
 import { findCommandDanger } from "./command-danger";
 import { commandPrefixMatches, parseCommandScope } from "./command-scope";
+import type { McpToolPolicy } from "./mcp/types";
+import { isReadOnly, labelOf, pathOfArgs } from "./tools";
+import type { ToolEnvironment } from "./tools/types";
 import type { PendingPermission } from "./types";
 
 type Broadcast = (request: PermissionRequest) => void;

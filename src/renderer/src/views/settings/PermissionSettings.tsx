@@ -1,6 +1,8 @@
 // @env browser
-import { useRef, useState, type JSX } from "react";
+import { cn } from "cn";
 import { CheckIcon, EyeIcon, ShieldCheckIcon, ZapIcon } from "lucide-react";
+import { useRef, useState, type JSX } from "react";
+
 import { ListEmpty } from "@renderer/components/ai/list-empty";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -12,7 +14,7 @@ import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { describeToolScope } from "@renderer/lib/tool-rules";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { ApprovalMode, PublicSettings } from "@shared/contract";
-import { cn } from "cn";
+
 import { SettingsGroup } from "./SettingsGroup";
 
 const MODE_ICONS: Record<ApprovalMode, typeof EyeIcon> = {
@@ -69,7 +71,7 @@ export function PermissionSettings({ settings }: { settings: PublicSettings }): 
                 onClick={() => {
                   if (!selected) void update(() => setDefaultApprovalMode(option));
                 }}
-                className="group focus-visible:ring-ring flex w-full items-start gap-3 py-4 text-left outline-none focus-visible:ring-2 disabled:opacity-60"
+                className="group flex w-full items-start gap-3 py-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
               >
                 <Icon
                   aria-hidden="true"
@@ -80,7 +82,7 @@ export function PermissionSettings({ settings }: { settings: PublicSettings }): 
                   <span className={cn("text-sm font-medium group-hover:underline", risk)}>
                     {t(APPROVAL_MODE_OPTIONS[option].label, locale)}
                   </span>
-                  <span className="text-muted-foreground text-xs leading-5">
+                  <span className="text-xs leading-5 text-muted-foreground">
                     {t(APPROVAL_MODE_OPTIONS[option].description, locale)}
                   </span>
                 </span>
@@ -103,7 +105,7 @@ export function PermissionSettings({ settings }: { settings: PublicSettings }): 
           ref={rulesList}
           aria-labelledby="settings-saved-rules"
           tabIndex={-1}
-          className="settings-list focus-visible:ring-ring min-w-0 outline-none focus-visible:ring-2"
+          className="settings-list min-w-0 outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {rules.length === 0 && (
             <ListEmpty
@@ -114,14 +116,14 @@ export function PermissionSettings({ settings }: { settings: PublicSettings }): 
           {rules.map((rule) => (
             <div key={JSON.stringify(rule)} className="settings-row">
               <div className="min-w-0 flex-1 basis-44">
-                <p className="wrap-anywhere text-sm font-medium">
+                <p className="text-sm font-medium wrap-anywhere">
                   {rule.toolName in TOOL_RULE_LABELS
                     ? t(TOOL_RULE_LABELS[rule.toolName], locale)
                     : rule.toolName}
                 </p>
                 <p
                   className={cn(
-                    "wrap-anywhere text-xs leading-5",
+                    "text-xs leading-5 wrap-anywhere",
                     rule.toolName === "bash" && !rule.commandPrefix
                       ? PERMISSION_ATTENTION_TEXT
                       : "text-muted-foreground",
@@ -146,7 +148,7 @@ export function PermissionSettings({ settings }: { settings: PublicSettings }): 
         </fieldset>
       </SettingsGroup>
       {error && (
-        <p role="alert" className="text-destructive text-sm">
+        <p role="alert" className="text-sm text-destructive">
           {localizeError(error, locale)}
         </p>
       )}

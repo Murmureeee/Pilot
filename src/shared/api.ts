@@ -48,13 +48,13 @@ import type {
   WorkspaceReferencePreview,
   WorkspaceReferenceRequest,
 } from "./contract";
-import type { McpServerInfo, McpServerInput } from "./mcp";
 import type {
   ExternalImportKind,
   ExternalImportPreview,
   ImportedPluginInfo,
   ImportReport,
 } from "./imports";
+import type { McpServerInfo, McpServerInput } from "./mcp";
 
 export interface PiApi {
   ping(request: PingRequest): Promise<PingResponse>;

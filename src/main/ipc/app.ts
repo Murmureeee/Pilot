@@ -1,6 +1,8 @@
 // @env node
 import { mkdirSync } from "node:fs";
+
 import { BrowserWindow, app, nativeTheme, shell, type WebContents } from "electron";
+
 import {
   IPC,
   type MenuAction,

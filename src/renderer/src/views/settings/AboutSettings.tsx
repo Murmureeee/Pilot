@@ -1,11 +1,13 @@
 // @env browser
-import type { JSX } from "react";
 import { ExternalLinkIcon } from "lucide-react";
+import type { JSX } from "react";
+
 import { UpdatePanel } from "@renderer/components/ai/update-panel";
 import { APP_LINKS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { APP_NAME } from "@shared/constants";
 import type { AppInfo } from "@shared/contract";
+
 import { SettingsGroup, SettingsItem } from "./SettingsGroup";
 
 export function AboutSettings({ appInfo }: { appInfo: AppInfo | null }): JSX.Element {
@@ -19,7 +21,7 @@ export function AboutSettings({ appInfo }: { appInfo: AppInfo | null }): JSX.Ele
             label={t("版本", locale)}
             description={appInfo?.isDev ? t("开发模式", locale) : undefined}
           >
-            <span className="text-muted-foreground text-sm select-text">
+            <span className="text-sm text-muted-foreground select-text">
               {appInfo?.version ?? "…"}
             </span>
           </SettingsItem>
@@ -42,10 +44,10 @@ export function AboutSettings({ appInfo }: { appInfo: AppInfo | null }): JSX.Ele
               href={link.href}
               target="_blank"
               rel="noreferrer"
-              className="settings-row focus-visible:ring-ring flex-nowrap text-sm font-medium outline-none hover:underline focus-visible:ring-2"
+              className="settings-row flex-nowrap text-sm font-medium outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="min-w-0 flex-1">{t(link.label, locale)}</span>
-              <ExternalLinkIcon aria-hidden="true" className="text-muted-foreground size-4" />
+              <ExternalLinkIcon aria-hidden="true" className="size-4 text-muted-foreground" />
             </a>
           ))}
         </div>

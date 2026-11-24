@@ -5,7 +5,9 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, readlink, realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
+
 import type { GitChange, GitChangesView } from "@shared/contract";
+
 import {
   GIT_FILE_READ_CONCURRENCY,
   GIT_STATUS_TIMEOUT_MS,

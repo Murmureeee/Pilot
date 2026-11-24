@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { windowShortcutAction } from "../src/renderer/src/lib/window-shortcuts";
 
 type Mods = Partial<Record<"ctrlKey" | "metaKey" | "shiftKey" | "altKey", boolean>>;

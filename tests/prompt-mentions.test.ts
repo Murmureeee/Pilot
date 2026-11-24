@@ -8,7 +8,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
+
 import { legacyMentionParts, prepareMentionPrompt } from "../src/main/agent-host/mentions";
 import { MENTION_CONTEXT_HEADING } from "../src/shared/constants";
 import type { PromptMention } from "../src/shared/contract";

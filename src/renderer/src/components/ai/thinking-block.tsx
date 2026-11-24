@@ -1,6 +1,8 @@
 // @env browser
-import { useState, type JSX } from "react";
+import { cn } from "cn";
 import { BrainIcon } from "lucide-react";
+import { useState, type JSX } from "react";
+
 import {
   TraceCollapsible,
   TraceCollapsibleContent,
@@ -11,7 +13,7 @@ import {
 } from "@renderer/components/ui/trace";
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { UiPart } from "@shared/contract";
-import { cn } from "cn";
+
 import { Response } from "./response";
 
 export function ThinkingBlock({

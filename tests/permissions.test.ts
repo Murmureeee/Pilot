@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { PermissionManager } from "../src/main/agent-host/permissions";
 import { homedir } from "node:os";
+
+import { describe, expect, it } from "vitest";
+
 import type { ApprovalMode, CommandShell, PermissionRequest, ToolRule } from "@shared/contract";
+
+import { PermissionManager } from "../src/main/agent-host/permissions";
 
 /** 结算宏任务 */
 const flush = (): Promise<void> => new Promise((resolveP) => setTimeout(resolveP, 0));

@@ -1,5 +1,6 @@
 import type { TranscriptContext } from "@earendil-works/pi-ai";
 import { describe, expect, it, vi } from "vitest";
+
 import {
   listModels,
   resolveModel,

@@ -1,24 +1,24 @@
 {
   "name": "pilot",
-  "productName": "Pilot",
   "version": "0.3.1",
   "private": true,
   "description": "Desktop AI agent app built on pi (earendil-works/pi)",
   "homepage": "https://github.com/Murmureeee/Pilot",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "package:win": "pnpm build && node scripts/package-win.mjs",
-    "package:linux": "pnpm build && node scripts/package-linux.mjs",
-    "preview": "electron-vite preview",
-    "postinstall": "node scripts/restore-electron.mjs",
-    "format": "oxfmt --write src tests",
-    "lint": "oxlint src tests && oxfmt --check src tests",
-    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
+    "ci": "pnpm lint && pnpm typecheck && pnpm knip && pnpm test --run",
+    "dev": "electron-vite dev",
+    "format": "oxfmt --write src tests package.json",
+    "format:check": "oxfmt --check src tests package.json",
     "knip": "knip",
+    "lint": "oxlint src tests && pnpm format:check",
+    "package:linux": "pnpm build && node scripts/package-linux.mjs",
+    "package:win": "pnpm build && node scripts/package-win.mjs",
+    "postinstall": "node scripts/restore-electron.mjs",
+    "preview": "electron-vite preview",
     "test": "vitest",
-    "ci": "pnpm lint && pnpm typecheck && pnpm knip && pnpm test --run"
+    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -59,5 +59,6 @@
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
-  }
+  },
+  "productName": "Pilot"
 }

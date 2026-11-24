@@ -205,7 +205,7 @@ button.workspace-reference:focus-visible {
 
 @layer components {
   .app-titlebar-control {
-    @apply text-sidebar-foreground/85 focus-visible:ring-sidebar-ring inline-flex h-7 shrink-0 items-center justify-center rounded-md outline-none transition-colors focus-visible:ring-2 enabled:hover:bg-sidebar-foreground/8 enabled:hover:text-sidebar-foreground disabled:opacity-40;
+    @apply inline-flex h-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/85 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring enabled:hover:bg-sidebar-foreground/8 enabled:hover:text-sidebar-foreground disabled:opacity-40;
   }
 
   .workspace-column {
@@ -222,12 +222,12 @@ button.workspace-reference:focus-visible {
 
   /* 设置行平铺在页面上，只用细线分隔，文字与分组标题左对齐。 */
   .settings-list {
-    @apply divide-border divide-y border-y;
+    @apply divide-y divide-border border-y;
   }
 
   /* 需要整体编辑或可滚动选择的内容（提供方表单、提供方列表）才用卡片。 */
   .settings-card {
-    @apply divide-border bg-card divide-y rounded-2xl border;
+    @apply divide-y divide-border rounded-2xl border bg-card;
   }
 
   .settings-row {

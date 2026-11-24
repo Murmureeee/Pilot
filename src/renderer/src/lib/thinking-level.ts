@@ -1,7 +1,8 @@
 // @env browser
 // 思考强度滑块的档位映射与 pi 的 ThinkingLevel 一一对应。
-import { THINKING_LEVELS } from "../../../shared/constants";
 import type { ThinkingLevel } from "@shared/contract";
+
+import { THINKING_LEVELS } from "../../../shared/constants";
 
 export const THINKING_LABELS: Record<ThinkingLevel, string> = {
   off: "关闭",

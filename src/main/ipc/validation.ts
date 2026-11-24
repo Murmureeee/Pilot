@@ -1,5 +1,6 @@
 // @env node
 import { z } from "zod";
+
 import {
   LOG_LEVELS,
   SUPPORTED_LOCALES,

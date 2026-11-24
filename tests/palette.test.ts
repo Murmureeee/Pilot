@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { filterEntries, type PaletteEntry } from "../src/renderer/src/lib/palette";
 import { relativeTime } from "../src/renderer/src/lib/relative-time";
 

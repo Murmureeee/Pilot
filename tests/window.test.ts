@@ -1,5 +1,6 @@
 // @env node
 import { expect, it } from "vitest";
+
 import { revealWindow } from "../src/main/window";
 
 function fakeWindow(

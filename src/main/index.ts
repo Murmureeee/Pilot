@@ -1,18 +1,14 @@
 // @env node
 import { existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
+
 import { BrowserWindow, Menu, app, nativeTheme, session, shell } from "electron";
+
 import { APP_NAME } from "../shared/constants";
 import { AGENT_EVENT_CHANNEL, UPDATE_STATUS_CHANNEL } from "../shared/contract";
 import { AgentHost } from "./agent-host/host";
 import { McpManager } from "./agent-host/mcp";
 import { SessionStore } from "./agent-host/session-store";
-import { DiagnosticLog, errorDetails } from "./diagnostics";
-import { logRendererConsole } from "./diagnostics/renderer";
-import { registerIpc } from "./ipc";
-import { registerRenderer, sendToRenderers } from "./ipc/transport";
-import { getLogLevel, loadSettings, saveSettings } from "./settings";
-import type { Settings } from "./settings/types";
 import { runAgentSmoke } from "./agent-host/smoke";
 import {
   DEFAULT_WINDOW_SIZE,
@@ -23,7 +19,13 @@ import {
   WINDOW_TITLE_BAR_HEIGHT,
 } from "./constants";
 import { DesktopExit } from "./desktop-exit";
+import { DiagnosticLog, errorDetails } from "./diagnostics";
+import { logRendererConsole } from "./diagnostics/renderer";
+import { registerIpc } from "./ipc";
+import { registerRenderer, sendToRenderers } from "./ipc/transport";
 import { prepareUserDataDirectory } from "./profile";
+import { getLogLevel, loadSettings, saveSettings } from "./settings";
+import type { Settings } from "./settings/types";
 import { createSleepBlocker } from "./sleep-blocker";
 import { DesktopUpdater } from "./updater";
 import { VerificationManager } from "./verification";

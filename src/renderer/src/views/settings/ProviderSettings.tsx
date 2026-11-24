@@ -1,6 +1,8 @@
 // @env browser
-import { useState, type JSX } from "react";
+import { cn } from "cn";
 import { CheckIcon, ChevronDownIcon, PlusIcon, SaveIcon } from "lucide-react";
+import { useState, type JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import {
   DropdownMenu,
@@ -18,7 +20,7 @@ import { useAgentStore } from "@renderer/stores/agent";
 import { THINKING_LEVELS } from "@shared/constants";
 import type { ProviderInput, PublicSettings, ThinkingLevel } from "@shared/contract";
 import { isOpenAiProvider } from "@shared/providers";
-import { cn } from "cn";
+
 import { ProviderEditor } from "./ProviderEditor";
 import type { DraftProvider } from "./types";
 
@@ -117,9 +119,9 @@ export function ProviderSettings({ settings }: { settings: PublicSettings }): JS
             <PlusIcon data-icon="inline-start" /> {t("添加提供方", locale)}
           </Button>
         </div>
-        <div className="settings-card max-h-52 overflow-y-auto [scrollbar-width:thin]">
+        <div className="settings-card max-h-52 [scrollbar-width:thin] overflow-y-auto">
           {drafts.length === 0 && (
-            <p className="text-muted-foreground px-4 py-3.5 text-sm">
+            <p className="px-4 py-3.5 text-sm text-muted-foreground">
               {t("尚未配置 Provider", locale)}
             </p>
           )}
@@ -130,7 +132,7 @@ export function ProviderSettings({ settings }: { settings: PublicSettings }): JS
               aria-pressed={draft.id === editorId}
               onClick={() => setEditorId(draft.id)}
               className={cn(
-                "settings-row hover:bg-accent/80 focus-visible:ring-ring w-full gap-x-3 text-start outline-none focus-visible:ring-2 focus-visible:ring-inset",
+                "settings-row w-full gap-x-3 text-start outline-none hover:bg-accent/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                 draft.id === editorId && "bg-accent/65",
               )}
             >
@@ -138,7 +140,7 @@ export function ProviderSettings({ settings }: { settings: PublicSettings }): JS
                 <span className="truncate text-sm">
                   {displayProviderName(draft, locale) || draft.id}
                 </span>
-                <span className="text-muted-foreground truncate text-xs">
+                <span className="truncate text-xs text-muted-foreground">
                   {t(PROVIDER_KIND_LABELS[draft.kind], locale)}
                 </span>
               </span>
@@ -173,7 +175,7 @@ export function ProviderSettings({ settings }: { settings: PublicSettings }): JS
             <h2 id="thinking-levels-heading" className="text-sm font-medium">
               {t("可用思考强度", locale)}
             </h2>
-            <p className="text-muted-foreground text-xs leading-5">
+            <p className="text-xs leading-5 text-muted-foreground">
               {t("选择聊天面板显示的档位。实际生效取决于模型支持。", locale)}
             </p>
           </div>
@@ -212,13 +214,13 @@ export function ProviderSettings({ settings }: { settings: PublicSettings }): JS
         </div>
       </section>
       {error && (
-        <p role="alert" className="text-destructive wrap-anywhere text-sm">
+        <p role="alert" className="text-sm wrap-anywhere text-destructive">
           {localizeError(error, locale)}
         </p>
       )}
       <div className="flex flex-wrap items-center justify-end gap-2">
         {saved && !dirty && (
-          <output className="text-muted-foreground text-xs">{t("已保存", locale)}</output>
+          <output className="text-xs text-muted-foreground">{t("已保存", locale)}</output>
         )}
         <Button size="sm" disabled={saving || !dirty} onClick={() => void save()}>
           <SaveIcon data-icon="inline-start" /> {t(saving ? "保存中…" : "保存", locale)}

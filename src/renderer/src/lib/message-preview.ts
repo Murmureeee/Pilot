@@ -1,5 +1,6 @@
 // @env browser
 import type { UiMessage } from "@shared/contract";
+
 import { visibleMessageText } from "../../../shared/mentions";
 import type { TurnPreview } from "./types";
 

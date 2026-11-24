@@ -1,5 +1,6 @@
 // @env node
 import type { CommandPrefix, CommandShell } from "@shared/contract";
+
 import {
   BASH_WORD_CHARACTER,
   COMMAND_NAME,

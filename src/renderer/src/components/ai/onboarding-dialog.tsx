@@ -2,10 +2,11 @@
 // 首次启动引导向导（FR-5.7）：三步 provider → 连接 → 模型。
 // 未保存草稿也支持目录浏览/连通性测试（settingsModelCatalog/testProvider 接受 ProviderInput）。
 // 完成 = 把草稿追加进 providers 并激活（保留已有 provider）。
-import { useState, type JSX } from "react";
+import { cn } from "cn";
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, LoaderCircleIcon } from "lucide-react";
+import { useState, type JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
-import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import {
   Dialog,
   DialogContent,
@@ -14,8 +15,8 @@ import {
   DialogTitle,
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
+import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
-import { cn } from "cn";
 import { APP_NAME } from "@shared/constants";
 import type {
   ModelCatalogEntry,
@@ -24,6 +25,7 @@ import type {
   ProviderTestResult,
 } from "@shared/contract";
 import { isLocalOpenAiProvider, isOpenAiProvider } from "@shared/providers";
+
 import { LocalProviderPresets } from "./local-provider-presets";
 
 const KIND_OPTIONS: { kind: ProviderKind; label: string; desc: string }[] = [
@@ -180,7 +182,7 @@ export function OnboardingDialog({
             <div key={label} className="flex min-w-0 flex-1 items-center gap-1.5">
               <span
                 className={cn(
-                  "text-muted-foreground flex size-5 shrink-0 items-center justify-center rounded-full border text-xs",
+                  "flex size-5 shrink-0 items-center justify-center rounded-full border text-xs text-muted-foreground",
                   step > i + 1 && "border-emerald-500 text-emerald-600 dark:text-emerald-400",
                   step === i + 1 && "border-foreground text-foreground",
                 )}
@@ -210,15 +212,15 @@ export function OnboardingDialog({
                   setModelId(o.kind === "faux" ? "faux-default" : "");
                 }}
                 className={cn(
-                  "border-border/70 hover:bg-accent flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors",
+                  "flex items-center gap-3 rounded-xl border border-border/70 px-3 py-2.5 text-left transition-colors hover:bg-accent",
                   kind === o.kind && "bg-accent",
                 )}
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-sm">{t(o.label, locale)}</p>
-                  <p className="text-muted-foreground text-xs">{t(o.desc, locale)}</p>
+                  <p className="text-xs text-muted-foreground">{t(o.desc, locale)}</p>
                 </div>
-                {kind === o.kind && <CheckIcon className="text-foreground size-4 shrink-0" />}
+                {kind === o.kind && <CheckIcon className="size-4 shrink-0 text-foreground" />}
               </button>
             ))}
           </div>
@@ -227,7 +229,7 @@ export function OnboardingDialog({
         {step === 2 && (
           <div className="grid gap-3">
             {kind === "faux" ? (
-              <p className="text-muted-foreground text-sm">
+              <p className="text-sm text-muted-foreground">
                 {t(
                   "演示模型无需任何配置。发送「演示」可体验工具调用，发送「计划演示」可查看任务计划。",
                   locale,
@@ -236,7 +238,7 @@ export function OnboardingDialog({
             ) : (
               <>
                 {isOpenAiProvider(kind) && (
-                  <div className="text-muted-foreground grid gap-1 text-xs">
+                  <div className="grid gap-1 text-xs text-muted-foreground">
                     <span>Base URL</span>
                     <Input
                       aria-label="Base URL"
@@ -251,7 +253,7 @@ export function OnboardingDialog({
                     {kind === "openai-compatible" && <LocalProviderPresets onSelect={setBaseUrl} />}
                   </div>
                 )}
-                <div className="text-muted-foreground grid gap-1 text-xs">
+                <div className="grid gap-1 text-xs text-muted-foreground">
                   <span>{localProvider ? t("API Key（本地可选）", locale) : "API Key"}</span>
                   <Input
                     type="password"
@@ -268,16 +270,16 @@ export function OnboardingDialog({
         {step === 3 && (
           <div className="grid gap-3">
             {kind === "faux" ? (
-              <p className="text-muted-foreground text-sm">faux-default</p>
+              <p className="text-sm text-muted-foreground">faux-default</p>
             ) : (
               <>
-                <div className="text-muted-foreground grid gap-1 text-xs">
+                <div className="grid gap-1 text-xs text-muted-foreground">
                   <span className="flex items-center gap-2">
                     {t("模型 ID", locale)}
                     <button
                       type="button"
                       onClick={() => void openCatalog()}
-                      className="text-foreground hover:bg-accent rounded-md px-1.5 py-0.5 font-normal transition-colors"
+                      className="rounded-md px-1.5 py-0.5 font-normal text-foreground transition-colors hover:bg-accent"
                     >
                       {t("浏览模型目录", locale)}
                     </button>
@@ -289,7 +291,7 @@ export function OnboardingDialog({
                   />
                 </div>
                 {catalog.loading && (
-                  <p className="text-muted-foreground text-xs">{t("加载中…", locale)}</p>
+                  <p className="text-xs text-muted-foreground">{t("加载中…", locale)}</p>
                 )}
                 {catalog.error && (
                   <p className="rounded-md bg-destructive/10 px-2 py-1.5 font-mono text-xs text-destructive">
@@ -297,17 +299,17 @@ export function OnboardingDialog({
                   </p>
                 )}
                 {catalog.entries.length > 0 && (
-                  <div className="border-border/70 max-h-48 overflow-y-auto rounded-xl border">
+                  <div className="max-h-48 overflow-y-auto rounded-xl border border-border/70">
                     {catalog.entries.map((m) => (
                       <button
                         key={m.id}
                         type="button"
                         onClick={() => setModelId(m.id)}
-                        className="hover:bg-accent flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors"
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent"
                       >
                         <span className="min-w-0 flex-1 truncate">{m.id}</span>
                         {modelId === m.id && (
-                          <CheckIcon className="text-foreground size-3.5 shrink-0" />
+                          <CheckIcon className="size-3.5 shrink-0 text-foreground" />
                         )}
                       </button>
                     ))}

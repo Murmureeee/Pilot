@@ -1,6 +1,8 @@
 // @env node
 import { isAbsolute, relative } from "node:path";
+
 import type { CommandDanger, CommandShell } from "@shared/contract";
+
 import { createToolPathResolver } from "../workspace/paths";
 import { inspectShellCommand } from "./command-scope";
 import {
@@ -150,7 +152,11 @@ function deletionDanger(
     const word = arg?.toLowerCase().replace(/^[\u2013-\u2015]/, "-");
     if (flags && word === "--") {
       flags = false;
-    } else if (flags && word && (/^-/.test(word) || (mayUseCmdFlags && /^\/[sq]$/.test(word)))) {
+    } else if (
+      flags &&
+      word &&
+      (word.startsWith("-") || (mayUseCmdFlags && /^\/[sq]$/.test(word)))
+    ) {
       const flag = word.split(":", 1)[0];
       recursive ||= /^(?:--recursive|-r|-re|-rec|-recu|-recur|-recurs|-recurse|\/s)$/.test(flag);
       force ||= /^(?:--force|-f|-fo|-for|-forc|-force|\/q)$/.test(flag);

@@ -1,7 +1,9 @@
 // @env node
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+
 import type { ProjectInstructionSource } from "@shared/contract";
+
 import { createToolPathResolver } from "../workspace/paths";
 
 const INSTRUCTIONS_FILE = "AGENTS.md";

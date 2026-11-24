@@ -1,13 +1,5 @@
 // @env browser
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type JSX,
-  type KeyboardEvent,
-} from "react";
+import { cn } from "cn";
 import {
   ArrowUpIcon,
   BlocksIcon,
@@ -20,6 +12,16 @@ import {
   SquareIcon,
   ZapIcon,
 } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type JSX,
+  type KeyboardEvent,
+} from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -37,8 +39,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
-import { InputGroup, InputGroupAddon } from "@renderer/components/ui/input-group";
 import { Input } from "@renderer/components/ui/input";
+import { InputGroup, InputGroupAddon } from "@renderer/components/ui/input-group";
 import { useWorkspaceSearch } from "@renderer/hooks/use-workspace-search";
 import {
   composerRange,
@@ -55,7 +57,6 @@ import {
   promptFromDraft,
   trimPrompt,
 } from "@renderer/lib/composer-shortcuts";
-import { loadSendKey } from "@renderer/lib/preferences";
 import type { ComposerSelection } from "@renderer/lib/composer/types";
 import {
   APPROVAL_MODE_OPTIONS,
@@ -63,11 +64,12 @@ import {
   COMPOSER_SURFACE_CLASS,
 } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
+import { loadSendKey } from "@renderer/lib/preferences";
 import type { ComposerCommand, ComposerSuggestion, ComposerToolbarMenu } from "@renderer/lib/types";
 import { selectActiveSession, selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
 import { APP_NAME, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
 import type { ActiveRun, ApprovalMode, PromptMention } from "@shared/contract";
-import { cn } from "cn";
+
 import { ComposerModelControls } from "./composer-model-controls";
 import { ComposerCaretMenu, ComposerSuggestions } from "./composer-suggestions";
 import { ContextUsage } from "./context-usage";
@@ -475,11 +477,11 @@ export function Composer({
   return (
     <div className="relative flex w-full min-w-0 flex-col gap-2">
       {noticeRun && (
-        <div className="bg-muted/60 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/60 px-3 py-2">
           <div role="status" className="min-w-0 text-sm wrap-anywhere">
             <p>{t(runNotice, locale, [runTitle ?? t("新会话", locale)])}</p>
             {blockedSend && (
-              <p className="text-muted-foreground text-xs">{t("此消息仍在草稿中。", locale)}</p>
+              <p className="text-xs text-muted-foreground">{t("此消息仍在草稿中。", locale)}</p>
             )}
           </div>
           <Button size="xs" variant="ghost" onClick={() => void loadSession(noticeRun.sessionId)}>
@@ -488,7 +490,7 @@ export function Composer({
         </div>
       )}
       {ownRun && (
-        <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-2 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-2 text-xs text-muted-foreground">
           <div className="flex flex-wrap items-center gap-2">
             <output
               className={cn(
@@ -507,7 +509,7 @@ export function Composer({
                 <button
                   type="button"
                   onClick={() => clearQueue(ownRun)}
-                  className="hover:text-foreground underline underline-offset-2"
+                  className="underline underline-offset-2 hover:text-foreground"
                 >
                   {t("清空排队", locale)}
                 </button>
@@ -538,7 +540,7 @@ export function Composer({
         </ComposerCaretMenu>
       )}
       {sendError && (
-        <p role="alert" className="text-destructive wrap-anywhere px-2 text-xs">
+        <p role="alert" className="px-2 text-xs wrap-anywhere text-destructive">
           {localizeError(sendError, locale)}
         </p>
       )}
@@ -549,7 +551,7 @@ export function Composer({
           role="textbox"
           aria-multiline="true"
           data-slot="input-group-control"
-          className="composer-editor relative min-h-[3.75rem] max-h-[min(14rem,38dvh)] w-full overflow-y-auto px-4 pt-3.5 pb-2 text-sm leading-6 wrap-anywhere whitespace-pre-wrap outline-none"
+          className="composer-editor relative max-h-[min(14rem,38dvh)] min-h-[3.75rem] w-full overflow-y-auto px-4 pt-3.5 pb-2 text-sm leading-6 wrap-anywhere whitespace-pre-wrap outline-none"
           aria-label={t("消息", locale)}
           aria-placeholder={placeholder}
           aria-autocomplete="list"
@@ -676,7 +678,7 @@ export function Composer({
                   <button
                     type="button"
                     className={cn(
-                      "focus-visible:ring-ring/40 flex min-h-8 items-center gap-1.5 rounded-full px-3 text-xs whitespace-nowrap transition-colors outline-none focus-visible:ring-2",
+                      "flex min-h-8 items-center gap-1.5 rounded-full px-3 text-xs whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
                       TONE_BADGE[modeMeta.tone],
                     )}
                   />
@@ -689,10 +691,10 @@ export function Composer({
                 side="top"
                 align="start"
                 sideOffset={8}
-                className="min-w-64 max-w-[min(24rem,var(--available-width))]"
+                className="max-w-[min(24rem,var(--available-width))] min-w-64"
               >
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel className="text-foreground font-medium">
+                  <DropdownMenuLabel className="font-medium text-foreground">
                     {t("会话权限模式", locale)}
                   </DropdownMenuLabel>
                   <DropdownMenuItem
@@ -702,7 +704,7 @@ export function Composer({
                     <ShieldCheckIcon className="mt-0.5 shrink-0" aria-hidden="true" />
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="text-sm leading-5">{t("跟随全局默认", locale)}</span>
-                      <span className="text-muted-foreground text-xs leading-4">
+                      <span className="text-xs leading-4 text-muted-foreground">
                         {t(
                           APPROVAL_MODE_OPTIONS[settings?.approvalMode ?? "standard"].label,
                           locale,
@@ -729,7 +731,7 @@ export function Composer({
                           <span className={cn("text-sm leading-5", TONE_TEXT[meta.tone])}>
                             {t(meta.label, locale)}
                           </span>
-                          <span className="text-muted-foreground text-xs leading-4">
+                          <span className="text-xs leading-4 text-muted-foreground">
                             {t(meta.description, locale)}
                           </span>
                         </div>
@@ -764,7 +766,7 @@ export function Composer({
             ) : (
               <Button
                 size="icon-lg"
-                className="disabled:bg-muted disabled:text-muted-foreground rounded-full disabled:opacity-100"
+                className="rounded-full disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
                 disabled={submitting || !canSend}
                 onClick={() => void send()}
                 aria-label={t("发送", locale)}

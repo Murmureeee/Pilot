@@ -1,5 +1,4 @@
 // @env browser
-import { useMemo, useState, type JSX } from "react";
 import {
   FilePenLineIcon,
   FileTextIcon,
@@ -9,6 +8,8 @@ import {
   SearchIcon,
   TerminalIcon,
 } from "lucide-react";
+import { useMemo, useState, type JSX } from "react";
+
 import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block";
 import {
   TraceCollapsible,
@@ -25,6 +26,7 @@ import { parseToolFailure, stackDisplayPath, toolInput } from "@renderer/lib/too
 import type { ToolFailure } from "@renderer/lib/types";
 import { selectWorkingDirectory, useAgentStore } from "@renderer/stores/agent";
 import type { UiPart } from "@shared/contract";
+
 import { InlineWorkspaceReference } from "./workspace-reference";
 
 const TOOL_ICONS = {
@@ -74,7 +76,7 @@ function FailureDetails({
   const framework = failure.frames.filter((frame) => frame.framework);
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
-      <p className="text-destructive max-h-56 overflow-auto overscroll-contain font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap">
+      <p className="max-h-56 overflow-auto overscroll-contain font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap text-destructive">
         {t(failure.frames.length ? failure.summary : failure.message, locale)}
       </p>
       {project.length > 0 && (

@@ -1,5 +1,6 @@
 // @env browser
 import { useEffect, useState, type JSX } from "react";
+
 import {
   ExternalImportDialog,
   ExternalImportResult,
@@ -71,7 +72,7 @@ export function ExternalImportSettings({
               <div key={kind} className="settings-row">
                 <div className="min-w-0 flex-1 basis-48">
                   <h2 className="text-sm font-medium">{t(option.label, locale)}</h2>
-                  <p className="text-muted-foreground mt-0.5 text-xs leading-5">
+                  <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
                     {t(option.description, locale)}
                   </p>
                 </div>
@@ -89,7 +90,7 @@ export function ExternalImportSettings({
         <ExternalImportResult report={report} locale={locale} />
       </div>
       {error && (
-        <p role="alert" className="text-destructive text-sm">
+        <p role="alert" className="text-sm text-destructive">
           {localizeError(error, locale)}
         </p>
       )}
@@ -100,8 +101,8 @@ export function ExternalImportSettings({
             {plugins.map((plugin) => (
               <div key={plugin.id} className="settings-row">
                 <div className="min-w-0 flex-1 basis-44">
-                  <p className="wrap-anywhere text-sm font-medium">{plugin.name}</p>
-                  <p className="text-muted-foreground mt-0.5 text-xs leading-5">
+                  <p className="text-sm font-medium wrap-anywhere">{plugin.name}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
                     {t("来自 {0}，包含 {1}", locale, [
                       IMPORT_SOURCE_LABELS[plugin.source],
                       importSummary(plugin, locale),

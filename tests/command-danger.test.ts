@@ -1,8 +1,11 @@
 import { mkdirSync, mkdtempDisposableSync, realpathSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { CommandDanger, CommandShell } from "@shared/contract";
+
 import { describe, expect, it } from "vitest";
+
+import type { CommandDanger, CommandShell } from "@shared/contract";
+
 import { findCommandDanger } from "../src/main/agent-host/command-danger";
 
 describe.each(["powershell", "bash"] as const)("%s dangerous command rules", (commandShell) => {

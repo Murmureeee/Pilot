@@ -2,8 +2,10 @@
 // 搜索类工具：glob（文件名匹配）与 grep（内容正则搜索）。只读，权限门默认放行。
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, relative } from "node:path";
+
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { int, obj, opt, str } from "@earendil-works/pi-schema";
+
 import { TOOL_LABELS } from "./constants";
 import { looksBinary, truncate } from "./output";
 import type { ResolveToolPath } from "./types";

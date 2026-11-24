@@ -1,7 +1,8 @@
 // @env browser
-import type { JSX } from "react";
-import { CircleCheckIcon, CircleDashedIcon, CircleDotIcon, ListChecksIcon } from "lucide-react";
 import { cn } from "cn";
+import { CircleCheckIcon, CircleDashedIcon, CircleDotIcon, ListChecksIcon } from "lucide-react";
+import type { JSX } from "react";
+
 import {
   Trace,
   TraceCollapsible,
@@ -40,7 +41,7 @@ function PlanSteps({ steps }: { steps: PlanStep[] }): JSX.Element {
               </TraceIcon>
               <span className="flex min-w-0 flex-col gap-0.5">
                 <span className="wrap-anywhere">{step.title}</span>
-                <span className="text-muted-foreground text-xs">{t(label, locale)}</span>
+                <span className="text-xs text-muted-foreground">{t(label, locale)}</span>
               </span>
             </TraceLine>
           </li>
@@ -90,7 +91,7 @@ export function PlanBar({ steps }: { steps: PlanStep[] }): JSX.Element {
       data-plan-bar
       aria-label={t("任务计划", locale)}
       role="group"
-      className="bg-muted/50 rounded-xl border px-3 py-2"
+      className="rounded-xl border bg-muted/50 px-3 py-2"
     >
       <TraceCollapsible>
         <TraceCollapsibleTrigger>

@@ -1,4 +1,5 @@
 // @env browser
+import { AlertTriangleIcon } from "lucide-react";
 import {
   Component,
   useEffect,
@@ -8,7 +9,7 @@ import {
   type PropsWithChildren,
   type ReactNode,
 } from "react";
-import { AlertTriangleIcon } from "lucide-react";
+
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
@@ -61,10 +62,10 @@ function AppErrorPage({ reason }: { reason: string }): JSX.Element {
   return (
     <div
       lang={LOCALE_DETAILS[locale].htmlLang}
-      className="bg-window-frame text-foreground grid h-screen grid-rows-[var(--app-titlebar-height)_minmax(0,1fr)] gap-1.5 px-2.5 pb-2.5"
+      className="grid h-screen grid-rows-[var(--app-titlebar-height)_minmax(0,1fr)] gap-1.5 bg-window-frame px-2.5 pb-2.5 text-foreground"
     >
       <div className="app-drag" aria-hidden="true" />
-      <main className="border-sidebar-border bg-background overflow-y-auto rounded-xl border p-6">
+      <main className="overflow-y-auto rounded-xl border border-sidebar-border bg-background p-6">
         <div className="mx-auto flex min-h-full max-w-lg items-center">
           <Alert variant="destructive">
             <AlertTriangleIcon aria-hidden="true" />

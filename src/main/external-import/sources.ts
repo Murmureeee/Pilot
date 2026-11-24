@@ -1,8 +1,11 @@
 // @env node
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
+
 import { parse } from "smol-toml";
+
 import type { ImportIssue, ImportSource } from "@shared/imports";
+
 import { childDirectories, directory, localPluginPath, within } from "./files";
 import type { ConfigObject, DiscoveredImport, ImportLocations, SourcePlugin } from "./types";
 

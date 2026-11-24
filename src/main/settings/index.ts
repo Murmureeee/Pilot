@@ -1,7 +1,9 @@
 // @env node
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
 import type { LogLevel, PublicSettings, SettingsInput } from "@shared/contract";
+
 import {
   DEFAULT_LOG_LEVEL,
   DEFAULT_THINKING_LEVEL,
@@ -14,9 +16,9 @@ import { SETTINGS_FILE_NAME, SETTINGS_SAVE_BLOCKED } from "../constants";
 import { backupCorruptFile } from "../corrupt-file";
 import { normalizeWorkingDirectory } from "../workspace/paths";
 import { findGitBash, getCommandShell } from "../workspace/shell";
-import { encryptSecret } from "./secrets";
 import { getProviderModels, normalizeModelCatalog } from "./models";
 import { parseSettings } from "./schema";
+import { encryptSecret } from "./secrets";
 import type { ProviderConfig, Settings } from "./types";
 
 function readSettingsFile(path: string): Buffer | undefined {

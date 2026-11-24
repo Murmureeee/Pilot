@@ -2,7 +2,9 @@ import * as fs from "node:fs";
 import { mkdtempDisposableSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
+
 import {
   loadSettings,
   mergeSettingsInput,
@@ -10,8 +12,8 @@ import {
   toPublicSettings,
   validateSettingsInput,
 } from "../src/main/settings";
-import type { Settings } from "../src/main/settings/types";
 import { updateActiveModel } from "../src/main/settings/models";
+import type { Settings } from "../src/main/settings/types";
 
 vi.mock("electron", () => ({ safeStorage: { isEncryptionAvailable: () => false } }));
 vi.mock("node:fs", { spy: true });

@@ -1,6 +1,7 @@
 // @env node
 import { appendFileSync, existsSync, lstatSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
+
 import { LOG_FILE_COUNT, LOG_FILE_MAX_BYTES, LOG_LEVELS } from "../../shared/constants";
 import type { LogLevel } from "../../shared/contract";
 import { LOG_FILE_NAME, SAFE_ERROR_CODES, SAFE_ERROR_NAMES } from "./constants";

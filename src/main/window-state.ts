@@ -1,7 +1,9 @@
 // @env node
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
+
 import { screen, type BrowserWindow, type Rectangle } from "electron";
 import { z } from "zod";
+
 import {
   MINIMUM_VISIBLE_TITLE_BAR,
   MINIMUM_WINDOW_SIZE,

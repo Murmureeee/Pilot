@@ -1,6 +1,7 @@
 // @env node
 import { createHash } from "node:crypto";
 import { addAbortListener } from "node:events";
+
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
   createMcpToolName,
@@ -15,7 +16,9 @@ import {
   type McpTransport,
   type Tool,
 } from "@earendil-works/pi-mcp";
+
 import type { McpServerInfo } from "@shared/mcp";
+
 import { APP_NAME, APP_PACKAGE_NAME } from "../../../shared/constants";
 import { MissingMcpEnvironment, resolveImportedMcp } from "../../external-import/mcp";
 import type { ImportedMcpConnection } from "../../external-import/types";

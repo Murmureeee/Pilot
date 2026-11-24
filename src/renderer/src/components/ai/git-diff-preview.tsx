@@ -1,5 +1,6 @@
 // @env browser
 import { useEffect, useState, type JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block";
 import {
@@ -20,6 +21,7 @@ import type {
   GitRollbackPreview,
   GitStageSelection,
 } from "@shared/contract";
+
 import { DiffLines } from "./file-diff-preview";
 
 function DiffStatus({ message, error = false }: { message: string; error?: boolean }): JSX.Element {
@@ -29,8 +31,8 @@ function DiffStatus({ message, error = false }: { message: string; error?: boole
       role={error ? "alert" : "status"}
       className={
         error
-          ? "text-destructive wrap-anywhere px-3 py-2 text-xs"
-          : "text-muted-foreground px-3 py-2 text-xs"
+          ? "px-3 py-2 text-xs wrap-anywhere text-destructive"
+          : "px-3 py-2 text-xs text-muted-foreground"
       }
     >
       {localizeError(message, locale)}
@@ -99,7 +101,7 @@ export function GitDiffPreview({
       ) : (
         data?.diff && (
           <div
-            className="overflow-x-auto [scrollbar-width:thin]"
+            className="[scrollbar-width:thin] overflow-x-auto"
             tabIndex={0}
             aria-label={t("逐行差异", locale)}
           >
@@ -118,10 +120,10 @@ export function GitDiffPreview({
               hunkAction={
                 revision && data.selectableHunks
                   ? (index) => (
-                      <label className="text-foreground flex items-center gap-1.5 font-sans text-xs">
+                      <label className="flex items-center gap-1.5 font-sans text-xs text-foreground">
                         <input
                           type="checkbox"
-                          className="accent-primary size-3.5"
+                          className="size-3.5 accent-primary"
                           data-git-select-hunk={index}
                           checked={selectedHunks.includes(index)}
                           disabled={blocked}
@@ -144,12 +146,12 @@ export function GitDiffPreview({
       )}
       {data?.diff?.truncated && <DiffStatus message="仅显示部分差异" />}
       {revision && (
-        <div className="border-border flex flex-wrap justify-end gap-2 border-t px-3 py-2">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-border px-3 py-2">
           {area === "staged" ? (
             <label className="flex items-center gap-1.5 text-xs">
               <input
                 type="checkbox"
-                className="accent-primary size-3.5"
+                className="size-3.5 accent-primary"
                 disabled={blocked}
                 checked={Boolean(selected && !selected.hunks)}
                 onChange={(event) =>
@@ -252,10 +254,10 @@ export function GitCheckpointFilePreview({
     }
   };
   return (
-    <div className="border-border min-w-0 border-t" data-git-checkpoint-diff>
+    <div className="min-w-0 border-t border-border" data-git-checkpoint-diff>
       {data?.diff && (
         <div
-          className="overflow-x-auto [scrollbar-width:thin]"
+          className="[scrollbar-width:thin] overflow-x-auto"
           tabIndex={0}
           aria-label={t("逐行差异", locale)}
         >
@@ -272,11 +274,11 @@ export function GitCheckpointFilePreview({
             }
             hunkAction={(index) =>
               data.hunks[index] ? (
-                <label className="text-foreground flex items-center gap-1.5 font-sans text-xs">
+                <label className="flex items-center gap-1.5 font-sans text-xs text-foreground">
                   <input
                     type="checkbox"
                     data-rollback-hunk={index}
-                    className="accent-primary size-3.5"
+                    className="size-3.5 accent-primary"
                     checked={selection.includes(index)}
                     onChange={(event) => {
                       const checked = event.currentTarget.checked;
@@ -297,7 +299,7 @@ export function GitCheckpointFilePreview({
       {!data && !error && <DiffStatus message="加载中…" />}
       {data?.diff?.truncated && <DiffStatus message="仅显示部分差异" />}
       {(data?.wholeFile || data?.hunks.some(Boolean)) && (
-        <div className="border-border flex flex-wrap justify-end gap-2 border-t px-3 py-2">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-border px-3 py-2">
           {data.wholeFile && (
             <Button
               size="sm"
@@ -346,7 +348,7 @@ export function GitCheckpointFilePreview({
               </DialogDescription>
             </DialogHeader>
             <div
-              className="border-border min-h-0 overflow-auto rounded-md border"
+              className="min-h-0 overflow-auto rounded-md border border-border"
               tabIndex={0}
               aria-label={t("预览撤销范围", locale)}
             >

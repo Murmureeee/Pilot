@@ -2,14 +2,16 @@ import * as fs from "node:fs";
 import { existsSync, mkdtempDisposableSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
+
 import {
   messageParts,
   messageText,
   SessionStore,
   toUiMessages,
 } from "../src/main/agent-host/session-store";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 vi.mock("node:fs", { spy: true });
 

@@ -1,6 +1,7 @@
 // @env browser
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
 import { ChevronRightIcon, FileTextIcon, FolderIcon, XIcon } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { WorkspaceReferenceLoad, WorkspaceReferenceTab } from "@renderer/lib/types";
@@ -14,7 +15,7 @@ function FileText({ text, line }: { text: string; line?: number }): JSX.Element 
   return (
     <div className="flex w-max min-w-full items-stretch py-2 font-mono text-xs leading-5">
       <pre
-        className="bg-background text-muted-foreground sticky left-0 me-3 shrink-0 border-r px-2.5 text-right select-none"
+        className="sticky left-0 me-3 shrink-0 border-r bg-background px-2.5 text-right text-muted-foreground select-none"
         aria-hidden="true"
       >
         {numbers}
@@ -27,7 +28,7 @@ function FileText({ text, line }: { text: string; line?: number }): JSX.Element 
             <>
               {target > 0 && lines.slice(0, target).join("\n") + "\n"}
               <mark
-                className="bg-accent text-foreground rounded-xs px-0.5"
+                className="rounded-xs bg-accent px-0.5 text-foreground"
                 data-reference-line={line}
               >
                 {lines[target] || " "}
@@ -109,17 +110,17 @@ export function WorkspaceReferencePanel({
       ref={panel}
       data-workspace-reference-panel
       aria-label={t("引用预览", locale)}
-      className="border-border bg-background flex w-[min(46%,42rem)] min-w-0 shrink-0 flex-col border-l"
+      className="flex w-[min(46%,42rem)] min-w-0 shrink-0 flex-col border-l border-border bg-background"
       onKeyDown={(event) => {
         if (event.key !== "Escape") return;
         event.stopPropagation();
         close();
       }}
     >
-      <header className="border-border/65 flex h-10 shrink-0 items-center justify-between gap-2 border-b pr-2 pl-3">
+      <header className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border/65 pr-2 pl-3">
         <h2
           title={path}
-          className="bg-secondary text-secondary-foreground flex h-7 min-w-0 items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium"
+          className="flex h-7 min-w-0 items-center gap-2 rounded-lg bg-secondary px-2.5 text-[13px] font-medium text-secondary-foreground"
         >
           <Icon aria-hidden="true" className="size-3.5 shrink-0" />
           <span className="truncate">{title}</span>
@@ -139,15 +140,15 @@ export function WorkspaceReferencePanel({
       <div
         ref={body}
         tabIndex={preview?.kind === "file" && preview.text ? 0 : undefined}
-        className="min-h-0 flex-1 overflow-auto overscroll-contain [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin]"
+        className="min-h-0 flex-1 [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] overflow-auto overscroll-contain"
       >
         {!current && (
-          <p role="status" className="text-muted-foreground px-3 py-4 text-xs">
+          <p role="status" className="px-3 py-4 text-xs text-muted-foreground">
             {t("加载中…", locale)}
           </p>
         )}
         {error && (
-          <p role="alert" className="text-muted-foreground px-3 py-4 text-xs">
+          <p role="alert" className="px-3 py-4 text-xs text-muted-foreground">
             {localizeError(error, locale)}
           </p>
         )}
@@ -155,7 +156,7 @@ export function WorkspaceReferencePanel({
           (preview.text ? (
             <FileText text={preview.text} line={line} />
           ) : (
-            <p className="text-muted-foreground px-3 py-4 text-xs">
+            <p className="px-3 py-4 text-xs text-muted-foreground">
               {t(preview.text === null ? "此文件无法在应用内预览。" : "空文件", locale)}
             </p>
           ))}
@@ -168,7 +169,7 @@ export function WorkspaceReferencePanel({
                   <button
                     type="button"
                     title={entry.path}
-                    className="hover:bg-muted focus-visible:ring-ring/50 flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none focus-visible:ring-2"
+                    className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50"
                     onClick={() =>
                       useWorkspaceReferenceStore.getState().open({
                         sessionId: reference.sessionId,
@@ -180,22 +181,22 @@ export function WorkspaceReferencePanel({
                   >
                     <EntryIcon
                       aria-hidden="true"
-                      className="text-muted-foreground size-3.5 shrink-0"
+                      className="size-3.5 shrink-0 text-muted-foreground"
                     />
                     <span className="min-w-0 flex-1 truncate">{referenceName(entry.path)}</span>
                     <ChevronRightIcon
                       aria-hidden="true"
-                      className="text-muted-foreground size-3.5 shrink-0"
+                      className="size-3.5 shrink-0 text-muted-foreground"
                     />
                   </button>
                 </li>
               );
             })}
             {preview.entries.length === 0 && !preview.truncated && (
-              <li className="text-muted-foreground px-2 py-2 text-xs">{t("空文件夹", locale)}</li>
+              <li className="px-2 py-2 text-xs text-muted-foreground">{t("空文件夹", locale)}</li>
             )}
             {preview.truncated && (
-              <li className="text-muted-foreground px-2 py-2 text-xs">
+              <li className="px-2 py-2 text-xs text-muted-foreground">
                 {t("仅显示部分目录内容", locale)}
               </li>
             )}

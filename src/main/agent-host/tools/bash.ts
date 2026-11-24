@@ -1,7 +1,9 @@
 // @env node
 import { spawn } from "node:child_process";
+
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { int, obj, opt, str } from "@earendil-works/pi-schema";
+
 import { createToolPathResolver } from "../../workspace/paths";
 import { shellExecutable } from "../../workspace/shell";
 import { TOOL_LABELS } from "./constants";

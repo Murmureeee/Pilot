@@ -8,8 +8,10 @@ import {
   type ExtraProps,
   type StreamdownTranslations,
 } from "streamdown";
+
 import { useLocale } from "@renderer/lib/i18n";
 import { remarkWorkspaceLinks, workspaceLinkFromHref } from "@renderer/lib/workspace-links";
+
 import { InlineWorkspaceReference } from "./workspace-reference";
 
 const MARKDOWN_PLUGINS = [...Object.values(defaultRemarkPlugins), remarkWorkspaceLinks];

@@ -1,6 +1,7 @@
 // @env browser
-import type { Dispatch, SetStateAction } from "react";
 import type { LucideIcon } from "lucide-react";
+import type { Dispatch, SetStateAction } from "react";
+
 import type {
   FileChangeSummary,
   UiMessage,

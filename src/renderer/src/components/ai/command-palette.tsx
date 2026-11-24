@@ -1,6 +1,6 @@
 // @env browser
 // 全局命令面板（Codex/ChatGPT 风格）：Ctrl+K 唤起，搜快捷操作与会话，键盘导航执行。
-import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from "react";
+import { cn } from "cn";
 import {
   EyeIcon,
   MessageSquareIcon,
@@ -10,7 +10,10 @@ import {
   SquarePenIcon,
   ZapIcon,
 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from "react";
+
 import { Dialog, DialogContent, DialogTitle } from "@renderer/components/ui/dialog";
+import { t, useLocale } from "@renderer/lib/i18n";
 import {
   filterEntries,
   PALETTE_TABS,
@@ -19,9 +22,7 @@ import {
 } from "@renderer/lib/palette";
 import { relativeTime } from "@renderer/lib/relative-time";
 import { selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
-import { t, useLocale } from "@renderer/lib/i18n";
 import type { ApprovalMode } from "@shared/contract";
-import { cn } from "cn";
 
 function EntryIcon({ entry }: { entry: PaletteEntry }): JSX.Element {
   if (entry.kind === "chat") return <MessageSquareIcon className="size-4 shrink-0" />;
@@ -166,7 +167,7 @@ export function CommandPalette(): JSX.Element | null {
       >
         <DialogTitle className="sr-only">{t("搜索", locale)}</DialogTitle>
         <div className="flex items-center gap-2 border-b px-4 py-3">
-          <SearchIcon className="text-muted-foreground size-4 shrink-0" />
+          <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
           <input
             autoFocus
             value={query}
@@ -180,7 +181,7 @@ export function CommandPalette(): JSX.Element | null {
 
         <div ref={listRef} className="max-h-80 min-h-40 overflow-y-auto py-1">
           {filtered.length === 0 && (
-            <p className="text-muted-foreground px-4 py-6 text-center text-sm">
+            <p className="px-4 py-6 text-center text-sm text-muted-foreground">
               {t("没有匹配的结果", locale)}
             </p>
           )}
@@ -190,7 +191,7 @@ export function CommandPalette(): JSX.Element | null {
             return (
               <div key={`${entry.kind}-${entry.id}`}>
                 {showHeader && (
-                  <p className="text-muted-foreground px-4 pb-1 pt-3 text-xs">
+                  <p className="px-4 pt-3 pb-1 text-xs text-muted-foreground">
                     {entry.kind === "action" ? t("快捷操作", locale) : t("聊天", locale)}
                   </p>
                 )}
@@ -233,7 +234,7 @@ export function CommandPalette(): JSX.Element | null {
               {t(tabItem.label, locale)}
             </button>
           ))}
-          <span className="text-muted-foreground ml-auto text-xs">
+          <span className="ml-auto text-xs text-muted-foreground">
             {t("↑↓ 选择 · Enter 执行", locale)}
           </span>
         </div>

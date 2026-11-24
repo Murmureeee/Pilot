@@ -3,7 +3,9 @@ import { execFile, type ExecFileException } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { promisify } from "node:util";
+
 import type { ProjectGitHead } from "@shared/contract";
+
 import { GIT_STATUS_MAX_BYTES, GIT_STATUS_TIMEOUT_MS } from "./constants";
 import { createToolPathResolver, isWithinDirectory } from "./paths";
 import type { GitCommandOptions } from "./types";

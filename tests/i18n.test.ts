@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+
 import { formatDuration } from "../src/renderer/src/lib/duration";
 import {
   currentLocale,

@@ -1,12 +1,14 @@
 // @env node
 import { randomUUID } from "node:crypto";
 import { stripVTControlCharacters } from "node:util";
+
 import type {
   RunRef,
   VerificationResult,
   VerificationState,
   VerificationStatus,
 } from "@shared/contract";
+
 import { launchVerification, stopVerificationProcess, verificationCommands } from "./commands";
 import { VERIFICATION_OUTPUT_LIMIT, VERIFICATION_UPDATE_INTERVAL_MS } from "./constants";
 import { VerificationHistory } from "./history";

@@ -1,12 +1,14 @@
 // @env browser
-import { useState, type JSX } from "react";
 import { ChevronDownIcon, FileDiffIcon, Undo2Icon } from "lucide-react";
+import { useState, type JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import { summarizeChanges } from "@renderer/lib/file-changes";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
 import { useWorkspaceReferenceStore } from "@renderer/stores/workspace-reference";
 import type { FileChangeSummary } from "@shared/contract";
+
 import { DiffStats } from "./diff-stats";
 
 export function FileChangesCard({
@@ -35,10 +37,10 @@ export function FileChangesCard({
   return (
     <section
       data-file-changes
-      className="border-border/80 bg-card min-w-0 overflow-hidden rounded-xl border"
+      className="min-w-0 overflow-hidden rounded-xl border border-border/80 bg-card"
     >
-      <div className="bg-muted/45 flex flex-wrap items-center gap-2.5 px-3 py-2.5">
-        <span className="bg-secondary text-secondary-foreground grid size-8 shrink-0 place-items-center rounded-lg">
+      <div className="flex flex-wrap items-center gap-2.5 bg-muted/45 px-3 py-2.5">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-secondary text-secondary-foreground">
           <FileDiffIcon aria-hidden="true" className="size-4" />
         </span>
         <div className="min-w-0 flex-[1_0_6rem]">
@@ -56,7 +58,7 @@ export function FileChangesCard({
           {t("查看更改", locale)}
         </Button>
       </div>
-      <ul className="divide-border/65 border-border/65 divide-y border-t">
+      <ul className="divide-y divide-border/65 border-t border-border/65">
         {visible.map((change) => (
           <li key={change.id} className="flex min-w-0 items-center gap-2 px-3 py-1.5">
             <button
@@ -65,12 +67,12 @@ export function FileChangesCard({
               data-review-file={change.id}
               disabled={!sessionId}
               onClick={() => show(change.id)}
-              className="hover:text-brand focus-visible:ring-ring/50 min-h-6 min-w-0 flex-1 truncate rounded-sm text-left font-mono text-xs outline-none hover:underline focus-visible:ring-2"
+              className="min-h-6 min-w-0 flex-1 truncate rounded-sm text-left font-mono text-xs outline-none hover:text-brand hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               {change.path}
             </button>
             {change.reverted ? (
-              <span className="text-muted-foreground shrink-0 text-xs">{t("已撤销", locale)}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{t("已撤销", locale)}</span>
             ) : (
               change.stats && <DiffStats stats={change.stats} />
             )}

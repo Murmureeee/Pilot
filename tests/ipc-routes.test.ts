@@ -1,6 +1,8 @@
 import { EventEmitter } from "node:events";
+
 import type { IpcMainInvokeEvent, WebContents } from "electron";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import { registerIpc } from "../src/main/ipc";
 import { handle, registerRenderer, sendToRenderers } from "../src/main/ipc/transport";
 import type { IpcContext } from "../src/main/ipc/types";

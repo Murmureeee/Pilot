@@ -1,8 +1,8 @@
 // @env browser
-import { useEffect, useRef, useState, type JSX } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Slider } from "@base-ui/react/slider";
 import { Toolbar } from "@base-ui/react/toolbar";
+import { cn } from "cn";
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -10,6 +10,8 @@ import {
   ChevronRightIcon,
   RotateCcwIcon,
 } from "lucide-react";
+import { useEffect, useRef, useState, type JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import { COMPOSER_MODEL_OPTION_CLASS } from "@renderer/lib/constants";
 import { displayProviderName, t, useLocale } from "@renderer/lib/i18n";
@@ -20,7 +22,6 @@ import { THINKING_LEVELS } from "@shared/constants";
 import type { SessionModelSelection, ThinkingLevel } from "@shared/contract";
 import { hasSavedModel, resolveSessionModel } from "@shared/providers";
 import { selectThinkingLevel } from "@shared/thinking";
-import { cn } from "cn";
 
 export function ComposerModelControls({
   menu,
@@ -139,11 +140,11 @@ export function ComposerModelControls({
         aria-description={modelName + " " + effort}
         title={thinkingTitle}
         disabled={!settings}
-        className="bg-secondary/75 text-secondary-foreground hover:bg-accent focus-visible:ring-ring/55 data-popup-open:bg-accent flex h-8 min-w-0 max-w-64 items-center gap-1.5 rounded-full px-3 text-xs outline-none focus-visible:ring-2 focus-visible:ring-inset disabled:opacity-60"
+        className="flex h-8 max-w-64 min-w-0 items-center gap-1.5 rounded-full bg-secondary/75 px-3 text-xs text-secondary-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/55 focus-visible:ring-inset disabled:opacity-60 data-popup-open:bg-accent"
       >
         <span className="truncate">{modelName}</span>
-        <span className="text-muted-foreground shrink-0">{effort}</span>
-        <ChevronDownIcon aria-hidden="true" className="text-muted-foreground size-3 shrink-0" />
+        <span className="shrink-0 text-muted-foreground">{effort}</span>
+        <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="top" align="end" sideOffset={8} className="z-50">
@@ -154,11 +155,11 @@ export function ComposerModelControls({
                 ? (selectedModelRow.current ?? backButton.current)
                 : (sliderInput.current ?? modelLink.current)
             }
-            className="border-border/80 bg-popover text-popover-foreground flex max-h-[min(20rem,65dvh)] w-72 max-w-[calc(100vw-1.5rem)] origin-(--transform-origin) flex-col overflow-hidden rounded-xl border shadow-md outline-none transition-[opacity,translate] duration-100 data-ending-style:translate-y-1 data-ending-style:opacity-0 data-starting-style:translate-y-1 data-starting-style:opacity-0 motion-reduce:transition-none"
+            className="flex max-h-[min(20rem,65dvh)] w-72 max-w-[calc(100vw-1.5rem)] origin-(--transform-origin) flex-col overflow-hidden rounded-xl border border-border/80 bg-popover text-popover-foreground shadow-md transition-[opacity,translate] duration-100 outline-none data-ending-style:translate-y-1 data-ending-style:opacity-0 data-starting-style:translate-y-1 data-starting-style:opacity-0 motion-reduce:transition-none"
           >
             {choosingModel ? (
               <>
-                <div className="border-border/70 bg-muted/45 flex shrink-0 items-center gap-1.5 border-b px-2 py-1.5">
+                <div className="flex shrink-0 items-center gap-1.5 border-b border-border/70 bg-muted/45 px-2 py-1.5">
                   <Button
                     ref={backButton}
                     type="button"
@@ -170,7 +171,7 @@ export function ComposerModelControls({
                   >
                     <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
                   </Button>
-                  <Popover.Title className="text-muted-foreground text-xs">
+                  <Popover.Title className="text-xs text-muted-foreground">
                     {modelTitle}
                   </Popover.Title>
                 </div>
@@ -185,7 +186,7 @@ export function ComposerModelControls({
                     const rows = event.currentTarget.querySelectorAll("button");
                     rows[event.key === "Home" ? 0 : rows.length - 1]?.focus();
                   }}
-                  className="min-h-0 overflow-y-auto overscroll-contain p-1 [scrollbar-gutter:stable] [scrollbar-width:thin]"
+                  className="min-h-0 [scrollbar-width:thin] [scrollbar-gutter:stable] overflow-y-auto overscroll-contain p-1"
                 >
                   <Toolbar.Button
                     ref={usingDefault ? selectedModelRow : undefined}
@@ -200,7 +201,7 @@ export function ComposerModelControls({
                         {t("跟随全局默认", locale)}
                       </span>
                       {defaultModel && (
-                        <span className="text-muted-foreground truncate text-xs leading-4">
+                        <span className="truncate text-xs leading-4 text-muted-foreground">
                           {defaultModel.name}
                         </span>
                       )}
@@ -215,7 +216,7 @@ export function ComposerModelControls({
                       role="group"
                       aria-label={displayProviderName(entry, locale)}
                     >
-                      <div className="text-muted-foreground truncate px-2.5 pt-2 pb-0.5 text-xs">
+                      <div className="truncate px-2.5 pt-2 pb-0.5 text-xs text-muted-foreground">
                         {displayProviderName(entry, locale)}
                       </div>
                       {entry.models.map((model) => {
@@ -242,7 +243,7 @@ export function ComposerModelControls({
                               {model.name !== model.id && (
                                 <span
                                   title={model.id}
-                                  className="text-muted-foreground truncate text-xs leading-4"
+                                  className="truncate text-xs leading-4 text-muted-foreground"
                                 >
                                   {model.id}
                                 </span>
@@ -257,7 +258,7 @@ export function ComposerModelControls({
                     </div>
                   ))}
                   {providers.length === 0 && (
-                    <p className="text-muted-foreground px-2.5 py-2 text-xs">
+                    <p className="px-2.5 py-2 text-xs text-muted-foreground">
                       {t("暂无已保存的模型", locale)}
                     </p>
                   )}
@@ -266,7 +267,7 @@ export function ComposerModelControls({
             ) : (
               <div className="min-h-0 overflow-y-auto p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <Popover.Title className="text-muted-foreground text-xs">
+                  <Popover.Title className="text-xs text-muted-foreground">
                     {thinkingTitle}
                   </Popover.Title>
                   <Button
@@ -291,10 +292,10 @@ export function ComposerModelControls({
                     popup.current?.focus({ preventScroll: true });
                     setMenu("model");
                   }}
-                  className="hover:bg-accent focus-visible:ring-ring/55 -mx-1 flex max-w-[calc(100%+0.5rem)] flex-col items-start gap-0.5 rounded-lg px-1.5 py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                  className="-mx-1 flex max-w-[calc(100%+0.5rem)] flex-col items-start gap-0.5 rounded-lg px-1.5 py-1 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/55 focus-visible:ring-inset"
                 >
                   <span className="text-base leading-5 font-medium">{effort}</span>
-                  <span className="text-muted-foreground flex max-w-full items-center gap-1 text-xs leading-4">
+                  <span className="flex max-w-full items-center gap-1 text-xs leading-4 text-muted-foreground">
                     <span className="truncate">{modelName}</span>
                     <ChevronRightIcon aria-hidden="true" className="size-3 shrink-0" />
                   </span>
@@ -311,8 +312,8 @@ export function ComposerModelControls({
                     onValueCommitted={(value) => commitLevel(levels[value])}
                   >
                     <Slider.Control className="relative flex h-9 w-full cursor-pointer touch-none items-center">
-                      <Slider.Track className="border-border/80 bg-muted relative h-5 w-full rounded-full border">
-                        <Slider.Indicator className="bg-primary/85 rounded-full" />
+                      <Slider.Track className="relative h-5 w-full rounded-full border border-border/80 bg-muted">
+                        <Slider.Indicator className="rounded-full bg-primary/85" />
                         <div
                           aria-hidden="true"
                           className="pointer-events-none absolute inset-x-0 inset-y-0 flex items-center justify-between"
@@ -333,7 +334,7 @@ export function ComposerModelControls({
                           inputRef={sliderInput}
                           getAriaLabel={() => thinkingTitle}
                           aria-valuetext={t(levelLabel(level), locale)}
-                          className="bg-popover border-primary/40 ring-ring/65 size-4 rounded-full border shadow-sm focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-popover"
+                          className="size-4 rounded-full border border-primary/40 bg-popover shadow-sm ring-ring/65 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-popover"
                         />
                       </Slider.Track>
                     </Slider.Control>
@@ -341,7 +342,7 @@ export function ComposerModelControls({
                 )}
                 {levels.length > 1 && (
                   <div
-                    className="text-muted-foreground flex justify-between px-0.5 text-xs"
+                    className="flex justify-between px-0.5 text-xs text-muted-foreground"
                     aria-hidden="true"
                   >
                     <span>{t(levelLabel(levels[0]), locale)}</span>

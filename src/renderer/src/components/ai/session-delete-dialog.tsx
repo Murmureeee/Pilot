@@ -2,6 +2,7 @@
 // 永久删除会话的二次确认弹窗（Sidebar 右键菜单与设置页归档管理共用）。
 // 语义 = ChatGPT「永久删除」：转录文件从磁盘彻底清除，不可恢复（与归档相对）。
 import type { JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,

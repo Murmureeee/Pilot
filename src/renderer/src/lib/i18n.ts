@@ -1,6 +1,7 @@
 // @env browser
 import { createInstance } from "i18next";
 import { initReactI18next, useTranslation } from "react-i18next";
+
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "../../../shared/constants";
 import type { Locale } from "../../../shared/contract";
 import { EN_MESSAGES } from "./locales/en";

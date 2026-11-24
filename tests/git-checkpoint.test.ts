@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import {
   createModels,
   fauxAssistantMessage,
@@ -18,6 +19,7 @@ import {
   fauxToolCall,
 } from "@earendil-works/pi-ai";
 import { expect, it, vi } from "vitest";
+
 import { AgentHost } from "../src/main/agent-host/host";
 import { McpManager } from "../src/main/agent-host/mcp";
 import * as models from "../src/main/agent-host/models";

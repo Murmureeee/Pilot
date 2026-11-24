@@ -1,6 +1,8 @@
 // @env node
 import { isAbsolute, resolve } from "node:path";
+
 import type { ImportIssue } from "@shared/imports";
+
 import { object } from "./sources";
 import type { ImportedMcpConnection, ImportMcpContext, ResolvedImportedMcp } from "./types";
 

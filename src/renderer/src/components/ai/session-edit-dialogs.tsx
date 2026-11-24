@@ -1,6 +1,7 @@
 // @env browser
 // 重命名与会话指令弹窗（侧栏右键菜单与主列顶栏的更多菜单共用）。
 import { useState, type JSX, type RefObject } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,

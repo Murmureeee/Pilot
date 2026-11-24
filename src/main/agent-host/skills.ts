@@ -5,6 +5,7 @@
 // 注入 = host 组装 systemPrompt 时把启用技能的正文作为 sections 拼接（下一轮请求生效）。
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { basename, join } from "node:path";
+
 import type { SkillMeta } from "@shared/contract";
 
 /** 解析 SKILL.md：frontmatter（--- 包裹的 name/description）+ 正文；无 frontmatter 时 name=目录名、description=首行 */

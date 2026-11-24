@@ -1,7 +1,8 @@
 // @env node
-import { randomUUID } from "node:crypto";
 import type { ExecFileException } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
+
 import type {
   FileDiff,
   FileDiffLine,
@@ -10,6 +11,7 @@ import type {
   GitChangesView,
   GitRollbackSelection,
 } from "@shared/contract";
+
 import { MAX_GIT_CHECKPOINT_BYTES } from "./constants";
 import { fingerprintText } from "./file-changes";
 import { readGit } from "./git";

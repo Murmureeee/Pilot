@@ -1,13 +1,14 @@
 // @env browser
-import type { JSX } from "react";
 import { Popover } from "@base-ui/react/popover";
 import { Progress } from "@base-ui/react/progress";
+import { cn } from "cn";
 import { GaugeIcon } from "lucide-react";
+import type { JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
 import { LOCALE_DETAILS } from "@shared/constants";
-import { cn } from "cn";
 
 export function ContextUsage(): JSX.Element | null {
   const locale = useLocale();
@@ -39,7 +40,7 @@ export function ContextUsage(): JSX.Element | null {
         aria-label={label}
         data-context-usage
         className={cn(
-          "text-muted-foreground gap-1 px-1.5 tabular-nums",
+          "gap-1 px-1.5 text-muted-foreground tabular-nums",
           high &&
             "text-amber-700 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-400",
         )}
@@ -49,7 +50,7 @@ export function ContextUsage(): JSX.Element | null {
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="top" align="end" sideOffset={8} className="z-50">
-          <Popover.Popup className="border-border bg-popover text-popover-foreground grid w-56 max-w-(--available-width) gap-2 rounded-xl border p-3 shadow-md">
+          <Popover.Popup className="grid w-56 max-w-(--available-width) gap-2 rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-md">
             <Popover.Title className="text-sm font-medium">{t("上下文", locale)}</Popover.Title>
             <Progress.Root
               value={Math.min(tokens, capacity)}
@@ -57,12 +58,12 @@ export function ContextUsage(): JSX.Element | null {
               aria-valuetext={details}
               className="grid gap-2"
             >
-              <Progress.Label className="text-muted-foreground text-xs">
+              <Progress.Label className="text-xs text-muted-foreground">
                 {t("最近一次请求", locale)}
               </Progress.Label>
-              <Progress.Track className="bg-muted h-1.5 overflow-hidden rounded-full">
+              <Progress.Track className="h-1.5 overflow-hidden rounded-full bg-muted">
                 <Progress.Indicator
-                  className={cn("bg-primary h-full rounded-full", high && "bg-amber-500")}
+                  className={cn("h-full rounded-full bg-primary", high && "bg-amber-500")}
                 />
               </Progress.Track>
             </Progress.Root>

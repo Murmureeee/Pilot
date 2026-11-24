@@ -1,6 +1,7 @@
 // @env node
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
+
 import type {
   ActiveRun,
   GitChangesView,
@@ -11,6 +12,7 @@ import type {
   UiUserPart,
   VerificationTask,
 } from "@shared/contract";
+
 import type {
   GitCheckpointBase,
   GitCommandObservation,

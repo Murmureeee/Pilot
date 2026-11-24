@@ -1,5 +1,6 @@
 // @env browser
 import { useEffect, useState, type JSX, type RefObject } from "react";
+
 import {
   Dialog,
   DialogContent,
@@ -40,18 +41,18 @@ function InstructionSourceList({ composerId }: { composerId: string }): JSX.Elem
 
   if (error) {
     return (
-      <p role="alert" className="text-destructive wrap-anywhere">
+      <p role="alert" className="wrap-anywhere text-destructive">
         {localizeError(error, locale)}
       </p>
     );
   }
   if (!sources) return <output className="text-muted-foreground">{t("加载中…", locale)}</output>;
   return (
-    <ol className="marker:text-muted-foreground flex list-decimal flex-col gap-3 ps-5">
+    <ol className="flex list-decimal flex-col gap-3 ps-5 marker:text-muted-foreground">
       <li>{t("应用指令", locale)}</li>
       <li>
         {t("项目指令", locale)}
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           {t(
             sources.project.status === "loaded" && !sources.running
               ? "将用于下一次请求"
@@ -60,7 +61,7 @@ function InstructionSourceList({ composerId }: { composerId: string }): JSX.Elem
           )}
         </p>
         {"path" in sources.project && (
-          <p className="text-muted-foreground font-mono text-xs wrap-anywhere">
+          <p className="font-mono text-xs wrap-anywhere text-muted-foreground">
             {sources.project.path}
           </p>
         )}
@@ -68,7 +69,7 @@ function InstructionSourceList({ composerId }: { composerId: string }): JSX.Elem
       <li>
         {t(sources.personalization === "global" ? "全局个性化" : "会话指令", locale)}
         {sources.personalization === null && (
-          <p className="text-muted-foreground text-xs">
+          <p className="text-xs text-muted-foreground">
             {t("未设置会话指令或全局个性化。", locale)}
           </p>
         )}
@@ -76,11 +77,11 @@ function InstructionSourceList({ composerId }: { composerId: string }): JSX.Elem
       <li>
         {t("技能", locale)}
         {sources.enabledSkills.length > 0 && (
-          <p className="text-muted-foreground text-xs wrap-anywhere">
+          <p className="text-xs wrap-anywhere text-muted-foreground">
             {sources.enabledSkills.join(", ")}
           </p>
         )}
-        <p className="text-muted-foreground text-xs">{t("包含随消息选择的技能。", locale)}</p>
+        <p className="text-xs text-muted-foreground">{t("包含随消息选择的技能。", locale)}</p>
       </li>
     </ol>
   );

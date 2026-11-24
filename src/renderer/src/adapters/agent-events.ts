@@ -10,6 +10,7 @@ import type {
   UiAgentEvent,
   UiMessage,
 } from "@shared/contract";
+
 import { applyMessageEvent } from "../../../shared/message-events";
 
 export interface AgentUiState {

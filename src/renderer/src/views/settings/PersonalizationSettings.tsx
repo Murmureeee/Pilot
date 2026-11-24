@@ -1,9 +1,11 @@
 // @env browser
 import { useState, type JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import { Textarea } from "@renderer/components/ui/textarea";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
+
 import { SettingsGroup } from "./SettingsGroup";
 
 const INSTRUCTION_ORDER = [
@@ -47,7 +49,7 @@ export function PersonalizationSettings({
           </label>
           <p
             id="custom-instructions-help"
-            className="text-muted-foreground mt-0.5 text-xs leading-5"
+            className="mt-0.5 text-xs leading-5 text-muted-foreground"
           >
             {t("默认用于所有会话。可通过会话菜单为单个聊天设置指令。", locale)}
           </p>
@@ -55,7 +57,7 @@ export function PersonalizationSettings({
         <Textarea
           id="custom-instructions"
           aria-describedby="custom-instructions-help"
-          className="bg-card min-h-40 rounded-2xl px-4 py-3 leading-6"
+          className="min-h-40 rounded-2xl bg-card px-4 py-3 leading-6"
           value={draft}
           disabled={saving}
           onChange={(event) => setDraft(event.target.value)}
@@ -78,7 +80,7 @@ export function PersonalizationSettings({
           </Button>
         </div>
         {error && (
-          <p role="alert" className="text-destructive text-sm">
+          <p role="alert" className="text-sm text-destructive">
             {localizeError(error, locale)}
           </p>
         )}
@@ -91,12 +93,12 @@ export function PersonalizationSettings({
         <ol className="settings-list">
           {INSTRUCTION_ORDER.map((item, index) => (
             <li key={item.label} className="flex items-start gap-3 py-3.5">
-              <span className="text-muted-foreground mt-0.5 w-4 text-xs tabular-nums">
+              <span className="mt-0.5 w-4 text-xs text-muted-foreground tabular-nums">
                 {index + 1}
               </span>
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="text-sm font-medium">{t(item.label, locale)}</span>
-                <span className="text-muted-foreground text-xs leading-5">
+                <span className="text-xs leading-5 text-muted-foreground">
                   {t(item.description, locale)}
                 </span>
               </div>

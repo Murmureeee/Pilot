@@ -2,6 +2,7 @@
 // Agent 宿主：Agent 实例生命周期、pi 事件 → UI 事件映射（含工具/用量/队列）、
 // 权限门接线、steer 插话路由、会话恢复与落盘。
 import { randomUUID } from "node:crypto";
+
 import {
   Agent,
   type AgentEvent,
@@ -9,6 +10,7 @@ import {
   type AgentTool,
 } from "@earendil-works/pi-agent-core";
 import type { AssistantMessageEvent, ToolResultMessage } from "@earendil-works/pi-ai";
+
 import type {
   ActiveRun,
   AgentRunEvent,
@@ -39,12 +41,14 @@ import type {
   UiMessage,
   VerificationTask,
 } from "@shared/contract";
-import { visibleMessageText } from "../../shared/mentions";
+
 import { APP_NAME, DEFAULT_THINKING_LEVEL } from "../../shared/constants";
+import { visibleMessageText } from "../../shared/mentions";
 import { applyMessageEvent } from "../../shared/message-events";
 import { hasSavedModel, resolveSessionModel } from "../../shared/providers";
 import { toPublicSettings } from "../settings";
 import { decryptSecret } from "../settings/secrets";
+import { sameToolRule } from "../settings/tool-rules";
 import type { ProviderConfig, Settings } from "../settings/types";
 import { readFileChange, restoreFileChange } from "../workspace/file-changes";
 import { relativeGitPath } from "../workspace/git";
@@ -94,7 +98,6 @@ import { createTools, labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
 import type { ToolEnvironment } from "./tools/types";
-import { sameToolRule } from "../settings/tool-rules";
 import type {
   AgentInstructions,
   GitCommitOperation,

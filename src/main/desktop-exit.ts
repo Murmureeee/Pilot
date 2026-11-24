@@ -6,6 +6,7 @@ import {
   type MessageBoxOptions,
   type MessageBoxReturnValue,
 } from "electron";
+
 import { APP_NAME, DEFAULT_LOCALE } from "../shared/constants";
 import { APP_EXITING_MESSAGE, NATIVE_EXIT_MESSAGES, UPDATE_NOT_READY_MESSAGE } from "./constants";
 import { errorDetails } from "./diagnostics";

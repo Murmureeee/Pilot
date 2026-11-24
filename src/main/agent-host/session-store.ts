@@ -12,7 +12,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+
 import type {
   ComposerDraft,
   SessionMeta,
@@ -21,6 +23,7 @@ import type {
   UiPart,
   VerificationTask,
 } from "@shared/contract";
+
 import { visibleMessageText } from "../../shared/mentions";
 import { applyPlanUpdate } from "../../shared/plan";
 import {

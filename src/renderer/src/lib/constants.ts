@@ -1,5 +1,6 @@
 // @env browser
 import { ArchiveIcon, CpuIcon, PlugIcon, ShieldCheckIcon, SquarePenIcon } from "lucide-react";
+
 import type {
   ApprovalMode,
   CommandDanger,
@@ -14,6 +15,7 @@ import type {
   VerificationStatus,
 } from "@shared/contract";
 import type { ExternalImportKind } from "@shared/imports";
+
 import type {
   ComposerCommand,
   SendKey,

@@ -1,7 +1,8 @@
 // @env browser
-import { useEffect, useState, type JSX, type ReactNode } from "react";
 import { Checkbox } from "@base-ui/react/checkbox";
 import { CheckIcon, FolderOpenIcon, MinusIcon, RotateCwIcon } from "lucide-react";
+import { useEffect, useState, type JSX, type ReactNode } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -11,8 +12,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@renderer/components/ui/dialog";
-import { localizeError, t } from "@renderer/lib/i18n";
 import { EXTERNAL_IMPORT_OPTIONS, IMPORT_SOURCE_LABELS } from "@renderer/lib/constants";
+import { localizeError, t } from "@renderer/lib/i18n";
 import { importSummary } from "@renderer/lib/import-summary";
 import { APP_NAME } from "@shared/constants";
 import type { Locale } from "@shared/contract";
@@ -57,7 +58,7 @@ function SelectionRow({
       onCheckedChange={onChange}
       className="group flex min-h-9 w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left outline-none hover:bg-muted/70 focus-visible:ring-2 focus-visible:ring-ring data-disabled:cursor-default data-disabled:text-muted-foreground data-disabled:hover:bg-transparent"
     >
-      <span className="border-muted-foreground/50 inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] border group-data-checked:border-brand group-data-checked:bg-brand group-data-checked:text-background group-data-indeterminate:border-brand group-data-indeterminate:bg-brand group-data-indeterminate:text-background group-data-disabled:opacity-50">
+      <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-muted-foreground/50 group-data-checked:border-brand group-data-checked:bg-brand group-data-checked:text-background group-data-disabled:opacity-50 group-data-indeterminate:border-brand group-data-indeterminate:bg-brand group-data-indeterminate:text-background">
         <Checkbox.Indicator>
           {mixed ? <MinusIcon className="size-3" /> : <CheckIcon className="size-3" />}
         </Checkbox.Indicator>
@@ -88,14 +89,14 @@ function ImportIssues({
 }): JSX.Element | null {
   if (!issues.length) return null;
   return (
-    <details className="text-muted-foreground text-xs">
+    <details className="text-xs text-muted-foreground">
       <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
         {t("{0} 项需要查看", locale, [issues.length])}
       </summary>
       <ul className="mt-2 grid gap-2">
         {issues.map(({ name, reason }, index) => (
           <li key={`${name}:${reason}:${index}`} className="grid gap-0.5">
-            <span className="text-foreground wrap-break-word">{name}</span>
+            <span className="wrap-break-word text-foreground">{name}</span>
             <span>{t(REASONS[reason], locale)}</span>
           </li>
         ))}
@@ -114,7 +115,7 @@ export function ExternalImportResult({
   if (!report) return null;
   const summary = importSummary(report, locale);
   return (
-    <div className="text-muted-foreground grid gap-1.5 text-xs">
+    <div className="grid gap-1.5 text-xs text-muted-foreground">
       <p role="status">
         {summary ? t("已导入 {0}。", locale, [summary]) : t("本次没有新增项目。", locale)}
         {(report.skills > 0 || report.servers > 0) && t(" 新增的技能和 MCP 服务默认停用。", locale)}
@@ -254,7 +255,7 @@ export function ExternalImportDialog({
         <div className="flex flex-wrap items-center gap-2">
           <div className="min-w-28 flex-1">
             <p className="text-xs">{t("项目来源", locale)}</p>
-            <p className="text-muted-foreground truncate text-xs" title={project ?? undefined}>
+            <p className="truncate text-xs text-muted-foreground" title={project ?? undefined}>
               {project ?? t("仅导入用户配置", locale)}
             </p>
           </div>
@@ -285,12 +286,12 @@ export function ExternalImportDialog({
         </div>
         <div className="min-h-0 overflow-y-auto overscroll-contain rounded-xl border bg-muted/20 p-2">
           {scanning && (
-            <p role="status" className="text-muted-foreground px-2.5 py-4 text-xs">
+            <p role="status" className="px-2.5 py-4 text-xs text-muted-foreground">
               {t("正在扫描可导入的项目…", locale)}
             </p>
           )}
           {preview && !hasItems && (
-            <p className="text-muted-foreground px-2.5 py-4 text-sm">
+            <p className="px-2.5 py-4 text-sm text-muted-foreground">
               {t("没有找到可导入的项目。", locale)}
             </p>
           )}
@@ -343,14 +344,14 @@ export function ExternalImportDialog({
                           <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                             <span className="min-w-0 wrap-break-word">{item.name}</span>
                             {item.imported && (
-                              <span className="text-muted-foreground text-xs">
+                              <span className="text-xs text-muted-foreground">
                                 {t("已导入", locale)}
                               </span>
                             )}
                           </span>
                           {detail && (
                             <span
-                              className="text-muted-foreground block truncate text-xs"
+                              className="block truncate text-xs text-muted-foreground"
                               title={detail}
                             >
                               {detail}
@@ -358,7 +359,7 @@ export function ExternalImportDialog({
                           )}
                         </SelectionRow>
                         {item.contents && (
-                          <details className="text-muted-foreground px-9 pb-1 text-xs">
+                          <details className="px-9 pb-1 text-xs text-muted-foreground">
                             <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
                               {t("查看包含的项目", locale)}
                             </summary>
@@ -390,12 +391,12 @@ export function ExternalImportDialog({
         </div>
         <div className="grid gap-2">
           {error && (
-            <p role="alert" className="text-destructive text-xs">
+            <p role="alert" className="text-xs text-destructive">
               {localizeError(error, locale)}
             </p>
           )}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p role="status" className="text-muted-foreground text-xs">
+            <p role="status" className="text-xs text-muted-foreground">
               {t("已选 {0}/{1} 项", locale, [chosenCount, available.length])}
             </p>
             <div className="flex gap-2">

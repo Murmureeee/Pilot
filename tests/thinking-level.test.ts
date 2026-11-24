@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { levelAt, levelIndex, levelLabel } from "../src/renderer/src/lib/thinking-level";
 
 describe("thinking-level mapping", () => {

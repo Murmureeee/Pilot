@@ -8,7 +8,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
+
 import { createTools } from "../src/main/agent-host/tools";
 import { createBashTool } from "../src/main/agent-host/tools/bash";
 import {
@@ -16,9 +18,9 @@ import {
   createReadFileTool,
   createWriteFileTool,
 } from "../src/main/agent-host/tools/file-tools";
+import { createGlobTool, createGrepTool } from "../src/main/agent-host/tools/search-tools";
 import { createToolPathResolver } from "../src/main/workspace/paths";
 import { findGitBash, getCommandShell } from "../src/main/workspace/shell";
-import { createGlobTool, createGrepTool } from "../src/main/agent-host/tools/search-tools";
 
 const resolvePath = createToolPathResolver();
 const bashTool = createBashTool({ commandShell: getCommandShell() });

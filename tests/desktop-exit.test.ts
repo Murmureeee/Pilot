@@ -1,7 +1,9 @@
 // @env node
 import { EventEmitter } from "node:events";
+
 import type { BrowserWindow, MessageBoxOptions, MessageBoxReturnValue } from "electron";
 import { beforeEach, expect, it, vi } from "vitest";
+
 import { DesktopExit } from "../src/main/desktop-exit";
 import type { DiagnosticLog } from "../src/main/diagnostics";
 import type { UpdateStatus } from "../src/shared/contract";

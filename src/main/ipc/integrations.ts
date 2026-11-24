@@ -1,5 +1,6 @@
 // @env node
 import { app, dialog } from "electron";
+
 import { IPC } from "../../shared/contract";
 import { NATIVE_DIALOG_TITLES } from "../constants";
 import {

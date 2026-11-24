@@ -1,6 +1,7 @@
 // @env browser
-import { useEffect, useState, type JSX } from "react";
 import { FolderOpenIcon, PlusIcon } from "lucide-react";
+import { useEffect, useState, type JSX } from "react";
+
 import {
   ExternalImportDialog,
   ExternalImportResult,
@@ -68,7 +69,7 @@ export function SkillSettings({
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-destructive wrap-anywhere text-sm">
+        <p role="alert" className="text-sm wrap-anywhere text-destructive">
           {localizeError(error, locale)}
         </p>
       )}
@@ -83,10 +84,10 @@ export function SkillSettings({
         {skills.map((skill) => (
           <div key={skill.id} className="settings-row flex-nowrap">
             <div className="min-w-0 flex-1">
-              <p className="wrap-anywhere text-sm font-medium">{skill.name}</p>
+              <p className="text-sm font-medium wrap-anywhere">{skill.name}</p>
               {skill.description && (
                 <p
-                  className="text-muted-foreground mt-0.5 line-clamp-2 text-xs leading-5"
+                  className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground"
                   title={skill.description}
                 >
                   {skill.description}

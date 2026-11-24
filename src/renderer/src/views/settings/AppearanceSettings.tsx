@@ -1,6 +1,8 @@
 // @env browser
-import { useState, type JSX } from "react";
+import { cn } from "cn";
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
+import { useState, type JSX } from "react";
+
 import {
   Select,
   SelectContent,
@@ -14,7 +16,7 @@ import { setLocale, t, useLocale } from "@renderer/lib/i18n";
 import { applyTheme, loadTheme } from "@renderer/lib/theme";
 import { LOCALE_DETAILS, SUPPORTED_LOCALES } from "@shared/constants";
 import type { Locale, ThemeSetting } from "@shared/contract";
-import { cn } from "cn";
+
 import { SettingsItem } from "./SettingsGroup";
 
 const THEME_ICONS: Record<ThemeSetting, typeof SunIcon> = {
@@ -35,7 +37,7 @@ export function AppearanceSettings(): JSX.Element {
       >
         <fieldset
           aria-label={t("主题", locale)}
-          className="bg-muted flex min-w-0 gap-0.5 rounded-lg p-0.5"
+          className="flex min-w-0 gap-0.5 rounded-lg bg-muted p-0.5"
         >
           {(Object.keys(THEME_LABELS) as ThemeSetting[]).map((value) => {
             const Icon = THEME_ICONS[value];
@@ -49,7 +51,7 @@ export function AppearanceSettings(): JSX.Element {
                   applyTheme(value);
                 }}
                 className={cn(
-                  "text-muted-foreground hover:text-foreground focus-visible:ring-ring flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs outline-none focus-visible:ring-2",
+                  "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
                   theme === value && "bg-background text-foreground shadow-xs",
                 )}
               >

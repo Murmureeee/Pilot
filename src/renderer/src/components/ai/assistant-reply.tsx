@@ -1,6 +1,7 @@
 // @env browser
-import type { JSX } from "react";
 import { ListTreeIcon, LoaderCircleIcon } from "lucide-react";
+import type { JSX } from "react";
+
 import {
   Trace,
   TraceCollapsible,
@@ -14,6 +15,7 @@ import {
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { ReplyEntry } from "@renderer/lib/types";
 import type { UiMessage } from "@shared/contract";
+
 import { FileChangesCard } from "./file-changes-card";
 import { PlanCard } from "./plan-card";
 import { Response } from "./response";
@@ -58,7 +60,7 @@ export function AssistantReply({
     if (part.type === "tool") return <ToolTrace key={key} part={part} />;
     if (part.type !== "text" || !part.text) return null;
     return (
-      <div key={key} className="text-muted-foreground text-[13px] leading-6">
+      <div key={key} className="text-[13px] leading-6 text-muted-foreground">
         <Response content={part.text} />
       </div>
     );

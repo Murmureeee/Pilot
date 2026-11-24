@@ -1,15 +1,12 @@
 // @env browser
 import { useCallback, useEffect, useState, type JSX } from "react";
+
 import { ChatHeader } from "@renderer/components/ai/chat-header";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
 import { FileChangesPanel } from "@renderer/components/ai/file-changes-panel";
 import { GitChangesPanel } from "@renderer/components/ai/git-changes-panel";
 import { TopBar } from "@renderer/components/ai/top-bar";
 import { WorkspaceReferencePanel } from "@renderer/components/ai/workspace-reference-panel";
-import { AppRail, SidebarPanel } from "@renderer/views/Sidebar";
-import { ChatView } from "@renderer/views/ChatView";
-import { SettingsView } from "@renderer/views/SettingsView";
-import { applyTheme, loadTheme, watchSystemTheme } from "@renderer/lib/theme";
 import {
   FILE_CHANGES_MIN_WINDOW_WIDTH,
   FILE_REVIEW_MIN_WINDOW_WIDTH,
@@ -21,6 +18,7 @@ import {
   saveSidebarCollapsed,
   saveSidebarWidth,
 } from "@renderer/lib/preferences";
+import { applyTheme, loadTheme, watchSystemTheme } from "@renderer/lib/theme";
 import { windowShortcutAction } from "@renderer/lib/window-shortcuts";
 import {
   selectProjectDirectory,
@@ -29,6 +27,9 @@ import {
 } from "@renderer/stores/agent";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
 import { useWorkspaceReferenceStore } from "@renderer/stores/workspace-reference";
+import { ChatView } from "@renderer/views/ChatView";
+import { SettingsView } from "@renderer/views/SettingsView";
+import { AppRail, SidebarPanel } from "@renderer/views/Sidebar";
 import { LOCALE_DETAILS } from "@shared/constants";
 
 export default function App(): JSX.Element {
@@ -141,7 +142,7 @@ export default function App(): JSX.Element {
   const title = sessions.find((s) => s.id === sessionId)?.title ?? t("新会话", locale);
 
   return (
-    <div className="bg-window-frame text-foreground grid h-screen grid-cols-[max-content_minmax(0,1fr)] grid-rows-[var(--app-titlebar-height)_minmax(0,1fr)] overflow-hidden">
+    <div className="grid h-screen grid-cols-[max-content_minmax(0,1fr)] grid-rows-[var(--app-titlebar-height)_minmax(0,1fr)] overflow-hidden bg-window-frame text-foreground">
       <div className="app-drag flex items-center px-3">
         <TopBar collapsed={sidebarCollapsed} onToggleSidebar={togglePanel} />
       </div>
@@ -149,7 +150,7 @@ export default function App(): JSX.Element {
 
       <div className="col-span-2 flex min-h-0 pt-1.5 pr-2.5 pb-2.5">
         <AppRail collapsed={sidebarCollapsed} onExpand={expandSidebar} />
-        <div className="border-sidebar-border bg-background flex min-w-0 flex-1 overflow-hidden rounded-xl border">
+        <div className="flex min-w-0 flex-1 overflow-hidden rounded-xl border border-sidebar-border bg-background">
           <SidebarPanel
             width={sidebarWidth}
             animateWidth={!dragging && !compactReview}

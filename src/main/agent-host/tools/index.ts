@@ -1,10 +1,11 @@
 // @env node
 // 工具注册表：权限门按此判定只读/写类，UI 按 label 展示。
 import type { AgentTool } from "@earendil-works/pi-agent-core";
+
+import { createToolPathResolver } from "../../workspace/paths";
 import { createBashTool } from "./bash";
 import { PLAN_TOOL_NAME, TOOL_LABELS } from "./constants";
 import { createEditFileTool, createReadFileTool, createWriteFileTool } from "./file-tools";
-import { createToolPathResolver } from "../../workspace/paths";
 import { planTool } from "./plan";
 import { createGlobTool, createGrepTool } from "./search-tools";
 import type { ResolveToolPath, ToolEnvironment } from "./types";

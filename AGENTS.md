@@ -22,7 +22,7 @@
 ## 验证流水线（代码改动后按序全绿，缺一不可，才能宣布"完成"）
 
 ```bash
-pnpm exec oxfmt --write src tests   # 1. 格式化（必须先跑，后续检查基于格式化后的代码）
+pnpm format                         # 1. 格式化（src、tests 和 package.json，必须先跑）
 pnpm typecheck                      # 2. TS 双工程
 pnpm exec oxlint src tests          # 3. lint（0 警告 0 错误）
 pnpm exec vitest --run              # 4. 全部测试

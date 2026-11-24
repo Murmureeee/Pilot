@@ -1,5 +1,6 @@
 // @env node
 import { app, BrowserWindow, dialog } from "electron";
+
 import { IPC } from "../../shared/contract";
 import { runAgentSmoke } from "../agent-host/smoke";
 import { NATIVE_DIALOG_TITLES } from "../constants";

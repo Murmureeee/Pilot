@@ -2,7 +2,9 @@
 import { mkdirSync, mkdtempDisposableSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { expect, it, vi } from "vitest";
+
 import { AgentHost } from "../src/main/agent-host/host";
 import { McpManager } from "../src/main/agent-host/mcp";
 import { SessionStore } from "../src/main/agent-host/session-store";

@@ -1,6 +1,7 @@
 // @env browser
-import { useMemo, useState, type JSX } from "react";
 import { SearchIcon, TrashIcon } from "lucide-react";
+import { useMemo, useState, type JSX } from "react";
+
 import { ListEmpty } from "@renderer/components/ai/list-empty";
 import { SessionDeleteDialog } from "@renderer/components/ai/session-delete-dialog";
 import { Button } from "@renderer/components/ui/button";
@@ -28,7 +29,7 @@ export function ArchivedSettings(): JSX.Element {
         <div className="relative">
           <SearchIcon
             aria-hidden="true"
-            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
           />
           <Input
             aria-label={t("搜索已归档的聊天", locale)}
@@ -47,7 +48,7 @@ export function ArchivedSettings(): JSX.Element {
           />
         )}
         {archived.length > 0 && visible.length === 0 && (
-          <output className="text-muted-foreground block py-4 text-sm">
+          <output className="block py-4 text-sm text-muted-foreground">
             {t("没有匹配的聊天", locale)}
           </output>
         )}
@@ -65,7 +66,7 @@ export function ArchivedSettings(): JSX.Element {
               >
                 {session.title}
               </button>
-              <p className="text-muted-foreground text-xs">
+              <p className="text-xs text-muted-foreground">
                 {relativeTime(session.updatedAt, locale)}
               </p>
             </div>

@@ -1,6 +1,8 @@
 // @env browser
-import { Activity, Fragment, useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { cn } from "cn";
 import { ArrowDownIcon, RotateCcwIcon } from "lucide-react";
+import { Activity, Fragment, useEffect, useMemo, useRef, useState, type JSX } from "react";
+
 import { AssistantReply } from "@renderer/components/ai/assistant-reply";
 import { Composer } from "@renderer/components/ai/composer";
 import { HomeStart } from "@renderer/components/ai/home-start";
@@ -10,7 +12,9 @@ import { PermissionCard } from "@renderer/components/ai/permission-card";
 import { PlanBar } from "@renderer/components/ai/plan-card";
 import { SettingsRecoveryNotice } from "@renderer/components/ai/settings-recovery-notice";
 import { InlineWorkspaceReference } from "@renderer/components/ai/workspace-reference";
+import { Bubble, BubbleContent } from "@renderer/components/ui/bubble";
 import { Button } from "@renderer/components/ui/button";
+import { Message, MessageContent } from "@renderer/components/ui/message";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -19,12 +23,9 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@renderer/components/ui/message-scroller";
-import { Message, MessageContent } from "@renderer/components/ui/message";
-import { Bubble, BubbleContent } from "@renderer/components/ui/bubble";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { ChatRow } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
-import { cn } from "cn";
 import type { UiMessage, UiPart } from "@shared/contract";
 import { isLocalOpenAiProvider } from "@shared/providers";
 
@@ -127,7 +128,7 @@ export function ChatView({
             <MessageScroller className="min-h-0 flex-1">
               <MessageScrollerViewport
                 ref={viewportRef}
-                className="[overflow-anchor:none] [scrollbar-color:var(--border)_transparent] [scrollbar-gutter:stable_both-edges] [scrollbar-width:thin]"
+                className="[scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] [scrollbar-gutter:stable_both-edges] [overflow-anchor:none]"
               >
                 <MessageScrollerContent
                   ref={contentRef}
@@ -213,10 +214,10 @@ export function ChatView({
           </h1>
         )}
         {needsSetup && (
-          <div className="bg-muted flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-muted p-4">
             <div className="min-w-0">
               <p className="text-sm font-medium">{t("配置模型后即可开始对话", locale)}</p>
-              <p className="text-muted-foreground mt-1 text-xs">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {t("连接模型提供方，或先试用本地演示。", locale)}
               </p>
             </div>
@@ -238,27 +239,27 @@ export function ChatView({
           </div>
         )}
         {projectError && (
-          <p role="alert" className="text-destructive wrap-anywhere text-sm">
+          <p role="alert" className="text-sm wrap-anywhere text-destructive">
             {localizeError(projectError, locale)}
           </p>
         )}
         {error && (
           <div
             role="alert"
-            className="border-destructive/25 bg-destructive/5 text-destructive rounded-xl border px-4 py-3"
+            className="rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-destructive"
           >
             <p className="text-sm font-medium">{t("请求失败", locale)}</p>
-            <p className="wrap-anywhere text-xs">{localizeError(error, locale)}</p>
+            <p className="text-xs wrap-anywhere">{localizeError(error, locale)}</p>
             <p className="mt-1 text-xs">
               {t("检查网络连接或模型设置，然后重新发送消息。", locale)}
             </p>
           </div>
         )}
         {interruptedRun && (
-          <div className="bg-muted/60 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/60 px-3 py-2">
             <output className="min-w-0">
               <span className="block text-sm font-medium">{t("已中断", locale)}</span>
-              <span className="text-muted-foreground block text-xs">
+              <span className="block text-xs text-muted-foreground">
                 {t("可以从已保存的消息和工具结果继续。", locale)}
               </span>
             </output>

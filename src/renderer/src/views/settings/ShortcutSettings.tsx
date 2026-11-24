@@ -1,9 +1,11 @@
 // @env browser
 import type { JSX } from "react";
+
 import { SHORTCUT_GROUPS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { loadSendKey } from "@renderer/lib/preferences";
 import type { ShortcutGroup } from "@renderer/lib/types";
+
 import { SettingsGroup } from "./SettingsGroup";
 
 export function ShortcutSettings(): JSX.Element {
@@ -28,7 +30,7 @@ export function ShortcutSettings(): JSX.Element {
                 <div key={item.label} className="settings-row flex-nowrap py-3">
                   <dt className="min-w-0 flex-1 text-sm">{t(item.label, locale)}</dt>
                   <dd>
-                    <kbd className="bg-muted text-muted-foreground rounded-md border px-1.5 py-0.5 font-sans text-xs whitespace-nowrap">
+                    <kbd className="rounded-md border bg-muted px-1.5 py-0.5 font-sans text-xs whitespace-nowrap text-muted-foreground">
                       {item.keys}
                     </kbd>
                   </dd>

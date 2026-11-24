@@ -1,5 +1,6 @@
 // @env browser
 import { useEffect, useState } from "react";
+
 import { useAgentStore } from "@renderer/stores/agent";
 import type { ProjectGitHead } from "@shared/contract";
 

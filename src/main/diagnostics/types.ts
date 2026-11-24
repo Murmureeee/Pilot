@@ -1,6 +1,8 @@
 // @env node
 import type { RenderProcessGoneDetails } from "electron";
+
 import type { LogLevel } from "@shared/contract";
+
 import type { SAFE_ERROR_CODES, SAFE_ERROR_NAMES } from "./constants";
 
 export type LogSeverity = Exclude<LogLevel, "off">;

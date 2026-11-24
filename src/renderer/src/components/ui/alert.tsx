@@ -1,7 +1,7 @@
 // @env browser
-import type { ComponentProps, JSX } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
+import type { ComponentProps, JSX } from "react";
 
 const alertVariants = cva(
   "grid w-full gap-1 rounded-2xl border px-4 py-3 text-left text-sm has-[>svg]:grid-cols-[auto_minmax(0,1fr)] has-[>svg]:gap-x-2.5 *:[svg]:size-4 *:[svg]:translate-y-0.5",
@@ -40,7 +40,7 @@ export function AlertDescription({ className, ...props }: ComponentProps<"div">)
   return (
     <div
       data-slot="alert-description"
-      className={cn("text-muted-foreground min-w-0 text-xs leading-5", className)}
+      className={cn("min-w-0 text-xs leading-5 text-muted-foreground", className)}
       {...props}
     />
   );

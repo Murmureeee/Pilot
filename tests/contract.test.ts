@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { AGENT_EVENT_CHANNEL, IPC, UPDATE_STATUS_CHANNEL } from "../src/shared/contract";
 
 describe("IPC contract", () => {

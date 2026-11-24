@@ -1,5 +1,6 @@
 // @env browser
 import type { Locale } from "@shared/contract";
+
 import { t } from "./i18n";
 
 /** 步骤耗时：一分钟内保留一位小数，更长的写成「2 分 13 秒」。 */

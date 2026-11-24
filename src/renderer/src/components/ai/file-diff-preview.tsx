@@ -1,12 +1,13 @@
 // @env browser
-import { Fragment, useEffect, useState, type JSX, type ReactNode } from "react";
+import { cn } from "cn";
 import { LoaderCircleIcon, Undo2Icon } from "lucide-react";
+import { Fragment, useEffect, useState, type JSX, type ReactNode } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import { loadHighlighter } from "@renderer/lib/highlighter";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
 import type { FileChangeSummary, FileDiff, FileDiffLine } from "@shared/contract";
-import { cn } from "cn";
 
 function hunkHeader(lines: FileDiffLine[]): string {
   const before = lines.find((line) => line.before !== undefined)?.before ?? 0;
@@ -79,7 +80,7 @@ export function DiffLines({
   }, [diff, path]);
 
   if (diff.hunks.length === 0) {
-    return <p className="text-muted-foreground px-4 py-5 text-xs">{t("没有文本行变更", locale)}</p>;
+    return <p className="px-4 py-5 text-xs text-muted-foreground">{t("没有文本行变更", locale)}</p>;
   }
   return (
     <table className="min-w-full border-collapse text-left font-mono text-xs leading-5">
@@ -107,16 +108,16 @@ export function DiffLines({
                     line.kind === "removed" && "bg-destructive/10 dark:bg-destructive/15",
                   )}
                 >
-                  <td className="text-muted-foreground w-9 min-w-9 px-1.5 text-right tabular-nums select-none">
+                  <td className="w-9 min-w-9 px-1.5 text-right text-muted-foreground tabular-nums select-none">
                     {line.before}
                   </td>
-                  <td className="text-muted-foreground w-9 min-w-9 px-1.5 text-right tabular-nums select-none">
+                  <td className="w-9 min-w-9 px-1.5 text-right text-muted-foreground tabular-nums select-none">
                     {target !== undefined && onOpenLine ? (
                       <button
                         type="button"
                         title={t("在 VS Code 中打开第 {0} 行", locale, [target])}
                         aria-label={t("在 VS Code 中打开第 {0} 行", locale, [target])}
-                        className="hover:text-brand focus-visible:ring-ring/50 rounded-sm underline underline-offset-2 outline-none focus-visible:ring-2"
+                        className="rounded-sm underline underline-offset-2 outline-none hover:text-brand focus-visible:ring-2 focus-visible:ring-ring/50"
                         onClick={() => onOpenLine(target)}
                       >
                         {line.after}
@@ -137,7 +138,7 @@ export function DiffLines({
                   <td className="pr-4 whitespace-pre">
                     {line.text ? (highlighted?.[hunkIndex]?.[lineIndex] ?? line.text) : " "}
                     {line.noNewline && (
-                      <span className="text-muted-foreground ml-3 select-none">
+                      <span className="ml-3 text-muted-foreground select-none">
                         {t("末尾无换行", locale)}
                       </span>
                     )}
@@ -204,7 +205,7 @@ export function FileDiffPreview({
   return (
     <div className="min-w-0 border-t" data-file-diff>
       <div
-        className="relative overflow-x-auto [scrollbar-width:thin]"
+        className="relative [scrollbar-width:thin] overflow-x-auto"
         tabIndex={diff ? 0 : undefined}
         aria-label={diff ? t("逐行差异", locale) : undefined}
       >
@@ -213,21 +214,21 @@ export function FileDiffPreview({
         ) : !available || loadError ? (
           <p
             role={loadError ? "alert" : undefined}
-            className="text-muted-foreground px-4 py-5 text-xs"
+            className="px-4 py-5 text-xs text-muted-foreground"
           >
             {loadError ? localizeError(loadError, locale) : t("此文件没有可用的差异预览。", locale)}
           </p>
         ) : (
           <p
             role="status"
-            className="text-muted-foreground flex items-center gap-2 px-4 py-5 text-xs"
+            className="flex items-center gap-2 px-4 py-5 text-xs text-muted-foreground"
           >
             <LoaderCircleIcon aria-hidden="true" className="size-3.5 motion-safe:animate-spin" />
             {t("加载中…", locale)}
           </p>
         )}
       </div>
-      <div className="border-border flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-border px-3 py-2">
         <div className="min-w-0 flex-1 text-xs">
           {change.reverted && (
             <p role="status" className="text-muted-foreground">
@@ -238,7 +239,7 @@ export function FileDiffPreview({
             <p className="text-muted-foreground">{t("仅显示部分差异", locale)}</p>
           )}
           {confirming && !change.reverted && (
-            <p className="text-destructive wrap-anywhere">
+            <p className="wrap-anywhere text-destructive">
               {t(
                 change.kind === "created"
                   ? "撤销会删除 Agent 新建的文件。"
@@ -248,7 +249,7 @@ export function FileDiffPreview({
             </p>
           )}
           {confirming && undoError && (
-            <p role="alert" className="text-destructive wrap-anywhere">
+            <p role="alert" className="wrap-anywhere text-destructive">
               {localizeError(undoError, locale)}
             </p>
           )}

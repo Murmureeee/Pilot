@@ -11,7 +11,7 @@ export function ListEmpty({
   return (
     <output className="flex flex-col gap-0.5 py-4">
       <span className="text-sm">{title}</span>
-      <span className="text-muted-foreground text-xs leading-5">{description}</span>
+      <span className="text-xs leading-5 text-muted-foreground">{description}</span>
     </output>
   );
 }

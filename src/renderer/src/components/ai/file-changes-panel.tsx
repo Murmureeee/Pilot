@@ -1,5 +1,5 @@
 // @env browser
-import { useId, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
+import { cn } from "cn";
 import {
   ChevronRightIcon,
   ChevronsDownUpIcon,
@@ -8,6 +8,8 @@ import {
   FolderTreeIcon,
   XIcon,
 } from "lucide-react";
+import { useId, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import { FILE_CHANGES_PANEL_CLASS, FILE_CHANGES_TREE_MIN_WIDTH } from "@renderer/lib/constants";
 import { changesForReply, fileChangeLabel, summarizeChanges } from "@renderer/lib/file-changes";
@@ -16,7 +18,7 @@ import type { FileChangesReview } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
 import type { FileChangeSummary } from "@shared/contract";
-import { cn } from "cn";
+
 import { DiffStats } from "./diff-stats";
 import { FileChangesNavigator } from "./file-changes-navigator";
 import { FileDiffPreview } from "./file-diff-preview";
@@ -39,7 +41,7 @@ function ChangedFile({
   const Icon = change.kind === "created" ? FilePlusIcon : FileDiffIcon;
 
   return (
-    <li className="border-border/70 min-w-0 border-b">
+    <li className="min-w-0 border-b border-border/70">
       <Button
         id={headerId}
         type="button"
@@ -58,19 +60,19 @@ function ChangedFile({
         <ChevronRightIcon
           aria-hidden="true"
           className={cn(
-            "text-muted-foreground size-3 transition-transform motion-reduce:transition-none",
+            "size-3 text-muted-foreground transition-transform motion-reduce:transition-none",
             expanded && "rotate-90",
           )}
         />
-        <Icon aria-hidden="true" className="text-primary/80 size-3.5" />
+        <Icon aria-hidden="true" className="size-3.5 text-primary/80" />
         <span className="flex min-w-0 flex-1">
           {directory && (
-            <span className="text-muted-foreground max-w-[65%] truncate">{directory}</span>
+            <span className="max-w-[65%] truncate text-muted-foreground">{directory}</span>
           )}
           <span className="min-w-0 truncate">{name}</span>
         </span>
         {change.reverted ? (
-          <span className="text-muted-foreground shrink-0 text-xs">{t("已撤销", locale)}</span>
+          <span className="shrink-0 text-xs text-muted-foreground">{t("已撤销", locale)}</span>
         ) : (
           change.stats && <DiffStats stats={change.stats} />
         )}
@@ -175,7 +177,7 @@ export function FileChangesPanel({ review }: { review: FileChangesReview }): JSX
         } else closePanel();
       }}
     >
-      <div className="border-border/65 bg-background flex h-10 shrink-0 items-center justify-between gap-2 border-b pr-2 pl-3">
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border/65 bg-background pr-2 pl-3">
         <div role="tablist" aria-label={t("工作区标签页", locale)}>
           <button
             ref={tab}
@@ -184,7 +186,7 @@ export function FileChangesPanel({ review }: { review: FileChangesReview }): JSX
             role="tab"
             aria-selected="true"
             aria-controls="file-changes-content"
-            className="bg-secondary text-secondary-foreground focus-visible:ring-ring/45 flex h-7 items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium outline-none focus-visible:ring-2"
+            className="flex h-7 items-center gap-2 rounded-lg bg-secondary px-2.5 text-[13px] font-medium text-secondary-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/45"
           >
             <FileDiffIcon aria-hidden="true" className="size-3.5" />
             {t("变更", locale)}
@@ -208,7 +210,7 @@ export function FileChangesPanel({ review }: { review: FileChangesReview }): JSX
         aria-labelledby="file-changes-tab"
         className="flex min-h-0 flex-1 flex-col"
       >
-        <div className="border-border/70 bg-muted/40 flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b px-2.5 py-1">
+        <div className="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border/70 bg-muted/40 px-2.5 py-1">
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
             <h2 className="text-xs font-medium">{t("变更了 {0} 个文件", locale, [count])}</h2>
             {stats && <DiffStats stats={stats} />}
@@ -256,7 +258,7 @@ export function FileChangesPanel({ review }: { review: FileChangesReview }): JSX
           <div
             ref={scrollArea}
             data-file-changes-scroll
-            className="min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin]"
+            className="min-h-0 min-w-0 [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] overflow-x-hidden overflow-y-auto overscroll-contain"
           >
             {changes.length ? (
               <ol className="min-w-0">
@@ -265,7 +267,7 @@ export function FileChangesPanel({ review }: { review: FileChangesReview }): JSX
                 ))}
               </ol>
             ) : (
-              <p className="text-muted-foreground px-3 py-4 text-xs">{t("暂无文件变更", locale)}</p>
+              <p className="px-3 py-4 text-xs text-muted-foreground">{t("暂无文件变更", locale)}</p>
             )}
           </div>
           {showNavigator && (

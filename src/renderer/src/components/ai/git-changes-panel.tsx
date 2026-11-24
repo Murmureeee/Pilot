@@ -1,6 +1,7 @@
 // @env browser
-import { useEffect, useRef, useState, type JSX } from "react";
 import { CheckIcon, ChevronRightIcon, FileDiffIcon, HistoryIcon, XIcon } from "lucide-react";
+import { useEffect, useRef, useState, type JSX } from "react";
+
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -22,6 +23,7 @@ import type {
   GitPatchSelection,
   GitStageSelection,
 } from "@shared/contract";
+
 import { GitCommitDialog } from "./git-commit-dialog";
 import { GitCheckpointFilePreview, GitDiffPreview } from "./git-diff-preview";
 
@@ -53,7 +55,7 @@ function GitChangeRow({
     <li
       data-git-file={change.path}
       data-git-origin={change.origin}
-      className="border-border/65 min-w-0 border-b"
+      className="min-w-0 border-b border-border/65"
     >
       <Button
         type="button"
@@ -73,12 +75,12 @@ function GitChangeRow({
             <span
               dir="auto"
               title={change.previousPath}
-              className="text-muted-foreground truncate text-xs"
+              className="truncate text-xs text-muted-foreground"
             >
               {t("原路径 {0}", locale, [change.previousPath])}
             </span>
           )}
-          <span className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span>
               {t(
                 change.resolved ? "任务期间移出清单" : GIT_CHANGE_KIND_LABELS[change.kind],
@@ -238,7 +240,7 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
         close();
       }}
     >
-      <div className="border-border/65 flex h-10 shrink-0 items-center justify-between gap-2 border-b pr-2 pl-3">
+      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border/65 pr-2 pl-3">
         <h2
           id="git-changes-heading"
           ref={heading}
@@ -260,8 +262,8 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
         </Button>
       </div>
       {view && (
-        <div className="border-border/70 bg-muted/40 flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1.5 border-b px-3 py-1.5">
-          <p className="text-muted-foreground text-xs">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1.5 border-b border-border/70 bg-muted/40 px-3 py-1.5">
+          <p className="text-xs text-muted-foreground">
             {t(GIT_REVIEW_PHASE_LABELS[view.phase], locale)}
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -300,8 +302,8 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
         </div>
       )}
       {live && changes && (
-        <div className="border-border/70 flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2">
-          <p className="text-muted-foreground text-xs">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 px-3 py-2">
+          <p className="text-xs text-muted-foreground">
             {t("暂存区 {0} 个文件", locale, [staged.size])}
           </p>
           <GitCommitDialog
@@ -317,7 +319,7 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
             }}
           />
           {stageError && (
-            <p role="alert" className="text-destructive basis-full text-xs wrap-anywhere">
+            <p role="alert" className="basis-full text-xs wrap-anywhere text-destructive">
               {localizeError(stageError, locale)}
             </p>
           )}
@@ -334,7 +336,7 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
                     ? t("已提交到 {0}", locale, [commit.branch])
                     : t("已提交到游离 HEAD", locale)}
                 </p>
-                <p className="text-muted-foreground font-mono break-all select-all">
+                <p className="font-mono break-all text-muted-foreground select-all">
                   {commit.commit}
                 </p>
               </div>
@@ -342,7 +344,7 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
           )}
         </div>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin]">
+      <div className="min-h-0 flex-1 [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] overflow-y-auto overscroll-contain">
         {checkpoint ? (
           <ul aria-label={t("任务检查点", locale)} data-git-checkpoint>
             {checkpoint.files.map((file) => {
@@ -354,7 +356,7 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
               return (
                 <li
                   key={file.path}
-                  className="border-border/65 min-w-0 border-b"
+                  className="min-w-0 border-b border-border/65"
                   data-checkpoint-file={file.path}
                 >
                   <Button
@@ -374,7 +376,7 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
                         {file.path}
                       </span>
                       {(file.conflict || file.reverted) && (
-                        <span className="text-muted-foreground text-xs wrap-anywhere">
+                        <span className="text-xs wrap-anywhere text-muted-foreground">
                           {t(
                             file.conflict
                               ? GIT_ROLLBACK_CONFLICT_LABELS[file.conflict]
@@ -408,7 +410,7 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
               <section key={area} data-git-area={area} aria-labelledby={`git-area-${area}`}>
                 <h3
                   id={`git-area-${area}`}
-                  className="border-border/65 bg-muted/45 border-b px-3 py-1.5 text-xs font-medium"
+                  className="border-b border-border/65 bg-muted/45 px-3 py-1.5 text-xs font-medium"
                 >
                   {t(GIT_CHANGE_AREA_LABELS[area], locale)}
                 </h3>
@@ -440,7 +442,7 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
             );
           })
         ) : (
-          <p role="status" className="text-muted-foreground px-3 py-4 text-xs">
+          <p role="status" className="px-3 py-4 text-xs text-muted-foreground">
             {t(emptyMessage, locale)}
           </p>
         )}

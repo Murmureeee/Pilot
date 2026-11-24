@@ -1,5 +1,6 @@
 // @env node
 import { ipcMain, type WebContents } from "electron";
+
 import { DEFAULT_LOCALE } from "../../shared/constants";
 import type { Locale } from "../../shared/contract";
 import type { InvokeHandler, IpcChannel, RendererEvents } from "./types";

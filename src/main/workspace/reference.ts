@@ -1,11 +1,13 @@
 // @env node
 import { opendirSync, statSync } from "node:fs";
 import { relative, sep } from "node:path";
+
 import type {
   WorkspaceEntry,
   WorkspaceReferencePreview,
   WorkspaceReferenceRequest,
 } from "@shared/contract";
+
 import { MAX_DIRECTORY_PREVIEW_ENTRIES } from "./constants";
 import { readFileSnapshot } from "./file-changes";
 import { createToolPathResolver } from "./paths";

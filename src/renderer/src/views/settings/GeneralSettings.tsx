@@ -1,5 +1,6 @@
 // @env browser
 import { useState, type JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import {
   Select,
@@ -15,6 +16,7 @@ import { loadSendKey, saveSendKey } from "@renderer/lib/preferences";
 import type { SendKey } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { CommandShell, PublicSettings } from "@shared/contract";
+
 import { SettingsGroup, SettingsItem } from "./SettingsGroup";
 
 function ToolEnvironmentForm({
@@ -81,10 +83,10 @@ function ToolEnvironmentForm({
         <div className="settings-row">
           <div className="min-w-0 flex-1 basis-64">
             <h3 className="text-sm font-medium">{t("默认工作目录", locale)}</h3>
-            <p className="text-muted-foreground mt-0.5 text-xs leading-5">
+            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
               {t("未关联项目时，文件工具和命令使用此目录。", locale)}
             </p>
-            <p className="mt-1 select-text wrap-anywhere text-xs">
+            <p className="mt-1 text-xs wrap-anywhere select-text">
               {directory ?? t("用户主目录（默认）", locale)}
             </p>
           </div>
@@ -118,7 +120,7 @@ function ToolEnvironmentForm({
               {shell === "bash" && (
                 <p
                   id="command-shell-help"
-                  className="text-muted-foreground mt-0.5 text-xs leading-5"
+                  className="mt-0.5 text-xs leading-5 text-muted-foreground"
                 >
                   {t("Git Bash 需要 Git for Windows。", locale)}
                 </p>
@@ -156,7 +158,7 @@ function ToolEnvironmentForm({
       {(dirty || saving || saved) && (
         <div className="flex flex-wrap items-center justify-end gap-2">
           {saved && (
-            <output className="text-muted-foreground text-xs">{t("已保存", locale)}</output>
+            <output className="text-xs text-muted-foreground">{t("已保存", locale)}</output>
           )}
           {(dirty || saving) && (
             <Button size="sm" disabled={picking || saving} onClick={() => void save()}>
@@ -166,7 +168,7 @@ function ToolEnvironmentForm({
         </div>
       )}
       {error && (
-        <p role="alert" className="text-destructive text-sm">
+        <p role="alert" className="text-sm text-destructive">
           {localizeError(error, locale)}
         </p>
       )}

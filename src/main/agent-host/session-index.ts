@@ -1,6 +1,8 @@
 // @env node
 import { z } from "zod";
+
 import type { SessionMeta } from "@shared/contract";
+
 import { SESSION_FILE_ID } from "../constants";
 import type { SessionIndex } from "./types";
 

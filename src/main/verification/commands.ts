@@ -3,6 +3,7 @@ import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
+
 import { VERIFICATION_KINDS, type VerificationKind } from "../../shared/contract";
 import { readFileSnapshot } from "../workspace/file-changes";
 import { createToolPathResolver } from "../workspace/paths";

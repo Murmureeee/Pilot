@@ -1,5 +1,6 @@
 // @env browser
 import type { JSX } from "react";
+
 import type { FileChangeSummary } from "@shared/contract";
 
 export function DiffStats({

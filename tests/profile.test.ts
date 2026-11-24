@@ -2,7 +2,9 @@
 import { existsSync, mkdirSync, mkdtempDisposableSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { expect, it } from "vitest";
+
 import { prepareUserDataDirectory } from "../src/main/profile";
 
 it.each(["pi Desktop", "pi-desktop"])("adopts an existing %s profile as Pilot", (name) => {

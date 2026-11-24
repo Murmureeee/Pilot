@@ -1,5 +1,6 @@
 // @env node
 import type { WebContentsConsoleMessageEventParams } from "electron";
+
 import { SAFE_ERROR_NAMES } from "./constants";
 import type { DiagnosticLog } from "./index";
 

@@ -1,7 +1,9 @@
 // @env node
 import { statSync } from "node:fs";
 import { parse } from "node:path";
+
 import type { PromptInput, PromptMention, UiUserPart } from "@shared/contract";
+
 import { MENTION_CONTEXT_HEADING } from "../../shared/constants";
 import { mentionToken } from "../../shared/mentions";
 import { createToolPathResolver } from "../workspace/paths";

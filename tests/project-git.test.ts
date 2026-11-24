@@ -11,7 +11,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { expect, it } from "vitest";
+
 import { readProjectGitHead } from "../src/main/workspace/git";
 import { captureGitSnapshot, compareGitSnapshots } from "../src/main/workspace/git-changes";
 

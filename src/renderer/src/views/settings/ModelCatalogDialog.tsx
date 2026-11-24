@@ -1,6 +1,8 @@
 // @env browser
-import { useState, type JSX } from "react";
+import { cn } from "cn";
 import { CheckIcon, LoaderCircleIcon } from "lucide-react";
+import { useState, type JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -12,7 +14,7 @@ import {
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
-import { cn } from "cn";
+
 import type { ModelCatalogDialogProps } from "./types";
 
 export function ModelCatalogDialog({
@@ -47,13 +49,13 @@ export function ModelCatalogDialog({
           <DialogDescription>{t("勾选要加入此提供方的模型。", locale)}</DialogDescription>
         </DialogHeader>
         {catalog.state === "loading" && (
-          <output className="text-muted-foreground flex items-center gap-2 py-3 text-sm">
+          <output className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
             <LoaderCircleIcon aria-hidden="true" className="size-4 motion-safe:animate-spin" />
             {t("加载中…", locale)}
           </output>
         )}
         {catalog.state === "error" && (
-          <p role="alert" className="text-destructive wrap-anywhere text-sm">
+          <p role="alert" className="text-sm wrap-anywhere text-destructive">
             {localizeError(catalog.error, locale)}
           </p>
         )}
@@ -82,9 +84,9 @@ export function ModelCatalogDialog({
                 {t(allSelected ? "取消全选" : "全选", locale)}
               </Button>
             </div>
-            <div className="min-h-0 max-h-[min(20rem,44vh)] overflow-y-auto overscroll-contain rounded-xl border p-1 [scrollbar-width:thin]">
+            <div className="max-h-[min(20rem,44vh)] min-h-0 [scrollbar-width:thin] overflow-y-auto overscroll-contain rounded-xl border p-1">
               {matches.length === 0 && (
-                <p className="text-muted-foreground px-2 py-3 text-sm">
+                <p className="px-2 py-3 text-sm text-muted-foreground">
                   {t("没有匹配的模型", locale)}
                 </p>
               )}
@@ -96,7 +98,7 @@ export function ModelCatalogDialog({
                     key={model.id}
                     title={added ? t("已添加", locale) : model.id}
                     className={cn(
-                      "hover:bg-accent focus-within:ring-ring flex w-full cursor-pointer items-start gap-2 rounded-lg px-2.5 py-1.5 text-start focus-within:ring-2 focus-within:ring-inset",
+                      "flex w-full cursor-pointer items-start gap-2 rounded-lg px-2.5 py-1.5 text-start focus-within:ring-2 focus-within:ring-ring focus-within:ring-inset hover:bg-accent",
                       checked && "bg-accent/60",
                       added && "opacity-55",
                     )}
@@ -116,7 +118,7 @@ export function ModelCatalogDialog({
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="truncate text-sm">{model.name}</span>
                       {model.name !== model.id && (
-                        <span className="text-muted-foreground truncate text-xs">{model.id}</span>
+                        <span className="truncate text-xs text-muted-foreground">{model.id}</span>
                       )}
                     </span>
                     {checked && <CheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />}

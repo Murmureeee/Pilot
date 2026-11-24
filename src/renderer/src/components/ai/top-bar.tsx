@@ -1,6 +1,6 @@
 // @env browser
 // 菜单动作走 IPC 白名单（编辑类为 webContents 原生实现）。
-import { useEffect, useState, type JSX } from "react";
+import { cn } from "cn";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -8,6 +8,8 @@ import {
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
 } from "lucide-react";
+import { useEffect, useState, type JSX } from "react";
+
 import { UpdatePanel } from "@renderer/components/ai/update-panel";
 import {
   Dialog,
@@ -29,12 +31,11 @@ import {
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
 import { t, useLocale } from "@renderer/lib/i18n";
+import { canBack, canForward } from "@renderer/lib/nav";
 import { useAgentStore } from "@renderer/stores/agent";
 import { useUpdateStore } from "@renderer/stores/update";
-import { canBack, canForward } from "@renderer/lib/nav";
 import { APP_NAME } from "@shared/constants";
 import type { AppInfo, MenuAction } from "@shared/contract";
-import { cn } from "cn";
 
 function Item({
   label,
@@ -106,7 +107,7 @@ export function TopBar({
             render={
               <button
                 type="button"
-                className="app-titlebar-control data-popup-open:bg-sidebar-foreground/8 w-7"
+                className="app-titlebar-control w-7 data-popup-open:bg-sidebar-foreground/8"
                 aria-label={menuLabel}
                 title={menuLabel}
               />
@@ -223,7 +224,7 @@ export function TopBar({
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-        <span aria-hidden="true" className="bg-sidebar-border mx-1.5 h-3.5 w-px shrink-0" />
+        <span aria-hidden="true" className="mx-1.5 h-3.5 w-px shrink-0 bg-sidebar-border" />
         <button
           type="button"
           className="app-titlebar-control w-7"
@@ -268,7 +269,7 @@ export function TopBar({
             )}
           </DialogHeader>
           {isAbout && (
-            <div className="text-muted-foreground border-b pb-3 font-mono text-xs">
+            <div className="border-b pb-3 font-mono text-xs text-muted-foreground">
               <p>
                 {t("版本", locale)} {appInfo?.version ?? "…"}
               </p>

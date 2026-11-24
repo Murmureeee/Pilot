@@ -1,5 +1,5 @@
 // @env browser
-import { useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
+import { cn } from "cn";
 import {
   CheckIcon,
   ChevronRightIcon,
@@ -9,6 +9,8 @@ import {
   SearchIcon,
   XIcon,
 } from "lucide-react";
+import { useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import {
   Collapsible,
@@ -26,7 +28,7 @@ import { t, useLocale } from "@renderer/lib/i18n";
 import type { FileChangeNode, FileChangesReview } from "@renderer/lib/types";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
 import type { FileChangeSummary } from "@shared/contract";
-import { cn } from "cn";
+
 import { DiffStats } from "./diff-stats";
 
 function FileChangesTree({
@@ -62,7 +64,7 @@ function FileChangesTree({
                   selected && "bg-sidebar-accent",
                 )}
               >
-                <Icon aria-hidden="true" className="text-muted-foreground size-3.5" />
+                <Icon aria-hidden="true" className="size-3.5 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate">{node.name}</span>
                 {change.stats && !change.reverted && <DiffStats stats={change.stats} />}
                 {selected && <CheckIcon aria-hidden="true" className="size-3" />}
@@ -87,7 +89,7 @@ function FileChangesTree({
               render={<Button variant="ghost" size="sm" />}
               data-change-folder={node.path}
               title={node.path}
-              className="group text-muted-foreground aria-expanded:hover:bg-sidebar-accent/65 h-7 w-full min-w-0 justify-start gap-1.5 rounded-md px-1.5 text-left text-xs font-normal aria-expanded:bg-transparent"
+              className="group h-7 w-full min-w-0 justify-start gap-1.5 rounded-md px-1.5 text-left text-xs font-normal text-muted-foreground aria-expanded:bg-transparent aria-expanded:hover:bg-sidebar-accent/65"
             >
               <ChevronRightIcon
                 aria-hidden="true"
@@ -96,7 +98,7 @@ function FileChangesTree({
               <FolderIcon aria-hidden="true" className="size-3.5" />
               <span className="truncate">{node.name}</span>
             </CollapsibleTrigger>
-            <CollapsibleContent className="border-border ms-2.5 min-w-0 border-s ps-1.5">
+            <CollapsibleContent className="ms-2.5 min-w-0 border-s border-border ps-1.5">
               <FileChangesTree
                 entries={node.children}
                 review={review}
@@ -152,12 +154,12 @@ export function FileChangesNavigator({
       data-file-changes-navigator
       aria-label={t("变更文件目录", locale)}
       className={cn(
-        "border-border/75 bg-sidebar flex min-h-0 min-w-0 flex-col",
+        "flex min-h-0 min-w-0 flex-col border-border/75 bg-sidebar",
         wide ? "order-last border-s" : "order-first max-h-48 border-b",
       )}
     >
-      <div className="border-border/65 shrink-0 border-b p-2">
-        <InputGroup className="bg-background h-8 rounded-lg">
+      <div className="shrink-0 border-b border-border/65 p-2">
+        <InputGroup className="h-8 rounded-lg bg-background">
           <InputGroupAddon className="ps-2">
             <SearchIcon aria-hidden="true" />
           </InputGroupAddon>
@@ -195,7 +197,7 @@ export function FileChangesNavigator({
       <div
         ref={scroll}
         data-file-changes-tree-scroll
-        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-1.5 [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin]"
+        className="min-h-0 flex-1 [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] overflow-x-hidden overflow-y-auto overscroll-contain p-1.5"
       >
         {entries.length ? (
           <FileChangesTree
@@ -206,7 +208,7 @@ export function FileChangesNavigator({
             onSelect={onSelect}
           />
         ) : (
-          <p role="status" className="text-muted-foreground px-1.5 py-2 text-xs">
+          <p role="status" className="px-1.5 py-2 text-xs text-muted-foreground">
             {t("没有匹配的文件", locale)}
           </p>
         )}

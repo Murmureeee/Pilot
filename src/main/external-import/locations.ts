@@ -1,6 +1,7 @@
 // @env node
 import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+
 import { directory } from "./files";
 import type { ImportLocations } from "./types";
 

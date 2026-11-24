@@ -11,7 +11,9 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { setImmediate } from "node:timers/promises";
+
 import type { FileDiff, GitChange, GitFileDiff } from "@shared/contract";
+
 import {
   GIT_FILE_READ_CONCURRENCY,
   GIT_STATUS_TIMEOUT_MS,

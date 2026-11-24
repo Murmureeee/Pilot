@@ -1,6 +1,7 @@
 // @env node
 import type { PowerSaveBlocker } from "electron";
 import { beforeEach, expect, it, vi } from "vitest";
+
 import type { DiagnosticLog } from "../src/main/diagnostics";
 import { createSleepBlocker } from "../src/main/sleep-blocker";
 

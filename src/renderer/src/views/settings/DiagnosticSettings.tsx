@@ -1,6 +1,7 @@
 // @env browser
-import { useState, type JSX } from "react";
 import { FolderOpenIcon } from "lucide-react";
+import { useState, type JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import {
   Select,
@@ -15,6 +16,7 @@ import { t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
 import { LOG_FILE_COUNT, LOG_FILE_MAX_BYTES, LOG_LEVELS } from "@shared/constants";
 import type { LogLevel } from "@shared/contract";
+
 import { SettingsGroup } from "./SettingsGroup";
 
 export function DiagnosticSettings(): JSX.Element {
@@ -53,7 +55,7 @@ export function DiagnosticSettings(): JSX.Element {
             <label htmlFor="diagnostic-log-level" className="text-sm font-medium">
               {t("日志级别", locale)}
             </label>
-            <p id="diagnostic-log-limit" className="text-muted-foreground text-xs leading-5">
+            <p id="diagnostic-log-limit" className="text-xs leading-5 text-muted-foreground">
               {t("本地最多保留 {0} 个日志文件，每个不超过 {1} MiB。", locale, [
                 LOG_FILE_COUNT,
                 LOG_FILE_MAX_BYTES / 1024 ** 2,
@@ -94,7 +96,7 @@ export function DiagnosticSettings(): JSX.Element {
         </div>
       </div>
       {error && (
-        <p role="alert" className="text-destructive text-xs">
+        <p role="alert" className="text-xs text-destructive">
           {t(error, locale)}
         </p>
       )}

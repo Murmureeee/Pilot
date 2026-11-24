@@ -1,6 +1,7 @@
 // @env browser
-import type { JSX } from "react";
 import { DownloadIcon, LoaderCircleIcon } from "lucide-react";
+import type { JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { t } from "@renderer/lib/i18n";
@@ -40,11 +41,11 @@ export function UpdatePanel({ locale }: { locale: Locale }): JSX.Element {
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <p role="status" className="text-muted-foreground text-xs">
+      <p role="status" className="text-xs text-muted-foreground">
         {description}
       </p>
       {actionFailed && status && state !== "error" && (
-        <p role="alert" className="text-destructive text-xs">
+        <p role="alert" className="text-xs text-destructive">
           {t("更新失败，请重试。", locale)}
         </p>
       )}

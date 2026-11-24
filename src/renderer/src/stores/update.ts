@@ -1,5 +1,6 @@
 // @env browser
 import { create } from "zustand";
+
 import type { UpdateStore } from "@renderer/lib/types";
 
 export const useUpdateStore = create<UpdateStore>((set, get) => ({

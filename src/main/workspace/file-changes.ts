@@ -14,6 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
+
 import { MAX_FILE_SNAPSHOT_BYTES } from "./constants";
 import { createToolPathResolver, isWithinDirectory } from "./paths";
 import { buildTextDiff } from "./text-diff";

@@ -2,8 +2,10 @@
 // 文件类工具：read_file / write_file / edit_file。错误一律 throw（pi 转为 isError 给模型）。
 import { lstatSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { int, bool, obj, opt, str } from "@earendil-works/pi-schema";
+
 import { readFileSnapshot, recordFileChange, textSnapshot } from "../../workspace/file-changes";
 import { TOOL_LABELS } from "./constants";
 import { truncate } from "./output";

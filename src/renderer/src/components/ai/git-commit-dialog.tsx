@@ -1,6 +1,7 @@
 // @env browser
-import { useId, useState, type JSX } from "react";
 import { GitCommitHorizontalIcon } from "lucide-react";
+import { useId, useState, type JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block";
 import {
@@ -75,7 +76,7 @@ export function GitCommitDialog({
     >
       <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
         {selections.length > 0 && (
-          <span className="text-muted-foreground text-xs" role="status">
+          <span className="text-xs text-muted-foreground" role="status">
             {t("已选 {0} 个文件", locale, [selections.length])}
           </span>
         )}
@@ -89,7 +90,7 @@ export function GitCommitDialog({
         </DialogTrigger>
       </div>
       {error && !preview && (
-        <p role="alert" className="text-destructive basis-full text-xs wrap-anywhere">
+        <p role="alert" className="basis-full text-xs wrap-anywhere text-destructive">
           {localizeError(error, locale)}
         </p>
       )}
@@ -135,7 +136,7 @@ export function GitCommitDialog({
             {error && (
               <p
                 role="alert"
-                className="text-destructive max-h-20 overflow-y-auto text-xs wrap-anywhere"
+                className="max-h-20 overflow-y-auto text-xs wrap-anywhere text-destructive"
               >
                 {localizeError(error, locale)}
               </p>

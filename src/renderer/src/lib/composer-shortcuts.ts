@@ -1,5 +1,6 @@
 // @env browser
 import type { ComposerDraft, PromptInput } from "@shared/contract";
+
 import { mentionToken } from "../../../shared/mentions";
 import type { ComposerTrigger, SendKey } from "./types";
 

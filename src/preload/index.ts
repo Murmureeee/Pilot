@@ -1,5 +1,6 @@
 // @env node
 import { contextBridge, ipcRenderer } from "electron";
+
 import type { PiApi } from "@shared/api";
 import type {
   Locale,

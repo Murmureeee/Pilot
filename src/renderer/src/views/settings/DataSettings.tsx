@@ -1,9 +1,11 @@
 // @env browser
-import type { JSX } from "react";
 import { FolderOpenIcon } from "lucide-react";
+import type { JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { AppInfo } from "@shared/contract";
+
 import { DiagnosticSettings } from "./DiagnosticSettings";
 import { SettingsGroup } from "./SettingsGroup";
 
@@ -21,7 +23,7 @@ export function DataSettings({ appInfo }: { appInfo: AppInfo | null }): JSX.Elem
           <div className="settings-row">
             <div className="min-w-0 flex-1 basis-56">
               <p className="text-sm font-medium">{t("应用数据目录", locale)}</p>
-              <p className="text-muted-foreground mt-0.5 text-xs leading-5 wrap-anywhere select-text">
+              <p className="mt-0.5 text-xs leading-5 wrap-anywhere text-muted-foreground select-text">
                 {appInfo?.settingsDir}
               </p>
             </div>
@@ -38,7 +40,7 @@ export function DataSettings({ appInfo }: { appInfo: AppInfo | null }): JSX.Elem
           <div className="settings-row">
             <div className="min-w-0 flex-1 basis-56">
               <p className="text-sm font-medium">{t("聊天记录目录", locale)}</p>
-              <p className="text-muted-foreground mt-0.5 text-xs leading-5 wrap-anywhere select-text">
+              <p className="mt-0.5 text-xs leading-5 wrap-anywhere text-muted-foreground select-text">
                 {appInfo?.sessionsDir}
               </p>
             </div>

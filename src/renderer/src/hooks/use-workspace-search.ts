@@ -1,8 +1,9 @@
 // @env browser
 import { useEffect, useState } from "react";
-import type { WorkspaceEntry } from "@shared/contract";
-import { WORKSPACE_QUERY_LENGTH } from "@shared/constants";
+
 import type { WorkspaceSearchResult } from "@renderer/lib/types";
+import { WORKSPACE_QUERY_LENGTH } from "@shared/constants";
+import type { WorkspaceEntry } from "@shared/contract";
 
 export function useWorkspaceSearch(
   workingDirectory: string | null,

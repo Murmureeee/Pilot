@@ -1,6 +1,8 @@
 // @env browser
-import { useId, useRef, useState, type JSX } from "react";
+import { cn } from "cn";
 import { CheckIcon, DownloadIcon, PlusIcon, TrashIcon, XIcon } from "lucide-react";
+import { useId, useRef, useState, type JSX } from "react";
+
 import { LocalProviderPresets } from "@renderer/components/ai/local-provider-presets";
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
@@ -16,7 +18,7 @@ import { PROVIDER_KIND_LABELS } from "@renderer/lib/constants";
 import { displayProviderName, localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { ModelCatalogEntry, ProviderKind, ProviderTestResult } from "@shared/contract";
 import { isLocalOpenAiProvider, isOpenAiProvider } from "@shared/providers";
-import { cn } from "cn";
+
 import { ModelCatalogDialog } from "./ModelCatalogDialog";
 import type { DraftProvider, ModelCatalogState, ProviderEditorProps } from "./types";
 
@@ -109,14 +111,14 @@ export function ProviderEditor({
       </div>
       <div className="grid gap-3.5 p-4">
         <div className="settings-fields">
-          <label className="text-muted-foreground grid gap-1.5 text-xs">
+          <label className="grid gap-1.5 text-xs text-muted-foreground">
             {t("名称", locale)}
             <Input
               value={draft.name}
               onChange={(event) => onChange({ name: event.target.value })}
             />
           </label>
-          <div className="text-muted-foreground grid gap-1.5 text-xs">
+          <div className="grid gap-1.5 text-xs text-muted-foreground">
             <label htmlFor={uid + "-type"}>{t("类型", locale)}</label>
             <Select
               value={draft.kind}
@@ -140,7 +142,7 @@ export function ProviderEditor({
           </div>
         </div>
         {openAi && (
-          <div className="text-muted-foreground grid gap-1.5 text-xs">
+          <div className="grid gap-1.5 text-xs text-muted-foreground">
             <label htmlFor={uid + "-endpoint"}>Base URL</label>
             <Input
               id={uid + "-endpoint"}
@@ -158,7 +160,7 @@ export function ProviderEditor({
           </div>
         )}
         {draft.kind !== "faux" && (
-          <label className="text-muted-foreground grid gap-1.5 text-xs">
+          <label className="grid gap-1.5 text-xs text-muted-foreground">
             {isLocalOpenAiProvider(draft) && !draft.hasKey
               ? t("API Key（本地可选）", locale)
               : t("API Key {0}", locale, [draft.hasKey ? t("（留空保持不变）", locale) : ""])}
@@ -172,7 +174,7 @@ export function ProviderEditor({
           </label>
         )}
       </div>
-      <div className="border-border/70 grid gap-3 border-t p-4">
+      <div className="grid gap-3 border-t border-border/70 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-medium">{t("模型列表", locale)}</h3>
           <Button
@@ -186,7 +188,7 @@ export function ProviderEditor({
           </Button>
         </div>
         {draft.models.length > 0 ? (
-          <div className="max-h-56 overflow-y-auto overscroll-contain rounded-xl border p-1 [scrollbar-width:thin]">
+          <div className="max-h-56 [scrollbar-width:thin] overflow-y-auto overscroll-contain rounded-xl border p-1">
             {draft.models.map((model) => {
               const chosen = model.id === draft.modelId;
               return (
@@ -202,12 +204,12 @@ export function ProviderEditor({
                     aria-pressed={chosen}
                     title={model.id}
                     onClick={() => changeConnection({ modelId: model.id })}
-                    className="hover:bg-accent/80 focus-visible:ring-ring flex min-w-0 flex-1 items-start gap-2 rounded-lg px-2.5 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                    className="flex min-w-0 flex-1 items-start gap-2 rounded-lg px-2.5 py-1.5 text-left outline-none hover:bg-accent/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                   >
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="truncate text-sm">{model.name}</span>
                       {model.name !== model.id && (
-                        <span className="text-muted-foreground truncate text-xs">{model.id}</span>
+                        <span className="truncate text-xs text-muted-foreground">{model.id}</span>
                       )}
                     </span>
                     {chosen && <CheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />}
@@ -215,7 +217,7 @@ export function ProviderEditor({
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    className="text-muted-foreground hover:text-destructive mt-0.5"
+                    className="mt-0.5 text-muted-foreground hover:text-destructive"
                     aria-label={t("移除模型 {0}", locale, [model.id])}
                     onClick={() => replaceModels(draft.models.filter(({ id }) => id !== model.id))}
                   >
@@ -226,7 +228,7 @@ export function ProviderEditor({
             })}
           </div>
         ) : (
-          <p className="text-muted-foreground text-xs">
+          <p className="text-xs text-muted-foreground">
             {t("可读取模型目录，或手动添加模型 ID。", locale)}
           </p>
         )}
@@ -259,7 +261,7 @@ export function ProviderEditor({
           {test && test !== "loading" && (
             <output
               className={cn(
-                "wrap-anywhere text-xs",
+                "text-xs wrap-anywhere",
                 test.ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive",
               )}
             >

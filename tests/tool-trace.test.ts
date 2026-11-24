@@ -1,5 +1,6 @@
 // @env browser
 import { describe, expect, it } from "vitest";
+
 import { parseToolFailure, stackDisplayPath } from "../src/renderer/src/lib/tool-trace";
 
 describe("tool failure trace", () => {

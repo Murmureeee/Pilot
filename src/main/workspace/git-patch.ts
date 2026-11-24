@@ -2,7 +2,9 @@
 import { isUtf8 } from "node:buffer";
 import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
+
 import type { FileDiffLine, GitChange, GitPatchSelection } from "@shared/contract";
+
 import { MAX_DIFF_PREVIEW_LINES } from "./constants";
 import { readGitBuffer, resolveGitDirectory } from "./git";
 import { isWithinDirectory } from "./paths";

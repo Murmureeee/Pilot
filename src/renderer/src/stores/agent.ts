@@ -1,9 +1,6 @@
 // @env browser
 import { create } from "zustand";
-import { applyAgentEvent, initialAgentUiState, type AgentUiState } from "../adapters/agent-events";
-import { currentLocale } from "../lib/i18n";
-import { initialNavState, moveNav, peekNav, pushNav, type NavState } from "../lib/nav";
-import type { ProjectSelection, SettingsSection } from "../lib/types";
+
 import type {
   ActiveRun,
   ApprovalMode,
@@ -23,6 +20,11 @@ import type {
   ToolRule,
   UiAgentEvent,
 } from "@shared/contract";
+
+import { applyAgentEvent, initialAgentUiState, type AgentUiState } from "../adapters/agent-events";
+import { currentLocale } from "../lib/i18n";
+import { initialNavState, moveNav, peekNav, pushNav, type NavState } from "../lib/nav";
+import type { ProjectSelection, SettingsSection } from "../lib/types";
 
 type View = "chat" | "settings";
 

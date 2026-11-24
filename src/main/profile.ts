@@ -1,6 +1,7 @@
 // @env node
 import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
+
 import { APP_NAME } from "../shared/constants";
 import { LEGACY_USER_DATA_DIRECTORIES } from "./constants";
 

@@ -1,5 +1,6 @@
 // @env browser
 import { useEffect, useRef, useState, type JSX } from "react";
+
 import { ExternalImportSettings } from "@renderer/components/ai/external-import-settings";
 import { McpSettings } from "@renderer/components/ai/mcp-settings";
 import { SettingsRecoveryNotice } from "@renderer/components/ai/settings-recovery-notice";
@@ -7,6 +8,7 @@ import { SETTINGS_SECTION_DESCRIPTIONS, SETTINGS_SECTION_LABELS } from "@rendere
 import { t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { AppInfo } from "@shared/contract";
+
 import { AboutSettings } from "./settings/AboutSettings";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { ArchivedSettings } from "./settings/ArchivedSettings";
@@ -39,14 +41,14 @@ export function SettingsView(): JSX.Element {
   return (
     <div
       ref={scroller}
-      className="settings-scroll min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]"
+      className="settings-scroll min-h-0 flex-1 [scrollbar-gutter:stable_both-edges] overflow-y-auto"
     >
       <div className="workspace-column grid gap-8 pt-8 pb-12 sm:pt-10">
         <header className="grid gap-1.5">
           <h1 className="text-xl leading-tight font-semibold tracking-tight">
             {t(SETTINGS_SECTION_LABELS[section], locale)}
           </h1>
-          <p className="text-muted-foreground text-sm leading-6">
+          <p className="text-sm leading-6 text-muted-foreground">
             {t(SETTINGS_SECTION_DESCRIPTIONS[section], locale)}
           </p>
         </header>

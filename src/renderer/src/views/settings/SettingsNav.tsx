@@ -1,5 +1,5 @@
 // @env browser
-import { useState, type JSX } from "react";
+import { cn } from "cn";
 import {
   ArchiveIcon,
   BlocksIcon,
@@ -15,6 +15,8 @@ import {
   ShieldCheckIcon,
   UserRoundIcon,
 } from "lucide-react";
+import { useState, type JSX } from "react";
+
 import { Input } from "@renderer/components/ui/input";
 import {
   SETTINGS_SECTION_DESCRIPTIONS,
@@ -24,7 +26,6 @@ import {
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { SettingsSection } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
-import { cn } from "cn";
 
 const SETTINGS_NAV: {
   label: string;
@@ -85,7 +86,7 @@ export function SettingsNav(): JSX.Element {
       <div className="relative mb-3.5">
         <SearchIcon
           aria-hidden="true"
-          className="text-sidebar-foreground/60 pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
+          className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-sidebar-foreground/60"
         />
         <Input
           type="search"
@@ -102,11 +103,11 @@ export function SettingsNav(): JSX.Element {
       </div>
       <div className="flex flex-col gap-3.5">
         {groups.length === 0 && (
-          <p className="text-sidebar-foreground/70 px-2.5 text-xs">{t("没有匹配的设置", locale)}</p>
+          <p className="px-2.5 text-xs text-sidebar-foreground/70">{t("没有匹配的设置", locale)}</p>
         )}
         {groups.map((group) => (
           <section key={group.label} className="grid gap-1.5">
-            <h3 className="text-sidebar-foreground/70 px-2.5 text-xs">{t(group.label, locale)}</h3>
+            <h3 className="px-2.5 text-xs text-sidebar-foreground/70">{t(group.label, locale)}</h3>
             <div className="flex flex-col gap-0.5">
               {group.items.map(({ id, icon: Icon }) => {
                 const selected = section === id;
@@ -117,13 +118,13 @@ export function SettingsNav(): JSX.Element {
                     onClick={() => setSection(id)}
                     aria-current={selected ? "page" : undefined}
                     className={cn(
-                      "hover:bg-sidebar-accent/65 focus-visible:ring-sidebar-ring flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset",
+                      "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors outline-none hover:bg-sidebar-accent/65 focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-inset",
                       selected && "bg-sidebar-accent",
                     )}
                   >
                     <Icon
                       aria-hidden="true"
-                      className="text-sidebar-foreground/70 size-4 shrink-0"
+                      className="size-4 shrink-0 text-sidebar-foreground/70"
                       strokeWidth={1.7}
                     />
                     <span className="min-w-0 flex-1 truncate">

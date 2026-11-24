@@ -1,10 +1,11 @@
 // @env browser
-import { Fragment, useLayoutEffect, useMemo, useRef, type JSX, type ReactNode } from "react";
 import { Popover } from "@base-ui/react/popover";
+import { cn } from "cn";
 import { CheckIcon } from "lucide-react";
+import { Fragment, useLayoutEffect, useMemo, useRef, type JSX, type ReactNode } from "react";
+
 import type { ComposerSelection } from "@renderer/lib/composer/types";
 import type { ComposerSuggestion } from "@renderer/lib/types";
-import { cn } from "cn";
 
 export function ComposerCaretMenu({
   selection,
@@ -44,7 +45,7 @@ export function ComposerCaretMenu({
             initialFocus={false}
             finalFocus={false}
             role="presentation"
-            className="border-border bg-popover text-popover-foreground w-max min-w-[min(22rem,calc(100vw-1rem))] max-w-[min(38rem,calc(100vw-1rem),var(--available-width))] overflow-hidden rounded-xl border shadow-lg"
+            className="w-max max-w-[min(38rem,calc(100vw-1rem),var(--available-width))] min-w-[min(22rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
           >
             {children}
           </Popover.Popup>
@@ -96,7 +97,7 @@ export function ComposerSuggestions({
               {group && options[index - 1]?.group !== group && (
                 <div
                   aria-hidden="true"
-                  className="text-muted-foreground px-2.5 pt-1.5 pb-0.5 text-xs leading-4"
+                  className="px-2.5 pt-1.5 pb-0.5 text-xs leading-4 text-muted-foreground"
                 >
                   {group}
                 </div>
@@ -115,7 +116,7 @@ export function ComposerSuggestions({
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={select}
               >
-                <Icon aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0" />
+                <Icon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
                 <span className="flex min-w-0 flex-1 items-baseline gap-2">
                   <span
                     className={cn("min-w-0 truncate", detail && "max-w-[48%] shrink-0")}
@@ -124,7 +125,7 @@ export function ComposerSuggestions({
                     {name}
                   </span>
                   {detail && (
-                    <span className="text-muted-foreground min-w-0 truncate text-xs" title={detail}>
+                    <span className="min-w-0 truncate text-xs text-muted-foreground" title={detail}>
                       {detail}
                     </span>
                   )}
@@ -132,7 +133,7 @@ export function ComposerSuggestions({
                 {shortcut && (
                   <kbd
                     title={shortcut}
-                    className="text-muted-foreground max-w-[26%] shrink-0 truncate font-mono text-[11px]"
+                    className="max-w-[26%] shrink-0 truncate font-mono text-[11px] text-muted-foreground"
                   >
                     {shortcut}
                   </kbd>
@@ -144,12 +145,12 @@ export function ComposerSuggestions({
         )}
       </div>
       {error && (
-        <p role="alert" className="text-destructive wrap-anywhere px-2.5 py-1.5 text-xs">
+        <p role="alert" className="px-2.5 py-1.5 text-xs wrap-anywhere text-destructive">
           {error}
         </p>
       )}
       {!error && options.length === 0 && (
-        <p role="status" className="text-muted-foreground wrap-anywhere px-2.5 py-1.5 text-xs">
+        <p role="status" className="px-2.5 py-1.5 text-xs wrap-anywhere text-muted-foreground">
           {feedback}
         </p>
       )}

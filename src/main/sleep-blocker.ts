@@ -1,5 +1,6 @@
 // @env node
 import { powerSaveBlocker } from "electron";
+
 import { errorDetails, type DiagnosticLog } from "./diagnostics";
 
 export function createSleepBlocker(log: Pick<DiagnosticLog, "write">): (active: boolean) => void {

@@ -1,5 +1,6 @@
 // @env browser
 import type { CommandPrefix, Locale, ToolRule } from "@shared/contract";
+
 import { COMMAND_SHELL_LABELS } from "./constants";
 import { t } from "./i18n";
 

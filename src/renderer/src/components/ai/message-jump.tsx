@@ -1,4 +1,6 @@
 // @env browser
+import { cn } from "cn";
+import { CheckIcon, CopyIcon } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -10,12 +12,11 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from "react";
-import { CheckIcon, CopyIcon } from "lucide-react";
+
 import { MESSAGE_JUMP } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { messagePreview, turnPreviews } from "@renderer/lib/message-preview";
 import type { VisibleTurns } from "@renderer/lib/types";
-import { cn } from "cn";
 import type { UiMessage } from "@shared/contract";
 
 function turnAt(anchors: HTMLCollectionOf<Element>, position: number): number {
@@ -258,7 +259,7 @@ export function MessageJump({
         ref={trackRef}
         data-slot="turn-ruler"
         aria-label={t("会话轮次", locale)}
-        className="pointer-events-auto relative max-h-[min(60%,24rem)] shrink-0 overflow-x-hidden overflow-y-auto overscroll-contain [scrollbar-width:none]"
+        className="pointer-events-auto relative max-h-[min(60%,24rem)] shrink-0 [scrollbar-width:none] overflow-x-hidden overflow-y-auto overscroll-contain"
         style={{ width: railWidth }}
         onScroll={measurePreview}
       >
@@ -285,7 +286,7 @@ export function MessageJump({
               }}
               onKeyDown={(event) => selectByKeyboard(event, index)}
               onClick={() => jump(turn.id)}
-              className="focus-visible:ring-ring flex h-2.5 w-full cursor-pointer items-center rounded-xs outline-none focus-visible:ring-1 focus-visible:ring-inset"
+              className="flex h-2.5 w-full cursor-pointer items-center rounded-xs outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
             >
               <span
                 aria-hidden="true"
@@ -325,7 +326,7 @@ export function MessageJump({
         >
           <div
             data-slot="turn-preview"
-            className="border-border/85 bg-popover rounded-xl border px-3 py-2 shadow-md"
+            className="rounded-xl border border-border/85 bg-popover px-3 py-2 shadow-md"
           >
             <div className="flex min-h-6 items-center gap-2">
               <p className="min-w-0 flex-1 truncate text-[13px] font-medium">
@@ -337,7 +338,7 @@ export function MessageJump({
                   onClick={() => void copyQuestion(selectedTurn.id, selectedTurn.question)}
                   aria-label={t(copiedId === selectedTurn.id ? "已复制" : "复制提问", locale)}
                   title={t(copiedId === selectedTurn.id ? "已复制" : "复制提问", locale)}
-                  className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring/40 grid size-6 shrink-0 place-items-center rounded-md outline-none focus-visible:ring-2"
+                  className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
                 >
                   {copiedId === selectedTurn.id ? (
                     <CheckIcon
@@ -351,7 +352,7 @@ export function MessageJump({
               )}
             </div>
             {selectedTurn.answer && (
-              <p className="text-muted-foreground mt-0.5 line-clamp-3 text-pretty text-xs leading-[1.125rem] wrap-anywhere">
+              <p className="mt-0.5 line-clamp-3 text-xs leading-[1.125rem] text-pretty wrap-anywhere text-muted-foreground">
                 {selectedTurn.answer}
               </p>
             )}

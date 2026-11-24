@@ -1,6 +1,7 @@
 // @env node
 import { existsSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
+
 import type { CommandShell } from "../../shared/contract";
 
 export function getCommandShell(shell?: CommandShell): CommandShell {

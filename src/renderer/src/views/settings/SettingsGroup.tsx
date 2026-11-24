@@ -19,7 +19,7 @@ export function SettingsGroup({
           {title}
         </h2>
         {description && (
-          <p className="text-muted-foreground mt-0.5 text-xs leading-5">{description}</p>
+          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</p>
         )}
       </div>
       {children}
@@ -49,7 +49,7 @@ export function SettingsItem({
           <p className="text-sm font-medium">{label}</p>
         )}
         {description && (
-          <p className="text-muted-foreground mt-0.5 text-xs leading-5 wrap-anywhere">
+          <p className="mt-0.5 text-xs leading-5 wrap-anywhere text-muted-foreground">
             {description}
           </p>
         )}

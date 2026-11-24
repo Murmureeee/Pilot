@@ -7,7 +7,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
+
 import { previewWorkspaceReference } from "../src/main/workspace/reference";
 import { searchWorkspace } from "../src/main/workspace/search";
 

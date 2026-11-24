@@ -1,6 +1,7 @@
 // @env browser
 // 相对时间格式化（命令面板会话列表用）。
 import type { Locale } from "@shared/contract";
+
 import { t } from "./i18n";
 
 const englishRelative = new Intl.RelativeTimeFormat("en");

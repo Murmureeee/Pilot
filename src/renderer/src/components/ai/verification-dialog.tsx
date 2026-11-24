@@ -1,4 +1,6 @@
 // @env browser
+import { cn } from "cn";
+import { CheckIcon, PlayIcon, RotateCcwIcon, SquareIcon } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -8,7 +10,7 @@ import {
   type JSX,
   type RefObject,
 } from "react";
-import { CheckIcon, PlayIcon, RotateCcwIcon, SquareIcon } from "lucide-react";
+
 import { Button } from "@renderer/components/ui/button";
 import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block";
 import {
@@ -28,7 +30,6 @@ import {
   type VerificationRun,
   type VerificationState,
 } from "@shared/contract";
-import { cn } from "cn";
 
 function isRunning(run: VerificationRun): boolean {
   return run.status === "running" || run.status === "stopping";
@@ -48,7 +49,7 @@ function VerificationStatusText({ run }: { run: VerificationRun }): JSX.Element 
     <span
       data-verification-status={run.status}
       className={cn(
-        "text-muted-foreground text-xs",
+        "text-xs text-muted-foreground",
         run.status === "failed" && "text-destructive",
         (run.status === "success" || run.status === "running") &&
           "text-emerald-700 dark:text-emerald-400",
@@ -168,15 +169,15 @@ function VerificationDetails({
       </dl>
       <VerificationOutput key={result.runId} output={result.output} />
       {result.truncated && (
-        <p className="text-muted-foreground text-xs">{t("输出较长，已省略前段。", locale)}</p>
+        <p className="text-xs text-muted-foreground">{t("输出较长，已省略前段。", locale)}</p>
       )}
       {result.error && (
-        <p role="alert" className="text-destructive text-xs wrap-anywhere">
+        <p role="alert" className="text-xs wrap-anywhere text-destructive">
           {localizeError(result.error, locale)}
         </p>
       )}
       {result.saveError && (
-        <p role="alert" className="text-destructive text-xs">
+        <p role="alert" className="text-xs text-destructive">
           {t(result.saveError, locale)}
         </p>
       )}
@@ -269,7 +270,7 @@ function VerificationDialogBody({ composerId }: { composerId: string }): JSX.Ele
     <>
       {state?.workingDirectory && (
         <form
-          className="border-border grid gap-2 border-b pb-3"
+          className="grid gap-2 border-b border-border pb-3"
           onSubmit={(event) => {
             event.preventDefault();
             const workingDirectory = state.workingDirectory;
@@ -294,14 +295,14 @@ function VerificationDialogBody({ composerId }: { composerId: string }): JSX.Ele
               </Button>
             ))}
           </div>
-          <div className="text-muted-foreground flex min-w-0 flex-col gap-0.5 text-xs">
+          <div className="flex min-w-0 flex-col gap-0.5 text-xs text-muted-foreground">
             <span>{t("工作目录", locale)}</span>
-            <span className="text-foreground font-mono wrap-anywhere">
+            <span className="font-mono wrap-anywhere text-foreground">
               {state.workingDirectory}
             </span>
           </div>
           <div className="flex items-end gap-2">
-            <label className="text-muted-foreground flex min-w-0 flex-1 flex-col gap-1 text-xs">
+            <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground">
               {t("命令", locale)}
               <Input
                 value={command}
@@ -321,15 +322,15 @@ function VerificationDialogBody({ composerId }: { composerId: string }): JSX.Ele
         </form>
       )}
       {state && !state.workingDirectory && (
-        <p className="text-muted-foreground text-xs">{t("请先选择工作目录。", locale)}</p>
+        <p className="text-xs text-muted-foreground">{t("请先选择工作目录。", locale)}</p>
       )}
       {error && (
-        <p role="alert" className="text-destructive text-xs wrap-anywhere">
+        <p role="alert" className="text-xs wrap-anywhere text-destructive">
           {localizeError(error, locale)}
         </p>
       )}
       {!state && !error && (
-        <p role="status" className="text-muted-foreground text-xs">
+        <p role="status" className="text-xs text-muted-foreground">
           {t("加载中…", locale)}
         </p>
       )}
@@ -356,7 +357,7 @@ function VerificationDialogBody({ composerId }: { composerId: string }): JSX.Ele
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span>{t(VERIFICATION_LABELS[run.kind], locale)}</span>
                     <VerificationStatusText run={run} />
-                    <span className="text-muted-foreground truncate text-xs">
+                    <span className="truncate text-xs text-muted-foreground">
                       {new Date(run.startedAt).toLocaleString(locale === "en" ? "en" : "zh-CN", {
                         dateStyle: "short",
                         timeStyle: "medium",
@@ -382,7 +383,7 @@ function VerificationDialogBody({ composerId }: { composerId: string }): JSX.Ele
             />
           ) : (
             !error && (
-              <p role="status" className="text-muted-foreground text-xs">
+              <p role="status" className="text-xs text-muted-foreground">
                 {t("加载中…", locale)}
               </p>
             )

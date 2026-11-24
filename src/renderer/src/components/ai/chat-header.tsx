@@ -1,6 +1,7 @@
 // @env browser
-import { useRef, useState, type JSX } from "react";
 import { EllipsisIcon } from "lucide-react";
+import { useRef, useState, type JSX } from "react";
+
 import { InstructionSourcesDialog } from "@renderer/components/ai/instruction-sources";
 import { ProjectBranch, ProjectChip, ReviewToggle } from "@renderer/components/ai/project-controls";
 import {
@@ -167,7 +168,7 @@ export function ChatHeader({
   const head = useProjectGitHead(projectDirectory);
 
   return (
-    <header className="border-border/65 @container flex h-10 shrink-0 items-center gap-2 border-b pr-2 pl-5">
+    <header className="@container flex h-10 shrink-0 items-center gap-2 border-b border-border/65 pr-2 pl-5">
       <SessionTitle key={session?.id ?? ""} title={title} session={session} />
       <ProjectChip
         sessionId={session?.id ?? null}

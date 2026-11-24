@@ -1,6 +1,8 @@
 // @env browser
 import { create } from "zustand";
+
 import type { FileChangesStore } from "@renderer/lib/types";
+
 import { fileChangeFolderPaths } from "../lib/file-changes";
 
 export const useFileChangesStore = create<FileChangesStore>((set) => ({

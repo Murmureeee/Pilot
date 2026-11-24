@@ -1,6 +1,7 @@
 // @env browser
-import { useState, type JSX } from "react";
 import { AlertTriangleIcon } from "lucide-react";
+import { useState, type JSX } from "react";
+
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
@@ -51,7 +52,7 @@ export function SettingsRecoveryNotice({ recovery }: { recovery: SettingsRecover
           {t(blocked ? "原设置文件 {0}" : "原文件已另存为 {0}", locale, [recovery.path])}
         </p>
         {error && (
-          <p role="alert" className="text-destructive wrap-anywhere">
+          <p role="alert" className="wrap-anywhere text-destructive">
             {localizeError(error, locale)}
           </p>
         )}

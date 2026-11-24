@@ -18,15 +18,17 @@ import { streamSimple as chatCompletionsStreamSimple } from "@earendil-works/pi-
 import { streamSimple as responsesStreamSimple } from "@earendil-works/pi-ai/api/openai-responses";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
+
 import type { ModelCatalogEntry, ProviderInput, ProviderTestResult } from "@shared/contract";
+
+import { visibleMessageText } from "../../shared/mentions";
+import { isLocalOpenAiProvider } from "../../shared/providers";
 import { normalizeModelCatalog } from "../settings/models";
 import type { ProviderConfig } from "../settings/types";
+import { legacyMentionParts } from "./mentions";
 import { messageText } from "./session-store";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
-import { isLocalOpenAiProvider } from "../../shared/providers";
-import { visibleMessageText } from "../../shared/mentions";
-import { legacyMentionParts } from "./mentions";
 
 export interface ResolvedModel {
   model: Model<Api>;

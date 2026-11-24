@@ -1,5 +1,6 @@
 // @env node
 import { opendir } from "node:fs/promises";
+
 import type { WorkspaceEntry } from "../../shared/contract";
 import { createToolPathResolver } from "./paths";
 

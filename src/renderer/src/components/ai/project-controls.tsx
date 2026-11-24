@@ -1,5 +1,5 @@
 // @env browser
-import type { JSX } from "react";
+import { cn } from "cn";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -8,6 +8,8 @@ import {
   FolderOpenIcon,
   GitBranchIcon,
 } from "lucide-react";
+import type { JSX } from "react";
+
 import { Button } from "@renderer/components/ui/button";
 import {
   DropdownMenu,
@@ -24,7 +26,6 @@ import { useAgentStore } from "@renderer/stores/agent";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
 import { useWorkspaceReferenceStore } from "@renderer/stores/workspace-reference";
 import type { ProjectGitHead } from "@shared/contract";
-import { cn } from "cn";
 
 export function ProjectChip({
   sessionId,
@@ -110,7 +111,7 @@ export function ProjectChip({
               <FolderIcon className="mt-0.5" aria-hidden="true" />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="truncate leading-5">{referenceName(directory)}</span>
-                <span className="text-muted-foreground truncate text-left text-xs leading-4 [direction:rtl]">
+                <span className="truncate text-left text-xs leading-4 text-muted-foreground [direction:rtl]">
                   <bdi dir="ltr">{directory}</bdi>
                 </span>
               </span>
@@ -138,7 +139,7 @@ export function ProjectBranch({ head }: { head: ProjectGitHead }): JSX.Element {
   const description = "branch" in head ? t("Git 分支 {0}", locale, [head.branch]) : label;
   return (
     <span
-      className="text-muted-foreground hidden max-w-40 min-w-0 items-center gap-1 text-xs @lg:flex"
+      className="hidden max-w-40 min-w-0 items-center gap-1 text-xs text-muted-foreground @lg:flex"
       title={description}
     >
       <GitBranchIcon className="size-3 shrink-0" aria-hidden="true" />

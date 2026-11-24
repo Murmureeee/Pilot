@@ -3,6 +3,7 @@
 // 用 pi-ai 的 faux provider（内存脚本响应），无需任何 API Key。
 import { Agent } from "@earendil-works/pi-agent-core";
 import { createModels, fauxAssistantMessage, fauxProvider, fauxText } from "@earendil-works/pi-ai";
+
 import type { AgentSmokeResult } from "@shared/contract";
 
 export async function runAgentSmoke(): Promise<AgentSmokeResult> {

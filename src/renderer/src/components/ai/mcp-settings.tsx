@@ -1,12 +1,12 @@
 // @env browser
+import { EllipsisIcon, PlusIcon } from "lucide-react";
+import { useEffect, useState, type JSX } from "react";
+
 import {
   ExternalImportDialog,
   ExternalImportResult,
 } from "@renderer/components/ai/external-import-dialog";
 import { ListEmpty } from "@renderer/components/ai/list-empty";
-import type { ImportReport } from "@shared/imports";
-import { useEffect, useState, type JSX } from "react";
-import { EllipsisIcon, PlusIcon } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -37,6 +37,7 @@ import { Switch } from "@renderer/components/ui/switch";
 import { Textarea } from "@renderer/components/ui/textarea";
 import { localizeError, t } from "@renderer/lib/i18n";
 import type { Locale } from "@shared/contract";
+import type { ImportReport } from "@shared/imports";
 import type { McpServerInfo, McpServerInput, McpTransportConfig } from "@shared/mcp";
 
 type McpDraft = McpServerInput & { transport: McpTransportConfig; imported: boolean };
@@ -197,7 +198,7 @@ export function McpSettings({
       <ExternalImportResult report={report} locale={locale} />
       <div className="settings-list" aria-busy={busy}>
         {servers.length === 0 && busy && (
-          <p role="status" className="text-muted-foreground py-4 text-sm">
+          <p role="status" className="py-4 text-sm text-muted-foreground">
             {t("正在读取 MCP 状态…", locale)}
           </p>
         )}
@@ -210,8 +211,8 @@ export function McpSettings({
         {servers.map((server) => (
           <section key={server.id} className="settings-row flex-nowrap items-start gap-x-3">
             <div className="min-w-0 flex-1">
-              <h2 className="wrap-anywhere text-sm font-medium">{server.name}</h2>
-              <p className="text-muted-foreground truncate text-xs leading-5">
+              <h2 className="text-sm font-medium wrap-anywhere">{server.name}</h2>
+              <p className="truncate text-xs leading-5 text-muted-foreground">
                 {server.transport.type === "stdio"
                   ? server.transport.command || "stdio"
                   : server.transport.url || "Streamable HTTP"}
@@ -222,7 +223,7 @@ export function McpSettings({
                     <summary className="cursor-pointer text-emerald-600 dark:text-emerald-400">
                       {t("已连接，{0} 个工具", locale, [server.tools.length])}
                     </summary>
-                    <ul className="text-muted-foreground mt-1 grid gap-0.5 pl-3">
+                    <ul className="mt-1 grid gap-0.5 pl-3 text-muted-foreground">
                       {server.tools.map((tool) => (
                         <li key={tool.name} className="wrap-anywhere">
                           {tool.label}
@@ -236,7 +237,7 @@ export function McpSettings({
                   </p>
                 ))}
               {server.error && (
-                <p className="text-destructive wrap-anywhere text-xs">{t(server.error, locale)}</p>
+                <p className="text-xs wrap-anywhere text-destructive">{t(server.error, locale)}</p>
               )}
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -285,7 +286,7 @@ export function McpSettings({
         ))}
       </div>
       {error && !draft && (
-        <p role="alert" className="text-destructive text-xs">
+        <p role="alert" className="text-xs text-destructive">
           {error}
         </p>
       )}
@@ -425,7 +426,7 @@ export function McpSettings({
             </div>
           )}
           {error && (
-            <p role="alert" className="text-destructive text-xs">
+            <p role="alert" className="text-xs text-destructive">
               {error}
             </p>
           )}

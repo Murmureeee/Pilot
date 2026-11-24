@@ -1,5 +1,6 @@
 // @env node
 import { dialog, type BrowserWindow, type RenderProcessGoneDetails } from "electron";
+
 import { APP_NAME } from "../shared/constants";
 import { RENDERER_RECOVERY_MESSAGES } from "./constants";
 import { errorDetails, type DiagnosticLog } from "./diagnostics";

@@ -1,9 +1,12 @@
 // @env node
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+
 import { app } from "electron";
 import { autoUpdater } from "electron-updater";
+
 import type { UpdateStatus } from "@shared/contract";
+
 import { UPDATE_NOT_READY_MESSAGE } from "./constants";
 import { errorDetails, type DiagnosticLog } from "./diagnostics";
 
