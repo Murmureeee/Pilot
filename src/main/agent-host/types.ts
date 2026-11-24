@@ -1,42 +1,63 @@
 // @env node
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
+import type { Agent, AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
+import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
 
 import type {
-  ActiveRun,
   GitChangesView,
   PermissionDecision,
   PermissionRequest,
   SessionInstructionSources,
   SessionMeta,
+  Snapshot,
+  ToolRule,
+  UiAgentEvent,
+  UiMessage,
   UiUserPart,
   VerificationTask,
 } from "@shared/contract";
 
-import type {
-  GitCheckpointBase,
-  GitCommandObservation,
-  GitCommitPlan,
-  GitSnapshot,
-  GitTaskCheckpoint,
-} from "../workspace/types";
-import type { PermissionManager } from "./permissions";
+import type { Settings } from "../settings/types";
+import type { GitCommitPlan, GitSnapshot, GitTaskCheckpoint } from "../workspace/types";
+import type { McpManager } from "./mcp";
+import type { SessionStore } from "./session-store";
+import type { ToolEnvironment } from "./tools/types";
 
-export interface RunningTask {
-  state: ActiveRun;
-  preparation: AbortController;
-  permissions: PermissionManager;
-  checkpoint: RunCheckpoint;
+export interface HostDeps {
+  store: SessionStore;
+  getSettings: () => Settings;
+  saveSettings: (settings: Settings) => void;
+  broadcast: (event: UiAgentEvent) => void;
+  onActivityChanged?: () => void;
+  skillsDir: string;
+  mcp: McpManager;
+}
+
+export interface AgentSessionView {
+  messages: UiMessage[];
+  nextId: number;
+  error: string | null;
+  usage: Snapshot["usage"];
+  contextWindow: number | null;
+  contextTokens: number;
+}
+
+export interface AgentRunOptions extends Pick<
+  HostDeps,
+  "store" | "mcp" | "skillsDir" | "broadcast" | "getSettings" | "saveSettings"
+> {
+  agent: Agent;
+  sessionId: string;
+  environment: ToolEnvironment;
+  tools: AgentTool[];
+  systemPrompt: string;
+  view: AgentSessionView;
+  sessionRules: ToolRule[];
   initialMessage?: ReferencedUserMessage;
-  finishedTools: Map<string, ToolResultMessage>;
-  previousActions: ReadonlySet<string>;
-  resumed: boolean;
-  gitBaseline: Promise<GitSnapshot>;
-  gitFilesBefore?: GitCheckpointBase;
-  commandObservations: GitCommandObservation[];
-  gitChangesAtEnd?: Promise<GitChangesView | null>;
-  persistError?: unknown;
-  interruptedForExit?: boolean;
+  skillInstructions?: readonly string[];
+  clearDraftFor?: string;
+  onStarted: () => void;
+  onSessionUpdated: () => void;
+  onFinished: () => void;
 }
 
 export interface RunCheckpoint {

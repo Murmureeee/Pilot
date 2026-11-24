@@ -1,5 +1,6 @@
 // @env node
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -27,10 +28,13 @@ import { expect, it, vi } from "vitest";
 import { AgentHost } from "../src/main/agent-host/host";
 import { McpManager } from "../src/main/agent-host/mcp";
 import * as models from "../src/main/agent-host/models";
+import { actionFingerprint } from "../src/main/agent-host/recovery";
 import { SessionStore } from "../src/main/agent-host/session-store";
 import type { Settings } from "../src/main/settings/types";
+import * as gitChanges from "../src/main/workspace/git-changes";
 import { previewWorkspaceReference } from "../src/main/workspace/reference";
 import { searchWorkspace } from "../src/main/workspace/search";
+import type { GitSnapshot } from "../src/main/workspace/types";
 import { MENTION_CONTEXT_HEADING } from "../src/shared/constants";
 import type { ComposerDraft, UiAgentEvent } from "../src/shared/contract";
 
@@ -529,6 +533,122 @@ it("preserves a resumable checkpoint and draft when quitting during approval", a
     host.abort(ref);
     await running;
   }
+});
+
+it("waits for run cleanup when exit starts from the run_started notification", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-exit-on-start-"));
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = { providers: [provider], activeProviderId: provider.id };
+  const baseline = Promise.withResolvers<GitSnapshot>();
+  using capture = vi.spyOn(gitChanges, "captureGitSnapshot").mockReturnValueOnce(baseline.promise);
+  const store = new SessionStore(join(profile.path, "sessions"));
+  let exit: Promise<void> | undefined;
+  let exited = false;
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: vi.fn<(value: Settings) => void>(),
+    broadcast: (event) => {
+      if (event.type === "run_started") {
+        exit = host.stopForExit().then(() => {
+          exited = true;
+        });
+      }
+    },
+    store,
+    skillsDir: join(profile.path, "skills"),
+    mcp: new McpManager(() => settings, "0.0.0"),
+  });
+  const running = host.prompt("Save this task for later");
+  try {
+    expect(capture).toHaveBeenCalledOnce();
+    expect(exit).toBeInstanceOf(Promise);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(exited).toBe(false);
+    expect(host.getSnapshot().status).toBe("stopping");
+
+    baseline.resolve(null);
+    await exit;
+    expect(host.getSnapshot()).toMatchObject({
+      activeRun: null,
+      interruptedRun: { sessionId: host.getSnapshot().sessionId },
+    });
+  } finally {
+    baseline.resolve(null);
+    await running;
+  }
+});
+
+it("resumes with a new run ID and blocks replay of an action recorded in the checkpoint", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-resume-action-"));
+  const directory = realpathSync(profile.path);
+  const store = new SessionStore(join(directory, "sessions"));
+  const session = store.create(directory);
+  const runId = randomUUID();
+  const task = { taskId: runId, agentRunId: runId, title: "Original task" };
+  const args = { path: "result.txt", content: "original tool output" };
+  const action = actionFingerprint("write_file", args, directory)!;
+  const path = join(directory, args.path);
+  writeFileSync(path, "user changes after interruption");
+  store.save(session.id, [{ role: "user", content: task.title, timestamp: 1 }], {
+    type: "pilot_run_checkpoint",
+    runId,
+    workingDirectory: directory,
+    startIndex: 0,
+    pending: [],
+    actions: [action],
+    gitBaseline: null,
+    task,
+  });
+  const faux = fauxProvider({ tokensPerSecond: 100_000 });
+  faux.appendResponses([
+    fauxAssistantMessage([fauxToolCall("write_file", args)], { stopReason: "toolUse" }),
+    fauxAssistantMessage([fauxText("Checked the saved action.")]),
+  ]);
+  const catalog = createModels();
+  catalog.setProvider(faux.provider);
+  using resolveModel = vi.spyOn(models, "resolveModel").mockReturnValue({
+    model: faux.getModel()!,
+    streamFn: catalog.streamSimple.bind(catalog),
+  });
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = {
+    providers: [provider],
+    activeProviderId: provider.id,
+    approvalMode: "full-access",
+  };
+  const events: UiAgentEvent[] = [];
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: vi.fn<(value: Settings) => void>(),
+    broadcast: (event) => {
+      events.push(event);
+    },
+    store,
+    skillsDir: join(directory, "skills"),
+    mcp: new McpManager(() => settings, "0.0.0"),
+  });
+  const ref = { sessionId: session.id, runId };
+  expect(host.loadSession(session.id).interruptedRun).toMatchObject(ref);
+  await host.resume(ref);
+
+  expect(resolveModel).toHaveBeenCalledOnce();
+  expect(readFileSync(path, "utf8")).toBe("user changes after interruption");
+  const started = events.find((event) => event.type === "run_started");
+  expect(started?.run).toMatchObject({ sessionId: session.id, workingDirectory: directory });
+  expect(started?.run.runId).not.toBe(runId);
+  expect(
+    events.some((event) => event.type === "tool_start" || event.type === "permission_request"),
+  ).toBe(false);
+  expect(events.find((event) => event.type === "tool_end")).toMatchObject({
+    state: "error",
+    output: expect.stringContaining("already started before the interruption"),
+  });
+  expect(store.getMeta(session.id)?.lastTask).toMatchObject({
+    ...task,
+    agentRunId: started?.run.runId,
+  });
+  expect(store.checkpoint(session.id)).toBeUndefined();
+  expect(host.getSnapshot().activeRun).toBeNull();
 });
 
 it("declares the current MCP tools on the first request and refreshes a resumed prompt", async () => {
