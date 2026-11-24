@@ -1,5 +1,5 @@
 // @env node
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { BrowserWindow, Menu, app, nativeTheme, session, shell } from "electron";
 import { APP_NAME } from "../shared/constants";
@@ -18,16 +18,11 @@ import { TITLE_BAR_OVERLAY_COLORS, WINDOWS_APP_ID } from "./constants";
 import { prepareUserDataDirectory } from "./profile";
 import { DesktopUpdater } from "./updater";
 import { VerificationManager } from "./verification";
+import { revealWindow } from "./window";
 
 const isDev = !app.isPackaged;
 
 if (process.platform === "win32" && app.isPackaged) app.setAppUserModelId(WINDOWS_APP_ID);
-
-if (!app.commandLine.getSwitchValue("user-data-dir")) {
-  const profile = prepareUserDataDirectory(app.getPath("appData"));
-  app.setPath("userData", profile);
-  app.setPath("sessionData", profile);
-}
 
 // Phase 0 无窗冒烟：electron . --smoke → 跑通 pi Agent 即退出
 async function runSmoke(): Promise<void> {
@@ -121,12 +116,7 @@ function createWindow(log: DiagnosticLog): BrowserWindow {
   return win;
 }
 
-app.whenReady().then(() => {
-  if (process.argv.includes("--smoke")) {
-    void runSmoke();
-    return;
-  }
-
+function startDesktop(): void {
   // 无边框设计：移除默认应用菜单（File/Edit/View/Window）
   Menu.setApplicationMenu(null);
 
@@ -185,23 +175,44 @@ app.whenReady().then(() => {
     verification,
     isDev,
   });
-  createWindow(log);
+  let mainWindow: BrowserWindow | undefined;
+  const getMainWindow = (): BrowserWindow => {
+    if (!mainWindow || mainWindow.isDestroyed()) mainWindow = createWindow(log);
+    return mainWindow;
+  };
+  app.on("second-instance", () => revealWindow(getMainWindow()));
+  app.on("activate", getMainWindow);
+  getMainWindow();
+
   app.once("before-quit", (event) => {
     event.preventDefault();
     void Promise.allSettled([mcp.close(), verification.close()]).then(() => app.quit());
   });
   setTimeout(() => void updater.check(), 2000).unref();
-
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(log);
-  });
-});
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
+}
 
 // 开发态屏蔽 Electron 的 CSP 安全告警（CSP 仅在生产注入，见上）
 if (isDev) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
+}
+
+if (process.argv.includes("--smoke")) {
+  void app.whenReady().then(runSmoke);
+} else {
+  const requestedProfile = app.commandLine.getSwitchValue("user-data-dir")
+    ? app.getPath("userData")
+    : prepareUserDataDirectory(app.getPath("appData"));
+  // Windows 按路径寻找已运行的实例，目录联接也需要解析到同一个实际目录。
+  const profile = realpathSync.native(requestedProfile);
+  app.setPath("userData", profile);
+  app.setPath("sessionData", profile);
+
+  if (app.requestSingleInstanceLock()) {
+    app.once("ready", startDesktop);
+    app.on("window-all-closed", () => {
+      if (process.platform !== "darwin") app.quit();
+    });
+  } else {
+    app.exit(0);
+  }
 }
