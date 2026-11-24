@@ -43,7 +43,7 @@ const MENU_ACTIONS: Record<MenuAction, (wc: WebContents) => void> = {
 export function registerAppRoutes(
   ctx: Pick<
     IpcContext,
-    "settingsDir" | "sessionsDir" | "skillsDir" | "logsDir" | "isDev" | "updater" | "host"
+    "settingsDir" | "sessionsDir" | "skillsDir" | "logsDir" | "isDev" | "updater" | "exit"
   >,
 ): void {
   handle(IPC.ping, (_event, request): PingResponse => {
@@ -84,10 +84,5 @@ export function registerAppRoutes(
   });
   handle(IPC.appGetUpdateStatus, () => ctx.updater.getStatus());
   handle(IPC.appCheckForUpdates, () => ctx.updater.check());
-  handle(IPC.appInstallUpdate, () => {
-    if (ctx.host.hasActiveRun()) {
-      throw new Error("请等待当前任务结束后再安装更新。");
-    }
-    ctx.updater.install();
-  });
+  handle(IPC.appInstallUpdate, () => ctx.exit.installUpdate());
 }

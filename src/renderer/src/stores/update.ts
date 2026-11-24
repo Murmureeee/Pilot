@@ -1,7 +1,6 @@
 // @env browser
 import { create } from "zustand";
 import type { UpdateStore } from "@renderer/lib/types";
-import type { UpdateStatus } from "@shared/contract";
 
 export const useUpdateStore = create<UpdateStore>((set, get) => ({
   status: null,
@@ -50,16 +49,12 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
   },
 
   install: async () => {
-    const { status } = get();
-    if (status?.state !== "ready") return;
-    const installing: UpdateStatus = { state: "installing", version: status.version };
-    set({ status: installing, actionFailed: false });
+    if (get().status?.state !== "ready") return;
+    set({ actionFailed: false });
     try {
       await window.pi.installUpdate();
     } catch {
-      if (get().status === installing) {
-        set({ status, actionFailed: true, dialog: get().dialog ?? "update" });
-      }
+      set({ actionFailed: true, dialog: get().dialog ?? "update" });
     }
   },
 }));

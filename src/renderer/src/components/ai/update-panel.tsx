@@ -4,7 +4,6 @@ import { DownloadIcon, LoaderCircleIcon } from "lucide-react";
 import { Button } from "@renderer/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@renderer/components/ui/tooltip";
 import { t } from "@renderer/lib/i18n";
-import { useAgentStore } from "@renderer/stores/agent";
 import { useUpdateStore } from "@renderer/stores/update";
 import type { Locale, UpdateStatus } from "@shared/contract";
 
@@ -32,7 +31,6 @@ function describeStatus(status: UpdateStatus, locale: Locale): string {
 export function UpdatePanel({ locale }: { locale: Locale }): JSX.Element {
   const status = useUpdateStore((s) => s.status);
   const actionFailed = useUpdateStore((s) => s.actionFailed);
-  const agentBusy = useAgentStore((s) => s.activeRun !== null || s.status !== "idle");
   const state = status?.state;
   const canCheck =
     state === "idle" || state === "current" || state === "error" || (!status && actionFailed);
@@ -55,17 +53,8 @@ export function UpdatePanel({ locale }: { locale: Locale }): JSX.Element {
           {t("检查更新", locale)}
         </Button>
       )}
-      {state === "ready" && agentBusy && (
-        <p className="text-muted-foreground text-xs">
-          {t("请等待当前任务结束后再安装更新。", locale)}
-        </p>
-      )}
       {state === "ready" && (
-        <Button
-          size="sm"
-          disabled={agentBusy}
-          onClick={() => void useUpdateStore.getState().install()}
-        >
+        <Button size="sm" onClick={() => void useUpdateStore.getState().install()}>
           {t("更新并重启", locale)}
         </Button>
       )}
@@ -75,7 +64,6 @@ export function UpdatePanel({ locale }: { locale: Locale }): JSX.Element {
 
 export function UpdateRailButton({ locale }: { locale: Locale }): JSX.Element | null {
   const status = useUpdateStore((s) => s.status);
-  const agentBusy = useAgentStore((s) => s.activeRun !== null || s.status !== "idle");
   if (
     status?.state !== "downloading" &&
     status?.state !== "ready" &&
@@ -83,7 +71,7 @@ export function UpdateRailButton({ locale }: { locale: Locale }): JSX.Element | 
   )
     return null;
 
-  const canInstall = status.state === "ready" && !agentBusy;
+  const canInstall = status.state === "ready";
   const label = canInstall ? t("更新并重启", locale) : describeStatus(status, locale);
   const handleClick = (): void => {
     const update = useUpdateStore.getState();

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { app } from "electron";
 import { autoUpdater } from "electron-updater";
 import type { UpdateStatus } from "@shared/contract";
+import { UPDATE_NOT_READY_MESSAGE } from "./constants";
 import { errorDetails, type DiagnosticLog } from "./diagnostics";
 
 export class DesktopUpdater {
@@ -80,9 +81,10 @@ export class DesktopUpdater {
     return this.status;
   }
 
-  install(): void {
-    if (this.status.state !== "ready") throw new Error("没有已下载的更新。");
+  install(): boolean {
+    if (this.status.state !== "ready") throw new Error(UPDATE_NOT_READY_MESSAGE);
     this.setStatus({ state: "installing", version: this.status.version });
     autoUpdater.quitAndInstall(true, true);
+    return this.getStatus().state === "installing";
   }
 }

@@ -713,7 +713,9 @@ export class AgentHost {
       };
     });
     run.gitChangesAtEnd = reviewed.then((saved) => (saved ? this.finishedGitView(saved) : null));
-    this.deps.store.save(sessionId, messages, undefined, await reviewed, run.checkpoint.task);
+    const changes = await reviewed;
+    if (run.interruptedForExit) return;
+    this.deps.store.save(sessionId, messages, undefined, changes, run.checkpoint.task);
     this.uiMessages = toUiMessages(messages, "s", (name) => this.toolLabel(name));
     this.nextId = this.uiMessages.length;
     this.send({ type: "messages", messages: this.uiMessages });
@@ -982,6 +984,7 @@ export class AgentHost {
               throw error;
             });
       if (preparation.signal.aborted) {
+        if (run.interruptedForExit) return;
         const messages = message ? [...agent.state.messages, message] : agent.state.messages;
         agent.state.messages = messages;
         await this.settle(run, messages);
@@ -992,6 +995,7 @@ export class AgentHost {
       started = true;
       if (message) await agent.prompt(message);
       else await agent.continue();
+      if (run.interruptedForExit) return;
       if (run.persistError) throw run.persistError;
       agent.state.messages = completeToolResults(agent.state.messages);
       await this.settle(run, agent.state.messages);
@@ -1003,6 +1007,14 @@ export class AgentHost {
         });
       }
     } finally {
+      if (run.interruptedForExit) {
+        try {
+          this.checkpointRun(run);
+          run.persistError = undefined;
+        } catch {
+          this.send({ type: "error", message: "无法保存任务进度。" });
+        }
+      }
       run.permissions.abortAll();
       agent.clearAllQueues();
       this.promptSkillInstructions.clear();
@@ -1022,6 +1034,16 @@ export class AgentHost {
   abort(ref: RunRef): void {
     const run = this.selectedRun(ref);
     if (run) this.stop(run);
+  }
+
+  async stopForExit(): Promise<void> {
+    const run = this.run;
+    if (!run) return;
+    const completion = this.runningPrompt;
+    run.interruptedForExit = true;
+    this.stop(run);
+    await completion;
+    if (run.persistError) throw new Error("无法保存任务进度。", { cause: run.persistError });
   }
 
   private stop(run: RunningTask): void {

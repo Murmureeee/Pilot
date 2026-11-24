@@ -34,6 +34,7 @@ export interface RunningTask {
   commandObservations: GitCommandObservation[];
   gitChangesAtEnd?: Promise<GitChangesView | null>;
   persistError?: unknown;
+  interruptedForExit?: boolean;
 }
 
 export interface RunCheckpoint {

@@ -15,6 +15,7 @@ import { getLogLevel, loadSettings, saveSettings } from "./settings";
 import type { Settings } from "./settings/types";
 import { runAgentSmoke } from "./agent-host/smoke";
 import { TITLE_BAR_OVERLAY_COLORS, WINDOWS_APP_ID } from "./constants";
+import { DesktopExit } from "./desktop-exit";
 import { prepareUserDataDirectory } from "./profile";
 import { DesktopUpdater } from "./updater";
 import { VerificationManager } from "./verification";
@@ -156,6 +157,15 @@ function startDesktop(): void {
   }
 
   const updater = new DesktopUpdater((event) => sendToRenderers(UPDATE_STATUS_CHANNEL, event), log);
+  let mainWindow: BrowserWindow | undefined;
+  const exit = new DesktopExit({
+    getWindow: () => mainWindow,
+    host,
+    verification,
+    mcp,
+    updater,
+    log,
+  });
   registerIpc({
     settingsDir: userData,
     sessionsDir,
@@ -167,21 +177,24 @@ function startDesktop(): void {
     mcp,
     updater,
     verification,
+    exit,
     isDev,
   });
-  let mainWindow: BrowserWindow | undefined;
   const getMainWindow = (): BrowserWindow => {
-    if (!mainWindow || mainWindow.isDestroyed()) mainWindow = createWindow(log);
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      mainWindow = createWindow(log);
+      exit.watchWindow(mainWindow);
+    }
     return mainWindow;
   };
-  app.on("second-instance", () => revealWindow(getMainWindow()));
-  app.on("activate", getMainWindow);
+  app.on("second-instance", () => {
+    if (!exit.isExiting()) revealWindow(getMainWindow());
+  });
+  app.on("activate", () => {
+    if (!exit.isExiting()) getMainWindow();
+  });
   getMainWindow();
 
-  app.once("before-quit", (event) => {
-    event.preventDefault();
-    void Promise.allSettled([mcp.close(), verification.close()]).then(() => app.quit());
-  });
   setTimeout(() => void updater.check(), 2000).unref();
 }
 

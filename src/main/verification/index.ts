@@ -15,7 +15,6 @@ import type { ActiveVerification, VerificationRequest } from "./types";
 export class VerificationManager {
   private readonly history: VerificationHistory;
   private readonly active = new Map<string, ActiveVerification>();
-  private closing = false;
 
   constructor(
     directory: string,
@@ -39,7 +38,6 @@ export class VerificationManager {
   }
 
   start(request: VerificationRequest): VerificationResult {
-    if (this.closing) throw new Error("应用正在退出。");
     const { sessionId } = request;
     if (this.active.has(sessionId)) throw new Error("此会话已有验证命令在运行。");
     const runId = randomUUID();
@@ -176,10 +174,17 @@ export class VerificationManager {
     this.history.remove(sessionId);
   }
 
-  async close(): Promise<void> {
-    this.closing = true;
-    await Promise.allSettled(
+  hasActiveRuns(): boolean {
+    return this.active.size > 0;
+  }
+
+  async stopAll(): Promise<void> {
+    const stopped = await Promise.allSettled(
       [...this.active.values()].map((entry) => this.stopEntry(entry, "interrupted")),
     );
+    for (const result of stopped) {
+      if (result.status === "rejected") throw result.reason;
+      if (result.value.saveError) throw new Error(result.value.saveError);
+    }
   }
 }

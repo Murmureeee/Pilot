@@ -9,6 +9,7 @@ import type {
 } from "../../shared/contract";
 import type { AgentHost } from "../agent-host/host";
 import type { McpManager } from "../agent-host/mcp";
+import type { DesktopExit } from "../desktop-exit";
 import type { Settings } from "../settings/types";
 import type { DesktopUpdater } from "../updater";
 import type { VerificationManager } from "../verification";
@@ -37,5 +38,6 @@ export interface IpcContext {
   mcp: McpManager;
   updater: DesktopUpdater;
   verification: VerificationManager;
+  exit: DesktopExit;
   isDev: boolean;
 }

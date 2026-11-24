@@ -33,6 +33,37 @@ export const RENDERER_RECOVERY_MESSAGES = {
   },
 } as const;
 
+export const APP_EXITING_MESSAGE = "应用正在退出。";
+export const UPDATE_NOT_READY_MESSAGE = "没有已下载的更新。";
+
+export const NATIVE_EXIT_MESSAGES = {
+  zh: {
+    quit: { title: "退出 Pilot？", accept: "停止并退出" },
+    closeWindow: { title: "关闭 Pilot 窗口？", accept: "停止并关闭" },
+    update: { title: "安装更新并重启 Pilot？", accept: "停止并更新" },
+    agent: "有任务在运行。",
+    verification: "有验证命令在运行。",
+    detail: "继续会停止运行中的操作并保存当前进度。",
+    cancel: "取消",
+    failed: "无法完成退出操作",
+    failedDetail: "任务或验证进度的清理未完成。请重试或在设置中查看日志。",
+    back: "返回 Pilot",
+  },
+  en: {
+    quit: { title: "Quit Pilot?", accept: "Stop and quit" },
+    closeWindow: { title: "Close the Pilot window?", accept: "Stop and close" },
+    update: { title: "Install the update and restart Pilot?", accept: "Stop and update" },
+    agent: "A task is running.",
+    verification: "Verification commands are running.",
+    detail: "Continuing will stop the running work and save its progress.",
+    cancel: "Cancel",
+    failed: "Could not complete the exit",
+    failedDetail:
+      "Some work could not be stopped or saved. Try again or check the logs in Settings.",
+    back: "Return to Pilot",
+  },
+} as const;
+
 export const NATIVE_DIALOG_TITLES = {
   zh: {
     skill: "选择技能目录（须含 SKILL.md）",

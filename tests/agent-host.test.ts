@@ -485,6 +485,50 @@ it("holds the run lock while stopping and ignores stop and queue actions from an
   }
 });
 
+it("preserves a resumable checkpoint and draft when quitting during approval", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-quit-agent-"));
+  const directory = realpathSync(profile.path);
+  const sessions = join(directory, "sessions");
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = { providers: [provider], activeProviderId: provider.id };
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: vi.fn<(value: Settings) => void>(),
+    broadcast: vi.fn<(event: UiAgentEvent) => void>(),
+    store: new SessionStore(sessions),
+    skillsDir: join(directory, "skills"),
+    mcp: new McpManager(() => settings, "0.0.0"),
+  });
+  const id = host.openProject(directory).composerId;
+  const prompt = "退出期间的演示";
+  const running = host.prompt(prompt, id);
+  const ref = host.getSnapshot().activeRun!;
+  try {
+    await vi.waitFor(() => expect(host.getSnapshot().pendingPermissions).toHaveLength(1));
+    host.saveSessionDraft(id, ["下次继续时的草稿"]);
+    await host.stopForExit();
+    expect(host.getSnapshot()).toMatchObject({
+      activeRun: null,
+      pendingPermissions: [],
+      interruptedRun: { runId: ref.runId, sessionId: id, workingDirectory: directory },
+      composerDraft: ["下次继续时的草稿"],
+    });
+    const reopened = new SessionStore(sessions);
+    expect(reopened.checkpoint(id)).toMatchObject({
+      runId: ref.runId,
+      workingDirectory: directory,
+    });
+    expect(reopened.load(id).filter((message) => message.role === "user")).toEqual([
+      expect.objectContaining({ content: prompt }),
+    ]);
+    expect(reopened.loadDraft(id)).toEqual(["下次继续时的草稿"]);
+    expect(existsSync(join(directory, "pilot-demo.txt"))).toBe(false);
+  } finally {
+    host.abort(ref);
+    await running;
+  }
+});
+
 it("declares the current MCP tools on the first request and refreshes a resumed prompt", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pi-agent-host-"));
   const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;

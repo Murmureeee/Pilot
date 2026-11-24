@@ -159,6 +159,22 @@ it("streams and saves successful, failed and stopped runs under the original cha
       timeout: 5000,
     });
 
+    const exiting = start("build", "node check.cjs build");
+    await vi.waitFor(() => expect(manager.result(exiting).output).toMatch(/CHILD=\d+/), {
+      timeout: 10_000,
+    });
+    const exitChild = Number(/CHILD=(\d+)/.exec(manager.result(exiting).output)?.[1]);
+    expect(manager.hasActiveRuns()).toBe(true);
+    await manager.stopAll();
+    expect(manager.hasActiveRuns()).toBe(false);
+    expect(manager.result(exiting)).toMatchObject({ status: "interrupted", task: owner.task });
+    await vi.waitFor(
+      () => expect(process.platform === "win32" && processExists(exitChild)).toBe(false),
+      {
+        timeout: 5000,
+      },
+    );
+
     const restartedHost = createHost();
     const restartedManager = new VerificationManager(
       history,
@@ -168,6 +184,7 @@ it("streams and saves successful, failed and stopped runs under the original cha
       restartedHost.loadSession(composerId);
       expect(restartedHost.verificationScope(composerId).task).toEqual(owner.task);
       expect(restartedManager.state(composerId, a).runs.map(({ status }) => status)).toEqual([
+        "interrupted",
         "stopped",
         "failed",
         "success",
@@ -187,9 +204,9 @@ it("streams and saves successful, failed and stopped runs under the original cha
       });
       expect(restartedManager.result(retry).output).toContain("CWD=" + realpathSync.native(a));
     } finally {
-      await restartedManager.close();
+      await restartedManager.stopAll();
     }
   } finally {
-    await manager.close();
+    await manager.stopAll();
   }
 }, 30_000);

@@ -15,7 +15,8 @@ export function registerAgentRoutes({
   host,
   verification,
   getSettings,
-}: Pick<IpcContext, "host" | "verification" | "getSettings">): void {
+  exit,
+}: Pick<IpcContext, "host" | "verification" | "getSettings" | "exit">): void {
   handle(IPC.runAgentSmoke, () => runAgentSmoke());
   handle(IPC.agentGetSnapshot, () => host.publishSnapshot());
   handle(IPC.agentSearchWorkspace, (_event, query, expectedDirectory) => {
@@ -26,10 +27,12 @@ export function registerAgentRoutes({
     previewWorkspaceReference(host.getWorkingDirectory(), reference),
   );
   handle(IPC.agentPrompt, (_event, input, expectedDirectory, composerId) => {
+    exit.checkWorkAllowed();
     const result = host.prompt(input, composerId, expectedDirectory);
     return result instanceof Promise ? null : result;
   });
   handle(IPC.agentResume, (_event, run) => {
+    exit.checkWorkAllowed();
     const result = host.resume(run);
     return result instanceof Promise ? null : result;
   });
@@ -125,6 +128,7 @@ export function registerAgentRoutes({
     verification.result(verificationRef(composerId, runId)),
   );
   handle(IPC.sessionStartVerification, (_event, composerId, request) => {
+    exit.checkWorkAllowed();
     const { sessionId, task } = host.verificationScope(composerId, request.workingDirectory);
     if (!sessionId) throw new Error("请先选择工作目录。");
     return verification.start({
@@ -137,9 +141,10 @@ export function registerAgentRoutes({
   handle(IPC.sessionStopVerification, (_event, composerId, runId) =>
     verification.stop(verificationRef(composerId, runId)),
   );
-  handle(IPC.sessionRerunVerification, (_event, composerId, runId) =>
-    verification.rerun(verificationRef(composerId, runId)),
-  );
+  handle(IPC.sessionRerunVerification, (_event, composerId, runId) => {
+    exit.checkWorkAllowed();
+    return verification.rerun(verificationRef(composerId, runId));
+  });
   handle(IPC.agentClearQueue, (_event, run) => host.clearQueue(run));
 
   handle(IPC.toolPermissionRespond, (_event, run, requestId, decision) =>
