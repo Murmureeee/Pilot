@@ -215,6 +215,12 @@ button.workspace-reference:focus-visible {
     padding-inline: clamp(1rem, 3vw, 2rem);
   }
 
+  @container chat (max-width: 32rem) {
+    .workspace-column {
+      padding-inline: 1rem;
+    }
+  }
+
   .settings-scroll {
     scrollbar-width: thin;
     scrollbar-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent) transparent;

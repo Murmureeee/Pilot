@@ -3,6 +3,9 @@
 import { cn } from "cn";
 import {
   EyeIcon,
+  FileDiffIcon,
+  FileTextIcon,
+  ListChecksIcon,
   MessageSquareIcon,
   SearchIcon,
   SettingsIcon,
@@ -13,6 +16,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from "react";
 
 import { Dialog, DialogContent, DialogTitle } from "@renderer/components/ui/dialog";
+import { REVIEW_SHORTCUTS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import {
   filterEntries,
@@ -22,6 +26,7 @@ import {
 } from "@renderer/lib/palette";
 import { relativeTime } from "@renderer/lib/relative-time";
 import { selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
+import { activateReview } from "@renderer/stores/review";
 import type { ApprovalMode } from "@shared/contract";
 
 function EntryIcon({ entry }: { entry: PaletteEntry }): JSX.Element {
@@ -31,6 +36,12 @@ function EntryIcon({ entry }: { entry: PaletteEntry }): JSX.Element {
       return <SquarePenIcon className="size-4 shrink-0" />;
     case "open-settings":
       return <SettingsIcon className="size-4 shrink-0" />;
+    case "review-changes":
+      return <FileDiffIcon className="size-4 shrink-0" />;
+    case "review-files":
+      return <FileTextIcon className="size-4 shrink-0" />;
+    case "review-verification":
+      return <ListChecksIcon className="size-4 shrink-0" />;
     case "mode-standard":
       return <ShieldCheckIcon className="size-4 shrink-0" />;
     case "mode-readonly":
@@ -42,7 +53,7 @@ function EntryIcon({ entry }: { entry: PaletteEntry }): JSX.Element {
   }
 }
 
-export function CommandPalette(): JSX.Element | null {
+export function CommandPalette({ canReview }: { canReview: boolean }): JSX.Element | null {
   const locale = useLocale();
   const open = useAgentStore((s) => s.paletteOpen);
   const setOpen = useAgentStore((s) => s.setPaletteOpen);
@@ -84,6 +95,23 @@ export function CommandPalette(): JSX.Element | null {
         }`,
       },
     ];
+    if (canReview) {
+      actions.push(
+        {
+          kind: "action",
+          id: "review-changes",
+          label: t(REVIEW_SHORTCUTS.changes.label, locale),
+          detail: REVIEW_SHORTCUTS.changes.keys,
+        },
+        { kind: "action", id: "review-files", label: t("打开文件页签", locale) },
+        {
+          kind: "action",
+          id: "review-verification",
+          label: t(REVIEW_SHORTCUTS.verification.label, locale),
+          detail: REVIEW_SHORTCUTS.verification.keys,
+        },
+      );
+    }
     const chats: PaletteEntry[] = sessions.map((s) => ({
       kind: "chat",
       id: s.id,
@@ -91,7 +119,7 @@ export function CommandPalette(): JSX.Element | null {
       detail: relativeTime(s.updatedAt, locale),
     }));
     return [...actions, ...chats];
-  }, [locale, sessions, approvalMode]);
+  }, [locale, sessions, approvalMode, canReview]);
 
   const filtered = useMemo(() => filterEntries(entries, query, tab), [entries, query, tab]);
 
@@ -122,6 +150,15 @@ export function CommandPalette(): JSX.Element | null {
         return;
       case "open-settings":
         setView("settings");
+        return;
+      case "review-changes":
+        activateReview("changes");
+        return;
+      case "review-files":
+        activateReview("files");
+        return;
+      case "review-verification":
+        activateReview("verification");
         return;
       case "mode-standard":
         changeApprovalMode("standard");

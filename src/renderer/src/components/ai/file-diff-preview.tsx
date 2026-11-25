@@ -1,9 +1,17 @@
 // @env browser
 import { cn } from "cn";
 import { LoaderCircleIcon, Undo2Icon } from "lucide-react";
-import { Fragment, useEffect, useState, type JSX, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type JSX, type ReactNode } from "react";
 
 import { Button } from "@renderer/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@renderer/components/ui/dialog";
 import { loadHighlighter } from "@renderer/lib/highlighter";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
@@ -158,17 +166,22 @@ export function FileDiffPreview({
   change,
   busy,
   confirming,
+  active,
 }: {
   sessionId: string;
   change: FileChangeSummary;
   busy: boolean;
   confirming: boolean;
+  active: boolean;
 }): JSX.Element {
   const locale = useLocale();
   const [diff, setDiff] = useState<FileDiff | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [undoError, setUndoError] = useState<string | null>(null);
   const [undoing, setUndoing] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const undoButton = useRef<HTMLButtonElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
   const confirmUndo = useFileChangesStore((state) => state.confirmUndo);
   const cancelUndo = useFileChangesStore((state) => state.cancelUndo);
   const available = change.stats !== undefined;
@@ -187,7 +200,7 @@ export function FileDiffPreview({
     return () => {
       mounted = false;
     };
-  }, [available, change.id, sessionId]);
+  }, [available, change.id, retry, sessionId]);
 
   const undo = async (): Promise<void> => {
     setUndoing(true);
@@ -211,12 +224,25 @@ export function FileDiffPreview({
       >
         {diff ? (
           <DiffLines diff={diff} path={change.path} />
-        ) : !available || loadError ? (
-          <p
-            role={loadError ? "alert" : undefined}
-            className="px-4 py-5 text-xs text-muted-foreground"
-          >
-            {loadError ? localizeError(loadError, locale) : t("此文件没有可用的差异预览。", locale)}
+        ) : loadError ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+            <p role="alert" className="text-xs wrap-anywhere text-destructive">
+              {localizeError(loadError, locale)}
+            </p>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => {
+                setLoadError(null);
+                setRetry((value) => value + 1);
+              }}
+            >
+              {t("重试", locale)}
+            </Button>
+          </div>
+        ) : !available ? (
+          <p className="px-4 py-5 text-xs text-muted-foreground">
+            {t("此文件没有可用的差异预览。", locale)}
           </p>
         ) : (
           <p
@@ -238,58 +264,72 @@ export function FileDiffPreview({
           {diff?.truncated && (
             <p className="text-muted-foreground">{t("仅显示部分差异", locale)}</p>
           )}
-          {confirming && !change.reverted && (
-            <p className="wrap-anywhere text-destructive">
-              {t(
-                change.kind === "created"
-                  ? "撤销会删除 Agent 新建的文件。"
-                  : "撤销会将文件还原到本次写入之前。",
-                locale,
-              )}
-            </p>
-          )}
-          {confirming && undoError && (
-            <p role="alert" className="wrap-anywhere text-destructive">
-              {localizeError(undoError, locale)}
-            </p>
-          )}
         </div>
         {available && !change.reverted && (
-          <div className="ms-auto flex shrink-0 items-center gap-2">
-            {confirming ? (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={undoing}
-                  onClick={() => cancelUndo(change.id)}
-                >
-                  {t("取消", locale)}
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  disabled={busy || undoing}
-                  onClick={() => void undo()}
-                >
-                  {t(undoing ? "正在撤销…" : "确认撤销", locale)}
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                onClick={() => {
-                  setUndoError(null);
-                  confirmUndo(change.id);
-                }}
+          <Dialog
+            open={active && confirming}
+            onOpenChange={(open) => {
+              if (!open && !undoing) cancelUndo(change.id);
+            }}
+          >
+            <Button
+              ref={undoButton}
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                setUndoError(null);
+                confirmUndo(change.id);
+              }}
+            >
+              <Undo2Icon data-icon="inline-start" aria-hidden="true" />
+              {t("撤销…", locale)}
+            </Button>
+            {active && confirming && (
+              <DialogContent
+                showCloseButton={false}
+                initialFocus={cancelButton}
+                finalFocus={() =>
+                  undoButton.current ?? document.getElementById("change-file-" + change.id)
+                }
               >
-                <Undo2Icon aria-hidden="true" className="size-3.5" />
-                {t("撤销", locale)}
-              </Button>
+                <DialogHeader>
+                  <DialogTitle>{t("预览撤销范围", locale)}</DialogTitle>
+                  <DialogDescription className="wrap-anywhere">
+                    {t(
+                      change.kind === "created"
+                        ? "撤销会删除 Agent 新建的文件。"
+                        : "撤销会将文件还原到本次写入之前。",
+                      locale,
+                    )}
+                  </DialogDescription>
+                </DialogHeader>
+                <p className="font-mono text-sm wrap-anywhere">{change.path}</p>
+                {undoError && (
+                  <p role="alert" className="text-xs wrap-anywhere text-destructive">
+                    {localizeError(undoError, locale)}
+                  </p>
+                )}
+                <DialogFooter>
+                  <Button
+                    ref={cancelButton}
+                    variant="outline"
+                    disabled={undoing}
+                    onClick={() => cancelUndo(change.id)}
+                  >
+                    {t("取消", locale)}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={busy || undoing}
+                    onClick={() => void undo()}
+                  >
+                    {t(undoing ? "正在撤销…" : "确认撤销", locale)}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
             )}
-          </div>
+          </Dialog>
         )}
       </div>
     </div>

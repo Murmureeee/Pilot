@@ -4,9 +4,11 @@ import type { Dispatch, SetStateAction } from "react";
 
 import type {
   FileChangeSummary,
+  GitChangesView,
   UiMessage,
   UiPart,
   UpdateStatus,
+  VerificationRun,
   WorkspaceEntry,
   WorkspaceReferencePreview,
   WorkspaceReferenceRequest,
@@ -98,7 +100,6 @@ export interface WorkspaceReferenceTab extends WorkspaceReferenceRequest, Worksp
 export interface WorkspaceReferenceStore {
   reference: WorkspaceReferenceTab | null;
   open(reference: WorkspaceReferenceTab): void;
-  close(): void;
 }
 
 export type WorkspaceReferenceLoad =
@@ -175,9 +176,7 @@ export type FileChangeNode =
 
 export interface FileChangesStore {
   review: FileChangesReview | null;
-  gitComposerId: string | null;
   open(request: OpenFileChanges): void;
-  openGit(composerId: string): void;
   close(): void;
   toggleFile(id: string): void;
   collapseFiles(): void;
@@ -185,6 +184,32 @@ export interface FileChangesStore {
   confirmUndo(id: string): void;
   cancelUndo(id: string): void;
 }
+
+export type ReviewTab = "changes" | "files" | "verification";
+
+export interface ReviewStore {
+  composerId: string | null;
+  open: boolean;
+  tab: ReviewTab;
+  focusRequest: number;
+  trigger: HTMLElement | null;
+  show(composerId: string, tab?: ReviewTab, trigger?: HTMLElement): void;
+  selectTab(tab: ReviewTab): void;
+  close(): void;
+}
+
+export type ReviewResizeRange = { min: number; max: number };
+export type VerificationIndicator = Pick<
+  VerificationRun,
+  "runId" | "startedAt" | "revision" | "status"
+>;
+
+export interface GitReview {
+  view: GitChangesView | null | undefined;
+  error: string | null;
+  refresh(): void;
+}
+
 export interface ProjectSelection {
   sessionId?: string;
   directory?: string;

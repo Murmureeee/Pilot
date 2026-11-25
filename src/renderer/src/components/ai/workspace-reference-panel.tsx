@@ -1,5 +1,5 @@
 // @env browser
-import { ChevronRightIcon, FileTextIcon, FolderIcon, XIcon } from "lucide-react";
+import { ChevronRightIcon, FileTextIcon, FolderIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
 
 import { Button } from "@renderer/components/ui/button";
@@ -44,15 +44,16 @@ function FileText({ text, line }: { text: string; line?: number }): JSX.Element 
 
 export function WorkspaceReferencePanel({
   reference,
+  active,
 }: {
   reference: WorkspaceReferenceTab;
+  active: boolean;
 }): JSX.Element {
   const locale = useLocale();
   const [loaded, setLoaded] = useState<WorkspaceReferenceLoad | null>(null);
+  const [retry, setRetry] = useState(0);
   const body = useRef<HTMLDivElement>(null);
-  const panel = useRef<HTMLElement>(null);
-  const closeButton = useRef<HTMLButtonElement>(null);
-  const trigger = useRef<HTMLElement | null>(null);
+  const lastPreview = useRef<WorkspaceReferenceLoad>(null);
   const { path, line, workingDirectory } = reference;
   const current = loaded?.reference === reference ? loaded : null;
   const preview = current && "preview" in current ? current.preview : null;
@@ -75,72 +76,32 @@ export function WorkspaceReferencePanel({
     return () => {
       active = false;
     };
-  }, [path, reference, workingDirectory]);
-
-  useLayoutEffect(() => {
-    const focused = document.activeElement;
-    if (
-      focused instanceof HTMLElement &&
-      focused !== document.body &&
-      !panel.current?.contains(focused)
-    ) {
-      trigger.current = focused;
-    }
-    closeButton.current?.focus({ preventScroll: true });
-  }, [reference]);
+  }, [path, reference, retry, workingDirectory]);
 
   useLayoutEffect(() => {
     const viewport = body.current;
-    if (!viewport) return;
+    if (!active || !viewport || !current || lastPreview.current === current) return;
+    lastPreview.current = current;
     viewport.scrollTop = 0;
     viewport.scrollLeft = 0;
     const target = viewport.querySelector("[data-reference-line]");
     if (target)
       viewport.scrollTop =
         target.getBoundingClientRect().top - viewport.getBoundingClientRect().top - 24;
-  }, [current]);
-
-  const close = (): void => {
-    useWorkspaceReferenceStore.getState().close();
-    trigger.current?.focus({ preventScroll: true });
-  };
+  }, [active, current]);
 
   return (
-    <aside
-      ref={panel}
-      data-workspace-reference-panel
-      aria-label={t("引用预览", locale)}
-      className="flex w-[min(46%,42rem)] min-w-0 shrink-0 flex-col border-l border-border bg-background"
-      onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
-        event.stopPropagation();
-        close();
-      }}
-    >
-      <header className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border/65 pr-2 pl-3">
-        <h2
-          title={path}
-          className="flex h-7 min-w-0 items-center gap-2 rounded-lg bg-secondary px-2.5 text-[13px] font-medium text-secondary-foreground"
-        >
+    <div data-workspace-reference-panel className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <header className="flex shrink-0 items-center gap-2 border-b border-border/65 bg-muted/40 px-3 py-2">
+        <h2 title={path} className="flex min-w-0 items-center gap-2 text-[13px] font-medium">
           <Icon aria-hidden="true" className="size-3.5 shrink-0" />
           <span className="truncate">{title}</span>
         </h2>
-        <Button
-          ref={closeButton}
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t("关闭预览", locale)}
-          title={t("关闭预览", locale)}
-          onClick={close}
-        >
-          <XIcon aria-hidden="true" className="size-4" />
-        </Button>
       </header>
       <div
         ref={body}
         tabIndex={preview?.kind === "file" && preview.text ? 0 : undefined}
-        className="min-h-0 flex-1 [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] overflow-auto overscroll-contain"
+        className="min-h-0 flex-1 [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] overflow-auto overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       >
         {!current && (
           <p role="status" className="px-3 py-4 text-xs text-muted-foreground">
@@ -148,9 +109,21 @@ export function WorkspaceReferencePanel({
           </p>
         )}
         {error && (
-          <p role="alert" className="px-3 py-4 text-xs text-muted-foreground">
-            {localizeError(error, locale)}
-          </p>
+          <div className="flex flex-col items-start gap-2 px-3 py-4">
+            <p role="alert" className="text-xs wrap-anywhere text-destructive">
+              {localizeError(error, locale)}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setLoaded(null);
+                setRetry((value) => value + 1);
+              }}
+            >
+              {t("重试", locale)}
+            </Button>
+          </div>
         )}
         {preview?.kind === "file" &&
           (preview.text ? (
@@ -203,6 +176,6 @@ export function WorkspaceReferencePanel({
           </ul>
         )}
       </div>
-    </aside>
+    </div>
   );
 }

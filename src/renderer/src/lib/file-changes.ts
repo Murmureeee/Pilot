@@ -97,3 +97,15 @@ export function summarizeChanges(changes: readonly FileChangeSummary[]): {
   }
   return { count: paths.size, stats };
 }
+
+export function latestFileChangesReply(messages: readonly UiMessage[]): string | undefined {
+  let replyId: string | undefined;
+  let latest: string | undefined;
+  for (const message of messages) {
+    if (message.role === "user") replyId = undefined;
+    if (message.role !== "assistant") continue;
+    replyId ??= message.id;
+    if (message.parts.some((part) => part.type === "tool" && part.fileChange)) latest = replyId;
+  }
+  return latest;
+}

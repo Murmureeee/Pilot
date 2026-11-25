@@ -1,25 +1,15 @@
 // @env browser
 import { cn } from "cn";
-import { CheckIcon, PlayIcon, RotateCcwIcon, SquareIcon } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type JSX,
-  type RefObject,
-} from "react";
+import { CheckIcon, ChevronRightIcon, PlayIcon, RotateCcwIcon, SquareIcon } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@renderer/components/ui/dialog";
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@renderer/components/ui/collapsible";
 import { Input } from "@renderer/components/ui/input";
 import { VERIFICATION_LABELS, VERIFICATION_STATUS_LABELS } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
@@ -60,21 +50,22 @@ function VerificationStatusText({ run }: { run: VerificationRun }): JSX.Element 
   );
 }
 
-function VerificationOutput({ output }: { output: string }): JSX.Element {
+function VerificationOutput({ output, active }: { output: string; active: boolean }): JSX.Element {
   const locale = useLocale();
   const viewport = useRef<HTMLPreElement>(null);
   const follow = useRef(true);
   useLayoutEffect(() => {
-    if (follow.current && viewport.current)
+    if (active && follow.current && viewport.current)
       viewport.current.scrollTop = viewport.current.scrollHeight;
-  }, [output]);
+  }, [active, output]);
   return (
     <CodeBlock size="sm">
       <CodeBlockContent
         ref={viewport}
         wrap
+        tabIndex={0}
         aria-label={t("输出", locale)}
-        className="max-h-[min(30dvh,22rem)] min-h-24 overscroll-contain text-xs"
+        className="max-h-[min(36dvh,22rem)] min-h-24 overscroll-contain text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         data-verification-output
         onScroll={(event) => {
           const node = event.currentTarget;
@@ -89,12 +80,14 @@ function VerificationOutput({ output }: { output: string }): JSX.Element {
 
 function VerificationDetails({
   result,
+  visible,
   busy,
   pending,
   onStop,
   onRerun,
 }: {
   result: VerificationResult;
+  visible: boolean;
   busy: boolean;
   pending: boolean;
   onStop(): void;
@@ -103,11 +96,13 @@ function VerificationDetails({
   const locale = useLocale();
   const active = isRunning(result);
   const [now, setNow] = useState(Date.now);
+  const [outputOpen, setOutputOpen] = useState<boolean>();
+  const showOutput = outputOpen ?? result.status !== "success";
   useEffect(() => {
-    if (!active) return;
+    if (!active || !visible) return;
     const timer = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(timer);
-  }, [active]);
+  }, [active, visible]);
   const duration = active ? Math.max(result.durationMs, now - result.startedAt) : result.durationMs;
   return (
     <div className="grid min-w-0 content-start gap-2.5" data-verification-detail={result.runId}>
@@ -167,10 +162,20 @@ function VerificationDetails({
           </div>
         )}
       </dl>
-      <VerificationOutput key={result.runId} output={result.output} />
-      {result.truncated && (
-        <p className="text-xs text-muted-foreground">{t("输出较长，已省略前段。", locale)}</p>
-      )}
+      <Collapsible open={showOutput} onOpenChange={setOutputOpen}>
+        <CollapsibleTrigger render={<Button size="sm" variant="ghost" className="group px-2" />}>
+          <ChevronRightIcon data-icon="inline-start" className="group-aria-expanded:rotate-90" />
+          {t("输出", locale)}
+        </CollapsibleTrigger>
+        <CollapsibleContent keepMounted>
+          <VerificationOutput output={result.output} active={visible && showOutput} />
+          {result.truncated && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("输出较长，已省略前段。", locale)}
+            </p>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
       {result.error && (
         <p role="alert" className="text-xs wrap-anywhere text-destructive">
           {localizeError(result.error, locale)}
@@ -185,7 +190,13 @@ function VerificationDetails({
   );
 }
 
-function VerificationDialogBody({ composerId }: { composerId: string }): JSX.Element {
+export function VerificationPanel({
+  composerId,
+  visible,
+}: {
+  composerId: string;
+  visible: boolean;
+}): JSX.Element {
   const locale = useLocale();
   const [state, setState] = useState<VerificationState>();
   const [runs, setRuns] = useState<VerificationRun[]>([]);
@@ -196,6 +207,7 @@ function VerificationDialogBody({ composerId }: { composerId: string }): JSX.Ele
   const [drafts, setDrafts] = useState<Partial<Record<VerificationKind, string>>>({});
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
   const command = drafts[kind] ?? state?.commands[kind] ?? "";
   const busy = runs.some(isRunning);
   const selectedId = selected ?? runs.find(isRunning)?.runId ?? runs[0]?.runId;
@@ -233,7 +245,7 @@ function VerificationDialogBody({ composerId }: { composerId: string }): JSX.Ele
       active = false;
       unsubscribe();
     };
-  }, [composerId, receive]);
+  }, [composerId, receive, retry]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -249,7 +261,7 @@ function VerificationDialogBody({ composerId }: { composerId: string }): JSX.Ele
     return () => {
       active = false;
     };
-  }, [composerId, selectedId]);
+  }, [composerId, selectedId, retry]);
 
   const perform = async (action: () => Promise<VerificationResult>): Promise<void> => {
     if (pending) return;
@@ -267,163 +279,159 @@ function VerificationDialogBody({ composerId }: { composerId: string }): JSX.Ele
   };
 
   return (
-    <>
-      {state?.workingDirectory && (
-        <form
-          className="grid gap-2 border-b border-border pb-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const workingDirectory = state.workingDirectory;
-            if (workingDirectory && command.trim() && !busy) {
-              void perform(() =>
-                window.pi.sessionStartVerification(composerId, { workingDirectory, kind, command }),
-              );
-            }
-          }}
-        >
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("验证类型", locale)}>
-            {VERIFICATION_KINDS.map((item) => (
-              <Button
-                key={item}
-                type="button"
-                size="sm"
-                variant={item === kind ? "secondary" : "ghost"}
-                aria-pressed={item === kind}
-                onClick={() => setKind(item)}
-              >
-                {t(VERIFICATION_LABELS[item], locale)}
+    <div
+      data-verification-panel
+      className="@container min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
+    >
+      <div className="flex min-w-0 flex-col gap-3 p-3">
+        {state?.workingDirectory && (
+          <form
+            className="grid gap-2 border-b border-border pb-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const workingDirectory = state.workingDirectory;
+              if (workingDirectory && command.trim() && !busy) {
+                void perform(() =>
+                  window.pi.sessionStartVerification(composerId, {
+                    workingDirectory,
+                    kind,
+                    command,
+                  }),
+                );
+              }
+            }}
+          >
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("验证类型", locale)}>
+              {VERIFICATION_KINDS.map((item) => (
+                <Button
+                  key={item}
+                  type="button"
+                  size="sm"
+                  variant={item === kind ? "secondary" : "ghost"}
+                  aria-pressed={item === kind}
+                  onClick={() => setKind(item)}
+                >
+                  {t(VERIFICATION_LABELS[item], locale)}
+                </Button>
+              ))}
+            </div>
+            <div className="flex min-w-0 flex-col gap-0.5 text-xs text-muted-foreground">
+              <span>{t("工作目录", locale)}</span>
+              <span className="font-mono wrap-anywhere text-foreground">
+                {state.workingDirectory}
+              </span>
+            </div>
+            <div className="flex items-end gap-2">
+              <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground">
+                {t("命令", locale)}
+                <Input
+                  value={command}
+                  onChange={(event) =>
+                    setDrafts((values) => ({ ...values, [kind]: event.target.value }))
+                  }
+                  placeholder={t("输入验证命令", locale)}
+                  maxLength={4096}
+                  className="font-mono text-sm"
+                />
+              </label>
+              <Button type="submit" size="sm" disabled={busy || pending || !command.trim()}>
+                <PlayIcon data-icon="inline-start" />
+                {t("运行", locale)}
               </Button>
-            ))}
-          </div>
-          <div className="flex min-w-0 flex-col gap-0.5 text-xs text-muted-foreground">
-            <span>{t("工作目录", locale)}</span>
-            <span className="font-mono wrap-anywhere text-foreground">
-              {state.workingDirectory}
-            </span>
-          </div>
-          <div className="flex items-end gap-2">
-            <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground">
-              {t("命令", locale)}
-              <Input
-                value={command}
-                onChange={(event) =>
-                  setDrafts((values) => ({ ...values, [kind]: event.target.value }))
-                }
-                placeholder={t("输入验证命令", locale)}
-                maxLength={4096}
-                className="font-mono text-sm"
-              />
-            </label>
-            <Button type="submit" size="sm" disabled={busy || pending || !command.trim()}>
-              <PlayIcon data-icon="inline-start" />
-              {t("运行", locale)}
+            </div>
+          </form>
+        )}
+        {state && !state.workingDirectory && (
+          <p className="text-xs text-muted-foreground">{t("请先选择工作目录。", locale)}</p>
+        )}
+        {error && (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p role="alert" className="min-w-0 text-xs wrap-anywhere text-destructive">
+              {localizeError(error, locale)}
+            </p>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => {
+                setError("");
+                setRetry((value) => value + 1);
+              }}
+            >
+              {t("刷新验证记录", locale)}
             </Button>
           </div>
-        </form>
-      )}
-      {state && !state.workingDirectory && (
-        <p className="text-xs text-muted-foreground">{t("请先选择工作目录。", locale)}</p>
-      )}
-      {error && (
-        <p role="alert" className="text-xs wrap-anywhere text-destructive">
-          {localizeError(error, locale)}
-        </p>
-      )}
-      {!state && !error && (
-        <p role="status" className="text-xs text-muted-foreground">
-          {t("加载中…", locale)}
-        </p>
-      )}
-      {runs.length > 0 && (
-        <div className="grid min-w-0 gap-3 sm:grid-cols-[11rem_minmax(0,1fr)]">
-          <ul
-            aria-label={t("验证记录", locale)}
-            className="max-h-56 min-w-0 overflow-y-auto overscroll-contain sm:max-h-[min(47dvh,28rem)]"
-            data-verification-history
-          >
-            {runs.map((run) => (
-              <li key={run.runId}>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  aria-current={run.runId === selectedId ? "true" : undefined}
-                  onClick={() => {
-                    setError("");
-                    setSelected(run.runId);
-                  }}
-                  className="h-auto w-full min-w-0 items-start justify-start gap-2 px-2 py-1.5 text-left font-normal"
-                >
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span>{t(VERIFICATION_LABELS[run.kind], locale)}</span>
-                    <VerificationStatusText run={run} />
-                    <span className="truncate text-xs text-muted-foreground">
-                      {new Date(run.startedAt).toLocaleString(locale === "en" ? "en" : "zh-CN", {
-                        dateStyle: "short",
-                        timeStyle: "medium",
-                      })}
+        )}
+        {!state && !error && (
+          <p role="status" className="text-xs text-muted-foreground">
+            {t("加载中…", locale)}
+          </p>
+        )}
+        {state && runs.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            {t("运行验证后，结果会显示在这里。", locale)}
+          </p>
+        )}
+        {runs.length > 0 && (
+          <div className="grid min-w-0 gap-3 @xl:grid-cols-[10rem_minmax(0,1fr)]">
+            <ul
+              aria-label={t("验证记录", locale)}
+              className="max-h-36 min-w-0 overflow-y-auto overscroll-contain rounded-lg border border-border/65 @xl:max-h-[min(47dvh,28rem)]"
+              data-verification-history
+            >
+              {runs.map((run) => (
+                <li key={run.runId}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-current={run.runId === selectedId ? "true" : undefined}
+                    onClick={() => {
+                      setError("");
+                      setSelected(run.runId);
+                    }}
+                    className="h-auto w-full min-w-0 items-start justify-start gap-2 px-2 py-1.5 text-left font-normal"
+                  >
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span>{t(VERIFICATION_LABELS[run.kind], locale)}</span>
+                      <VerificationStatusText run={run} />
+                      <span className="truncate text-xs text-muted-foreground">
+                        {new Date(run.startedAt).toLocaleString(locale === "en" ? "en" : "zh-CN", {
+                          dateStyle: "short",
+                          timeStyle: "medium",
+                        })}
+                      </span>
                     </span>
-                  </span>
-                  {run.runId === selectedId && <CheckIcon aria-hidden="true" className="mt-0.5" />}
-                </Button>
-              </li>
-            ))}
-          </ul>
-          {result ? (
-            <VerificationDetails
-              result={result}
-              busy={busy}
-              pending={pending}
-              onStop={() =>
-                void perform(() => window.pi.sessionStopVerification(composerId, result.runId))
-              }
-              onRerun={() =>
-                void perform(() => window.pi.sessionRerunVerification(composerId, result.runId))
-              }
-            />
-          ) : (
-            !error && (
-              <p role="status" className="text-xs text-muted-foreground">
-                {t("加载中…", locale)}
-              </p>
-            )
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
-export function VerificationDialog({
-  composerId,
-  open,
-  onOpenChange,
-  finalFocus,
-}: {
-  composerId: string;
-  open: boolean;
-  onOpenChange(open: boolean): void;
-  finalFocus: RefObject<HTMLElement | null>;
-}): JSX.Element {
-  const locale = useLocale();
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {open && (
-        <DialogContent
-          className="max-h-[calc(100dvh-2rem)] min-w-0 gap-3 overflow-y-auto overscroll-contain p-4 sm:max-w-3xl sm:p-5"
-          closeLabel={t("关闭验证", locale)}
-          finalFocus={finalFocus}
-          data-verification-dialog
-        >
-          <DialogHeader>
-            <DialogTitle>{t("验证", locale)}</DialogTitle>
-            <DialogDescription className="sr-only">
-              {t("运行项目命令并查看会话的验证记录。", locale)}
-            </DialogDescription>
-          </DialogHeader>
-          <VerificationDialogBody composerId={composerId} />
-        </DialogContent>
-      )}
-    </Dialog>
+                    {run.runId === selectedId && (
+                      <CheckIcon aria-hidden="true" className="mt-0.5" />
+                    )}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            {result ? (
+              <VerificationDetails
+                key={result.runId}
+                result={result}
+                visible={visible}
+                busy={busy}
+                pending={pending}
+                onStop={() =>
+                  void perform(() => window.pi.sessionStopVerification(composerId, result.runId))
+                }
+                onRerun={() =>
+                  void perform(() => window.pi.sessionRerunVerification(composerId, result.runId))
+                }
+              />
+            ) : (
+              !error && (
+                <p role="status" className="text-xs text-muted-foreground">
+                  {t("加载中…", locale)}
+                </p>
+              )
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

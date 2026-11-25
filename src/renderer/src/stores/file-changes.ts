@@ -7,8 +7,6 @@ import { fileChangeFolderPaths } from "../lib/file-changes";
 
 export const useFileChangesStore = create<FileChangesStore>((set) => ({
   review: null,
-  gitComposerId: null,
-  openGit: (composerId) => set({ review: null, gitComposerId: composerId }),
   open: ({ sessionId, replyId, changeId, changePath, confirmUndo }) =>
     set(({ review }) => {
       const sameReply = review?.sessionId === sessionId && review.replyId === replyId;
@@ -18,7 +16,6 @@ export const useFileChangesStore = create<FileChangesStore>((set) => ({
         ? review.collapsedFolders.filter((path) => !reveal.includes(path))
         : [];
       return {
-        gitComposerId: null,
         review: {
           sessionId,
           replyId,
@@ -30,7 +27,7 @@ export const useFileChangesStore = create<FileChangesStore>((set) => ({
         },
       };
     }),
-  close: () => set({ review: null, gitComposerId: null }),
+  close: () => set({ review: null }),
   setFolderOpen: (path, open) =>
     set((state) => {
       const { review } = state;

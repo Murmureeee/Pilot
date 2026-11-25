@@ -20,12 +20,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
+import { REVIEW_PANEL_ID, REVIEW_TRIGGER_ID } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { referenceName } from "@renderer/lib/workspace-links";
 import { useAgentStore } from "@renderer/stores/agent";
-import { useFileChangesStore } from "@renderer/stores/file-changes";
-import { useWorkspaceReferenceStore } from "@renderer/stores/workspace-reference";
-import type { ProjectGitHead } from "@shared/contract";
+import { activateReview } from "@renderer/stores/review";
+import type { ProjectGitHead, VerificationStatus } from "@shared/contract";
+
+import { ChangeCount, VerificationMark } from "./review-indicators";
 
 export function ProjectChip({
   sessionId,
@@ -151,32 +153,29 @@ export function ProjectBranch({ head }: { head: ProjectGitHead }): JSX.Element {
 }
 
 export function ReviewToggle({
-  composerId,
   open,
+  count,
+  verificationStatus,
 }: {
-  composerId: string;
   open: boolean;
+  count?: number;
+  verificationStatus?: VerificationStatus;
 }): JSX.Element {
   const locale = useLocale();
   return (
     <Button
-      id="git-changes-trigger"
+      id={REVIEW_TRIGGER_ID}
       size="sm"
       variant={open ? "secondary" : "ghost"}
       aria-expanded={open}
-      aria-controls={open ? "git-changes-panel" : undefined}
-      title={t("查看 Git 变更", locale)}
-      onClick={() => {
-        const changes = useFileChangesStore.getState();
-        if (open) changes.close();
-        else {
-          useWorkspaceReferenceStore.getState().close();
-          changes.openGit(composerId);
-        }
-      }}
+      aria-controls={open ? REVIEW_PANEL_ID : undefined}
+      title={t(open ? "关闭审查面板" : "打开审查面板", locale)}
+      onClick={(event) => activateReview(undefined, event.currentTarget)}
     >
       <FileDiffIcon data-icon="inline-start" />
       {t("审查", locale)}
+      {count !== undefined && <ChangeCount count={count} />}
+      {verificationStatus && <VerificationMark status={verificationStatus} />}
     </Button>
   );
 }

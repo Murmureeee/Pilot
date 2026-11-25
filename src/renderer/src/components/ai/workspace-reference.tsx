@@ -3,6 +3,7 @@ import { cn } from "cn";
 import type { JSX, ReactNode } from "react";
 
 import { selectWorkingDirectory, useAgentStore } from "@renderer/stores/agent";
+import { useReviewStore } from "@renderer/stores/review";
 import { useWorkspaceReferenceStore } from "@renderer/stores/workspace-reference";
 import type { PromptMention } from "@shared/contract";
 
@@ -42,7 +43,9 @@ export function InlineWorkspaceReference({
       className={className}
       title={title}
       data-reference-kind={kind}
-      onClick={() => {
+      onClick={(event) => {
+        const { composerId } = useAgentStore.getState();
+        if (!composerId) return;
         useWorkspaceReferenceStore.getState().open({
           sessionId,
           path,
@@ -50,6 +53,7 @@ export function InlineWorkspaceReference({
           line,
           workingDirectory: workingDirectory ?? directory,
         });
+        useReviewStore.getState().show(composerId, "files", event.currentTarget);
       }}
     >
       {children}

@@ -168,6 +168,11 @@ export const SEND_KEY_LABELS: Record<SendKey, string> = {
   "mod-enter": "Ctrl+Enter 发送，Enter 换行",
 };
 
+export const REVIEW_SHORTCUTS = {
+  changes: { label: "打开或关闭变更页签", keys: "Ctrl+Shift+D" },
+  verification: { label: "打开验证页签", keys: "Ctrl+Shift+T" },
+} as const;
+
 export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   {
     label: "全局",
@@ -179,6 +184,8 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { label: "后退", keys: "Ctrl+[" },
       { label: "前进", keys: "Ctrl+]" },
       { label: "显示或隐藏侧边栏", keys: "Ctrl+Shift+S" },
+      REVIEW_SHORTCUTS.changes,
+      REVIEW_SHORTCUTS.verification,
     ],
   },
   {
@@ -328,8 +335,18 @@ export const SIDEBAR_MIN_WIDTH = 220;
 export const SIDEBAR_MAX_WIDTH = 520;
 export const SIDEBAR_DEFAULT_WIDTH = 262;
 
-export const FILE_REVIEW_MIN_WINDOW_WIDTH = 700;
-export const FILE_CHANGES_MIN_WINDOW_WIDTH = 900;
+export const REVIEW_TWO_COLUMN_WIDTH = 900;
+export const REVIEW_THREE_COLUMN_WIDTH = 1100;
+export const REVIEW_MIN_WIDTH = 360;
+export const REVIEW_CHAT_MIN_WIDTH = 21 * 16;
+export const REVIEW_CARD_INSET = 64;
+export const REVIEW_PANEL_ID = "review-panel";
+export const REVIEW_TRIGGER_ID = "review-trigger";
+export const REVIEW_TABS = [
+  { value: "changes", label: "变更" },
+  { value: "files", label: "文件" },
+  { value: "verification", label: "验证" },
+] as const;
 export const FILE_CHANGES_TREE_MIN_WIDTH = 500;
 export const VERIFICATION_LABELS: Record<VerificationKind, string> = {
   test: "测试",
@@ -344,9 +361,6 @@ export const VERIFICATION_STATUS_LABELS: Record<VerificationStatus, string> = {
   stopped: "已停止",
   interrupted: "已中断",
 };
-export const FILE_CHANGES_PANEL_CLASS =
-  "border-border bg-background flex min-w-0 shrink-0 flex-col border-s [width:min(62%,56rem,calc(100%_-_21rem))]";
-
 export const GIT_CHANGE_AREAS = ["staged", "unstaged", "untracked"] as const;
 export const GIT_CHANGE_AREA_LABELS: Record<GitChange["area"], string> = {
   staged: "暂存区",

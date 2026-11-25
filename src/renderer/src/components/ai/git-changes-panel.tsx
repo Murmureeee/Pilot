@@ -1,11 +1,11 @@
 // @env browser
-import { CheckIcon, ChevronRightIcon, FileDiffIcon, HistoryIcon, XIcon } from "lucide-react";
-import { useEffect, useRef, useState, type JSX } from "react";
+import { CheckIcon, ChevronRightIcon, HistoryIcon } from "lucide-react";
+import { useState, type JSX } from "react";
 
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
+import { useGitReview } from "@renderer/hooks/use-git-review";
 import {
-  FILE_CHANGES_PANEL_CLASS,
   GIT_CHANGE_AREAS,
   GIT_CHANGE_AREA_LABELS,
   GIT_CHANGE_KIND_LABELS,
@@ -14,11 +14,10 @@ import {
   GIT_REVIEW_PHASE_LABELS,
 } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
+import type { GitReview } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
-import { useFileChangesStore } from "@renderer/stores/file-changes";
 import type {
   GitChange,
-  GitChangesView,
   GitCommitResult,
   GitPatchSelection,
   GitStageSelection,
@@ -117,10 +116,16 @@ function GitChangeRow({
   );
 }
 
-export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Element {
+export function GitChangesPanel({
+  composerId,
+  workingDirectory,
+  liveReview,
+}: {
+  composerId: string;
+  workingDirectory: string | null;
+  liveReview: GitReview;
+}): JSX.Element {
   const locale = useLocale();
-  const heading = useRef<HTMLHeadingElement>(null);
-  const [view, setView] = useState<GitChangesView | null>();
   const [showCheckpoint, setShowCheckpoint] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [expanded, setExpanded] = useState<string>();
@@ -131,64 +136,21 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
   const [commit, setCommit] = useState<GitCommitResult>();
   const busy = useAgentStore((state) => state.activeRun !== null);
   const live = !showCheckpoint && !showHistory;
-
-  useEffect(() => {
-    heading.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    let disposed = false;
-    let reading = false;
-    let queued = false;
-    const refresh = async (): Promise<void> => {
-      if (reading) {
-        queued = true;
-        return;
-      }
-      reading = true;
-      do {
-        queued = false;
-        const next = await window.pi
-          .sessionGitChanges(composerId, live)
-          .catch((): GitChangesView => ({
-            phase: "workspace",
-            changes: null,
-          }));
-        if (!disposed && !queued) setView(next);
-      } while (!disposed && queued);
-      reading = false;
-    };
-    const refreshOnFocus = (): void => void refresh();
-    const unsubscribe = window.pi.onAgentEvent((event) => {
-      if (
-        "run" in event &&
-        event.run.sessionId === composerId &&
-        (event.type === "run_started" ||
-          event.type === "tool_end" ||
-          (event.type === "status" && event.status === "idle"))
-      )
-        void refresh();
-    });
-    window.addEventListener("focus", refreshOnFocus);
-    void refresh();
-    return () => {
-      disposed = true;
-      unsubscribe();
-      window.removeEventListener("focus", refreshOnFocus);
-    };
-  }, [composerId, live, revision]);
-
-  const close = (): void => {
-    useFileChangesStore.getState().close();
-    document.getElementById("git-changes-trigger")?.focus();
-  };
+  const history = useGitReview(live ? null : composerId, workingDirectory, false);
+  const review = live ? liveReview : history;
+  const view = review.view;
+  const phase = (view ?? liveReview.view)?.phase;
   const changes = view?.changes;
   const staged = new Set(
     changes?.filter((change) => change.area === "staged").map((change) => change.path),
   );
   const selected = selections.filter((item) => staged.has(item.path));
   const checkpoint = showCheckpoint ? view?.checkpoint : undefined;
-  const refresh = (): void => setRevision((value) => value + 1);
+  const refresh = (): void => {
+    liveReview.refresh();
+    if (!live) history.refresh();
+    setRevision((value) => value + 1);
+  };
   const refreshSelection = (): void => {
     setSelections([]);
     refresh();
@@ -222,52 +184,16 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
   const toggle = (key: string): void =>
     setExpanded((current) => (current === key ? undefined : key));
   const emptyMessage =
-    view === undefined
-      ? "加载中…"
-      : !view
-        ? "当前目录没有 Git 工作树"
-        : changes === null
-          ? "无法读取 Git 变更"
-          : "暂无文件变更";
+    view === undefined ? "加载中…" : !view ? "当前目录没有 Git 工作树" : "暂无文件变更";
   return (
-    <aside
-      id="git-changes-panel"
-      aria-labelledby="git-changes-heading"
-      className={FILE_CHANGES_PANEL_CLASS}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape" || !event.currentTarget.contains(event.target as Node)) return;
-        event.stopPropagation();
-        close();
-      }}
-    >
-      <div className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border/65 pr-2 pl-3">
-        <h2
-          id="git-changes-heading"
-          ref={heading}
-          tabIndex={-1}
-          className="flex min-w-0 items-center gap-2 text-[13px] font-medium outline-none"
-        >
-          <FileDiffIcon aria-hidden="true" className="size-3.5 shrink-0" />
-          {t("Git 变更", locale)}
-        </h2>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t("关闭变更标签页", locale)}
-          title={t("关闭变更标签页", locale)}
-          onClick={close}
-        >
-          <XIcon aria-hidden="true" />
-        </Button>
-      </div>
-      {view && (
+    <div data-git-changes className="flex min-h-0 flex-1 flex-col">
+      {phase && (
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-1.5 border-b border-border/70 bg-muted/40 px-3 py-1.5">
           <p className="text-xs text-muted-foreground">
-            {t(GIT_REVIEW_PHASE_LABELS[view.phase], locale)}
+            {t(GIT_REVIEW_PHASE_LABELS[phase], locale)}
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
-            {(view.hasHistory || showHistory) && (
+            {(liveReview.view?.hasHistory || showHistory) && (
               <Button
                 size="xs"
                 variant={showHistory ? "secondary" : "outline"}
@@ -282,7 +208,7 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
                 {t("任务变更记录", locale)}
               </Button>
             )}
-            {view.checkpoint && (
+            {liveReview.view?.checkpoint && (
               <Button
                 size="xs"
                 variant={showCheckpoint ? "secondary" : "outline"}
@@ -301,50 +227,20 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
           </div>
         </div>
       )}
-      {live && changes && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/70 px-3 py-2">
-          <p className="text-xs text-muted-foreground">
-            {t("暂存区 {0} 个文件", locale, [staged.size])}
+      {(review.error || changes === null) && (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/65 px-3 py-2">
+          <p role="alert" className="min-w-0 text-xs wrap-anywhere text-destructive">
+            {review.error ? localizeError(review.error, locale) : t("无法读取 Git 变更", locale)}
           </p>
-          <GitCommitDialog
-            composerId={composerId}
-            selections={selected}
-            disabled={busy || staging}
-            onRefresh={refreshSelection}
-            onApplied={(result) => {
-              setCommit(result);
-              setExpanded(undefined);
-              setStageError("");
-              refreshSelection();
-            }}
-          />
-          {stageError && (
-            <p role="alert" className="basis-full text-xs wrap-anywhere text-destructive">
-              {localizeError(stageError, locale)}
-            </p>
-          )}
-          {commit && (
-            <div
-              role="status"
-              data-git-commit={commit.commit}
-              className="flex basis-full items-start gap-1.5 text-xs text-emerald-700 dark:text-emerald-400"
-            >
-              <CheckIcon aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
-              <div className="min-w-0">
-                <p className="wrap-anywhere">
-                  {commit.branch
-                    ? t("已提交到 {0}", locale, [commit.branch])
-                    : t("已提交到游离 HEAD", locale)}
-                </p>
-                <p className="font-mono break-all text-muted-foreground select-all">
-                  {commit.commit}
-                </p>
-              </div>
-            </div>
-          )}
+          <Button variant="outline" size="xs" onClick={refresh}>
+            {t("重试", locale)}
+          </Button>
         </div>
       )}
-      <div className="min-h-0 flex-1 [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] overflow-y-auto overscroll-contain">
+      <div
+        data-git-changes-scroll
+        className="min-h-0 flex-1 [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] overflow-y-auto overscroll-contain"
+      >
         {checkpoint ? (
           <ul aria-label={t("任务检查点", locale)} data-git-checkpoint>
             {checkpoint.files.map((file) => {
@@ -395,7 +291,7 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
                       checkpointId={checkpoint.id}
                       request={{ path: file.path, area: change.area }}
                       busy={busy}
-                      onApplied={() => setRevision((value) => value + 1)}
+                      onApplied={refresh}
                     />
                   )}
                 </li>
@@ -442,11 +338,68 @@ export function GitChangesPanel({ composerId }: { composerId: string }): JSX.Ele
             );
           })
         ) : (
-          <p role="status" className="px-3 py-4 text-xs text-muted-foreground">
-            {t(emptyMessage, locale)}
-          </p>
+          !(review.error || changes === null) && (
+            <p role="status" className="px-3 py-4 text-xs text-muted-foreground">
+              {t(emptyMessage, locale)}
+            </p>
+          )
         )}
       </div>
-    </aside>
+      {live && changes && (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/70 px-3 py-2">
+          <p className="text-xs text-muted-foreground">
+            {t("暂存区 {0} 个文件", locale, [staged.size])}
+          </p>
+          <GitCommitDialog
+            composerId={composerId}
+            selections={selected}
+            disabled={busy || staging}
+            onRefresh={refreshSelection}
+            onApplied={(result) => {
+              setCommit(result);
+              setExpanded(undefined);
+              setStageError("");
+              refreshSelection();
+            }}
+          />
+          {stageError && (
+            <div className="flex basis-full flex-wrap items-center justify-between gap-2">
+              <p role="alert" className="text-xs wrap-anywhere text-destructive">
+                {localizeError(stageError, locale)}
+              </p>
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => {
+                  setStageError("");
+                  refresh();
+                }}
+              >
+                {t("刷新变更", locale)}
+              </Button>
+            </div>
+          )}
+          {commit && (
+            <div
+              role="status"
+              data-git-commit={commit.commit}
+              className="flex basis-full items-start gap-1.5 text-xs text-emerald-700 dark:text-emerald-400"
+            >
+              <CheckIcon aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
+              <div className="min-w-0">
+                <p className="wrap-anywhere">
+                  {commit.branch
+                    ? t("已提交到 {0}", locale, [commit.branch])
+                    : t("已提交到游离 HEAD", locale)}
+                </p>
+                <p className="font-mono break-all text-muted-foreground select-all">
+                  {commit.commit}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

@@ -5,8 +5,9 @@ import { useState, type JSX } from "react";
 import { Button } from "@renderer/components/ui/button";
 import { summarizeChanges } from "@renderer/lib/file-changes";
 import { t, useLocale } from "@renderer/lib/i18n";
+import { useAgentStore } from "@renderer/stores/agent";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
-import { useWorkspaceReferenceStore } from "@renderer/stores/workspace-reference";
+import { useReviewStore } from "@renderer/stores/review";
 import type { FileChangeSummary } from "@shared/contract";
 
 import { DiffStats } from "./diff-stats";
@@ -27,11 +28,12 @@ export function FileChangesCard({
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? changes : changes.slice(0, 3);
   const { count, stats } = summarizeChanges(changes);
-  const show = (changeId?: string, confirmUndo = false): void => {
-    if (!sessionId) return;
-    useWorkspaceReferenceStore.getState().close();
+  const show = (trigger: HTMLElement, changeId?: string, confirmUndo = false): void => {
+    const { composerId } = useAgentStore.getState();
+    if (!sessionId || !composerId) return;
     const changePath = changes.find((change) => change.id === changeId)?.path;
     open({ sessionId, replyId, changeId, changePath, confirmUndo });
+    useReviewStore.getState().show(composerId, "changes", trigger);
   };
 
   return (
@@ -53,7 +55,9 @@ export function FileChangesCard({
           className="ms-auto"
           disabled={!sessionId}
           data-review-overview={replyId}
-          onClick={() => show(changes.length === 1 ? changes[0]?.id : undefined)}
+          onClick={(event) =>
+            show(event.currentTarget, changes.length === 1 ? changes[0]?.id : undefined)
+          }
         >
           {t("查看更改", locale)}
         </Button>
@@ -66,7 +70,7 @@ export function FileChangesCard({
               title={change.path}
               data-review-file={change.id}
               disabled={!sessionId}
-              onClick={() => show(change.id)}
+              onClick={(event) => show(event.currentTarget, change.id)}
               className="min-h-6 min-w-0 flex-1 truncate rounded-sm text-left font-mono text-xs outline-none hover:text-brand hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               {change.path}
@@ -83,7 +87,7 @@ export function FileChangesCard({
                 disabled={!sessionId || busy}
                 aria-label={t("撤销 {0} 的变更", locale, [change.path])}
                 title={t("撤销", locale)}
-                onClick={() => show(change.id, true)}
+                onClick={(event) => show(event.currentTarget, change.id, true)}
               >
                 <Undo2Icon aria-hidden="true" />
               </Button>

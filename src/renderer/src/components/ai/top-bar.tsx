@@ -8,7 +8,7 @@ import {
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
 } from "lucide-react";
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 
 import { UpdatePanel } from "@renderer/components/ai/update-panel";
 import {
@@ -30,9 +30,11 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
+import { REVIEW_SHORTCUTS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { canBack, canForward } from "@renderer/lib/nav";
 import { useAgentStore } from "@renderer/stores/agent";
+import { activateReview } from "@renderer/stores/review";
 import { useUpdateStore } from "@renderer/stores/update";
 import { APP_NAME } from "@shared/constants";
 import type { AppInfo, MenuAction } from "@shared/contract";
@@ -65,9 +67,13 @@ function Item({
 export function TopBar({
   collapsed,
   onToggleSidebar,
+  reviewOpen,
+  canReview,
 }: {
   collapsed: boolean;
   onToggleSidebar(): void;
+  reviewOpen: boolean;
+  canReview: boolean;
 }): JSX.Element {
   const locale = useLocale();
   const nav = useAgentStore((s) => s.nav);
@@ -82,6 +88,7 @@ export function TopBar({
   const dialog = useUpdateStore((s) => s.dialog);
   const setDialog = useUpdateStore((s) => s.setDialog);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const menuTrigger = useRef<HTMLButtonElement>(null);
   const sidebarLabel = t(collapsed ? "显示侧边栏" : "隐藏侧边栏", locale);
   const menuLabel = t("应用菜单", locale);
   const aboutLabel = t("关于 {0}", locale, [APP_NAME]);
@@ -106,6 +113,7 @@ export function TopBar({
           <DropdownMenuTrigger
             render={
               <button
+                ref={menuTrigger}
                 type="button"
                 className="app-titlebar-control w-7 data-popup-open:bg-sidebar-foreground/8"
                 aria-label={menuLabel}
@@ -144,6 +152,23 @@ export function TopBar({
                 <DropdownMenuSubContent className="min-w-52">
                   <DropdownMenuGroup>
                     <Item label={sidebarLabel} shortcut="Ctrl+Shift+S" onRun={onToggleSidebar} />
+                    <Item
+                      label={t(reviewOpen ? "关闭审查面板" : "打开审查面板", locale)}
+                      disabled={!canReview}
+                      onRun={() => activateReview(undefined, menuTrigger.current ?? undefined)}
+                    />
+                    <Item
+                      label={t(REVIEW_SHORTCUTS.changes.label, locale)}
+                      shortcut={REVIEW_SHORTCUTS.changes.keys}
+                      disabled={!canReview}
+                      onRun={() => activateReview("changes", menuTrigger.current ?? undefined)}
+                    />
+                    <Item
+                      label={t(REVIEW_SHORTCUTS.verification.label, locale)}
+                      shortcut={REVIEW_SHORTCUTS.verification.keys}
+                      disabled={!canReview}
+                      onRun={() => activateReview("verification", menuTrigger.current ?? undefined)}
+                    />
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
@@ -249,6 +274,7 @@ export function TopBar({
           type="button"
           className="app-titlebar-control w-7"
           onClick={onToggleSidebar}
+          id="sidebar-toggle"
           aria-label={sidebarLabel}
           aria-expanded={!collapsed}
           aria-controls="sidebar-panel"

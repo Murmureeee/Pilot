@@ -8,7 +8,6 @@ import {
   SessionPersonaDialog,
   SessionRenameDialog,
 } from "@renderer/components/ai/session-edit-dialogs";
-import { VerificationDialog } from "@renderer/components/ai/verification-dialog";
 import { Button } from "@renderer/components/ui/button";
 import {
   DropdownMenu,
@@ -21,7 +20,7 @@ import {
 import { useProjectGitHead } from "@renderer/hooks/use-project-git-head";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { selectActiveSession, useAgentStore } from "@renderer/stores/agent";
-import type { SessionMeta } from "@shared/contract";
+import type { SessionMeta, VerificationStatus } from "@shared/contract";
 
 const TITLE_CLASS = "min-w-0 truncate text-[13px] font-medium";
 
@@ -68,24 +67,18 @@ function SessionTitle({
 function SessionMenu({
   composerId,
   session,
-  canVerify,
 }: {
   composerId: string;
   session: SessionMeta | null;
-  canVerify: boolean;
 }): JSX.Element {
   const locale = useLocale();
   const setSessionArchived = useAgentStore((s) => s.setSessionArchived);
-  const [dialog, setDialog] = useState<"verification" | "instructions" | null>(null);
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [renaming, setRenaming] = useState<SessionMeta | null>(null);
   const [persona, setPersona] = useState<SessionMeta | null>(null);
   // 对话框从菜单项打开，关闭后菜单项已不存在，焦点要明确交还给触发按钮。
   const trigger = useRef<HTMLButtonElement>(null);
   const label = t("更多操作", locale);
-  const close = (open: boolean): void => {
-    if (!open) setDialog(null);
-  };
-
   return (
     <>
       <DropdownMenu>
@@ -98,12 +91,7 @@ function SessionMenu({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
-            {canVerify && (
-              <DropdownMenuItem onClick={() => setDialog("verification")}>
-                {t("验证…", locale)}
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onClick={() => setDialog("instructions")}>
+            <DropdownMenuItem onClick={() => setInstructionsOpen(true)}>
               {t("指令来源…", locale)}
             </DropdownMenuItem>
           </DropdownMenuGroup>
@@ -125,16 +113,10 @@ function SessionMenu({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      <VerificationDialog
-        composerId={composerId}
-        open={dialog === "verification"}
-        onOpenChange={close}
-        finalFocus={trigger}
-      />
       <InstructionSourcesDialog
         composerId={composerId}
-        open={dialog === "instructions"}
-        onOpenChange={close}
+        open={instructionsOpen}
+        onOpenChange={setInstructionsOpen}
         finalFocus={trigger}
       />
       <SessionRenameDialog
@@ -157,12 +139,18 @@ export function ChatHeader({
   workingDirectory,
   projectDirectory,
   reviewOpen,
+  canReview,
+  changeCount,
+  verificationStatus,
 }: {
   title: string;
   composerId: string | null;
   workingDirectory: string | null;
   projectDirectory: string | null;
   reviewOpen: boolean;
+  canReview: boolean;
+  changeCount?: number;
+  verificationStatus?: VerificationStatus;
 }): JSX.Element {
   const session = useAgentStore(selectActiveSession) ?? null;
   const head = useProjectGitHead(projectDirectory);
@@ -178,13 +166,14 @@ export function ChatHeader({
       {head && <ProjectBranch head={head} />}
       {composerId && (
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          {head && <ReviewToggle composerId={composerId} open={reviewOpen} />}
-          <SessionMenu
-            key={composerId}
-            composerId={composerId}
-            session={session}
-            canVerify={Boolean(workingDirectory || session)}
-          />
+          {canReview && (
+            <ReviewToggle
+              open={reviewOpen}
+              count={changeCount}
+              verificationStatus={verificationStatus}
+            />
+          )}
+          <SessionMenu key={composerId} composerId={composerId} session={session} />
         </div>
       )}
     </header>

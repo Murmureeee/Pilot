@@ -117,7 +117,12 @@ export function ChatView({
   };
 
   return (
-    <div className={cn("relative flex min-h-0 flex-1 flex-col", isEmpty && "overflow-y-auto")}>
+    <div
+      className={cn(
+        "@container/chat relative flex min-h-0 flex-1 flex-col",
+        isEmpty && "overflow-y-auto",
+      )}
+    >
       {settings?.recovery && (
         <div className="workspace-column shrink-0 pt-4 pb-2">
           <SettingsRecoveryNotice recovery={settings.recovery} />

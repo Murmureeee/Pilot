@@ -1,5 +1,10 @@
 // @env browser
-import { SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./constants";
+import {
+  REVIEW_MIN_WIDTH,
+  SIDEBAR_DEFAULT_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+} from "./constants";
 import type { SendKey } from "./types";
 
 const SEND_KEY_STORAGE_KEY = "pilot-send-key";
@@ -31,8 +36,9 @@ export function saveCollapsedProjects(directories: readonly string[]): void {
 
 const SIDEBAR_WIDTH_STORAGE_KEY = "pilot-sidebar-width";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "pilot-sidebar-collapsed";
+const REVIEW_WIDTH_STORAGE_KEY = "pilot-review-width";
 
-function readSidebarPreference(key: string): string | null {
+function readLayoutPreference(key: string): string | null {
   try {
     return localStorage.getItem(key);
   } catch {
@@ -40,7 +46,7 @@ function readSidebarPreference(key: string): string | null {
   }
 }
 
-function writeSidebarPreference(key: string, value: string): void {
+function writeLayoutPreference(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
   } catch {
@@ -49,20 +55,30 @@ function writeSidebarPreference(key: string, value: string): void {
 }
 
 export function loadSidebarWidth(): number {
-  const value = readSidebarPreference(SIDEBAR_WIDTH_STORAGE_KEY)?.trim();
+  const value = readLayoutPreference(SIDEBAR_WIDTH_STORAGE_KEY)?.trim();
   const width = Number(value);
   if (!value || !Number.isFinite(width)) return SIDEBAR_DEFAULT_WIDTH;
   return Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, Math.round(width)));
 }
 
 export function saveSidebarWidth(width: number): void {
-  writeSidebarPreference(SIDEBAR_WIDTH_STORAGE_KEY, String(width));
+  writeLayoutPreference(SIDEBAR_WIDTH_STORAGE_KEY, String(width));
 }
 
 export function loadSidebarCollapsed(): boolean {
-  return readSidebarPreference(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
+  return readLayoutPreference(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
 }
 
 export function saveSidebarCollapsed(collapsed: boolean): void {
-  writeSidebarPreference(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
+  writeLayoutPreference(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
+}
+
+export function loadReviewWidth(): number | null {
+  const value = readLayoutPreference(REVIEW_WIDTH_STORAGE_KEY)?.trim();
+  const width = Number(value);
+  return value && Number.isFinite(width) ? Math.max(REVIEW_MIN_WIDTH, Math.round(width)) : null;
+}
+
+export function saveReviewWidth(width: number): void {
+  writeLayoutPreference(REVIEW_WIDTH_STORAGE_KEY, String(width));
 }
