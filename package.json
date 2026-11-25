@@ -18,7 +18,8 @@
     "postinstall": "node scripts/restore-electron.mjs",
     "preview": "electron-vite preview",
     "test": "vitest",
-    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json"
+    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
+    "verify:windows:ui": "node scripts/verify-windows-ui.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -54,6 +55,7 @@
     "knip": "^6.45.1",
     "oxfmt": "^0.79.0",
     "oxlint": "^1.94.0",
+    "playwright-core": "1.65.1",
     "png-to-ico": "^3.0.2",
     "sharp": "^0.35.5",
     "tailwindcss": "^4.3.5",

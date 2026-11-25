@@ -87,6 +87,9 @@ jobs:
       - name: Electron smoke test and development startup
         run: node scripts/verify-windows.mjs
 
+      - name: Windows desktop UI scenes
+        run: pnpm verify:windows:ui
+
       - name: Build Windows test installer
         if: inputs.build_test_packages && !inputs.prepare_release
         run: pnpm package:win
