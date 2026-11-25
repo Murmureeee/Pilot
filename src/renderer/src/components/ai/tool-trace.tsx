@@ -24,10 +24,11 @@ import { PERMISSION_DECISIONS } from "@renderer/lib/constants";
 import { formatDuration } from "@renderer/lib/duration";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { describeToolScope } from "@renderer/lib/tool-rules";
-import { parseToolFailure, stackDisplayPath, toolInput } from "@renderer/lib/tool-trace";
+import { parseToolFailure, stackDisplayPath } from "@renderer/lib/tool-trace";
 import type { ToolFailure } from "@renderer/lib/types";
 import { selectWorkingDirectory, useAgentStore } from "@renderer/stores/agent";
-import type { UiPart } from "@shared/contract";
+import type { TranscriptLocation, UiPart } from "@shared/contract";
+import { toolInput } from "@shared/tool-input";
 
 import { InlineWorkspaceReference } from "./workspace-reference";
 
@@ -50,15 +51,26 @@ function ToolOutput({ text }: { text: string }): JSX.Element {
   );
 }
 
-function ToolDetails({ title, text }: { title: string; text: string }): JSX.Element {
+function ToolDetails({
+  title,
+  text,
+  reveal = false,
+  field,
+}: {
+  title: string;
+  text: string;
+  reveal?: boolean;
+  field?: TranscriptLocation["field"];
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
   return (
-    <TraceCollapsible>
+    <TraceCollapsible open={reveal || open} onOpenChange={setOpen}>
       <TraceCollapsibleTrigger>
         <TraceLine>
           <TraceTitle>{title}</TraceTitle>
         </TraceLine>
       </TraceCollapsibleTrigger>
-      <TraceCollapsibleContent>
+      <TraceCollapsibleContent data-transcript-field={field}>
         <ToolOutput text={text} />
       </TraceCollapsibleContent>
     </TraceCollapsible>
@@ -68,14 +80,17 @@ function ToolDetails({ title, text }: { title: string; text: string }): JSX.Elem
 function FailureDetails({
   failure,
   output,
+  revealOutput = false,
 }: {
   failure: ToolFailure;
   output: string;
+  revealOutput?: boolean;
 }): JSX.Element {
   const locale = useLocale();
   const workspace = useAgentStore(selectWorkingDirectory) ?? undefined;
   const project = failure.frames.filter((frame) => !frame.framework);
   const framework = failure.frames.filter((frame) => frame.framework);
+  const [frameworkOpen, setFrameworkOpen] = useState(false);
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
       <p className="max-h-56 overflow-auto overscroll-contain font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap text-destructive">
@@ -102,7 +117,7 @@ function FailureDetails({
         </ol>
       )}
       {framework.length > 0 && (
-        <TraceCollapsible>
+        <TraceCollapsible open={revealOutput || frameworkOpen} onOpenChange={setFrameworkOpen}>
           <TraceCollapsibleTrigger>
             <TraceLine>
               <TraceIcon>
@@ -117,13 +132,24 @@ function FailureDetails({
         </TraceCollapsible>
       )}
       {failure.frames.length > 0 && failure.message !== failure.summary && (
-        <ToolDetails title={t("完整输出", locale)} text={output} />
+        <ToolDetails
+          title={t("完整输出", locale)}
+          text={output}
+          reveal={revealOutput}
+          field="output"
+        />
       )}
     </div>
   );
 }
 
-export function ToolTrace({ part }: { part: Extract<UiPart, { type: "tool" }> }): JSX.Element {
+export function ToolTrace({
+  part,
+  searchField,
+}: {
+  part: Extract<UiPart, { type: "tool" }>;
+  searchField?: TranscriptLocation["field"];
+}): JSX.Element {
   const locale = useLocale();
   const [open, setOpen] = useState<boolean | null>(null);
   const input = useMemo(() => toolInput(part.inputSummary), [part.inputSummary]);
@@ -164,7 +190,9 @@ export function ToolTrace({ part }: { part: Extract<UiPart, { type: "tool" }> })
           <ToolIcon />
         )}
       </TraceIcon>
-      <TraceTitle title={title}>{title}</TraceTitle>
+      <TraceTitle title={title} data-transcript-field="input">
+        {title}
+      </TraceTitle>
       {/* 不到一秒的步骤不标耗时，一排零点几秒只是噪音。 */}
       {part.state === "success" && part.durationMs !== undefined && part.durationMs >= 1000 && (
         <TraceDescription>{formatDuration(part.durationMs, locale)}</TraceDescription>
@@ -180,7 +208,7 @@ export function ToolTrace({ part }: { part: Extract<UiPart, { type: "tool" }> })
   // 命令运行时跟着输出展开，成功后收起；失败始终展开。用户手动开合过就以用户为准。
   const autoOpen = Boolean(failure || (shell && output && part.state === "running"));
   return (
-    <TraceCollapsible open={open ?? autoOpen} onOpenChange={setOpen}>
+    <TraceCollapsible open={Boolean(searchField) || (open ?? autoOpen)} onOpenChange={setOpen}>
       <TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
       <TraceCollapsibleContent className="mt-1.5">
         <div className="flex min-w-0 flex-col gap-2">
@@ -198,12 +226,27 @@ export function ToolTrace({ part }: { part: Extract<UiPart, { type: "tool" }> })
             </div>
           )}
           {failure ? (
-            <FailureDetails failure={failure} output={failureText} />
+            <div data-transcript-field="output">
+              <FailureDetails
+                failure={failure}
+                output={failureText}
+                revealOutput={searchField === "output"}
+              />
+            </div>
           ) : (
-            (output || input.details) && <ToolOutput text={output ?? input.details} />
+            (output || input.details) && (
+              <div data-transcript-field={output ? "output" : "input"}>
+                <ToolOutput text={output ?? input.details} />
+              </div>
+            )
           )}
           {(failure || output) && showArguments && (
-            <ToolDetails title={t(shell ? "命令" : "参数", locale)} text={input.details} />
+            <ToolDetails
+              title={t(shell ? "命令" : "参数", locale)}
+              text={input.details}
+              reveal={searchField === "input"}
+              field="input"
+            />
           )}
         </div>
       </TraceCollapsibleContent>

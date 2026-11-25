@@ -1,6 +1,6 @@
 // @env browser
 import { ListTreeIcon, LoaderCircleIcon } from "lucide-react";
-import type { JSX } from "react";
+import { useState, type JSX } from "react";
 
 import {
   Trace,
@@ -15,7 +15,8 @@ import {
 import { formatDuration } from "@renderer/lib/duration";
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { ReplyEntry } from "@renderer/lib/types";
-import type { UiMessage } from "@shared/contract";
+import type { TranscriptLocation, UiMessage } from "@shared/contract";
+import { transcriptPartKey } from "@shared/transcript-search";
 
 import { FileChangesCard } from "./file-changes-card";
 import { MessageActions } from "./message-actions";
@@ -32,6 +33,7 @@ export function AssistantReply({
   busy,
   hasActiveRun,
   hasLaterMessages,
+  findLocation,
 }: {
   messages: UiMessage[];
   sessionId: string | null;
@@ -40,16 +42,21 @@ export function AssistantReply({
   busy: boolean;
   hasActiveRun: boolean;
   hasLaterMessages: boolean;
+  findLocation?: TranscriptLocation;
 }): JSX.Element {
   const locale = useLocale();
+  const [activityOpen, setActivityOpen] = useState(false);
+  const target = findLocation && transcriptPartKey(findLocation.messageId, findLocation.partIndex);
   const entries: ReplyEntry[] = messages.flatMap((message) =>
     message.parts.map((part, index) => ({
       key: message.id + "/" + (part.type === "tool" ? part.callId : index),
+      location: transcriptPartKey(message.id, index),
       part,
       streaming: message.streaming === true && index === message.parts.length - 1,
     })),
   );
-  const plan = entries.findLast(({ part }) => part.type === "plan")?.part;
+  const plans = entries.filter(({ part }) => part.type === "plan");
+  const plan = plans.find(({ location }) => location === target) ?? plans.at(-1);
   const changes = entries.flatMap(({ part }) =>
     part.type === "tool" && part.fileChange ? [part.fileChange] : [],
   );
@@ -78,13 +85,35 @@ export function AssistantReply({
         : t("已处理 {0} 步", locale, [tools.length]);
   }
   // 运行期间计划钉在输入坞上方，回合结束后才回到轨迹里。
-  const planCard = !live && plan?.type === "plan" && <PlanCard steps={plan.steps} />;
-  const steps = activity.map(({ key, part }) => {
-    if (part.type === "thinking") return <ThinkingBlock key={key} part={part} />;
-    if (part.type === "tool") return <ToolTrace key={key} part={part} />;
+  const planCard = plan?.part.type === "plan" && (!live || plan.location === target) && (
+    <div data-transcript-part={plan.location}>
+      <PlanCard steps={plan.part.steps} reveal={plan.location === target} />
+    </div>
+  );
+  const matchedActivity =
+    activity.some(({ location }) => location === target) ||
+    (plan !== undefined && plan.location === target);
+  const steps = activity.map(({ key, location, part }) => {
+    if (part.type === "thinking" || part.type === "tool")
+      return (
+        <div key={key} data-transcript-part={location}>
+          {part.type === "thinking" ? (
+            <ThinkingBlock part={part} reveal={location === target} />
+          ) : (
+            <ToolTrace
+              part={part}
+              searchField={location === target ? findLocation?.field : undefined}
+            />
+          )}
+        </div>
+      );
     if (part.type !== "text" || !part.text) return null;
     return (
-      <div key={key} className="text-[13px] leading-6 text-muted-foreground">
+      <div
+        key={key}
+        data-transcript-part={location}
+        className="text-[13px] leading-6 text-muted-foreground"
+      >
         <Response content={part.text} />
       </div>
     );
@@ -94,7 +123,7 @@ export function AssistantReply({
     <>
       {summarized ? (
         <Trace data-reply-activity>
-          <TraceCollapsible>
+          <TraceCollapsible open={activityOpen || matchedActivity} onOpenChange={setActivityOpen}>
             <TraceCollapsibleTrigger>
               <TraceLine>
                 <TraceIcon>
@@ -123,10 +152,10 @@ export function AssistantReply({
         </>
       )}
       {answer.map(
-        ({ key, part, streaming }) =>
+        ({ key, location, part, streaming }) =>
           part.type === "text" &&
           part.text && (
-            <div key={key} className="min-w-0 text-sm leading-6">
+            <div key={key} data-transcript-part={location} className="min-w-0 text-sm leading-6">
               <Response content={part.text} />
               {streaming && (
                 <span

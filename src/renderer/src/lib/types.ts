@@ -5,6 +5,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type {
   FileChangeSummary,
   GitChangesView,
+  TranscriptLocation,
   UiMessage,
   UiPart,
   UpdateStatus,
@@ -65,6 +66,7 @@ export type ComposerToolbarMenu = "permissions" | "model" | "thinking";
 
 export type ComposerShortcut =
   | "focus-composer"
+  | "find-chat"
   | "cycle-approval-mode"
   | "recall-message"
   | "stop-run";
@@ -164,13 +166,25 @@ export interface VisibleTurns {
 
 export type ChatRow =
   | { role: "user"; id: string; message: UiMessage }
-  | { role: "compaction"; id: string; part: Extract<UiPart, { type: "compaction" }> }
+  | {
+      role: "compaction";
+      id: string;
+      partIndex: number;
+      part: Extract<UiPart, { type: "compaction" }>;
+    }
   | { role: "assistant"; id: string; messages: UiMessage[] };
 
 export interface ReplyEntry {
   key: string;
+  location: string;
   part: UiPart;
   streaming: boolean;
+}
+
+export interface ChatFind {
+  sessionId: string;
+  query: string;
+  location?: TranscriptLocation;
 }
 
 export interface OpenFileChanges {

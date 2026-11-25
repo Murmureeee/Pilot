@@ -220,17 +220,19 @@ export function TopBar({
                 <DropdownMenuSubTrigger>{t("输入框", locale)}</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="min-w-56">
                   <DropdownMenuGroup>
-                    {(Object.keys(COMPOSER_SHORTCUTS) as ComposerShortcut[]).map((id) => (
-                      <Item
-                        key={id}
-                        label={t(COMPOSER_SHORTCUTS[id].label, locale)}
-                        shortcut={COMPOSER_SHORTCUTS[id].keys}
-                        disabled={!composerShortcuts[id]}
-                        onRun={() => {
-                          shortcutAfterClose.current = id;
-                        }}
-                      />
-                    ))}
+                    {(Object.keys(COMPOSER_SHORTCUTS) as ComposerShortcut[])
+                      .filter((id) => id !== "find-chat")
+                      .map((id) => (
+                        <Item
+                          key={id}
+                          label={t(COMPOSER_SHORTCUTS[id].label, locale)}
+                          shortcut={COMPOSER_SHORTCUTS[id].keys}
+                          disabled={!composerShortcuts[id]}
+                          onRun={() => {
+                            shortcutAfterClose.current = id;
+                          }}
+                        />
+                      ))}
                   </DropdownMenuGroup>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
@@ -251,6 +253,14 @@ export function TopBar({
                       label={t("全选", locale)}
                       shortcut="Ctrl+A"
                       onRun={() => run("select-all")}
+                    />
+                    <Item
+                      label={t(COMPOSER_SHORTCUTS["find-chat"].label, locale)}
+                      shortcut={COMPOSER_SHORTCUTS["find-chat"].keys}
+                      disabled={!composerShortcuts["find-chat"]}
+                      onRun={() => {
+                        shortcutAfterClose.current = "find-chat";
+                      }}
                     />
                   </DropdownMenuGroup>
                 </DropdownMenuSubContent>

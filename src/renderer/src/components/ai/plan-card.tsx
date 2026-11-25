@@ -1,7 +1,7 @@
 // @env browser
 import { cn } from "cn";
 import { CircleCheckIcon, CircleDashedIcon, CircleDotIcon, ListChecksIcon } from "lucide-react";
-import type { JSX } from "react";
+import { useState, type JSX } from "react";
 
 import {
   Trace,
@@ -56,13 +56,20 @@ function progress(steps: PlanStep[]): [number, number] {
 }
 
 /** 回合结束后留在该回合轨迹里的最终计划。 */
-export function PlanCard({ steps }: { steps: PlanStep[] }): JSX.Element {
+export function PlanCard({
+  steps,
+  reveal = false,
+}: {
+  steps: PlanStep[];
+  reveal?: boolean;
+}): JSX.Element {
   const locale = useLocale();
   const [done, total] = progress(steps);
+  const [open, setOpen] = useState<boolean | null>(null);
   return (
     <Trace>
       {/* 全部完成的计划和成功的步骤一样收起；还有没做完的步骤才值得直接摆出来。 */}
-      <TraceCollapsible defaultOpen={done < total}>
+      <TraceCollapsible open={reveal || (open ?? done < total)} onOpenChange={setOpen}>
         <TraceCollapsibleTrigger>
           <TraceLine>
             <TraceIcon>

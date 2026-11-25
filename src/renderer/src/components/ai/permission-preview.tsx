@@ -3,8 +3,8 @@ import type { JSX } from "react";
 
 import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
-import { toolInput } from "@renderer/lib/tool-trace";
 import type { PermissionRequest } from "@shared/contract";
+import { toolInput } from "@shared/tool-input";
 
 import { DiffLines } from "./file-diff-preview";
 

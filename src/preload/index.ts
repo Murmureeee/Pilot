@@ -102,6 +102,8 @@ const api: PiApi = {
   sessionApplyMessageRollback: (id, token) =>
     ipcRenderer.invoke(IPC.sessionApplyMessageRollback, id, token),
   sessionCopy: (id: string) => ipcRenderer.invoke(IPC.sessionCopy, id) as Promise<string>,
+  sessionSearch: (query, project) => ipcRenderer.invoke(IPC.sessionSearch, query, project),
+  sessionExportMarkdown: (id, locale) => ipcRenderer.invoke(IPC.sessionExportMarkdown, id, locale),
   sessionPersona: (id: string, persona: string | null) =>
     ipcRenderer.invoke(IPC.sessionPersona, id, persona),
   sessionInstructionSources: (composerId) =>

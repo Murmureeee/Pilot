@@ -1,6 +1,6 @@
 // @env browser
 import { Minimize2Icon } from "lucide-react";
-import type { JSX } from "react";
+import { useState, type JSX } from "react";
 
 import {
   Trace,
@@ -14,11 +14,18 @@ import {
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { ContextCompaction } from "@shared/contract";
 
-export function CompactionMarker({ compaction }: { compaction: ContextCompaction }): JSX.Element {
+export function CompactionMarker({
+  compaction,
+  reveal = false,
+}: {
+  compaction: ContextCompaction;
+  reveal?: boolean;
+}): JSX.Element {
   const locale = useLocale();
+  const [open, setOpen] = useState(false);
   return (
     <Trace data-context-compaction>
-      <TraceCollapsible>
+      <TraceCollapsible open={reveal || open} onOpenChange={setOpen}>
         <TraceCollapsibleTrigger>
           <TraceLine>
             <TraceIcon>

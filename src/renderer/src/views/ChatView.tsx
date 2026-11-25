@@ -1,18 +1,10 @@
 // @env browser
 import { cn } from "cn";
 import { ArrowDownIcon, RotateCcwIcon } from "lucide-react";
-import {
-  Activity,
-  Fragment,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type JSX,
-  type Ref,
-} from "react";
+import { Activity, useEffect, useMemo, useRef, useState, type JSX, type Ref } from "react";
 
 import { AssistantReply } from "@renderer/components/ai/assistant-reply";
+import { ChatFindBar } from "@renderer/components/ai/chat-find-bar";
 import { CompactionMarker } from "@renderer/components/ai/compaction-marker";
 import { Composer } from "@renderer/components/ai/composer";
 import { HomeStart } from "@renderer/components/ai/home-start";
@@ -36,12 +28,14 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@renderer/components/ui/message-scroller";
+import { useTranscriptLocation } from "@renderer/hooks/use-transcript-location";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { ChatRow, ComposerShortcuts } from "@renderer/lib/types";
 import { selectPlanReview, useAgentStore } from "@renderer/stores/agent";
 import type { UiMessage, UiPart } from "@shared/contract";
 import { visibleMessageText } from "@shared/mentions";
 import { isLocalOpenAiProvider } from "@shared/providers";
+import { findTranscript, transcriptPartKey, transcriptSegments } from "@shared/transcript-search";
 
 function chatRows(messages: UiMessage[]): ChatRow[] {
   const rows: ChatRow[] = [];
@@ -53,8 +47,10 @@ function chatRows(messages: UiMessage[]): ChatRow[] {
       if (previous?.role === "assistant") previous.messages.push(message);
       else rows.push({ id: message.id, role: "assistant", messages: [message] });
     } else {
-      const part = message.parts.find((entry) => entry.type === "compaction");
-      if (part) rows.push({ id: message.id, role: "compaction", part });
+      const partIndex = message.parts.findIndex((entry) => entry.type === "compaction");
+      const part = message.parts[partIndex];
+      if (part?.type === "compaction")
+        rows.push({ id: message.id, role: "compaction", partIndex, part });
     }
   }
   return rows;
@@ -74,6 +70,10 @@ export function ChatView({
   const locale = useLocale();
   const messages = useAgentStore((s) => s.messages);
   const sessionId = useAgentStore((s) => s.sessionId);
+  const find = useAgentStore((state) =>
+    state.chatFind?.sessionId === state.sessionId ? state.chatFind : null,
+  );
+  const setFind = useAgentStore((state) => state.setChatFind);
   const composerId = useAgentStore((s) => s.composerId);
   const busy = useAgentStore((s) => s.status !== "idle");
   const permission = useAgentStore((s) => s.pendingPermissions[0]);
@@ -88,6 +88,25 @@ export function ChatView({
   const settings = useAgentStore((s) => s.settings);
   const setView = useAgentStore((s) => s.setView);
   const rows = useMemo(() => chatRows(messages), [messages]);
+  const term = find?.query ?? "";
+  const searching = Boolean(term.trim());
+  const segments = useMemo(
+    () => (searching ? transcriptSegments(messages) : []),
+    [messages, searching],
+  );
+  const matches = useMemo(() => [...findTranscript(segments, term)], [segments, term]);
+  const requested = find?.location;
+  const matchIndex = Math.max(
+    0,
+    matches.findIndex(
+      ({ location }) =>
+        location.messageId === requested?.messageId &&
+        location.partIndex === requested.partIndex &&
+        location.field === requested.field &&
+        location.occurrence === requested.occurrence,
+    ),
+  );
+  const match = matches[matchIndex];
   const isEmpty = rows.length === 0;
   // run_started 先于新的用户消息到达。这段间隙里上一回合仍是最后一行，但它已经结束，
   // 不能当作进行中，否则收起的轨迹会闪开、旧计划会跳到输入坞上。可继续的中断回合除外。
@@ -112,6 +131,7 @@ export function ChatView({
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  useTranscriptLocation(viewportRef, contentRef, term, match?.location);
   const composerColumn = useRef<HTMLDivElement>(null);
   const wasAwaitingApproval = useRef(false);
 
@@ -146,6 +166,21 @@ export function ChatView({
           <SettingsRecoveryNotice recovery={settings.recovery} />
         </div>
       )}
+      {find && (
+        <ChatFindBar
+          sessionId={find.sessionId}
+          query={find.query}
+          index={matchIndex}
+          count={matches.length}
+          snippet={match?.snippet}
+          onQuery={(query) => setFind({ sessionId: find.sessionId, query })}
+          onStep={(offset) => {
+            const next = (matchIndex + offset + matches.length) % matches.length;
+            setFind({ ...find, location: matches[next]?.location });
+          }}
+          onClose={() => setFind(null)}
+        />
+      )}
       {!isEmpty && (
         <div className="relative flex min-h-0 flex-1 flex-col">
           <MessageJump
@@ -154,7 +189,7 @@ export function ChatView({
             viewportRef={viewportRef}
             contentRef={contentRef}
           />
-          <MessageScrollerProvider key={sessionId ?? "draft"} autoScroll>
+          <MessageScrollerProvider key={sessionId ?? "draft"} autoScroll={!find}>
             <MessageScroller className="min-h-0 flex-1">
               <MessageScrollerViewport
                 ref={viewportRef}
@@ -167,8 +202,15 @@ export function ChatView({
                   {rows.map((row) => {
                     if (row.role === "compaction") {
                       return (
-                        <MessageScrollerItem key={row.id} messageId={row.id}>
-                          <CompactionMarker compaction={row.part.compaction} />
+                        <MessageScrollerItem
+                          key={row.id}
+                          messageId={row.id}
+                          data-transcript-part={transcriptPartKey(row.id, row.partIndex)}
+                        >
+                          <CompactionMarker
+                            compaction={row.part.compaction}
+                            reveal={match?.location.messageId === row.id}
+                          />
                         </MessageScrollerItem>
                       );
                     }
@@ -194,19 +236,29 @@ export function ChatView({
                                 <Bubble align="end" variant="secondary" className="max-w-[88%]">
                                   <BubbleContent className="rounded-[18px] rounded-br-md px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap">
                                     {row.message.parts.map((part, partIndex) => {
-                                      if (part.type === "text")
-                                        return <Fragment key={partIndex}>{part.text}</Fragment>;
-                                      if (part.type !== "mention") return null;
+                                      if (part.type !== "text" && part.type !== "mention")
+                                        return null;
                                       return (
-                                        <InlineWorkspaceReference
+                                        <span
                                           key={partIndex}
-                                          chip
-                                          kind={part.kind}
-                                          path={part.id}
-                                          workingDirectory={part.workingDirectory}
+                                          data-transcript-part={transcriptPartKey(
+                                            row.id,
+                                            partIndex,
+                                          )}
                                         >
-                                          {part.label}
-                                        </InlineWorkspaceReference>
+                                          {part.type === "text" ? (
+                                            part.text
+                                          ) : (
+                                            <InlineWorkspaceReference
+                                              chip
+                                              kind={part.kind}
+                                              path={part.id}
+                                              workingDirectory={part.workingDirectory}
+                                            >
+                                              {part.label}
+                                            </InlineWorkspaceReference>
+                                          )}
+                                        </span>
                                       );
                                     })}
                                   </BubbleContent>
@@ -229,6 +281,7 @@ export function ChatView({
                                 busy={busy}
                                 hasActiveRun={activeRun !== null}
                                 hasLaterMessages={row !== lastRow}
+                                findLocation={match?.location}
                               />
                             )}
                           </MessageContent>

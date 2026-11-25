@@ -20,6 +20,7 @@ import type {
   GitRollbackPreview,
   GitRollbackSelection,
   GitStageSelection,
+  Locale,
   MessageBranchAction,
   MessageRollbackPreview,
   PermissionDecision,
@@ -28,6 +29,7 @@ import type {
   RunRef,
   SessionMeta,
   SessionNavigation,
+  SessionSearchResults,
   SessionInstructionSources,
   SessionSettings,
   SessionSettingsInput,
@@ -743,6 +745,14 @@ export class AgentHost {
   /** 会话全文文本（渲染层写入剪贴板） */
   copySession(id: string): string {
     return this.deps.store.transcriptText(id) ?? "";
+  }
+
+  searchSessions(query: string, project?: string | null): SessionSearchResults {
+    return this.deps.store.searchTranscripts(query, project);
+  }
+
+  exportSessionMarkdown(id: string, locale: Locale): { filename: string; markdown: string } {
+    return this.deps.store.exportMarkdown(id, locale);
   }
 
   /** 会话级人设覆盖（FR-5.9 每会话粒度；变更经 systemPrompt 指纹在下一轮生效） */

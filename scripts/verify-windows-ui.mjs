@@ -18,6 +18,7 @@ import {
   verifyPlanDraft,
   verifyPlanExecution,
   verifyRestoredSettings,
+  verifySearchAndExport,
   verifySettings,
   verifyStreamingReply,
   verifyUnsentDraft,
@@ -140,9 +141,12 @@ try {
       verifyPlanDraft(page, window, model, project),
     );
   });
-  await withApp(profile, async (page) => {
+  await withApp(profile, async (page, _window, app) => {
     await runScene("Restore preferences and conversation after restarting", () =>
       verifyRestoredSettings(page, model),
+    );
+    await runScene("Find transcript matches and export Markdown", () =>
+      verifySearchAndExport(page, app, model, project),
     );
     await runScene("Restore and execute the approved plan", () =>
       verifyPlanExecution(page, model, project),

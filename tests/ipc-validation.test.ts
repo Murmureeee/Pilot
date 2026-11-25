@@ -88,6 +88,8 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.sessionPreviewMessageRollback]: [sessionId, "s-2"],
   [IPC.sessionApplyMessageRollback]: [sessionId, sessionId],
   [IPC.sessionCopy]: [sessionId],
+  [IPC.sessionSearch]: ["readme.md"],
+  [IPC.sessionExportMarkdown]: [sessionId, "en"],
   [IPC.sessionPersona]: [sessionId, null],
   [IPC.sessionInstructionSources]: [sessionId],
   [IPC.sessionFileDiff]: [sessionId, sessionId],
@@ -143,6 +145,12 @@ const valid: Record<IpcChannel, unknown[]> = {
 };
 
 describe("IPC argument validation", () => {
+  it("accepts all-project, unlinked, and project-scoped transcript searches", () => {
+    for (const project of [null, "E:/projects/Pilot"]) {
+      const args = ["readme.md", project];
+      expect(parseIpcArgs(IPC.sessionSearch, args)).toEqual(args);
+    }
+  });
   it("preserves valid inputs and enforces argument counts on every invoke channel", () => {
     for (const channel of Object.values(IPC)) {
       const args = valid[channel];
@@ -230,6 +238,9 @@ describe("IPC argument validation", () => {
     [IPC.agentResume, [{ sessionId, runId: "other" }]],
     [IPC.agentClearQueue, [{ ...run, runId: "stale" }]],
     [IPC.sessionLoad, ["not-a-session-id"]],
+    [IPC.sessionSearch, ["   "]],
+    [IPC.sessionSearch, ["x".repeat(513)]],
+    [IPC.sessionExportMarkdown, [sessionId, "fr"]],
     [IPC.sessionSelectProject, ["zh", "C:/projects/Pilot"]],
     [IPC.sessionUseRecentProject, ["E:/projects/Pilot", "another-folder"]],
     [IPC.sessionOpenProjectFolder, [" "]],

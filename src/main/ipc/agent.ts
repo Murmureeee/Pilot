@@ -1,4 +1,6 @@
 // @env node
+import { writeFile } from "node:fs/promises";
+
 import { app, BrowserWindow, dialog, shell } from "electron";
 
 import { IPC } from "../../shared/contract";
@@ -139,6 +141,22 @@ export function registerAgentRoutes({
     return host.applyMessageRollback(id, token);
   });
   handle(IPC.sessionCopy, (_event, id) => host.copySession(id));
+  handle(IPC.sessionSearch, (_event, query, project) => host.searchSessions(query, project));
+  handle(IPC.sessionExportMarkdown, async (event, id, locale) => {
+    const { filename, markdown } = host.exportSessionMarkdown(id, locale);
+    const options = {
+      title: NATIVE_DIALOG_TITLES[locale].exportMarkdown,
+      defaultPath: filename,
+      filters: [{ name: "Markdown", extensions: ["md"] }],
+    };
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const result = window
+      ? await dialog.showSaveDialog(window, options)
+      : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) return null;
+    await writeFile(result.filePath, markdown, "utf8");
+    return result.filePath;
+  });
   handle(IPC.sessionPersona, (_event, id, persona) => host.setSessionPersona(id, persona));
   handle(IPC.sessionInstructionSources, (_event, composerId) =>
     host.getInstructionSources(composerId),

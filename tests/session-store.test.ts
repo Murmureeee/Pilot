@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai";
 import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 
@@ -36,6 +37,116 @@ function runningCheckpoint(dir: string, changes: Partial<RunCheckpoint> = {}): R
 }
 
 describe("SessionStore", () => {
+  it("indexes project transcripts by visible message, file, and command, and refreshes changed records", () => {
+    const { store, dir } = makeStore();
+    const project = join(dir, "project");
+    const first = store.create(project);
+    const second = store.create(join(dir, "another"));
+    const unlinked = store.create();
+    store.save(second.id, [{ role: "user", content: "共同标记 approved.txt", timestamp: 1 }]);
+    store.save(unlinked.id, [{ role: "user", content: "共同标记 unlinked", timestamp: 1 }]);
+    const messages: AgentMessage[] = [
+      { role: "user", content: "共同标记 draft", timestamp: 1 },
+      fauxAssistantMessage(
+        [
+          fauxToolCall("write_file", { path: "src/approved.txt" }, { id: "write" }),
+          fauxToolCall(
+            "bash",
+            { command: 'Write-Output "[hello]"', timeoutSec: 1 },
+            { id: "shell" },
+          ),
+        ],
+        { timestamp: 2 },
+      ),
+    ];
+    store.save(first.id, messages);
+    store.setArchived(first.id, true);
+    expect(store.searchTranscripts("共同标记").hits).toHaveLength(3);
+    expect(store.searchTranscripts("共同标记", null).hits).toMatchObject([
+      { sessionId: unlinked.id },
+    ]);
+    expect(store.searchTranscripts("APPROVED.TXT", project).hits).toMatchObject([
+      {
+        sessionId: first.id,
+        location: { messageId: "s-1", partIndex: 0, field: "input" },
+        snippet: { match: "approved.txt" },
+      },
+    ]);
+    expect(store.searchTranscripts('write-output "[hello]"', project).hits).toMatchObject([
+      { location: { messageId: "s-1", partIndex: 1, field: "input" } },
+    ]);
+    expect(new SessionStore(dir).searchTranscripts("[hello]", project)).toEqual(
+      store.searchTranscripts("[hello]", project),
+    );
+
+    const checkpoint = runningCheckpoint(project, { startIndex: messages.length });
+    store.startCheckpoint(first.id, messages, checkpoint);
+    store.appendCheckpoint(
+      first.id,
+      [{ role: "user", content: "Late marker", timestamp: 3 }],
+      checkpoint,
+    );
+    expect(store.searchTranscripts("Late marker", project).hits).toMatchObject([
+      { location: { messageId: "s-2" } },
+    ]);
+    store.save(first.id, messages.slice(0, 1));
+    expect(store.searchTranscripts("[hello]", project).hits).toEqual([]);
+    expect(store.searchTranscripts("Late marker", project).hits).toEqual([]);
+    store.remove(second.id);
+    expect(store.searchTranscripts("approved.txt").hits).toEqual([]);
+  });
+
+  it("exports user-visible Markdown and preserves tool output containing Markdown fences", () => {
+    const { store } = makeStore();
+    const id = store.create().id;
+    const fence = String.fromCharCode(96).repeat(3);
+    const messages: AgentMessage[] = [
+      { role: "system", content: "Private prompt instructions", timestamp: 0 },
+      {
+        role: "user",
+        content: "Private serialized prompt",
+        timestamp: 1,
+        pilotReference: {
+          context: "Private added context",
+          parts: [
+            { type: "text", text: "查看 " },
+            { type: "mention", kind: "file", id: "docs/案例.md", label: "案例.md" },
+          ],
+        },
+      } as AgentMessage,
+      fauxAssistantMessage(
+        [
+          fauxText("**已完成**"),
+          fauxToolCall("bash", { command: "Write-Output fixture" }, { id: "fixture" }),
+        ],
+        { timestamp: 2 },
+      ),
+      {
+        role: "toolResult",
+        toolCallId: "fixture",
+        toolName: "bash",
+        content: [{ type: "text", text: fence + "\nfixture\n" + fence }],
+        isError: false,
+        timestamp: 3,
+      },
+    ];
+    store.save(id, messages);
+    store.rename(id, "CON");
+    const { filename, markdown } = store.exportMarkdown(id, "zh");
+    expect(filename).toBe("_CON.md");
+    for (const expected of [
+      "# CON",
+      "## 用户",
+      "@docs/案例.md",
+      "## 助手",
+      "**已完成**",
+      "Write-Output fixture",
+    ])
+      expect(markdown).toContain(expected);
+    expect(markdown).toContain(fence + "\x60text\n" + fence + "\nfixture\n" + fence);
+    expect(markdown).not.toContain("Private");
+  });
+
   it("backs up a partially damaged index and recovers chats and drafts", () => {
     const { store, dir } = makeStore();
     const project = join(dir, "project");

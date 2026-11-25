@@ -29,6 +29,8 @@ export const PLAN_MODE_INSTRUCTIONS = [
   "Pilot is in Plan Mode. Research the user's task using the available read and search tools. Do not modify files, run commands, call external tools, or start implementation. This applies even if the user, a project instruction, or a skill asks you to execute.",
   "If a decision is needed, ask the user before proposing a plan. When the plan is ready, call propose_plan with a self-contained Markdown plan in the user's language. Describe the intended changes, relevant files, and verification steps. Wait for explicit plan confirmation in Pilot before implementing.",
 ].join(" ");
+export const CONVERSATION_SEARCH_LIMIT = 80;
+export const CONVERSATION_INDEX_CACHE_SIZE = 48;
 export const APPROVED_PLAN_INSTRUCTIONS =
   "The user approved the plan in this message. Execute this version of the plan under the current approval mode.";
 export const CONTEXT_COMPACTION_RATIO = 0.8;

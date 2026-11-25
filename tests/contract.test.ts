@@ -79,6 +79,8 @@ describe("IPC contract", () => {
     expect(IPC.sessionPreviewMessageRollback).toBe("session:preview-message-rollback");
     expect(IPC.sessionApplyMessageRollback).toBe("session:apply-message-rollback");
     expect(IPC.sessionCopy).toBe("session:copy");
+    expect(IPC.sessionSearch).toBe("session:search");
+    expect(IPC.sessionExportMarkdown).toBe("session:export-markdown");
     expect(IPC.settingsModelCatalog).toBe("settings:model-catalog");
     expect(IPC.settingsTestProvider).toBe("settings:test-provider");
     expect(IPC.settingsPickWorkingDirectory).toBe("settings:pick-working-directory");

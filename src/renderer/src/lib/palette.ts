@@ -1,5 +1,7 @@
 // @env browser
 // 命令面板条目模型与过滤（纯函数，NFR-6 测试覆盖）。
+import type { SessionSearchHit, SessionSearchResults } from "@shared/contract";
+
 export type PaletteTab = "all" | "actions" | "chats";
 
 export interface PaletteEntry {
@@ -8,6 +10,14 @@ export interface PaletteEntry {
   label: string;
   /** 操作快捷键提示或会话相对时间 */
   detail?: string;
+  hit?: SessionSearchHit;
+  findQuery?: string;
+}
+
+export interface PaletteSearch {
+  key: string;
+  result?: SessionSearchResults;
+  error?: string;
 }
 
 export const PALETTE_TABS: { value: PaletteTab; label: string }[] = [

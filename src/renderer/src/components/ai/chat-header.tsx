@@ -73,6 +73,8 @@ function SessionMenu({
 }): JSX.Element {
   const locale = useLocale();
   const setSessionArchived = useAgentStore((s) => s.setSessionArchived);
+  const exportMarkdown = useAgentStore((s) => s.exportSessionMarkdown);
+  const [exporting, setExporting] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [renaming, setRenaming] = useState<SessionMeta | null>(null);
   const [persona, setPersona] = useState<SessionMeta | null>(null);
@@ -104,6 +106,15 @@ function SessionMenu({
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setPersona(session)}>
                   {t(session.personaOverride ? "会话指令（已覆盖）" : "会话指令…", locale)}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={exporting}
+                  onClick={() => {
+                    setExporting(true);
+                    void exportMarkdown(session.id).finally(() => setExporting(false));
+                  }}
+                >
+                  {t(exporting ? "正在导出…" : "导出 Markdown…", locale)}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => void setSessionArchived(session.id, true)}>
                   {t("归档", locale)}

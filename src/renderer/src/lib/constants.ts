@@ -209,6 +209,7 @@ export const REVIEW_SHORTCUTS = {
 
 export const COMPOSER_SHORTCUTS = {
   "focus-composer": { label: "聚焦输入框", keys: "Ctrl+L" },
+  "find-chat": { label: "在当前会话中查找", keys: "Ctrl+F" },
   "cycle-approval-mode": { label: "切换权限模式", keys: "Shift+Tab" },
   "recall-message": { label: "取回上一条消息", keys: "↑" },
   "stop-run": { label: "停止任务", keys: "Esc × 2" },
@@ -221,6 +222,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
     label: "全局",
     items: [
       { label: "搜索与命令面板", keys: "Ctrl+K" },
+      COMPOSER_SHORTCUTS["find-chat"],
       { label: "新聊天", keys: "Ctrl+N" },
       { label: "打开项目…", keys: "Ctrl+O" },
       { label: "设置", keys: "Ctrl+," },

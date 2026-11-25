@@ -34,6 +34,7 @@ import type {
   PublicSettings,
   RunRef,
   SessionMeta,
+  SessionSearchResults,
   SessionInstructionSources,
   SessionSettingsInput,
   SettingsInput,
@@ -144,6 +145,8 @@ export interface PiApi {
   sessionApplyMessageRollback(composerId: string, token: string): Promise<Snapshot>;
   /** 会话全文文本（复制到剪贴板用） */
   sessionCopy(id: string): Promise<string>;
+  sessionSearch(query: string, project?: string | null): Promise<SessionSearchResults>;
+  sessionExportMarkdown(id: string, locale: Locale): Promise<string | null>;
   /** 会话级人设覆盖（null = 清除，回落全局） */
   sessionPersona(id: string, persona: string | null): Promise<void>;
   sessionInstructionSources(composerId: string): Promise<SessionInstructionSources>;

@@ -47,6 +47,7 @@ import { SettingsView } from "@renderer/views/SettingsView";
 import { SidebarPanel } from "@renderer/views/Sidebar";
 import { AppRail } from "@renderer/views/sidebar/AppRail";
 import { LOCALE_DETAILS } from "@shared/constants";
+import type { TranscriptLocation } from "@shared/contract";
 
 export default function App(): JSX.Element {
   const view = useAgentStore((s) => s.view);
@@ -67,7 +68,7 @@ export default function App(): JSX.Element {
   const [openSidebarScope, setOpenSidebarScope] = useState<string | null>(null);
   const [composerAction, setComposerAction] = useState<Exclude<
     ComposerShortcut,
-    "stop-run"
+    "stop-run" | "find-chat"
   > | null>(null);
   const composerShortcuts = useRef<ComposerShortcuts>(null);
   const canEdit = useAgentStore((state) =>
@@ -112,16 +113,38 @@ export default function App(): JSX.Element {
   const enabledComposerShortcuts = useMemo<Record<ComposerShortcut, boolean>>(
     () => ({
       "focus-composer": Boolean(composerId),
+      "find-chat": sessionId !== null,
       "cycle-approval-mode": canEdit,
       "recall-message": canEdit && canRecall,
       "stop-run": stoppableRunId !== null,
     }),
-    [composerId, canEdit, canRecall, stoppableRunId],
+    [composerId, canEdit, canRecall, sessionId, stoppableRunId],
   );
+
+  const openChatFind = useCallback((query?: string, location?: TranscriptLocation): void => {
+    const store = useAgentStore.getState();
+    const { sessionId: activeSessionId, chatFind } = store;
+    if (!activeSessionId) return;
+    store.setView("chat");
+    setOpenSidebarScope(null);
+    if (window.innerWidth < REVIEW_TWO_COLUMN_WIDTH) useReviewStore.getState().close();
+    if (query !== undefined || chatFind?.sessionId !== activeSessionId)
+      store.setChatFind({ sessionId: activeSessionId, query: query ?? "", location });
+    requestAnimationFrame(() => {
+      if (useAgentStore.getState().sessionId !== activeSessionId) return;
+      const input = document.querySelector<HTMLInputElement>("[data-chat-find-input]");
+      input?.focus({ preventScroll: true });
+      if (query === undefined) input?.select();
+    });
+  }, []);
 
   const runComposerShortcut = useCallback(
     (shortcut: ComposerShortcut): void => {
       if (!enabledComposerShortcuts[shortcut]) return;
+      if (shortcut === "find-chat") {
+        openChatFind();
+        return;
+      }
       const store = useAgentStore.getState();
       if (shortcut === "stop-run") {
         clear();
@@ -133,7 +156,7 @@ export default function App(): JSX.Element {
       if (window.innerWidth < REVIEW_TWO_COLUMN_WIDTH) useReviewStore.getState().close();
       setComposerAction(shortcut);
     },
-    [clear, enabledComposerShortcuts, stoppableRunId],
+    [clear, enabledComposerShortcuts, openChatFind, stoppableRunId],
   );
 
   useEffect(() => {
@@ -265,6 +288,10 @@ export default function App(): JSX.Element {
           event.preventDefault();
           clear();
           closeReview();
+        } else if (store.chatFind?.sessionId === store.sessionId) {
+          event.preventDefault();
+          clear();
+          store.setChatFind(null);
         } else if (store.pendingPermissions.length) {
           event.preventDefault();
           clear();
@@ -291,6 +318,10 @@ export default function App(): JSX.Element {
         if (event.repeat || store.paletteOpen || popupOwnsShortcut(event)) return;
         event.preventDefault();
         runComposerShortcut("focus-composer");
+      } else if (key === "f" && !event.shiftKey && store.view === "chat" && store.sessionId) {
+        if (event.repeat || store.paletteOpen || popupOwnsShortcut(event)) return;
+        event.preventDefault();
+        runComposerShortcut("find-chat");
       } else if (key === "k") {
         event.preventDefault();
         setPaletteOpen(!store.paletteOpen);
@@ -470,6 +501,7 @@ export default function App(): JSX.Element {
         canReview={view === "chat" && canReview}
         composerShortcuts={enabledComposerShortcuts}
         onComposerShortcut={runComposerShortcut}
+        onOpenChatFind={openChatFind}
       />
     </div>
   );

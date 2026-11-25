@@ -1,6 +1,7 @@
 // @env all
 export { name as APP_PACKAGE_NAME, productName as APP_NAME } from "../../package.json";
 export const WORKSPACE_QUERY_LENGTH = 512;
+export const CONVERSATION_QUERY_LENGTH = 512;
 export const EXECUTION_APPROVAL_MODES = ["standard", "read-only", "full-access"] as const;
 export const PLAN_PROPOSAL_MAX_LENGTH = 12_000;
 export const MENTION_CONTEXT_HEADING =

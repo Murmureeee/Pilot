@@ -18,6 +18,7 @@ const planPrompt = "Plan a change to a desktop fixture file.";
 const plannedFile = "plan-mode.txt";
 const revisedPlan = "1. Write the revised fixture note.\n2. Verify the file contents.";
 const planningDraft = "Keep this draft while a plan awaits confirmation.";
+const shellSearch = 'Write-Output "PilotFindCommand"';
 
 const locales = [
   {
@@ -311,6 +312,25 @@ async function verifyReviewLayout(page, locale, overlay) {
   await page.waitForFunction(() => document.activeElement?.id === "review-trigger");
 }
 
+async function verifyFindLayout(page) {
+  await page.keyboard.press("Control+k");
+  const palette = page.getByRole("dialog");
+  await assertFits(palette);
+  await assertFits(palette.getByRole("textbox"));
+  await assertFits(palette.getByRole("combobox"));
+  await page.keyboard.press("Escape");
+  await palette.waitFor({ state: "hidden" });
+
+  await page.keyboard.press("Control+f");
+  const bar = page.locator("[data-chat-find]");
+  const field = bar.locator("[data-chat-find-input]");
+  await field.fill("Desktop");
+  await assertFits(bar);
+  for (const control of await bar.getByRole("button").all()) await assertFits(control);
+  await field.press("Escape");
+  await bar.waitFor({ state: "hidden" });
+}
+
 export async function verifyLayouts(page, window) {
   let current = locales[0];
   for (const size of [wide, narrow]) {
@@ -321,6 +341,7 @@ export async function verifyLayouts(page, window) {
         current = locale;
         await assertFits(editor(page));
         await verifyReviewLayout(page, locale, size === narrow);
+        await verifyFindLayout(page);
         console.log(
           "Checked " + size.width + " × " + size.height + " " + locale.lang + " " + theme,
         );
@@ -330,6 +351,7 @@ export async function verifyLayouts(page, window) {
 
   await resize(page, window, narrow, 1.5);
   await verifyReviewLayout(page, current, true);
+  await verifyFindLayout(page);
   await page.keyboard.press("Control+Shift+s");
   await page.waitForFunction(() => document.querySelector("main")?.inert);
   await page.keyboard.press("Escape");
@@ -564,4 +586,95 @@ export async function verifyRestoredSettings(page, model) {
   await palette.getByRole("textbox", { name: "Search" }).press("Enter");
   await page.getByText(approvalReply, { exact: true }).waitFor();
   assert.equal(await editor(page).innerText(), draft);
+}
+
+export async function verifySearchAndExport(page, app, model, project) {
+  const activeChat = page.locator('[data-session-id][aria-current="page"]');
+  const sessionId = await activeChat.getAttribute("data-session-id");
+  assert.ok(sessionId, "The stream fixture must be the active chat");
+  await send(page, "Prepare the search and Markdown export fixture.");
+  const reply = await model.nextCompletion();
+  sendTool(reply, "fixture-search-shell", "bash", { command: shellSearch });
+  const approval = page.locator("[data-permission-card]");
+  await approval.getByText(shellSearch, { exact: true }).waitFor();
+  await button(approval, "Allow once").click();
+  const result = await model.nextCompletion();
+  assert.match(result.input.messages.at(-1).content, /PilotFindCommand/);
+  result.write({ content: "**Search fixture** uses jump needle twice.\n\nThe second jump needle is here." });
+  result.finish();
+  await button(page, "Send").waitFor();
+
+  await page.keyboard.press("Control+l");
+  await page.keyboard.press("Control+f");
+  const find = page.locator("[data-chat-find-input]");
+  await find.fill("jump needle");
+  const count = page.locator("[data-chat-find-count]");
+  await count.getByText("1 / 2", { exact: true }).waitFor();
+  await page.waitForFunction(() => CSS.highlights?.has("pilot-chat-find"));
+  await find.press("Enter");
+  await count.getByText("2 / 2", { exact: true }).waitFor();
+  await find.press("Shift+Enter");
+  await count.getByText("1 / 2", { exact: true }).waitFor();
+  await find.press("Escape");
+  await find.waitFor({ state: "hidden" });
+  await page.waitForFunction(() => document.activeElement?.matches("[data-composer-editor]"));
+
+  await page
+    .locator("[data-session-id]")
+    .getByText(planPrompt.slice(0, 24), { exact: true })
+    .click();
+  await page.locator("[data-plan-review]").waitFor();
+  assert.notEqual(await activeChat.getAttribute("data-session-id"), sessionId);
+
+  await page.keyboard.press("Control+k");
+  const palette = page.getByRole("dialog", { name: "Search" });
+  const search = palette.getByRole("textbox", { name: "Search" });
+  const scope = palette.getByRole("combobox", { name: "Search project scope" });
+  await search.fill(shellSearch);
+  await scope.click();
+  await page.getByRole("option", { name: "No linked project", exact: true }).click();
+  await palette.getByText("No matching results", { exact: true }).waitFor();
+  await scope.click();
+  await page.getByRole("option", { name: new RegExp("^" + basename(project)) }).click();
+  const hit = palette.locator(`[data-session-search-hit="${sessionId}"]`).first();
+  await hit.getByText(shellSearch, { exact: true }).waitFor();
+  await search.press("Enter");
+  await find.waitFor();
+  assert.equal(await activeChat.getAttribute("data-session-id"), sessionId);
+  assert.equal(await find.inputValue(), shellSearch);
+  const foundPart = page.locator("main [data-chat-find-current]");
+  await foundPart.getByText("PilotFindCommand", { exact: true }).waitFor();
+  assert.equal(await foundPart.locator("[data-tool-state=success]").count(), 1);
+  await find.press("Escape");
+
+  await page.keyboard.press("Control+k");
+  await search.fill("APPROVED.TXT");
+  await hit.click();
+  await find.waitFor();
+  assert.equal(await activeChat.getAttribute("data-session-id"), sessionId);
+  assert.equal(await find.inputValue(), "APPROVED.TXT");
+  await page.locator("[data-chat-find-snippet] mark").getByText(approvedFile, { exact: true }).waitFor();
+  await find.press("Escape");
+
+  const destination = join(project, "exported-chat.md");
+  const exportItem = async (cancel) => {
+    await app.evaluate(({ dialog }, options) => {
+      const original = dialog.showSaveDialog;
+      dialog.showSaveDialog = async (_window, config) => {
+        dialog.showSaveDialog = original;
+        if (config.title !== "Export Markdown" || !config.defaultPath.endsWith(".md"))
+          throw new Error("Expected a Markdown save dialog");
+        return { canceled: options.cancel, filePath: options.cancel ? "" : options.path };
+      };
+    }, { path: destination, cancel });
+    await button(page.locator("main"), "More actions").click();
+    await page.getByRole("menuitem", { name: "Export Markdown…", exact: true }).click();
+  };
+  await exportItem(true);
+  assert.ok(!existsSync(destination));
+  await exportItem(false);
+  await page.getByText("Chat exported", { exact: true }).waitFor();
+  const markdown = readFileSync(destination, "utf8");
+  for (const value of ["# Desktop stream scene", "## User", "## Assistant", "**Search fixture**", shellSearch, approvedFile])
+    assert.ok(markdown.includes(value), "Markdown must include " + value);
 }

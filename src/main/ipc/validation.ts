@@ -2,6 +2,7 @@
 import { z } from "zod";
 
 import {
+  CONVERSATION_QUERY_LENGTH,
   EXECUTION_APPROVAL_MODES,
   LOG_LEVELS,
   PLAN_PROPOSAL_MAX_LENGTH,
@@ -240,6 +241,11 @@ const inputs = {
   [IPC.sessionPreviewMessageRollback]: z.tuple([z.uuid(), z.string().regex(/^s-(0|[1-9]\d*)$/)]),
   [IPC.sessionApplyMessageRollback]: sessionChange,
   [IPC.sessionCopy]: session,
+  [IPC.sessionSearch]: z.tuple([
+    z.string().trim().min(1).max(CONVERSATION_QUERY_LENGTH),
+    nonBlank.nullable().optional(),
+  ]),
+  [IPC.sessionExportMarkdown]: z.tuple([z.uuid(), z.enum(SUPPORTED_LOCALES)]),
   [IPC.sessionPersona]: z.tuple([z.uuid(), z.string().nullable()]),
   [IPC.sessionInstructionSources]: session,
   [IPC.sessionFileDiff]: sessionChange,

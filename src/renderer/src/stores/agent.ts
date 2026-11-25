@@ -27,7 +27,7 @@ import { applyAgentEvent, initialAgentUiState, type AgentUiState } from "../adap
 import { showFeedback, showFeedbackError } from "../lib/feedback";
 import { currentLocale } from "../lib/i18n";
 import { initialNavState, moveNav, peekNav, pushNav, type NavState } from "../lib/nav";
-import type { ProjectSelection, SettingsSection } from "../lib/types";
+import type { ChatFind, ProjectSelection, SettingsSection } from "../lib/types";
 
 type View = "chat" | "settings";
 
@@ -44,8 +44,10 @@ interface AgentStore extends AgentUiState {
   settingsSection: SettingsSection;
   initialized: boolean;
   paletteOpen: boolean;
+  chatFind: ChatFind | null;
   nav: NavState;
   setPaletteOpen(open: boolean): void;
+  setChatFind(find: ChatFind | null): void;
   setSettingsSection(section: SettingsSection): void;
   /** 保存全局人设/自定义指令（"" = 清空） */
   savePersona(text: string): Promise<void>;
@@ -80,6 +82,7 @@ interface AgentStore extends AgentUiState {
   forkSession(id: string): Promise<void>;
   /** 会话全文复制到剪贴板 */
   copySession(id: string): Promise<void>;
+  exportSessionMarkdown(id: string): Promise<void>;
   /** 删除会话；删除当前会话时回到草稿态 */
   deleteSession(id: string): Promise<void>;
   navBack(): Promise<void>;
@@ -222,10 +225,12 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   settingsSection: "general",
   initialized: false,
   paletteOpen: false,
+  chatFind: null,
   revealRequest: 0,
   nav: initialNavState(),
 
   setPaletteOpen: (open) => set({ paletteOpen: open }),
+  setChatFind: (chatFind) => set({ chatFind }),
   setSettingsSection: (section) => set({ settingsSection: section }),
 
   savePersona: async (text) => {
@@ -259,6 +264,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
           }
           return {
             ...sessionSnapshot(snapshot, state),
+            chatFind: state.chatFind?.sessionId === snapshot.sessionId ? state.chatFind : null,
             nav,
             projectError: null,
             ...(navigation === "reveal"
@@ -397,6 +403,14 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
       showFeedback("已复制聊天全文");
     } catch (error) {
       showFeedbackError("无法复制聊天。请重试。", error);
+    }
+  },
+
+  exportSessionMarkdown: async (id) => {
+    try {
+      if (await window.pi.sessionExportMarkdown(id, currentLocale())) showFeedback("已导出聊天");
+    } catch (error) {
+      showFeedbackError("无法导出聊天。请重试。", error);
     }
   },
 

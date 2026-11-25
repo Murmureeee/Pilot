@@ -250,3 +250,13 @@ button.workspace-reference:focus-visible {
     gap: 0.75rem;
   }
 }
+::highlight(pilot-chat-find) {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+[data-chat-find-current] {
+  border-radius: var(--radius);
+  outline: 1px solid var(--muted-foreground);
+  outline-offset: 2px;
+}

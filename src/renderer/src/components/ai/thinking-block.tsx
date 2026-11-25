@@ -18,8 +18,10 @@ import { Response } from "./response";
 
 export function ThinkingBlock({
   part,
+  reveal = false,
 }: {
   part: Extract<UiPart, { type: "thinking" }>;
+  reveal?: boolean;
 }): JSX.Element {
   const locale = useLocale();
   const [open, setOpen] = useState<boolean | null>(null);
@@ -45,7 +47,7 @@ export function ThinkingBlock({
   if (!part.text) return line;
 
   return (
-    <TraceCollapsible open={open ?? streaming} onOpenChange={setOpen}>
+    <TraceCollapsible open={reveal || (open ?? streaming)} onOpenChange={setOpen}>
       <TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
       <TraceCollapsibleContent>
         <div

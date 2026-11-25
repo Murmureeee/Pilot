@@ -22,8 +22,10 @@ import type { ToolResultMessage } from "@earendil-works/pi-ai";
 
 import type {
   ComposerDraft,
+  Locale,
   SessionMeta,
   SessionRunResult,
+  SessionSearchResults,
   SessionSettings,
   UiMessage,
   UiPart,
@@ -32,6 +34,7 @@ import type {
 import { visibleMessageText } from "../../shared/mentions";
 import { insertCompactionMarker } from "../../shared/message-events";
 import { applyPlanUpdate } from "../../shared/plan";
+import { findTranscript, transcriptSegments } from "../../shared/transcript-search";
 import {
   NEW_CHAT_DRAFTS_FILE,
   SESSION_DRAFT_EXTENSION,
@@ -42,12 +45,14 @@ import {
 import { backupCorruptFile } from "../corrupt-file";
 import { toolRuleSchema } from "../settings/schema";
 import { readFileChange } from "../workspace/file-changes";
+import { CONVERSATION_INDEX_CACHE_SIZE, CONVERSATION_SEARCH_LIMIT } from "./constants";
 import { legacyMentionParts } from "./mentions";
 import { completeToolResults } from "./recovery";
 import { parseNewChatDrafts, parseSessionIndex } from "./session-index";
 import { labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
+import { transcriptFilename, transcriptMarkdown } from "./transcript-markdown";
 import type {
   ApprovedToolResult,
   CheckpointAppend,
@@ -223,6 +228,7 @@ export class SessionStore {
   private readonly contextCompactions = new Map<string, SavedCompaction[]>();
   private readonly messageHistories = new Map<string, MessageHistory>();
   private readonly transcriptWrites = new Map<string, TranscriptWriteState>();
+  private readonly transcriptIndex = new Map<string, ReturnType<typeof transcriptSegments>>();
 
   constructor(private readonly dir: string) {
     mkdirSync(dir, { recursive: true });
@@ -614,6 +620,43 @@ export class SessionStore {
       .join("\n\n");
   }
 
+  searchTranscripts(query: string, project?: string | null): SessionSearchResults {
+    const hits: SessionSearchResults["hits"] = [];
+    if (!query.trim()) return { hits, hasMore: false };
+    for (const { id, workingDirectory } of this.list()) {
+      if (project !== undefined && (workingDirectory ?? null) !== project) continue;
+      for (const match of findTranscript(this.indexedTranscript(id), query)) {
+        if (hits.length === CONVERSATION_SEARCH_LIMIT) return { hits, hasMore: true };
+        hits.push({ sessionId: id, ...match });
+      }
+    }
+    return { hits, hasMore: false };
+  }
+
+  private indexedTranscript(id: string): ReturnType<typeof transcriptSegments> {
+    const cached = this.transcriptIndex.get(id);
+    const segments =
+      cached ??
+      transcriptSegments(toUiMessages(this.load(id), "s", undefined, this.compactions(id)));
+    this.transcriptIndex.delete(id);
+    this.transcriptIndex.set(id, segments);
+    if (this.transcriptIndex.size > CONVERSATION_INDEX_CACHE_SIZE) {
+      const oldest = this.transcriptIndex.keys().next().value;
+      if (oldest !== undefined) this.transcriptIndex.delete(oldest);
+    }
+    return segments;
+  }
+
+  exportMarkdown(id: string, locale: Locale): { filename: string; markdown: string } {
+    const session = this.getMeta(id);
+    if (!session) throw new Error("找不到该会话。");
+    const messages = toUiMessages(this.load(id), "s", undefined, this.compactions(id));
+    return {
+      filename: transcriptFilename(session.title),
+      markdown: transcriptMarkdown(session.title, messages, locale),
+    };
+  }
+
   /** 删除：移除转录文件与索引项（文件不存在也照常清索引） */
   remove(id: string): void {
     this.backUpIndexIfNeeded();
@@ -626,6 +669,7 @@ export class SessionStore {
     this.contextCompactions.delete(id);
     this.messageHistories.delete(id);
     this.transcriptWrites.delete(id);
+    this.transcriptIndex.delete(id);
     this.index.sessions = this.index.sessions.filter((s) => s.id !== id);
     this.writeIndex();
   }
@@ -753,6 +797,7 @@ export class SessionStore {
     checkpoint: RunCheckpoint,
     completedTool?: ToolResultMessage,
   ): void {
+    this.transcriptIndex.delete(id);
     const state = this.transcriptWriteState(id);
     if (!state.appendable) throw new Error("无法保存任务进度。");
     const record: CheckpointAppend = {
@@ -882,6 +927,7 @@ export class SessionStore {
     compactions = this.compactions(id),
     messageHistory = this.messageHistory(id),
   ): void {
+    this.transcriptIndex.delete(id);
     const git = gitChanges?.checkpoint;
     const tasks = git
       ? messageHistory.tasks.map((task) =>

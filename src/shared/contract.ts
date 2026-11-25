@@ -58,6 +58,8 @@ export const IPC = {
   sessionPreviewMessageRollback: "session:preview-message-rollback",
   sessionApplyMessageRollback: "session:apply-message-rollback",
   sessionCopy: "session:copy",
+  sessionSearch: "session:search",
+  sessionExportMarkdown: "session:export-markdown",
   sessionPersona: "session:persona",
   sessionInstructionSources: "session:instruction-sources",
   sessionFileDiff: "session:file-diff",
@@ -270,6 +272,30 @@ export interface UiMessage {
   parts: UiPart[];
   streaming?: boolean;
   timing?: AssistantTiming;
+}
+
+export interface TranscriptLocation {
+  messageId: string;
+  partIndex: number;
+  field: "text" | "input" | "output" | "path";
+  occurrence: number;
+}
+
+export interface TranscriptSnippet {
+  before: string;
+  match: string;
+  after: string;
+}
+
+export interface SessionSearchHit {
+  sessionId: string;
+  location: TranscriptLocation;
+  snippet: TranscriptSnippet;
+}
+
+export interface SessionSearchResults {
+  hits: SessionSearchHit[];
+  hasMore: boolean;
 }
 
 export type AgentStatus = "idle" | "streaming" | "waiting_approval" | "stopping";

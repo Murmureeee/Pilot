@@ -80,6 +80,7 @@ export const NATIVE_DIALOG_TITLES = {
     workingDirectory: "选择工具工作目录",
     openProject: "打开项目",
     bindProject: "关联项目",
+    exportMarkdown: "导出 Markdown",
   },
   en: {
     skill: "Choose a skill folder containing SKILL.md",
@@ -87,6 +88,7 @@ export const NATIVE_DIALOG_TITLES = {
     workingDirectory: "Choose the tools’ working directory",
     openProject: "Open project",
     bindProject: "Link project",
+    exportMarkdown: "Export Markdown",
   },
 } as const satisfies Record<
   Locale,
@@ -96,5 +98,6 @@ export const NATIVE_DIALOG_TITLES = {
     workingDirectory: string;
     openProject: string;
     bindProject: string;
+    exportMarkdown: string;
   }
 >;

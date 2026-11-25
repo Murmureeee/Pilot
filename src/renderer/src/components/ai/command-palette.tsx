@@ -18,20 +18,33 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from "react";
 
+import { Button } from "@renderer/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@renderer/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@renderer/components/ui/select";
 import { COMPOSER_SHORTCUTS, REVIEW_SHORTCUTS } from "@renderer/lib/constants";
-import { t, useLocale } from "@renderer/lib/i18n";
+import { showFeedbackError } from "@renderer/lib/feedback";
+import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import {
   filterEntries,
   PALETTE_TABS,
   type PaletteEntry,
+  type PaletteSearch,
   type PaletteTab,
 } from "@renderer/lib/palette";
 import { relativeTime } from "@renderer/lib/relative-time";
 import type { ComposerShortcut } from "@renderer/lib/types";
+import { referenceName } from "@renderer/lib/workspace-links";
 import { selectApprovalMode, selectPlanReview, useAgentStore } from "@renderer/stores/agent";
 import { activateReview } from "@renderer/stores/review";
-import type { ApprovalMode } from "@shared/contract";
+import { CONVERSATION_QUERY_LENGTH } from "@shared/constants";
+import type { ApprovalMode, TranscriptLocation } from "@shared/contract";
 
 function EntryIcon({ entry }: { entry: PaletteEntry }): JSX.Element {
   if (entry.kind === "chat") return <MessageSquareIcon className="size-4 shrink-0" />;
@@ -48,6 +61,8 @@ function EntryIcon({ entry }: { entry: PaletteEntry }): JSX.Element {
       return <ListChecksIcon className="size-4 shrink-0" />;
     case "focus-composer":
       return <LocateFixedIcon className="size-4 shrink-0" />;
+    case "find-chat":
+      return <SearchIcon className="size-4 shrink-0" />;
     case "recall-message":
       return <ArrowUpIcon className="size-4 shrink-0" />;
     case "stop-run":
@@ -68,15 +83,18 @@ export function CommandPalette({
   canReview,
   composerShortcuts,
   onComposerShortcut,
+  onOpenChatFind,
 }: {
   canReview: boolean;
   composerShortcuts: Record<ComposerShortcut, boolean>;
   onComposerShortcut(shortcut: ComposerShortcut): void;
+  onOpenChatFind(query: string, location: TranscriptLocation): void;
 }): JSX.Element {
   const locale = useLocale();
   const open = useAgentStore((s) => s.paletteOpen);
   const setOpen = useAgentStore((s) => s.setPaletteOpen);
   const sessions = useAgentStore((s) => s.sessions);
+  const recentProjects = useAgentStore((s) => s.recentProjects);
   const approvalMode = useAgentStore(selectApprovalMode);
   const reviewingPlan = useAgentStore((state) => Boolean(selectPlanReview(state)));
   const newSession = useAgentStore((s) => s.newSession);
@@ -87,9 +105,49 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<PaletteTab>("all");
   const [selected, setSelected] = useState(0);
+  const [scope, setScope] = useState("all");
+  const [search, setSearch] = useState<PaletteSearch | null>(null);
+  const [retrySearch, setRetrySearch] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const entryAfterClose = useRef<PaletteEntry | null>(null);
+  const directory = scope === "all" ? undefined : scope === "unlinked" ? null : scope;
+  const term = query.trim();
+  const searchKey = JSON.stringify([scope, term, retrySearch]);
+  const currentSearch = tab !== "actions" && search?.key === searchKey ? search : null;
+  const searching = Boolean(term && tab !== "actions" && !currentSearch);
+  const projects = useMemo(
+    () => [
+      ...new Set([
+        ...recentProjects,
+        ...sessions.flatMap((session) => session.workingDirectory ?? []),
+      ]),
+    ],
+    [recentProjects, sessions],
+  );
+
+  useEffect(() => {
+    if (!open || !term || tab === "actions") return;
+    let live = true;
+    const timer = window.setTimeout(() => {
+      void window.pi.sessionSearch(term, directory).then(
+        (result) => {
+          if (live) setSearch({ key: searchKey, result });
+        },
+        (error: unknown) => {
+          if (live)
+            setSearch({
+              key: searchKey,
+              error: error instanceof Error ? error.message : String(error),
+            });
+        },
+      );
+    }, 150);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [open, term, tab, directory, searchKey, sessions]);
 
   const entries = useMemo<PaletteEntry[]>(() => {
     const actions: PaletteEntry[] = [
@@ -142,21 +200,45 @@ export function CommandPalette({
       const shortcut = COMPOSER_SHORTCUTS[id];
       actions.push({ kind: "action", id, label: t(shortcut.label, locale), detail: shortcut.keys });
     }
-    const chats: PaletteEntry[] = sessions.map((s) => ({
-      kind: "chat",
-      id: s.id,
-      label: s.title,
-      detail: relativeTime(s.updatedAt, locale),
-    }));
+    const chats: PaletteEntry[] = sessions
+      .filter(
+        (session) => directory === undefined || (session.workingDirectory ?? null) === directory,
+      )
+      .map((session) => ({
+        kind: "chat",
+        id: session.id,
+        label: session.title,
+        detail: relativeTime(session.updatedAt, locale),
+      }));
     return [...actions, ...chats];
-  }, [locale, sessions, approvalMode, reviewingPlan, canReview, composerShortcuts]);
+  }, [locale, sessions, approvalMode, reviewingPlan, canReview, composerShortcuts, directory]);
 
-  const filtered = useMemo(() => filterEntries(entries, query, tab), [entries, query, tab]);
+  const filtered = useMemo(() => {
+    const visible = filterEntries(entries, query, tab);
+    if (!term || tab === "actions" || !currentSearch?.result) return visible;
+    const matchingSessions = new Map(sessions.map((session) => [session.id, session]));
+    for (const hit of currentSearch.result.hits) {
+      const session = matchingSessions.get(hit.sessionId);
+      if (!session) continue;
+      const { messageId, partIndex, field, occurrence } = hit.location;
+      visible.push({
+        kind: "chat",
+        id: [hit.sessionId, messageId, partIndex, field, occurrence].join("/"),
+        label: session.title,
+        detail: session.workingDirectory
+          ? referenceName(session.workingDirectory)
+          : t("未关联项目", locale),
+        hit,
+        findQuery: term,
+      });
+    }
+    return visible;
+  }, [entries, query, tab, term, currentSearch, sessions, locale]);
 
   // 查询/标签变化时复位选中项，并保证选中项滚动进可视区
   useEffect(() => {
     setSelected(0);
-  }, [query, tab]);
+  }, [query, tab, scope]);
 
   useEffect(() => {
     if (!open) return;
@@ -172,6 +254,17 @@ export function CommandPalette({
   };
 
   const runById = (entry: PaletteEntry): void => {
+    if (entry.hit) {
+      const { sessionId, location } = entry.hit;
+      const query = entry.findQuery ?? "";
+      setView("chat");
+      void loadSession(sessionId)
+        .then(() => {
+          if (useAgentStore.getState().sessionId === sessionId) onOpenChatFind(query, location);
+        })
+        .catch((error: unknown) => showFeedbackError("无法打开搜索结果。请重试。", error));
+      return;
+    }
     if (entry.kind === "chat") {
       setView("chat");
       void loadSession(entry.id);
@@ -204,6 +297,7 @@ export function CommandPalette({
         changeApprovalMode("full-access");
         return;
       case "focus-composer":
+      case "find-chat":
       case "cycle-approval-mode":
       case "recall-message":
       case "stop-run":
@@ -217,6 +311,7 @@ export function CommandPalette({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setSelected((i) => Math.min(filtered.length - 1, i + 1));
@@ -225,13 +320,13 @@ export function CommandPalette({
       setSelected((i) => Math.max(0, i - 1));
     } else if (event.key === "Enter") {
       event.preventDefault();
-      const entry = filtered[selected];
+      const entry = filtered[Math.min(selected, filtered.length - 1)];
       if (entry) selectEntry(entry);
     }
   };
 
   // 渲染分组：连续同类条目归一段（操作在前、聊天在后）
-  let lastKind: PaletteEntry["kind"] | null = null;
+  let lastKind: PaletteEntry["kind"] | "match" | null = null;
 
   return (
     <Dialog
@@ -255,6 +350,7 @@ export function CommandPalette({
           <input
             ref={searchRef}
             value={query}
+            maxLength={CONVERSATION_QUERY_LENGTH}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
             aria-label={t("搜索", locale)}
@@ -264,24 +360,29 @@ export function CommandPalette({
         </div>
 
         <div ref={listRef} className="max-h-80 min-h-0 overflow-y-auto py-1">
-          {filtered.length === 0 && (
+          {filtered.length === 0 && !currentSearch?.error && (
             <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-              {t("没有匹配的结果", locale)}
+              {t(searching ? "正在搜索会话…" : "没有匹配的结果", locale)}
             </p>
           )}
           {filtered.map((entry, index) => {
-            const showHeader = entry.kind !== lastKind;
-            lastKind = entry.kind;
+            const kind = entry.hit ? "match" : entry.kind;
+            const showHeader = kind !== lastKind;
+            lastKind = kind;
             return (
               <div key={`${entry.kind}-${entry.id}`}>
                 {showHeader && (
                   <p className="px-4 pt-3 pb-1 text-xs text-muted-foreground">
-                    {entry.kind === "action" ? t("快捷操作", locale) : t("聊天", locale)}
+                    {t(
+                      kind === "action" ? "快捷操作" : kind === "match" ? "会话内容" : "聊天",
+                      locale,
+                    )}
                   </p>
                 )}
                 <button
                   type="button"
                   data-index={index}
+                  data-session-search-hit={entry.hit ? entry.hit.sessionId : undefined}
                   onMouseEnter={() => setSelected(index)}
                   onClick={() => selectEntry(entry)}
                   className={cn(
@@ -295,11 +396,39 @@ export function CommandPalette({
                     {entry.detail && (
                       <span className="text-xs text-muted-foreground">{entry.detail}</span>
                     )}
+                    {entry.hit && (
+                      <span className="line-clamp-2 text-xs wrap-anywhere text-muted-foreground">
+                        {entry.hit.snippet.before}
+                        <mark className="bg-primary text-primary-foreground">
+                          {entry.hit.snippet.match}
+                        </mark>
+                        {entry.hit.snippet.after}
+                      </span>
+                    )}
                   </span>
                 </button>
               </div>
             );
           })}
+          {currentSearch?.error && tab !== "actions" && (
+            <div className="flex items-center justify-between gap-2 px-4 py-2 text-sm">
+              <p role="alert" className="min-w-0 wrap-anywhere text-destructive">
+                {localizeError(currentSearch.error, locale)}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setRetrySearch((value) => value + 1)}
+              >
+                {t("重试搜索", locale)}
+              </Button>
+            </div>
+          )}
+          {currentSearch?.result?.hasMore && tab !== "actions" && (
+            <p className="px-4 py-2 text-xs text-muted-foreground">
+              {t("还有更多结果，请缩小搜索范围。", locale)}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-1 border-t px-3 py-2">
@@ -318,6 +447,35 @@ export function CommandPalette({
               {t(tabItem.label, locale)}
             </button>
           ))}
+          {tab !== "actions" && (
+            <Select value={scope} onValueChange={(value) => value && setScope(value)}>
+              <SelectTrigger size="sm" aria-label={t("搜索项目范围", locale)} className="max-w-36">
+                <SelectValue>
+                  {scope === "all"
+                    ? t("全部项目", locale)
+                    : scope === "unlinked"
+                      ? t("未关联项目", locale)
+                      : referenceName(scope)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="start" alignItemWithTrigger={false} className="min-w-40">
+                <SelectGroup>
+                  <SelectItem value="all">{t("全部项目", locale)}</SelectItem>
+                  <SelectItem value="unlinked">{t("未关联项目", locale)}</SelectItem>
+                  {projects.map((project) => (
+                    <SelectItem key={project} value={project}>
+                      <span className="flex min-w-0 flex-col gap-0.5">
+                        <span>{referenceName(project)}</span>
+                        <span className="text-xs wrap-anywhere text-muted-foreground">
+                          {project}
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
           <span className="ml-auto text-xs text-muted-foreground">
             {t("↑↓ 选择 · Enter 执行", locale)}
           </span>
