@@ -265,7 +265,8 @@ it("recovers a partially applied plain folder rewind after restarting", async ()
   const anchor = anchorMessages.at(-1)!.id;
   const store = new SessionStore(join(root, "sessions"));
   const record = store.read(id);
-  const { journal } = await prepareMessageRollback(record, anchor, directory);
+  const { journal, preview: prepared } = await prepareMessageRollback(record, anchor, directory);
+  expect(prepared.conflicts).toEqual([]);
   expect(journal?.files).toHaveLength(2);
   store.writeTranscript(id, record.messages, undefined, null, record.compactions, {
     ...record.messageHistory,

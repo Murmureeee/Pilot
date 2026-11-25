@@ -34,7 +34,8 @@ import type {
 
 export function gitFilePath(directory: string, root: string, path: string): string {
   const project = resolveGitDirectory(directory);
-  const filename = join(root, path);
+  // A plain folder's saved working directory can use a Windows short name.
+  const filename = join(root === directory ? project : root, path);
   if (
     !path ||
     isAbsolute(path) ||
