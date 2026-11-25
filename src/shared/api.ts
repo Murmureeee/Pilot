@@ -19,6 +19,8 @@ import type {
   Locale,
   LogLevel,
   MenuAction,
+  MessageBranchAction,
+  MessageRollbackPreview,
   ModelCatalogEntry,
   OpenPathTarget,
   PermissionDecision,
@@ -126,6 +128,16 @@ export interface PiApi {
   sessionUnread(id: string, unread: boolean): Promise<SessionMeta[]>;
   /** 分叉：复制转录为新会话，返回刷新后的会话列表 */
   sessionFork(id: string): Promise<SessionMeta[]>;
+  sessionBranchMessage(
+    composerId: string,
+    messageId: string,
+    action: MessageBranchAction,
+  ): Promise<Snapshot>;
+  sessionPreviewMessageRollback(
+    composerId: string,
+    messageId: string,
+  ): Promise<MessageRollbackPreview>;
+  sessionApplyMessageRollback(composerId: string, token: string): Promise<Snapshot>;
   /** 会话全文文本（复制到剪贴板用） */
   sessionCopy(id: string): Promise<string>;
   /** 会话级人设覆盖（null = 清除，回落全局） */

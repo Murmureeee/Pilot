@@ -19,6 +19,8 @@ import type {
   GitRollbackPreview,
   GitRollbackSelection,
   GitStageSelection,
+  MessageBranchAction,
+  MessageRollbackPreview,
   PermissionDecision,
   PromptInput,
   RunRef,
@@ -35,6 +37,7 @@ import type {
 
 import { compactFocus } from "../../shared/compact-command";
 import { APP_NAME, DEFAULT_THINKING_LEVEL } from "../../shared/constants";
+import { promptFromDraft } from "../../shared/mentions";
 import { applyMessageEvent } from "../../shared/message-events";
 import { effectiveModelCapabilities } from "../../shared/model-capabilities";
 import { hasSavedModel, resolveSessionModel, selectedCatalogModel } from "../../shared/providers";
@@ -73,6 +76,12 @@ import type {
 import { SKILL_CATALOG_INSTRUCTIONS } from "./constants";
 import { compactedContext, contextSize, transcriptUsage } from "./context-compaction";
 import { prepareMentionPrompt } from "./mentions";
+import { draftFromMessage, messageIndex } from "./message-operations";
+import {
+  applyMessageRollbackFiles,
+  prepareMessageRollback,
+  recoverMessageRollbackFiles,
+} from "./message-rollback";
 import { resolveModel } from "./models";
 import { loadProjectInstructions } from "./project-instructions";
 import { failedRunOf, interruptedRunOf } from "./recovery";
@@ -87,6 +96,7 @@ import type {
   CompactionRequest,
   HostDeps,
   GitCommitOperation,
+  MessageRollbackOperation,
   ReferencedUserMessage,
   SavedGitChanges,
 } from "./types";
@@ -115,6 +125,7 @@ export class AgentHost {
   private run?: AgentRun;
   private gitRollback?: GitRollbackOperation;
   private applyingGitRollback = false;
+  private messageRollback?: MessageRollbackOperation;
   private gitCommit?: GitCommitOperation;
   private applyingGitSelection = false;
   private readonly sessionRules = new Map<string, ToolRule[]>();
@@ -344,6 +355,8 @@ export class AgentHost {
     task?: VerificationTask;
   } {
     this.checkComposerId(composerId);
+    if (expectedDirectory !== undefined && this.applyingGitRollback)
+      throw new Error("请等待撤销完成后再运行验证。");
     const workingDirectory = this.getWorkingDirectory() ?? null;
     if (expectedDirectory !== undefined) {
       if (workingDirectory !== expectedDirectory)
@@ -388,12 +401,13 @@ export class AgentHost {
     input: string | PromptInput,
     composerId?: string,
     expectedDirectory?: string | null,
+    replay = false,
   ): Promise<void> | ActiveRun {
     if (this.applyingGitRollback) throw new Error("正在撤销 Git 变更，请稍后重试。");
     if (this.applyingGitSelection) throw new Error("正在更新 Git，请稍后重试。");
     if (composerId !== undefined) this.checkComposerId(composerId);
     const focus =
-      typeof input === "string" || input.mentions.length === 0
+      !replay && (typeof input === "string" || input.mentions.length === 0)
         ? compactFocus(typeof input === "string" ? input : input.text)
         : undefined;
     if (focus !== undefined) {
@@ -480,6 +494,8 @@ export class AgentHost {
     compaction?: CompactionRequest,
   ): Promise<void> {
     const sessionId = this.sessionId!;
+    if (this.deps.store.messageHistory(sessionId).rollback)
+      throw new Error("此聊天有未完成的撤销。请重新打开「回到此处」。");
     const sessionRules = this.sessionRules.get(sessionId) ?? [];
     this.sessionRules.set(sessionId, sessionRules);
     const run = new AgentRun({
@@ -562,6 +578,35 @@ export class AgentHost {
   forkSession(id: string): SessionMeta[] {
     this.deps.store.fork(id);
     return this.sendSessions();
+  }
+
+  branchMessage(composerId: string, messageId: string, action: MessageBranchAction): Snapshot {
+    this.checkComposerId(composerId);
+    const origin = this.getCurrentSession();
+    if (!origin) throw new Error("找不到该会话。");
+    if (action === "retry" && (this.run || this.applyingGitRollback || this.applyingGitSelection))
+      throw new Error("请等待当前任务结束后再重试。");
+    const messages = this.deps.store.load(origin.id);
+    const index = messageIndex(messages, messageId);
+    const expectedRole = action === "retry" ? "assistant" : "user";
+    if (messages[index].role !== expectedRole) throw new Error("消息已变更，请重新选择。");
+    const userIndex =
+      action === "retry"
+        ? messages.findLastIndex(({ role }, i) => i < index && role === "user")
+        : index;
+    if (userIndex < 0) throw new Error("找不到这条回复的原始消息。");
+    const directory = this.getWorkingDirectory();
+    const draft = action === "fork" ? [] : draftFromMessage(messages[userIndex], directory);
+    const end = action === "fork" ? index + 1 : userIndex;
+    const id = this.deps.store.branchFromMessage(
+      origin,
+      messages.slice(0, end),
+      action === "edit" ? draft : [],
+    );
+    this.switchSession(id);
+    const snapshot = this.publishSnapshot("reveal");
+    if (action === "retry") void this.prompt(promptFromDraft(draft), id, directory ?? null, true);
+    return snapshot;
   }
 
   /** 会话全文文本（渲染层写入剪贴板） */
@@ -652,6 +697,7 @@ export class AgentHost {
 
   private switchSession(id: string | null, draftWorkingDirectory?: string): void {
     this.gitCommit = undefined;
+    this.messageRollback = undefined;
     this.sessionId = id;
     this.composerId = id ?? randomUUID();
     this.draftWorkingDirectory = draftWorkingDirectory;
@@ -970,7 +1016,7 @@ export class AgentHost {
       selection.checkpointId,
       selection.path,
     );
-    await verifyGitRollback(directory, checkpoint, file);
+    await verifyGitRollback(directory, checkpoint.snapshot, [file]);
     const current = this.selectedGitCheckpoint(composerId, checkpoint.id, file.path);
     if (this.run || this.applyingGitRollback) throw new Error("请等待当前回复结束后再撤销。");
     const after = rollbackTarget(directory, current.checkpoint, current.file, selection);
@@ -1007,7 +1053,7 @@ export class AgentHost {
       );
       if (file.revision !== operation.file.revision || file.after === undefined)
         throw new Error("检查点已更新，请重新预览撤销范围。");
-      await verifyGitRollback(directory, checkpoint, file);
+      await verifyGitRollback(directory, checkpoint.snapshot, [file]);
       const { saved } = this.selectedGitCheckpoint(composerId, checkpoint.id, file.path);
       const { messages } = this.deps.store.read(composerId);
       // If the app closes between the file write and transcript update, compare both recorded versions.
@@ -1033,6 +1079,105 @@ export class AgentHost {
           checkpoint: this.settleGitRollback(journal, directory),
         });
       }
+    } finally {
+      this.applyingGitRollback = false;
+    }
+  }
+
+  async previewMessageRollback(
+    composerId: string,
+    messageId: string,
+  ): Promise<MessageRollbackPreview> {
+    this.checkComposerId(composerId);
+    if (!this.sessionId) throw new Error("找不到该会话。");
+    if (this.run || this.applyingGitRollback || this.applyingGitSelection)
+      throw new Error("请等待当前任务结束后再撤销。");
+    const directory = this.getWorkingDirectory();
+    this.gitRecord(composerId, directory);
+    const store = this.deps.store;
+    let record = store.read(composerId);
+    if (record.checkpoint && !record.checkpoint.failure)
+      throw new Error("此聊天有未结束的任务。请先继续该任务。");
+    const previous = record.messageHistory.rollback;
+    if (previous) {
+      if (previous.directory !== directory) throw new Error("工作目录已变更，无法完成上一次撤销。");
+      this.applyingGitRollback = true;
+      try {
+        await recoverMessageRollbackFiles(previous);
+        store.writeTranscript(
+          composerId,
+          record.messages,
+          record.checkpoint,
+          record.gitChanges ?? null,
+          record.compactions,
+          { tasks: record.messageHistory.tasks },
+        );
+        record = store.read(composerId);
+      } finally {
+        this.applyingGitRollback = false;
+      }
+    }
+    const plan = await prepareMessageRollback(record, messageId, directory);
+    this.checkComposerId(composerId);
+    this.checkWorkingDirectory(directory ?? null);
+    if (plan.preview.conflicts.length) {
+      this.messageRollback = undefined;
+      return plan.preview;
+    }
+    const token = randomUUID();
+    this.messageRollback = { token, sessionId: composerId, messageId, revision: plan.revision };
+    return { ...plan.preview, token };
+  }
+
+  async applyMessageRollback(composerId: string, token: string): Promise<Snapshot> {
+    this.checkComposerId(composerId);
+    if (this.run || this.applyingGitRollback || this.applyingGitSelection)
+      throw new Error("请等待当前任务结束后再撤销。");
+    const operation = this.messageRollback;
+    if (!operation || operation.token !== token || operation.sessionId !== composerId)
+      throw new Error("检查点已更新，请重新预览撤销范围。");
+    this.messageRollback = undefined;
+    this.applyingGitRollback = true;
+    try {
+      const store = this.deps.store;
+      const record = store.read(composerId);
+      const directory = this.getWorkingDirectory();
+      const plan = await prepareMessageRollback(record, operation.messageId, directory);
+      this.checkComposerId(composerId);
+      this.checkWorkingDirectory(directory ?? null);
+      if (plan.preview.conflicts.length) throw new Error(plan.preview.conflicts[0].reason);
+      if (record.messageHistory.rollback || plan.revision !== operation.revision)
+        throw new Error("检查点已更新，请重新预览撤销范围。");
+      const { journal } = plan;
+      if (journal) {
+        store.writeTranscript(
+          composerId,
+          record.messages,
+          record.checkpoint,
+          record.gitChanges ?? null,
+          record.compactions,
+          { ...record.messageHistory, rollback: journal },
+        );
+      }
+      try {
+        if (journal) applyMessageRollbackFiles(journal);
+        store.finishMessageRollback(composerId, record, plan.endIndex);
+      } catch (error) {
+        if (journal && store.messageHistory(composerId).rollback) {
+          await recoverMessageRollbackFiles(journal);
+          store.writeTranscript(
+            composerId,
+            record.messages,
+            record.checkpoint,
+            record.gitChanges ?? null,
+            record.compactions,
+            record.messageHistory,
+          );
+        }
+        throw error;
+      }
+      this.resetAgent();
+      return this.publishSnapshot();
     } finally {
       this.applyingGitRollback = false;
     }

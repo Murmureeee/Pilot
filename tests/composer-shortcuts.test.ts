@@ -4,10 +4,10 @@ import {
   composerEnterAction,
   composerTrigger,
   matchesComposerQuery,
-  promptFromDraft,
   trimPrompt,
 } from "../src/renderer/src/lib/composer-shortcuts";
 import type { PromptMention } from "../src/shared/contract";
+import { promptFromDraft } from "../src/shared/mentions";
 
 describe("composer shortcuts", () => {
   it("finds the entire slash token while leaving neighboring prose outside the token", () => {

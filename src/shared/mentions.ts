@@ -1,5 +1,5 @@
 // @env all
-import type { PromptMention, UiPart } from "./contract";
+import type { ComposerDraft, PromptInput, PromptMention, UiPart } from "./contract";
 
 export function mentionToken({ type, id }: Pick<PromptMention, "type" | "id">): string {
   const escaped = id.replace(/[%[\]\r\n]/g, (character) => encodeURIComponent(character));
@@ -14,4 +14,17 @@ export function visibleMessageText(parts: readonly UiPart[]): string {
       return "";
     })
     .join("");
+}
+
+export function promptFromDraft(draft: ComposerDraft): PromptInput {
+  const mentions: PromptInput["mentions"] = [];
+  let text = "";
+  for (const part of draft) {
+    if (typeof part === "string") text += part;
+    else {
+      mentions.push({ ...part, offset: text.length });
+      text += mentionToken(part);
+    }
+  }
+  return { text, mentions };
 }

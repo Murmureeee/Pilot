@@ -275,6 +275,7 @@ describe("SessionStore", () => {
       checkpoint: undefined,
       gitChanges: undefined,
       compactions: [],
+      messageHistory: { tasks: [] },
     });
   });
 

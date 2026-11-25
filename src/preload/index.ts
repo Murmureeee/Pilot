@@ -90,6 +90,12 @@ const api: PiApi = {
   sessionUnread: (id: string, unread: boolean) =>
     ipcRenderer.invoke(IPC.sessionUnread, id, unread) as Promise<SessionMeta[]>,
   sessionFork: (id: string) => ipcRenderer.invoke(IPC.sessionFork, id) as Promise<SessionMeta[]>,
+  sessionBranchMessage: (id, messageId, action) =>
+    ipcRenderer.invoke(IPC.sessionBranchMessage, id, messageId, action),
+  sessionPreviewMessageRollback: (id, messageId) =>
+    ipcRenderer.invoke(IPC.sessionPreviewMessageRollback, id, messageId),
+  sessionApplyMessageRollback: (id, token) =>
+    ipcRenderer.invoke(IPC.sessionApplyMessageRollback, id, token),
   sessionCopy: (id: string) => ipcRenderer.invoke(IPC.sessionCopy, id) as Promise<string>,
   sessionPersona: (id: string, persona: string | null) =>
     ipcRenderer.invoke(IPC.sessionPersona, id, persona),

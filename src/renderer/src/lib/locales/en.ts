@@ -651,6 +651,44 @@ export const EN_MESSAGES: Record<string, string> = {
   "第 {0} 轮，{1}": "Turn {0}, {1}",
   复制提问: "Copy message",
   已复制: "Copied",
+  消息操作: "Message actions",
+  复制消息: "Copy message",
+  复制回复: "Copy reply",
+  编辑并重发: "Edit and resend",
+  从此处分叉: "Branch from here",
+  重试回复: "Retry reply",
+  回到此处: "Rewind to here",
+  确认回到此处: "Confirm rewind",
+  已回到所选回复: "Rewound to the selected reply",
+  重新预览: "Refresh preview",
+  "预览后续消息和任务改动。": "Preview subsequent messages and task changes.",
+  "将从当前聊天移除所选回复之后的 {0} 条消息，并撤销下列任务改动。":
+    "Remove {0} messages after the selected reply from this chat and undo the task changes listed here.",
+  "此范围只有会话消息。": "This range contains only chat messages.",
+  "无法复制消息。请重试。": "Could not copy the message. Try again.",
+  "无法处理这条消息。请重试。": "Could not perform this message action. Try again.",
+  "消息已变更，请重新选择。": "The message changed. Select it again.",
+  "找不到这条回复的原始消息。": "Pilot could not find the original message for this reply.",
+  "此回复之后没有消息。": "There are no messages after this reply.",
+  "请等待当前任务结束后再重试。": "Wait for the current task to finish before retrying.",
+  "请等待当前任务结束后再撤销。": "Wait for the current task to finish before rewinding.",
+  "请等待验证完成后再撤销。": "Wait for verification to finish before rewinding.",
+  "请等待撤销完成后再运行验证。": "Wait for the rewind to finish before running verification.",
+  "此聊天有未结束的任务。请先继续该任务。": "This chat has an unfinished task. Resume it first.",
+  "此聊天有未完成的撤销。请重新打开「回到此处」。":
+    "This chat has an unfinished rewind. Open Rewind to here again.",
+  "工作目录已变更，无法完成上一次撤销。":
+    "The working directory changed. Pilot could not finish the previous rewind.",
+  "所选回复位于任务中途。请选择任务结束时的回复。":
+    "The selected reply is in the middle of a task. Select the reply that ended the task.",
+  "缺少可确认的任务检查点。请先在审查面板核对后续改动。":
+    "No verifiable task checkpoint is available. Review the later changes in the review panel.",
+  "文件缺少 Git 检查点。请先在审查面板核对后续改动。":
+    "The file has no Git checkpoint. Review the later changes in the review panel.",
+  "任务改动与现有文件或暂存内容冲突。请在审查面板核对。":
+    "Task changes conflict with the current file or index. Review them in the review panel.",
+  "文件在撤销过程中发生变化。请先核对工作区中的文件。":
+    "A file changed during the rewind. Review the affected files in the workspace.",
   "（空消息）": "(empty message)",
   任务计划: "Task plan",
   "已处理 {0} 步": "Steps taken: {0}",

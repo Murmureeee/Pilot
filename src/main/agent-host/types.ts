@@ -6,6 +6,7 @@ import type {
   AssistantTiming,
   GitChangesView,
   ContextCompaction,
+  MessageRollbackPreview,
   ModelFailure,
   ModelRetryProgress,
   PermissionDecision,
@@ -25,7 +26,14 @@ import type {
 } from "@shared/contract";
 
 import type { Settings } from "../settings/types";
-import type { GitCommitPlan, GitSnapshot, GitTaskCheckpoint } from "../workspace/types";
+import type {
+  GitCheckpointFile,
+  GitCommitPlan,
+  GitFileState,
+  GitSnapshot,
+  GitTaskCheckpoint,
+  GitWorktree,
+} from "../workspace/types";
 import type { McpManager } from "./mcp";
 import type { SessionStore } from "./session-store";
 import type { ToolEnvironment } from "./tools/types";
@@ -75,6 +83,56 @@ export type CompactionRequest = { mode: "manual"; focus: string } | { mode: "ret
 export interface SessionRunSettlement {
   task?: VerificationTask;
   result: Exclude<SessionRunResult, "interrupted">;
+  messageRange?: Pick<SavedMessageTask, "startIndex" | "workingDirectory" | "workspace">;
+}
+
+type MessageTaskWorkspace =
+  | { kind: "git"; snapshot: Pick<GitWorktree, "root" | "head">; files: GitCheckpointFile[] }
+  | { kind: "folder" }
+  | { kind: "unknown" };
+
+export interface SavedMessageTask {
+  type: "pilot_message_task";
+  task: VerificationTask;
+  result: SessionRunSettlement["result"];
+  startIndex: number;
+  endIndex: number;
+  workingDirectory: string | null;
+  workspace: MessageTaskWorkspace;
+}
+
+export interface MessageRollbackFile {
+  path: string;
+  current: GitFileState;
+  target: GitFileState;
+  index?: string;
+}
+
+export interface MessageRollbackJournal {
+  type: "pilot_message_rollback";
+  directory: string;
+  root: string;
+  head?: string;
+  files: MessageRollbackFile[];
+}
+
+export interface MessageHistory {
+  tasks: SavedMessageTask[];
+  rollback?: MessageRollbackJournal;
+}
+
+export interface MessageRollbackOperation {
+  sessionId: string;
+  token: string;
+  messageId: string;
+  revision: string;
+}
+
+export interface PreparedMessageRollback {
+  endIndex: number;
+  revision: string;
+  preview: MessageRollbackPreview;
+  journal?: MessageRollbackJournal;
 }
 
 export interface SavedCompaction extends ContextCompaction {
@@ -160,6 +218,7 @@ export interface SessionRecord {
   checkpoint?: RunCheckpoint;
   gitChanges?: SavedGitChanges;
   compactions: SavedCompaction[];
+  messageHistory: MessageHistory;
 }
 
 export interface AgentInstructions {

@@ -983,9 +983,26 @@ export class AgentRun {
     if (this.interruptedForExit) return;
     const checkpoint = failure ? { ...this.checkpoint, failure } : undefined;
     const result = failure ? "failed" : this.preparation.signal.aborted ? "stopped" : "success";
+    const baseline = this.checkpoint.gitBaseline;
+    const git = changes?.checkpoint;
+    const workspace =
+      git &&
+      baseline &&
+      "root" in baseline &&
+      baseline.root === git.snapshot.root &&
+      baseline.head === git.snapshot.head
+        ? {
+            kind: "git" as const,
+            snapshot: { root: git.snapshot.root, head: git.snapshot.head },
+            files: git.files,
+          }
+        : baseline === null && changes === null
+          ? { kind: "folder" as const }
+          : { kind: "unknown" as const };
     this.deps.store.save(sessionId, messages, checkpoint, changes, {
       task: this.checkpoint.task,
       result,
+      messageRange: { startIndex: this.checkpoint.startIndex, workingDirectory, workspace },
     });
     this.result = result;
     this.deps.view.messages = toUiMessages(

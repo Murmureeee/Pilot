@@ -55,7 +55,6 @@ import {
 import {
   composerEnterAction,
   matchesComposerQuery,
-  promptFromDraft,
   trimPrompt,
 } from "@renderer/lib/composer-shortcuts";
 import type { ComposerSelection } from "@renderer/lib/composer/types";
@@ -71,6 +70,7 @@ import { selectActiveSession, selectApprovalMode, useAgentStore } from "@rendere
 import { compactFocus } from "@shared/compact-command";
 import { APP_NAME, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
 import type { ActiveRun, ApprovalMode, PromptMention, SkillMeta } from "@shared/contract";
+import { promptFromDraft } from "@shared/mentions";
 
 import { ComposerModelControls } from "./composer-model-controls";
 import { ComposerCaretMenu, ComposerSuggestions } from "./composer-suggestions";

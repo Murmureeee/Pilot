@@ -117,6 +117,20 @@ export function registerAgentRoutes({
   handle(IPC.sessionArchive, (_event, id, archived) => host.archiveSession(id, archived));
   handle(IPC.sessionUnread, (_event, id, unread) => host.unreadSession(id, unread));
   handle(IPC.sessionFork, (_event, id) => host.forkSession(id));
+  handle(IPC.sessionBranchMessage, (_event, id, messageId, action) => {
+    if (action === "retry") exit.checkWorkAllowed();
+    return host.branchMessage(id, messageId, action);
+  });
+  handle(IPC.sessionPreviewMessageRollback, (_event, id, messageId) => {
+    exit.checkWorkAllowed();
+    if (verification.hasActiveRuns()) throw new Error("请等待验证完成后再撤销。");
+    return host.previewMessageRollback(id, messageId);
+  });
+  handle(IPC.sessionApplyMessageRollback, (_event, id, token) => {
+    exit.checkWorkAllowed();
+    if (verification.hasActiveRuns()) throw new Error("请等待验证完成后再撤销。");
+    return host.applyMessageRollback(id, token);
+  });
   handle(IPC.sessionCopy, (_event, id) => host.copySession(id));
   handle(IPC.sessionPersona, (_event, id, persona) => host.setSessionPersona(id, persona));
   handle(IPC.sessionInstructionSources, (_event, composerId) =>

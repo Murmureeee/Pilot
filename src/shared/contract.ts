@@ -46,6 +46,9 @@ export const IPC = {
   sessionArchive: "session:archive",
   sessionUnread: "session:unread",
   sessionFork: "session:fork",
+  sessionBranchMessage: "session:branch-message",
+  sessionPreviewMessageRollback: "session:preview-message-rollback",
+  sessionApplyMessageRollback: "session:apply-message-rollback",
   sessionCopy: "session:copy",
   sessionPersona: "session:persona",
   sessionInstructionSources: "session:instruction-sources",
@@ -108,6 +111,8 @@ export type PromptMention =
     };
 
 export type ComposerDraft = (string | PromptMention)[];
+
+export type MessageBranchAction = "fork" | "edit" | "retry";
 
 export interface PromptInput {
   text: string;
@@ -568,6 +573,13 @@ export interface GitRollbackPreview {
   path: string;
   operation: "modify" | "create" | "delete";
   diff: FileDiff;
+}
+
+export interface MessageRollbackPreview {
+  token?: string;
+  removedMessages: number;
+  files: Omit<GitRollbackPreview, "token">[];
+  conflicts: { path?: string; reason: string }[];
 }
 
 /** 主题（FR-5.5）：亮 / 暗 / 跟随系统；渲染层本地存储，切换时同步原生标题栏颜色 */

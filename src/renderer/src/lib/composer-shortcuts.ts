@@ -1,7 +1,6 @@
 // @env browser
-import type { ComposerDraft, PromptInput } from "@shared/contract";
+import type { PromptInput } from "@shared/contract";
 
-import { mentionToken } from "../../../shared/mentions";
 import type { ComposerTrigger, SendKey } from "./types";
 
 export function composerTrigger(text: string, start: number, end: number): ComposerTrigger | null {
@@ -41,19 +40,6 @@ export function matchesComposerQuery(label: string, query: string): boolean {
     index = match + character.length;
   }
   return true;
-}
-
-export function promptFromDraft(draft: ComposerDraft): PromptInput {
-  const mentions: PromptInput["mentions"] = [];
-  let text = "";
-  for (const part of draft) {
-    if (typeof part === "string") text += part;
-    else {
-      mentions.push({ ...part, offset: text.length });
-      text += mentionToken(part);
-    }
-  }
-  return { text, mentions };
 }
 
 export function trimPrompt(input: PromptInput): PromptInput {

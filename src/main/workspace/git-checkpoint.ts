@@ -241,8 +241,17 @@ export function gitCheckpointDiff(
   checkpoint: GitTaskCheckpoint,
   file: GitCheckpointFile,
 ): GitCheckpointDiff {
+  return reviewGitCheckpointFile(
+    file,
+    readGitWorktreeFile(directory, checkpoint.snapshot.root, file.path),
+  );
+}
+
+export function reviewGitCheckpointFile(
+  file: GitCheckpointFile,
+  current: GitFileState | undefined,
+): GitCheckpointDiff {
   const diff = checkpointDiff(file);
-  const current = readGitWorktreeFile(directory, checkpoint.snapshot.root, file.path);
   let conflict = file.conflict;
   if (!conflict && !sameGitFile(file.after, current)) conflict = "later-edit";
   if (!conflict && diff?.truncated && file.userEdits?.length) conflict = "ownership";
@@ -297,8 +306,8 @@ export function rollbackTarget(
 
 export async function verifyGitRollback(
   directory: string,
-  checkpoint: GitTaskCheckpoint,
-  file: GitCheckpointFile,
+  snapshot: Pick<GitWorktree, "root" | "head">,
+  files: readonly Pick<GitCheckpointFile, "path" | "index" | "after">[],
 ): Promise<void> {
   const [root, head] = await Promise.all([
     readGit(directory, ["rev-parse", "--show-toplevel"])
@@ -308,11 +317,14 @@ export async function verifyGitRollback(
       .then((output) => output.trim())
       .catch((error: ExecFileException) => (error.code === 1 ? "(initial)" : undefined)),
   ]);
-  if (!root || root !== checkpoint.snapshot.root || head !== checkpoint.snapshot.head)
+  if (!root || root !== snapshot.root || head !== snapshot.head)
     throw new Error("Git 工作树或 HEAD 已变更，无法撤销。");
-  const index = await readGitIndex(root, file.path);
-  if ((index.get(file.path) ?? "") !== file.index)
-    throw new Error("文件的暂存内容已变更，无法撤销。");
-  if (!sameGitFile(readGitWorktreeFile(directory, root, file.path), file.after))
-    throw new Error("文件已有后续改动，无法撤销此变更。");
+  if (!files.length) return;
+  const index = await readGitIndex(root, files.length === 1 ? files[0].path : undefined);
+  for (const file of files) {
+    if ((index.get(file.path) ?? "") !== file.index)
+      throw new Error("文件的暂存内容已变更，无法撤销。");
+    if (!sameGitFile(readGitWorktreeFile(directory, root, file.path), file.after))
+      throw new Error("文件已有后续改动，无法撤销此变更。");
+  }
 }

@@ -50,10 +50,13 @@ import { readPlanSteps } from "./tools/plan";
 import type {
   ApprovedToolResult,
   CheckpointAppend,
+  MessageHistory,
+  MessageRollbackJournal,
   ReferencedUserMessage,
   RunCheckpoint,
   SavedCompaction,
   SavedGitChanges,
+  SavedMessageTask,
   SessionIndex,
   SessionRecord,
   SessionRunSettlement,
@@ -215,6 +218,7 @@ export class SessionStore {
   private readonly checkpoints = new Map<string, RunCheckpoint | null>();
   private readonly gitChanges = new Map<string, SavedGitChanges | null>();
   private readonly contextCompactions = new Map<string, SavedCompaction[]>();
+  private readonly messageHistories = new Map<string, MessageHistory>();
   private readonly transcriptWrites = new Map<string, TranscriptWriteState>();
 
   constructor(private readonly dir: string) {
@@ -533,6 +537,28 @@ export class SessionStore {
     return this.rename(meta.id, `分叉：${origin.title.slice(0, 21)}`);
   }
 
+  branchFromMessage(origin: SessionMeta, messages: AgentMessage[], draft: ComposerDraft): string {
+    const settings = { model: origin.model, approvalMode: origin.approvalMode };
+    const { id } = this.create(origin.workingDirectory, undefined, settings);
+    try {
+      const compactions = this.compactions(origin.id).filter(
+        ({ cutoff }) => cutoff <= messages.length,
+      );
+      const tasks = this.messageHistory(origin.id).tasks.filter(
+        ({ endIndex }) => endIndex <= messages.length,
+      );
+      if (messages.length)
+        this.writeTranscript(id, messages, undefined, null, compactions, { tasks });
+      if (origin.personaOverride) this.setPersonaOverride(id, origin.personaOverride);
+      this.rename(id, "分叉：" + origin.title.slice(0, 21));
+      this.saveDraft(id, draft);
+      return id;
+    } catch (error) {
+      this.remove(id);
+      throw error;
+    }
+  }
+
   /** 会话全文（复制用）：user/assistant 逐条带角色标签 */
   transcriptText(id: string): string | null {
     const meta = this.index.sessions.find((s) => s.id === id);
@@ -557,6 +583,7 @@ export class SessionStore {
     this.checkpoints.delete(id);
     this.gitChanges.delete(id);
     this.contextCompactions.delete(id);
+    this.messageHistories.delete(id);
     this.transcriptWrites.delete(id);
     this.index.sessions = this.index.sessions.filter((s) => s.id !== id);
     this.writeIndex();
@@ -583,6 +610,10 @@ export class SessionStore {
     return this.contextCompactions.get(id) ?? this.read(id).compactions;
   }
 
+  messageHistory(id: string): MessageHistory {
+    return this.messageHistories.get(id) ?? this.read(id).messageHistory;
+  }
+
   addCompaction(
     id: string,
     messages: AgentMessage[],
@@ -602,6 +633,7 @@ export class SessionStore {
     let checkpoint: RunCheckpoint | undefined;
     let gitChanges: SavedGitChanges | undefined;
     const compactions: SavedCompaction[] = [];
+    const messageHistory: MessageHistory = { tasks: [] };
     const completedTools = new Map<string, ToolResultMessage>();
     for (const [index, line] of lines.entries()) {
       if (!line.trim()) continue;
@@ -611,6 +643,8 @@ export class SessionStore {
           | CheckpointAppend
           | SavedGitChanges
           | SavedCompaction
+          | SavedMessageTask
+          | MessageRollbackJournal
           | AgentMessage;
         if ("role" in value) messages.push(value);
         else if (value.type === "pilot_run_checkpoint") checkpoint = value;
@@ -626,6 +660,10 @@ export class SessionStore {
             completedTools.set(value.completedTool.toolCallId, value.completedTool);
           checkpoint = value.checkpoint;
         } else if (value.type === "pilot_git_changes") gitChanges = value;
+        else if (value.type === "pilot_message_task" && validMessageTask(value))
+          messageHistory.tasks.push(value);
+        else if (value.type === "pilot_message_rollback" && Array.isArray(value.files))
+          messageHistory.rollback = value;
         else if (value.type === "pilot_context_compaction" && validCompaction(value))
           compactions.push(value);
       } catch {
@@ -637,11 +675,15 @@ export class SessionStore {
     this.gitChanges.set(id, gitChanges ?? null);
     const saved = compactions.filter(({ cutoff }) => cutoff <= messages.length);
     this.contextCompactions.set(id, saved);
+    messageHistory.tasks = messageHistory.tasks.filter(
+      ({ endIndex }) => endIndex <= messages.length,
+    );
+    this.messageHistories.set(id, messageHistory);
     this.transcriptWrites.set(id, {
       messageCount: messages.length,
       appendable: lines.length === 0 || lines.at(-1) === "",
     });
-    return { messages, checkpoint, gitChanges, compactions: saved };
+    return { messages, checkpoint, gitChanges, compactions: saved, messageHistory };
   }
 
   startCheckpoint(id: string, messages: AgentMessage[], checkpoint: RunCheckpoint): void {
@@ -705,8 +747,50 @@ export class SessionStore {
     settlement?: SessionRunSettlement,
     compactions?: SavedCompaction[],
   ): SessionMeta {
-    this.writeTranscript(id, messages, checkpoint, gitChanges, compactions);
+    const history = this.messageHistory(id);
+    const { messageRange, task, result } = settlement ?? {};
+    const next =
+      messageRange && task && result && messageRange.startIndex < messages.length
+        ? {
+            ...history,
+            tasks: [
+              ...history.tasks.filter((entry) => entry.task.taskId !== task.taskId),
+              {
+                type: "pilot_message_task" as const,
+                ...messageRange,
+                task,
+                result,
+                endIndex: messages.length,
+              },
+            ],
+          }
+        : history;
+    this.writeTranscript(id, messages, checkpoint, gitChanges, compactions, next);
     return this.saveSessionMeta(id, messages, checkpoint, settlement?.result, settlement);
+  }
+
+  finishMessageRollback(id: string, record: SessionRecord, endIndex: number): void {
+    const tasks = record.messageHistory.tasks.filter((task) => task.endIndex <= endIndex);
+    const compactions = record.compactions.filter(({ cutoff }) => cutoff <= endIndex);
+    if (!this.getMeta(id)) throw new Error("找不到该会话。");
+    const task = tasks.at(-1);
+    const previousIndex = this.index;
+    this.writeIndex({
+      ...previousIndex,
+      sessions: previousIndex.sessions.map((session) =>
+        session.id === id
+          ? { ...session, updatedAt: Date.now(), lastTask: task?.task, lastRunResult: task?.result }
+          : session,
+      ),
+    });
+    try {
+      this.writeTranscript(id, record.messages.slice(0, endIndex), undefined, null, compactions, {
+        tasks,
+      });
+    } catch (error) {
+      this.writeIndex(previousIndex);
+      throw error;
+    }
   }
 
   private saveSessionMeta(
@@ -743,11 +827,22 @@ export class SessionStore {
     checkpoint?: RunCheckpoint,
     gitChanges = this.lastGitChanges(id) ?? null,
     compactions = this.compactions(id),
+    messageHistory = this.messageHistory(id),
   ): void {
+    const git = gitChanges?.checkpoint;
+    const tasks = git
+      ? messageHistory.tasks.map((task) =>
+          task.task.agentRunId === git.id && task.workspace.kind === "git"
+            ? { ...task, workspace: { ...task.workspace, files: git.files } }
+            : task,
+        )
+      : messageHistory.tasks;
     // The checkpoint and its transcript commit together, including the transition to a finished run.
     const records = [
       ...(checkpoint ? [checkpoint] : []),
       ...(gitChanges ? [gitChanges] : []),
+      ...tasks,
+      ...(messageHistory.rollback ? [messageHistory.rollback] : []),
       ...compactions,
       ...messages,
     ];
@@ -759,6 +854,7 @@ export class SessionStore {
     this.checkpoints.set(id, checkpoint ?? null);
     this.gitChanges.set(id, gitChanges);
     this.contextCompactions.set(id, compactions);
+    this.messageHistories.set(id, { tasks, rollback: messageHistory.rollback });
     this.transcriptWrites.set(id, { messageCount: messages.length, appendable: true });
   }
 }
@@ -807,6 +903,23 @@ function validCompaction(value: SavedCompaction): boolean {
     ) &&
     Number.isSafeInteger(value.toolOutputLimit) &&
     value.toolOutputLimit > 0
+  );
+}
+
+function validMessageTask(value: SavedMessageTask): boolean {
+  return (
+    Number.isSafeInteger(value.startIndex) &&
+    value.startIndex >= 0 &&
+    Number.isSafeInteger(value.endIndex) &&
+    value.endIndex > value.startIndex &&
+    typeof value.task?.agentRunId === "string" &&
+    typeof value.task.taskId === "string" &&
+    (value.workspace?.kind === "folder" ||
+      value.workspace?.kind === "unknown" ||
+      (value.workspace?.kind === "git" &&
+        typeof value.workspace.snapshot?.root === "string" &&
+        typeof value.workspace.snapshot.head === "string" &&
+        Array.isArray(value.workspace.files)))
   );
 }
 

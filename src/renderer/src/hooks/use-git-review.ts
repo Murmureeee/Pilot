@@ -57,11 +57,12 @@ export function useGitReview(
     requestRefresh.current = onFocus;
     const unsubscribe = window.pi.onAgentEvent((event) => {
       if (
-        "run" in event &&
-        event.run.sessionId === composerId &&
-        (event.type === "run_started" ||
-          event.type === "tool_end" ||
-          (event.type === "status" && event.status === "idle"))
+        (event.type === "snapshot" && event.snapshot.composerId === composerId) ||
+        ("run" in event &&
+          event.run.sessionId === composerId &&
+          (event.type === "run_started" ||
+            event.type === "tool_end" ||
+            (event.type === "status" && event.status === "idle")))
       )
         void read();
     });

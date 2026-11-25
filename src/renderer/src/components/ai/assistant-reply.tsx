@@ -18,6 +18,7 @@ import type { ReplyEntry } from "@renderer/lib/types";
 import type { UiMessage } from "@shared/contract";
 
 import { FileChangesCard } from "./file-changes-card";
+import { MessageActions } from "./message-actions";
 import { PlanCard } from "./plan-card";
 import { Response } from "./response";
 import { ThinkingBlock } from "./thinking-block";
@@ -26,13 +27,19 @@ import { ToolTrace } from "./tool-trace";
 export function AssistantReply({
   messages,
   sessionId,
+  composerId,
   live,
   busy,
+  hasActiveRun,
+  hasLaterMessages,
 }: {
   messages: UiMessage[];
   sessionId: string | null;
+  composerId: string | null;
   live: boolean;
   busy: boolean;
+  hasActiveRun: boolean;
+  hasLaterMessages: boolean;
 }): JSX.Element {
   const locale = useLocale();
   const entries: ReplyEntry[] = messages.flatMap((message) =>
@@ -136,6 +143,18 @@ export function AssistantReply({
           sessionId={sessionId}
           replyId={messages[0].id}
           busy={busy}
+        />
+      )}
+      {!live && composerId && (
+        <MessageActions
+          composerId={composerId}
+          messageId={messages.at(-1)!.id}
+          kind="assistant"
+          busy={hasActiveRun}
+          hasLaterMessages={hasLaterMessages}
+          text={answer
+            .flatMap(({ part }) => (part.type === "text" && part.text ? [part.text] : []))
+            .join("\n\n")}
         />
       )}
       {entries.length === 0 && live && (

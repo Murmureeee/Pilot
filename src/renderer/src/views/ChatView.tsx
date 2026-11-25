@@ -7,6 +7,7 @@ import { AssistantReply } from "@renderer/components/ai/assistant-reply";
 import { CompactionMarker } from "@renderer/components/ai/compaction-marker";
 import { Composer } from "@renderer/components/ai/composer";
 import { HomeStart } from "@renderer/components/ai/home-start";
+import { MessageActions } from "@renderer/components/ai/message-actions";
 import { MessageJump } from "@renderer/components/ai/message-jump";
 import { ModelFailureCard } from "@renderer/components/ai/model-feedback";
 import { OnboardingDialog } from "@renderer/components/ai/onboarding-dialog";
@@ -29,6 +30,7 @@ import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { ChatRow } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { UiMessage, UiPart } from "@shared/contract";
+import { visibleMessageText } from "@shared/mentions";
 import { isLocalOpenAiProvider } from "@shared/providers";
 
 function chatRows(messages: UiMessage[]): ChatRow[] {
@@ -172,32 +174,45 @@ export function ChatView({
                         <Message align={isUser ? "end" : "start"} className="items-start">
                           <MessageContent className="gap-3">
                             {isUser ? (
-                              <Bubble align="end" variant="secondary" className="max-w-[88%]">
-                                <BubbleContent className="rounded-[18px] rounded-br-md px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap">
-                                  {row.message.parts.map((part, partIndex) => {
-                                    if (part.type === "text")
-                                      return <Fragment key={partIndex}>{part.text}</Fragment>;
-                                    if (part.type !== "mention") return null;
-                                    return (
-                                      <InlineWorkspaceReference
-                                        key={partIndex}
-                                        chip
-                                        kind={part.kind}
-                                        path={part.id}
-                                        workingDirectory={part.workingDirectory}
-                                      >
-                                        {part.label}
-                                      </InlineWorkspaceReference>
-                                    );
-                                  })}
-                                </BubbleContent>
-                              </Bubble>
+                              <>
+                                <Bubble align="end" variant="secondary" className="max-w-[88%]">
+                                  <BubbleContent className="rounded-[18px] rounded-br-md px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap">
+                                    {row.message.parts.map((part, partIndex) => {
+                                      if (part.type === "text")
+                                        return <Fragment key={partIndex}>{part.text}</Fragment>;
+                                      if (part.type !== "mention") return null;
+                                      return (
+                                        <InlineWorkspaceReference
+                                          key={partIndex}
+                                          chip
+                                          kind={part.kind}
+                                          path={part.id}
+                                          workingDirectory={part.workingDirectory}
+                                        >
+                                          {part.label}
+                                        </InlineWorkspaceReference>
+                                      );
+                                    })}
+                                  </BubbleContent>
+                                </Bubble>
+                                {composerId && (
+                                  <MessageActions
+                                    composerId={composerId}
+                                    messageId={row.id}
+                                    kind="user"
+                                    text={visibleMessageText(row.message.parts)}
+                                  />
+                                )}
+                              </>
                             ) : (
                               <AssistantReply
                                 messages={row.messages}
                                 sessionId={sessionId}
+                                composerId={composerId}
                                 live={live}
                                 busy={busy}
+                                hasActiveRun={activeRun !== null}
+                                hasLaterMessages={row !== lastRow}
                               />
                             )}
                           </MessageContent>

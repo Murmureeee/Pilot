@@ -217,6 +217,13 @@ const inputs = {
   [IPC.sessionArchive]: sessionFlag,
   [IPC.sessionUnread]: sessionFlag,
   [IPC.sessionFork]: session,
+  [IPC.sessionBranchMessage]: z.tuple([
+    z.uuid(),
+    z.string().regex(/^s-(0|[1-9]\d*)$/),
+    z.enum(["fork", "edit", "retry"]),
+  ]),
+  [IPC.sessionPreviewMessageRollback]: z.tuple([z.uuid(), z.string().regex(/^s-(0|[1-9]\d*)$/)]),
+  [IPC.sessionApplyMessageRollback]: sessionChange,
   [IPC.sessionCopy]: session,
   [IPC.sessionPersona]: z.tuple([z.uuid(), z.string().nullable()]),
   [IPC.sessionInstructionSources]: session,
