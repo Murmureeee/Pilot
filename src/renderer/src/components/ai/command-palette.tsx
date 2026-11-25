@@ -2,21 +2,24 @@
 // 全局命令面板（Codex/ChatGPT 风格）：Ctrl+K 唤起，搜快捷操作与会话，键盘导航执行。
 import { cn } from "cn";
 import {
+  ArrowUpIcon,
   EyeIcon,
   FileDiffIcon,
   FileTextIcon,
   ListChecksIcon,
+  LocateFixedIcon,
   MessageSquareIcon,
   SearchIcon,
   SettingsIcon,
   ShieldCheckIcon,
   SquarePenIcon,
+  SquareIcon,
   ZapIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent } from "react";
 
 import { Dialog, DialogContent, DialogTitle } from "@renderer/components/ui/dialog";
-import { REVIEW_SHORTCUTS } from "@renderer/lib/constants";
+import { COMPOSER_SHORTCUTS, REVIEW_SHORTCUTS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import {
   filterEntries,
@@ -25,6 +28,7 @@ import {
   type PaletteTab,
 } from "@renderer/lib/palette";
 import { relativeTime } from "@renderer/lib/relative-time";
+import type { ComposerShortcut } from "@renderer/lib/types";
 import { selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
 import { activateReview } from "@renderer/stores/review";
 import type { ApprovalMode } from "@shared/contract";
@@ -42,6 +46,13 @@ function EntryIcon({ entry }: { entry: PaletteEntry }): JSX.Element {
       return <FileTextIcon className="size-4 shrink-0" />;
     case "review-verification":
       return <ListChecksIcon className="size-4 shrink-0" />;
+    case "focus-composer":
+      return <LocateFixedIcon className="size-4 shrink-0" />;
+    case "recall-message":
+      return <ArrowUpIcon className="size-4 shrink-0" />;
+    case "stop-run":
+      return <SquareIcon className="size-4 shrink-0" />;
+    case "cycle-approval-mode":
     case "mode-standard":
       return <ShieldCheckIcon className="size-4 shrink-0" />;
     case "mode-readonly":
@@ -53,7 +64,15 @@ function EntryIcon({ entry }: { entry: PaletteEntry }): JSX.Element {
   }
 }
 
-export function CommandPalette({ canReview }: { canReview: boolean }): JSX.Element | null {
+export function CommandPalette({
+  canReview,
+  composerShortcuts,
+  onComposerShortcut,
+}: {
+  canReview: boolean;
+  composerShortcuts: Record<ComposerShortcut, boolean>;
+  onComposerShortcut(shortcut: ComposerShortcut): void;
+}): JSX.Element {
   const locale = useLocale();
   const open = useAgentStore((s) => s.paletteOpen);
   const setOpen = useAgentStore((s) => s.setPaletteOpen);
@@ -68,6 +87,8 @@ export function CommandPalette({ canReview }: { canReview: boolean }): JSX.Eleme
   const [tab, setTab] = useState<PaletteTab>("all");
   const [selected, setSelected] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const entryAfterClose = useRef<PaletteEntry | null>(null);
 
   const entries = useMemo<PaletteEntry[]>(() => {
     const actions: PaletteEntry[] = [
@@ -112,6 +133,11 @@ export function CommandPalette({ canReview }: { canReview: boolean }): JSX.Eleme
         },
       );
     }
+    for (const id of Object.keys(COMPOSER_SHORTCUTS) as ComposerShortcut[]) {
+      if (!composerShortcuts[id]) continue;
+      const shortcut = COMPOSER_SHORTCUTS[id];
+      actions.push({ kind: "action", id, label: t(shortcut.label, locale), detail: shortcut.keys });
+    }
     const chats: PaletteEntry[] = sessions.map((s) => ({
       kind: "chat",
       id: s.id,
@@ -119,7 +145,7 @@ export function CommandPalette({ canReview }: { canReview: boolean }): JSX.Eleme
       detail: relativeTime(s.updatedAt, locale),
     }));
     return [...actions, ...chats];
-  }, [locale, sessions, approvalMode, canReview]);
+  }, [locale, sessions, approvalMode, canReview, composerShortcuts]);
 
   const filtered = useMemo(() => filterEntries(entries, query, tab), [entries, query, tab]);
 
@@ -142,7 +168,11 @@ export function CommandPalette({ canReview }: { canReview: boolean }): JSX.Eleme
   };
 
   const runById = (entry: PaletteEntry): void => {
-    setOpen(false);
+    if (entry.kind === "chat") {
+      setView("chat");
+      void loadSession(entry.id);
+      return;
+    }
     switch (entry.id) {
       case "new-chat":
         setView("chat");
@@ -169,12 +199,17 @@ export function CommandPalette({ canReview }: { canReview: boolean }): JSX.Eleme
       case "mode-full":
         changeApprovalMode("full-access");
         return;
-      default: {
-        // 会话条目：id = 会话 id
-        setView("chat");
-        void loadSession(entry.id);
-      }
+      case "focus-composer":
+      case "cycle-approval-mode":
+      case "recall-message":
+      case "stop-run":
+        onComposerShortcut(entry.id);
     }
+  };
+
+  const selectEntry = (entry: PaletteEntry): void => {
+    entryAfterClose.current = entry;
+    setOpen(false);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
@@ -187,26 +222,34 @@ export function CommandPalette({ canReview }: { canReview: boolean }): JSX.Eleme
     } else if (event.key === "Enter") {
       event.preventDefault();
       const entry = filtered[selected];
-      if (entry) runById(entry);
+      if (entry) selectEntry(entry);
     }
   };
-
-  if (!open) return null;
 
   // 渲染分组：连续同类条目归一段（操作在前、聊天在后）
   let lastKind: PaletteEntry["kind"] | null = null;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => setOpen(o)}>
+    <Dialog
+      open={open}
+      onOpenChange={setOpen}
+      onOpenChangeComplete={(next) => {
+        if (next || !entryAfterClose.current) return;
+        const entry = entryAfterClose.current;
+        entryAfterClose.current = null;
+        runById(entry);
+      }}
+    >
       <DialogContent
-        className="top-[18%] max-w-xl translate-y-0 gap-0 overflow-hidden p-0"
+        className="top-[18%] max-h-[calc(82dvh-1rem)] translate-y-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-w-xl"
         showCloseButton={false}
+        initialFocus={searchRef}
       >
         <DialogTitle className="sr-only">{t("搜索", locale)}</DialogTitle>
         <div className="flex items-center gap-2 border-b px-4 py-3">
           <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
           <input
-            autoFocus
+            ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
@@ -216,7 +259,7 @@ export function CommandPalette({ canReview }: { canReview: boolean }): JSX.Eleme
           />
         </div>
 
-        <div ref={listRef} className="max-h-80 min-h-40 overflow-y-auto py-1">
+        <div ref={listRef} className="max-h-80 min-h-0 overflow-y-auto py-1">
           {filtered.length === 0 && (
             <p className="px-4 py-6 text-center text-sm text-muted-foreground">
               {t("没有匹配的结果", locale)}
@@ -236,9 +279,9 @@ export function CommandPalette({ canReview }: { canReview: boolean }): JSX.Eleme
                   type="button"
                   data-index={index}
                   onMouseEnter={() => setSelected(index)}
-                  onClick={() => runById(entry)}
+                  onClick={() => selectEntry(entry)}
                   className={cn(
-                    "flex w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors",
+                    "flex w-full items-center gap-3 px-4 py-2 text-left text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                     index === selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
                   )}
                 >
@@ -255,14 +298,14 @@ export function CommandPalette({ canReview }: { canReview: boolean }): JSX.Eleme
           })}
         </div>
 
-        <div className="flex items-center gap-1 border-t px-3 py-2">
+        <div className="flex flex-wrap items-center gap-1 border-t px-3 py-2">
           {PALETTE_TABS.map((tabItem) => (
             <button
               key={tabItem.value}
               type="button"
               onClick={() => setTab(tabItem.value)}
               className={cn(
-                "rounded-full px-2.5 py-1 text-xs transition-colors",
+                "rounded-full px-2.5 py-1 text-xs whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 tab === tabItem.value
                   ? "bg-accent font-medium text-accent-foreground"
                   : "text-muted-foreground hover:bg-accent/60",

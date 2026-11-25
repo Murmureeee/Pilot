@@ -30,9 +30,10 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
-import { REVIEW_SHORTCUTS } from "@renderer/lib/constants";
+import { COMPOSER_SHORTCUTS, REVIEW_SHORTCUTS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { canBack, canForward } from "@renderer/lib/nav";
+import type { ComposerShortcut } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
 import { activateReview } from "@renderer/stores/review";
 import { useUpdateStore } from "@renderer/stores/update";
@@ -69,11 +70,15 @@ export function TopBar({
   onToggleSidebar,
   reviewOpen,
   canReview,
+  composerShortcuts,
+  onComposerShortcut,
 }: {
   collapsed: boolean;
   onToggleSidebar(): void;
   reviewOpen: boolean;
   canReview: boolean;
+  composerShortcuts: Record<ComposerShortcut, boolean>;
+  onComposerShortcut(shortcut: ComposerShortcut): void;
 }): JSX.Element {
   const locale = useLocale();
   const nav = useAgentStore((s) => s.nav);
@@ -89,6 +94,7 @@ export function TopBar({
   const setDialog = useUpdateStore((s) => s.setDialog);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const menuTrigger = useRef<HTMLButtonElement>(null);
+  const shortcutAfterClose = useRef<ComposerShortcut | null>(null);
   const sidebarLabel = t(collapsed ? "显示侧边栏" : "隐藏侧边栏", locale);
   const menuLabel = t("应用菜单", locale);
   const aboutLabel = t("关于 {0}", locale, [APP_NAME]);
@@ -109,7 +115,14 @@ export function TopBar({
   return (
     <>
       <div className="app-no-drag flex shrink-0 items-center gap-0.5">
-        <DropdownMenu>
+        <DropdownMenu
+          onOpenChangeComplete={(open) => {
+            if (open || !shortcutAfterClose.current) return;
+            const shortcut = shortcutAfterClose.current;
+            shortcutAfterClose.current = null;
+            onComposerShortcut(shortcut);
+          }}
+        >
           <DropdownMenuTrigger
             render={
               <button
@@ -200,6 +213,24 @@ export function TopBar({
                       shortcut="Ctrl+R"
                       onRun={() => run("reload")}
                     />
+                  </DropdownMenuGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>{t("输入框", locale)}</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="min-w-56">
+                  <DropdownMenuGroup>
+                    {(Object.keys(COMPOSER_SHORTCUTS) as ComposerShortcut[]).map((id) => (
+                      <Item
+                        key={id}
+                        label={t(COMPOSER_SHORTCUTS[id].label, locale)}
+                        shortcut={COMPOSER_SHORTCUTS[id].keys}
+                        disabled={!composerShortcuts[id]}
+                        onRun={() => {
+                          shortcutAfterClose.current = id;
+                        }}
+                      />
+                    ))}
                   </DropdownMenuGroup>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>

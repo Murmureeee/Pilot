@@ -1,6 +1,6 @@
 // @env browser
 import { cn } from "cn";
-import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 
 import { ChatHeader } from "@renderer/components/ai/chat-header";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
@@ -11,6 +11,7 @@ import { TopBar } from "@renderer/components/ai/top-bar";
 import { VerificationPanel } from "@renderer/components/ai/verification-panel";
 import { WorkspaceReferencePanel } from "@renderer/components/ai/workspace-reference-panel";
 import { useGitReview } from "@renderer/hooks/use-git-review";
+import { useStopShortcut } from "@renderer/hooks/use-stop-shortcut";
 import { useVerificationStatus } from "@renderer/hooks/use-verification-status";
 import { REVIEW_THREE_COLUMN_WIDTH, REVIEW_TWO_COLUMN_WIDTH } from "@renderer/lib/constants";
 import {
@@ -28,7 +29,9 @@ import {
   saveSidebarWidth,
 } from "@renderer/lib/preferences";
 import { reviewLayout } from "@renderer/lib/review-layout";
+import { popupOwnsShortcut } from "@renderer/lib/shortcut-overlays";
 import { applyTheme, loadTheme, watchSystemTheme } from "@renderer/lib/theme";
+import type { ComposerShortcut, ComposerShortcuts } from "@renderer/lib/types";
 import { windowShortcutAction } from "@renderer/lib/window-shortcuts";
 import {
   selectProjectDirectory,
@@ -36,7 +39,7 @@ import {
   useAgentStore,
 } from "@renderer/stores/agent";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
-import { activateReview, useReviewStore } from "@renderer/stores/review";
+import { activateReview, closeReview, useReviewStore } from "@renderer/stores/review";
 import { useWorkspaceReferenceStore } from "@renderer/stores/workspace-reference";
 import { ChatView } from "@renderer/views/ChatView";
 import { SettingsView } from "@renderer/views/SettingsView";
@@ -61,6 +64,25 @@ export default function App(): JSX.Element {
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
   const [preferredReviewWidth, setReviewWidth] = useState(loadReviewWidth);
   const [openSidebarScope, setOpenSidebarScope] = useState<string | null>(null);
+  const [composerAction, setComposerAction] = useState<Exclude<
+    ComposerShortcut,
+    "stop-run"
+  > | null>(null);
+  const composerShortcuts = useRef<ComposerShortcuts>(null);
+  const canEdit = useAgentStore((state) =>
+    Boolean(state.composerId && !state.pendingPermissions.length),
+  );
+  const canRecall = useAgentStore(
+    (state) =>
+      state.composerDraft.length === 0 && state.messages.some(({ role }) => role === "user"),
+  );
+  const stoppableRunId = useAgentStore((state) =>
+    state.status === "streaming" &&
+    state.pendingPermissions.length === 0 &&
+    state.activeRun?.sessionId === state.sessionId
+      ? state.activeRun.runId
+      : null,
+  );
   const reviewAttached = useReviewStore(
     (state) => composerId !== null && state.composerId === composerId,
   );
@@ -85,6 +107,46 @@ export default function App(): JSX.Element {
   );
   const reviewOverlay = reviewOpen && layout.overlay;
   const conversationVisible = view === "chat" && !sidebarOverlay && !reviewOverlay;
+  const { showHint, press, clear } = useStopShortcut(conversationVisible ? stoppableRunId : null);
+  const enabledComposerShortcuts = useMemo<Record<ComposerShortcut, boolean>>(
+    () => ({
+      "focus-composer": Boolean(composerId),
+      "cycle-approval-mode": canEdit,
+      "recall-message": canEdit && canRecall,
+      "stop-run": stoppableRunId !== null,
+    }),
+    [composerId, canEdit, canRecall, stoppableRunId],
+  );
+
+  const runComposerShortcut = useCallback(
+    (shortcut: ComposerShortcut): void => {
+      if (!enabledComposerShortcuts[shortcut]) return;
+      const store = useAgentStore.getState();
+      if (shortcut === "stop-run") {
+        clear();
+        if (store.activeRun?.runId === stoppableRunId) store.abort(store.activeRun);
+        return;
+      }
+      store.setView("chat");
+      setOpenSidebarScope(null);
+      if (window.innerWidth < REVIEW_TWO_COLUMN_WIDTH) useReviewStore.getState().close();
+      setComposerAction(shortcut);
+    },
+    [clear, enabledComposerShortcuts, stoppableRunId],
+  );
+
+  useEffect(() => {
+    if (!composerAction || !conversationVisible) return;
+    const frame = requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>("main [data-permission-card], main [data-composer-editor]")
+        ?.focus();
+      if (composerAction === "cycle-approval-mode") composerShortcuts.current?.cycleMode();
+      if (composerAction === "recall-message") composerShortcuts.current?.recallMessage();
+      setComposerAction(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [composerAction, conversationVisible]);
 
   useEffect(() => {
     void window.pi.setConversationVisible(conversationVisible).catch(() => {});
@@ -172,20 +234,46 @@ export default function App(): JSX.Element {
     document.documentElement.lang = LOCALE_DETAILS[locale].htmlLang;
   }, [locale]);
 
-  // 全局快捷键：Ctrl+K 面板 / Ctrl+N 新聊天 / Ctrl+[ ] 导航 / Ctrl+, 设置 / Ctrl+Shift+S 侧栏 / 窗口级动作
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       const store = useAgentStore.getState();
-      if (
-        event.key === "Escape" &&
-        sidebarOverlay &&
-        !event.defaultPrevented &&
-        event.target instanceof Element &&
-        event.target.closest("#sidebar-panel, #sidebar-toggle")
-      ) {
-        event.preventDefault();
-        setOpenSidebarScope(null);
-        document.getElementById("sidebar-toggle")?.focus();
+      if (event.key !== "Escape" || event.defaultPrevented) clear();
+      if (event.defaultPrevented || event.isComposing) return;
+      if (event.key === "Escape") {
+        if (event.repeat) return;
+        if (
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.shiftKey ||
+          store.view !== "chat" ||
+          store.paletteOpen ||
+          popupOwnsShortcut(event)
+        ) {
+          clear();
+          return;
+        }
+        if (sidebarOverlay) {
+          event.preventDefault();
+          clear();
+          setOpenSidebarScope(null);
+          document.getElementById("sidebar-toggle")?.focus();
+        } else if (reviewOverlay) {
+          event.preventDefault();
+          clear();
+          closeReview();
+        } else if (store.pendingPermissions.length) {
+          event.preventDefault();
+          clear();
+          document
+            .querySelector<HTMLButtonElement>(
+              '[data-permission-card] button[aria-keyshortcuts="Escape"]',
+            )
+            ?.click();
+        } else if (store.activeRun && store.activeRun.runId === stoppableRunId) {
+          event.preventDefault();
+          press(store.activeRun);
+        }
         return;
       }
       const windowAction = windowShortcutAction(event);
@@ -194,9 +282,13 @@ export default function App(): JSX.Element {
         void store.menuAction(windowAction);
         return;
       }
-      if (event.defaultPrevented || event.altKey || !(event.ctrlKey || event.metaKey)) return;
+      if (event.altKey || !(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
-      if (key === "k") {
+      if (key === "l" && !event.shiftKey) {
+        if (event.repeat || store.paletteOpen || popupOwnsShortcut(event)) return;
+        event.preventDefault();
+        runComposerShortcut("focus-composer");
+      } else if (key === "k") {
         event.preventDefault();
         setPaletteOpen(!store.paletteOpen);
       } else if (key === "n") {
@@ -225,19 +317,24 @@ export default function App(): JSX.Element {
         store.view === "chat" &&
         canReview
       ) {
-        if (
-          event.repeat ||
-          store.paletteOpen ||
-          document.querySelector('[role="dialog"][data-open]')
-        )
-          return;
+        if (event.repeat || store.paletteOpen || popupOwnsShortcut(event)) return;
         event.preventDefault();
         activateReview(key === "d" ? "changes" : "verification");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canReview, setPaletteOpen, sidebarOverlay, togglePanel]);
+  }, [
+    canReview,
+    clear,
+    press,
+    reviewOverlay,
+    runComposerShortcut,
+    setPaletteOpen,
+    sidebarOverlay,
+    stoppableRunId,
+    togglePanel,
+  ]);
 
   const title = sessions.find((s) => s.id === sessionId)?.title ?? t("新会话", locale);
 
@@ -249,6 +346,8 @@ export default function App(): JSX.Element {
           onToggleSidebar={togglePanel}
           reviewOpen={reviewOpen}
           canReview={view === "chat" && canReview}
+          composerShortcuts={enabledComposerShortcuts}
+          onComposerShortcut={runComposerShortcut}
         />
       </div>
       <div className="app-drag" aria-hidden="true" />
@@ -306,6 +405,8 @@ export default function App(): JSX.Element {
                   <ChatView
                     workingDirectory={workingDirectory}
                     projectDirectory={projectDirectory}
+                    shortcutRef={composerShortcuts}
+                    showStopHint={showHint}
                   />
                 </>
               ) : (
@@ -362,7 +463,11 @@ export default function App(): JSX.Element {
         </div>
       </div>
 
-      <CommandPalette canReview={view === "chat" && canReview} />
+      <CommandPalette
+        canReview={view === "chat" && canReview}
+        composerShortcuts={enabledComposerShortcuts}
+        onComposerShortcut={runComposerShortcut}
+      />
     </div>
   );
 }

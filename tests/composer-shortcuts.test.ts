@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  composerEditingShortcut,
   composerEnterAction,
   composerTrigger,
   matchesComposerQuery,
+  nextApprovalMode,
   trimPrompt,
 } from "../src/renderer/src/lib/composer-shortcuts";
 import type { PromptMention } from "../src/shared/contract";
-import { promptFromDraft } from "../src/shared/mentions";
+import { draftFromMessageParts, promptFromDraft } from "../src/shared/mentions";
 
 describe("composer shortcuts", () => {
   it("finds the entire slash token while leaving neighboring prose outside the token", () => {
@@ -103,5 +105,50 @@ describe("composer shortcuts", () => {
     expect(composerEnterAction(key({ metaKey: true }), "mod-enter")).toBe("send");
     expect(composerEnterAction(key({ shiftKey: true }), "mod-enter")).toBeNull();
     expect(composerEnterAction({ ...key(), key: "a" }, "mod-enter")).toBeNull();
+  });
+
+  it("recalls only from an empty editor and leaves forward Tab and modified arrows to the editor", () => {
+    const key = { key: "ArrowUp", shiftKey: false, ctrlKey: false, metaKey: false, altKey: false };
+    expect(composerEditingShortcut(key, true)).toBe("recall-message");
+    expect(composerEditingShortcut(key, false)).toBeNull();
+    expect(composerEditingShortcut({ ...key, shiftKey: true }, true)).toBeNull();
+    expect(composerEditingShortcut({ ...key, ctrlKey: true }, true)).toBeNull();
+    expect(composerEditingShortcut({ ...key, key: "Tab" }, true)).toBeNull();
+    expect(composerEditingShortcut({ ...key, key: "Tab", shiftKey: true }, false)).toBe(
+      "cycle-approval-mode",
+    );
+    expect(
+      composerEditingShortcut({ ...key, key: "Tab", shiftKey: true, altKey: true }, true),
+    ).toBeNull();
+  });
+
+  it("cycles from the effective session approval mode", () => {
+    expect(nextApprovalMode("standard")).toBe("read-only");
+    expect(nextApprovalMode("read-only")).toBe("full-access");
+    expect(nextApprovalMode("full-access")).toBe("standard");
+  });
+
+  it("recalls the original file and skill references, including legacy file paths", () => {
+    const recalled = draftFromMessageParts(
+      [
+        { type: "text", text: "Read " },
+        { type: "mention", kind: "file", id: "notes.md", label: "Notes" },
+        { type: "text", text: " using " },
+        { type: "mention", kind: "skill", id: "review", label: "Review" },
+        {
+          type: "mention",
+          kind: "directory",
+          id: "src",
+          label: "Source",
+          workingDirectory: "E:/original",
+        },
+      ],
+      "E:/work",
+    );
+    expect(promptFromDraft(recalled).mentions).toMatchObject([
+      { type: "file", id: "notes.md", meta: { workingDirectory: "E:/work" } },
+      { type: "skill", id: "review" },
+      { type: "directory", id: "src", meta: { workingDirectory: "E:/original" } },
+    ]);
   });
 });

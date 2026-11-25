@@ -37,7 +37,7 @@ import type {
 
 import { compactFocus } from "../../shared/compact-command";
 import { APP_NAME, DEFAULT_THINKING_LEVEL } from "../../shared/constants";
-import { promptFromDraft } from "../../shared/mentions";
+import { draftFromMessageParts, promptFromDraft } from "../../shared/mentions";
 import { applyMessageEvent } from "../../shared/message-events";
 import { effectiveModelCapabilities } from "../../shared/model-capabilities";
 import { hasSavedModel, resolveSessionModel, selectedCatalogModel } from "../../shared/providers";
@@ -76,7 +76,7 @@ import type {
 import { SKILL_CATALOG_INSTRUCTIONS } from "./constants";
 import { compactedContext, contextSize, transcriptUsage } from "./context-compaction";
 import { prepareMentionPrompt } from "./mentions";
-import { draftFromMessage, messageIndex } from "./message-operations";
+import { messageIndex } from "./message-operations";
 import {
   applyMessageRollbackFiles,
   prepareMessageRollback,
@@ -86,7 +86,7 @@ import { resolveModel } from "./models";
 import { loadProjectInstructions } from "./project-instructions";
 import { failedRunOf, interruptedRunOf } from "./recovery";
 import { AgentRun, finishedGitView } from "./run";
-import { toUiMessages } from "./session-store";
+import { messageParts, toUiMessages } from "./session-store";
 import { scanSkills, skillCatalog } from "./skills";
 import { createTools } from "./tools";
 import type { ToolEnvironment } from "./tools/types";
@@ -596,7 +596,8 @@ export class AgentHost {
         : index;
     if (userIndex < 0) throw new Error("找不到这条回复的原始消息。");
     const directory = this.getWorkingDirectory();
-    const draft = action === "fork" ? [] : draftFromMessage(messages[userIndex], directory);
+    const draft =
+      action === "fork" ? [] : draftFromMessageParts(messageParts(messages[userIndex]), directory);
     const end = action === "fork" ? index + 1 : userIndex;
     const id = this.deps.store.branchFromMessage(
       origin,

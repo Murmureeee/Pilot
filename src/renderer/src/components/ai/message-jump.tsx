@@ -16,6 +16,7 @@ import {
 import { MESSAGE_JUMP } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { messagePreview, turnPreviews } from "@renderer/lib/message-preview";
+import { popupOwnsShortcut } from "@renderer/lib/shortcut-overlays";
 import type { VisibleTurns } from "@renderer/lib/types";
 import type { UiMessage } from "@shared/contract";
 
@@ -175,7 +176,15 @@ export function MessageJump({
   useEffect(() => {
     if (!canPreview || selectedIndex === null) return;
     const dismiss = (event: globalThis.KeyboardEvent): void => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (
+        event.key !== "Escape" ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.repeat ||
+        popupOwnsShortcut(event)
+      )
+        return;
+      event.preventDefault();
       if (
         rulerRef.current?.contains(document.activeElement) &&
         !trackRef.current?.contains(document.activeElement)
@@ -186,8 +195,8 @@ export function MessageJump({
       setHoveredIndex(null);
       setKeyboardIndex(null);
     };
-    window.addEventListener("keydown", dismiss);
-    return () => window.removeEventListener("keydown", dismiss);
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
   }, [canPreview, selectedIndex]);
 
   useEffect(() => {

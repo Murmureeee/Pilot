@@ -16,10 +16,12 @@ import {
   useCallback,
   useEffect,
   useId,
+  useImperativeHandle,
   useRef,
   useState,
   type JSX,
   type KeyboardEvent,
+  type Ref,
 } from "react";
 
 import { ModelRetryLabel } from "@renderer/components/ai/model-feedback";
@@ -53,8 +55,10 @@ import {
   selectComposerRange,
 } from "@renderer/lib/composer-editor";
 import {
+  composerEditingShortcut,
   composerEnterAction,
   matchesComposerQuery,
+  nextApprovalMode,
   trimPrompt,
 } from "@renderer/lib/composer-shortcuts";
 import type { ComposerSelection } from "@renderer/lib/composer/types";
@@ -62,15 +66,21 @@ import {
   APPROVAL_MODE_OPTIONS,
   COMPOSER_COMMANDS,
   COMPOSER_SURFACE_CLASS,
+  PERMISSION_ATTENTION_TEXT,
 } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { loadSendKey } from "@renderer/lib/preferences";
-import type { ComposerCommand, ComposerSuggestion, ComposerToolbarMenu } from "@renderer/lib/types";
+import type {
+  ComposerCommand,
+  ComposerShortcuts,
+  ComposerSuggestion,
+  ComposerToolbarMenu,
+} from "@renderer/lib/types";
 import { selectActiveSession, selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
 import { compactFocus } from "@shared/compact-command";
 import { APP_NAME, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
 import type { ActiveRun, ApprovalMode, PromptMention, SkillMeta } from "@shared/contract";
-import { promptFromDraft } from "@shared/mentions";
+import { draftFromMessageParts, promptFromDraft } from "@shared/mentions";
 
 import { ComposerModelControls } from "./composer-model-controls";
 import { ComposerCaretMenu, ComposerSuggestions } from "./composer-suggestions";
@@ -102,20 +112,24 @@ const MODE_META: Record<
 
 const TONE_TEXT: Record<ModeTone, string> = {
   neutral: "",
-  amber: "text-amber-600 dark:text-amber-400",
+  amber: PERMISSION_ATTENTION_TEXT,
 };
 
 const TONE_BADGE: Record<ModeTone, string> = {
   neutral: "bg-muted text-foreground hover:bg-accent",
-  amber: "bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 dark:text-amber-400",
+  amber: "bg-amber-500/10 text-amber-800 hover:bg-amber-500/20 dark:text-amber-400",
 };
 
 export function Composer({
   composerId,
   workingDirectory,
+  shortcutRef,
+  showStopHint,
 }: {
   composerId: string;
   workingDirectory: string | null;
+  shortcutRef: Ref<ComposerShortcuts>;
+  showStopHint: boolean;
 }): JSX.Element {
   const locale = useLocale();
   const status = useAgentStore((s) => s.status);
@@ -145,6 +159,7 @@ export function Composer({
   const resources = useRef(new Map<string, PromptMention>());
   const pendingMention = useRef<PromptMention | null>(null);
   const pickerInput = useRef<HTMLInputElement>(null);
+  const modeUpdating = useRef(false);
   const inlineId = useId();
   const pickerId = useId();
   const prompt = useAgentStore((s) => s.prompt);
@@ -432,11 +447,38 @@ export function Composer({
   };
 
   const changeApprovalMode = (approvalMode: ApprovalMode | null): void => {
+    if (modeUpdating.current) return;
     setSendError(null);
-    void updateSessionSettings({ approvalMode }).catch((error: unknown) =>
-      setSendError(error instanceof Error ? error.message : String(error)),
-    );
+    modeUpdating.current = true;
+    void updateSessionSettings({ approvalMode })
+      .catch((error: unknown) =>
+        setSendError(error instanceof Error ? error.message : String(error)),
+      )
+      .finally(() => {
+        modeUpdating.current = false;
+      });
   };
+
+  const cycleMode = (): void => {
+    changeApprovalMode(nextApprovalMode(selectApprovalMode(useAgentStore.getState())));
+  };
+
+  const recallMessage = (): void => {
+    const state = useAgentStore.getState();
+    const field = editor.current;
+    if (!field || state.composerDraft.length !== 0) return;
+    const previous = state.messages.findLast(({ role }) => role === "user");
+    if (!previous) return;
+    restoreComposerDraft(
+      field,
+      draftFromMessageParts(previous.parts, workingDirectory),
+      resources.current,
+    );
+    selectComposerRange(field, null);
+    readEditor();
+  };
+
+  useImperativeHandle(shortcutRef, (): ComposerShortcuts => ({ cycleMode, recallMessage }));
 
   const onSuggestionKey = (event: KeyboardEvent<HTMLElement>): boolean => {
     if (!trigger && !pickerOpen) return false;
@@ -464,9 +506,20 @@ export function Composer({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (composing || event.nativeEvent.isComposing) return;
+    if (event.defaultPrevented || composing || event.nativeEvent.isComposing) return;
     const action = composerEnterAction(event, loadSendKey());
     if (!(isCompact && action === "send") && onSuggestionKey(event)) return;
+    const shortcut = composerEditingShortcut(event, draft.text.length === 0);
+    if (shortcut === "cycle-approval-mode") {
+      event.preventDefault();
+      if (!event.repeat) cycleMode();
+      return;
+    }
+    if (shortcut === "recall-message" && !event.repeat) {
+      event.preventDefault();
+      recallMessage();
+      return;
+    }
     if (!action) return;
     event.preventDefault();
     if (action === "send") void send();
@@ -512,9 +565,8 @@ export function Composer({
             <output
               className={cn(
                 "flex items-center gap-2",
-                status === "waiting_approval"
-                  ? "text-amber-700 dark:text-amber-400"
-                  : "text-emerald-700 dark:text-emerald-400",
+                status === "waiting_approval" && PERMISSION_ATTENTION_TEXT,
+                status === "streaming" && "text-emerald-700 dark:text-emerald-400",
               )}
             >
               <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
@@ -528,6 +580,7 @@ export function Composer({
                 t(statusLabel, locale)
               )}
             </output>
+            {showStopHint && <span role="status">{t("再按一次 Esc 停止任务。", locale)}</span>}
             {steerCount > 0 && (
               <>
                 <span>{t("插话排队 {0}", locale, [steerCount])}</span>
@@ -578,8 +631,10 @@ export function Composer({
           role="textbox"
           aria-multiline="true"
           data-slot="input-group-control"
+          data-composer-editor
           className="composer-editor relative max-h-[min(14rem,38dvh)] min-h-[3.75rem] w-full overflow-y-auto px-4 pt-3.5 pb-2 text-sm leading-6 wrap-anywhere whitespace-pre-wrap outline-none"
           aria-label={t("消息", locale)}
+          aria-keyshortcuts="Control+L Shift+Tab ArrowUp"
           aria-placeholder={placeholder}
           aria-autocomplete="list"
           aria-controls={trigger ? inlineId : undefined}
@@ -705,7 +760,7 @@ export function Composer({
                   <button
                     type="button"
                     className={cn(
-                      "flex min-h-8 items-center gap-1.5 rounded-full px-3 text-xs whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                      "flex min-h-8 items-center gap-1.5 rounded-full px-3 text-xs whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       TONE_BADGE[modeMeta.tone],
                     )}
                   />
@@ -714,6 +769,9 @@ export function Composer({
                 <ModeIcon className="size-3.5" />
                 {t(modeMeta.label, locale)}
               </DropdownMenuTrigger>
+              <span className="sr-only" role="status">
+                {t("会话权限模式", locale)} {t(modeMeta.label, locale)}
+              </span>
               <DropdownMenuContent
                 side="top"
                 align="start"

@@ -61,6 +61,17 @@ export interface ComposerSuggestion {
 
 export type ComposerToolbarMenu = "permissions" | "model" | "thinking";
 
+export type ComposerShortcut =
+  | "focus-composer"
+  | "cycle-approval-mode"
+  | "recall-message"
+  | "stop-run";
+
+export interface ComposerShortcuts {
+  cycleMode(): void;
+  recallMessage(): void;
+}
+
 export interface ComposerModelControlsProps {
   menu: ComposerToolbarMenu | null;
   setMenu: Dispatch<SetStateAction<ComposerToolbarMenu | null>>;

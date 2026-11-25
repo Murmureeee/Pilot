@@ -1,5 +1,5 @@
 // @env browser
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block";
@@ -101,7 +101,7 @@ export function GitDiffPreview({
       ) : (
         data?.diff && (
           <div
-            className="[scrollbar-width:thin] overflow-x-auto"
+            className="[scrollbar-width:thin] overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
             tabIndex={0}
             aria-label={t("逐行差异", locale)}
           >
@@ -123,7 +123,7 @@ export function GitDiffPreview({
                       <label className="flex items-center gap-1.5 font-sans text-xs text-foreground">
                         <input
                           type="checkbox"
-                          className="size-3.5 accent-primary"
+                          className="size-3.5 rounded-sm accent-brand focus-visible:ring-2 focus-visible:ring-ring"
                           data-git-select-hunk={index}
                           checked={selectedHunks.includes(index)}
                           disabled={blocked}
@@ -151,7 +151,7 @@ export function GitDiffPreview({
             <label className="flex items-center gap-1.5 text-xs">
               <input
                 type="checkbox"
-                className="size-3.5 accent-primary"
+                className="size-3.5 rounded-sm accent-brand focus-visible:ring-2 focus-visible:ring-ring"
                 disabled={blocked}
                 checked={Boolean(selected && !selected.hunks)}
                 onChange={(event) =>
@@ -201,9 +201,13 @@ export function GitCheckpointFilePreview({
   const [data, setData] = useState<GitCheckpointDiff>();
   const [selection, setSelection] = useState<number[]>([]);
   const [preview, setPreview] = useState<GitRollbackPreview>();
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const [waiting, setWaiting] = useState(false);
   const [applyError, setApplyError] = useState("");
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const applied = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -220,8 +224,10 @@ export function GitCheckpointFilePreview({
     };
   }, [checkpointId, path, composerId]);
 
-  const review = async (hunks?: number[]): Promise<void> => {
+  const review = async (button: HTMLButtonElement, hunks?: number[]): Promise<void> => {
     if (!data || waiting || busy) return;
+    trigger.current = button;
+    applied.current = false;
     setWaiting(true);
     setError("");
     setApplyError("");
@@ -234,6 +240,7 @@ export function GitCheckpointFilePreview({
           revision: data.revision,
         }),
       );
+      setOpen(true);
     } catch (reason) {
       setError(String(reason));
     } finally {
@@ -245,8 +252,8 @@ export function GitCheckpointFilePreview({
     setWaiting(true);
     try {
       await window.pi.sessionApplyGitRollback(composerId, preview.token);
-      setPreview(undefined);
-      onApplied();
+      applied.current = true;
+      setOpen(false);
     } catch (reason) {
       setApplyError(String(reason));
     } finally {
@@ -257,7 +264,7 @@ export function GitCheckpointFilePreview({
     <div className="min-w-0 border-t border-border" data-git-checkpoint-diff>
       {data?.diff && (
         <div
-          className="[scrollbar-width:thin] overflow-x-auto"
+          className="[scrollbar-width:thin] overflow-x-auto outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
           tabIndex={0}
           aria-label={t("逐行差异", locale)}
         >
@@ -278,7 +285,7 @@ export function GitCheckpointFilePreview({
                   <input
                     type="checkbox"
                     data-rollback-hunk={index}
-                    className="size-3.5 accent-primary"
+                    className="size-3.5 rounded-sm accent-brand focus-visible:ring-2 focus-visible:ring-ring"
                     checked={selection.includes(index)}
                     onChange={(event) => {
                       const checked = event.currentTarget.checked;
@@ -305,7 +312,7 @@ export function GitCheckpointFilePreview({
               size="sm"
               variant="outline"
               disabled={busy || waiting}
-              onClick={() => void review()}
+              onClick={(event) => void review(event.currentTarget)}
             >
               {t("预览撤销文件", locale)}
             </Button>
@@ -315,7 +322,7 @@ export function GitCheckpointFilePreview({
               size="sm"
               variant="outline"
               disabled={busy || waiting || selection.length === 0}
-              onClick={() => void review(selection)}
+              onClick={(event) => void review(event.currentTarget, selection)}
             >
               {t("预览撤销所选区块", locale)}
             </Button>
@@ -323,15 +330,28 @@ export function GitCheckpointFilePreview({
         </div>
       )}
       <Dialog
-        open={Boolean(preview)}
-        onOpenChange={(open) => {
-          if (!open && !waiting) setPreview(undefined);
+        open={open}
+        onOpenChange={(next) => {
+          if (!next && !waiting) setOpen(false);
+        }}
+        onOpenChangeComplete={(next) => {
+          if (next) return;
+          setPreview(undefined);
+          if (applied.current) onApplied();
         }}
       >
         {preview && (
           <DialogContent
             className="max-h-[calc(100dvh-2rem)] min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 sm:max-w-2xl"
             showCloseButton={false}
+            initialFocus={cancel}
+            finalFocus={() =>
+              applied.current
+                ? trigger.current
+                    ?.closest("[data-checkpoint-file]")
+                    ?.querySelector<HTMLButtonElement>("button[aria-expanded]")
+                : trigger.current
+            }
           >
             <DialogHeader>
               <DialogTitle>{t("预览撤销范围", locale)}</DialogTitle>
@@ -348,7 +368,7 @@ export function GitCheckpointFilePreview({
               </DialogDescription>
             </DialogHeader>
             <div
-              className="min-h-0 overflow-auto rounded-md border border-border"
+              className="min-h-0 overflow-auto rounded-md border border-border outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
               tabIndex={0}
               aria-label={t("预览撤销范围", locale)}
             >
@@ -358,7 +378,12 @@ export function GitCheckpointFilePreview({
             <div>
               {applyError && <DiffStatus error message={applyError} />}
               <DialogFooter>
-                <Button variant="outline" disabled={waiting} onClick={() => setPreview(undefined)}>
+                <Button
+                  ref={cancel}
+                  variant="outline"
+                  disabled={waiting}
+                  onClick={() => setOpen(false)}
+                >
                   {t("取消", locale)}
                 </Button>
                 <Button

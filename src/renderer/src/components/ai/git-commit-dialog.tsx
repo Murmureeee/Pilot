@@ -1,6 +1,6 @@
 // @env browser
 import { GitCommitHorizontalIcon } from "lucide-react";
-import { useId, useState, type JSX } from "react";
+import { useId, useRef, useState, type JSX } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block";
@@ -33,15 +33,21 @@ export function GitCommitDialog({
   const locale = useLocale();
   const messageId = useId();
   const [preview, setPreview] = useState<GitCommitPreview>();
+  const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState("");
+  const trigger = useRef<HTMLButtonElement>(null);
+  const messageField = useRef<HTMLTextAreaElement>(null);
+  const committed = useRef<GitCommitResult>(null);
   const review = async (): Promise<void> => {
     if (waiting || disabled || !selections.length) return;
     setWaiting(true);
     setError("");
+    committed.current = null;
     try {
       setPreview(await window.pi.sessionPreviewGitCommit(composerId, selections));
+      setOpen(true);
     } catch (reason) {
       setError(String(reason));
       onRefresh();
@@ -53,10 +59,8 @@ export function GitCommitDialog({
     if (!preview || waiting || disabled || !message.trim() || error) return;
     setWaiting(true);
     try {
-      const result = await window.pi.sessionCommitGit(composerId, preview.token, message);
-      setMessage("");
-      setPreview(undefined);
-      onApplied(result);
+      committed.current = await window.pi.sessionCommitGit(composerId, preview.token, message);
+      setOpen(false);
     } catch (reason) {
       setError(String(reason));
       onRefresh();
@@ -66,11 +70,19 @@ export function GitCommitDialog({
   };
   return (
     <Dialog
-      open={Boolean(preview)}
-      onOpenChange={(open) => {
-        if (!open && !waiting) {
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && !waiting) {
           setError("");
-          setPreview(undefined);
+          setOpen(false);
+        }
+      }}
+      onOpenChangeComplete={(next) => {
+        if (next) return;
+        setPreview(undefined);
+        if (committed.current) {
+          setMessage("");
+          onApplied(committed.current);
         }
       }}
     >
@@ -81,7 +93,7 @@ export function GitCommitDialog({
           </span>
         )}
         <DialogTrigger
-          render={<Button variant="outline" size="xs" />}
+          render={<Button ref={trigger} variant="outline" size="xs" />}
           disabled={disabled || waiting || !selections.length}
           onClick={() => void review()}
         >
@@ -98,6 +110,14 @@ export function GitCommitDialog({
         <DialogContent
           showCloseButton={false}
           className="max-h-[calc(100dvh-2rem)] min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 sm:max-w-3xl"
+          initialFocus={messageField}
+          finalFocus={() =>
+            committed.current
+              ? trigger.current
+                  ?.closest("[data-review-layout]")
+                  ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+              : trigger.current
+          }
         >
           <DialogHeader>
             <DialogTitle>{t("预览提交", locale)}</DialogTitle>
@@ -115,7 +135,11 @@ export function GitCommitDialog({
             }}
           >
             <CodeBlock size="sm" className="min-h-0 flex-1">
-              <CodeBlockContent aria-label={t("本次提交的差异", locale)} data-git-commit-patch>
+              <CodeBlockContent
+                tabIndex={0}
+                aria-label={t("本次提交的差异", locale)}
+                data-git-commit-patch
+              >
                 {preview.patch}
               </CodeBlockContent>
             </CodeBlock>
@@ -124,6 +148,7 @@ export function GitCommitDialog({
                 {t("提交信息", locale)}
               </label>
               <Textarea
+                ref={messageField}
                 id={messageId}
                 className="max-h-28"
                 rows={3}
@@ -148,7 +173,7 @@ export function GitCommitDialog({
                 disabled={waiting}
                 onClick={() => {
                   setError("");
-                  setPreview(undefined);
+                  setOpen(false);
                 }}
               >
                 {t(error ? "返回选择" : "取消", locale)}

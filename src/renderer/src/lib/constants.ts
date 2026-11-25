@@ -27,6 +27,7 @@ import type { ExternalImportKind } from "@shared/imports";
 
 import type {
   ComposerCommand,
+  ComposerShortcut,
   SendKey,
   SessionRowStatus,
   SettingsSection,
@@ -168,7 +169,17 @@ export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[
     "OpenAI",
   ],
   persona: ["自定义指令", "指令生效顺序", "AGENTS.md"],
-  shortcuts: ["Ctrl", "发送消息", "换行"],
+  shortcuts: [
+    "Ctrl",
+    "Shift",
+    "Esc",
+    "发送消息",
+    "换行",
+    "聚焦输入框",
+    "取回上一条消息",
+    "切换权限模式",
+    "停止任务",
+  ],
   archived: ["取消归档", "永久删除"],
   data: ["应用数据目录", "聊天记录目录", "日志级别", "日志目录"],
   about: ["版本", "软件更新", "检查更新", "更新记录", "反馈问题"],
@@ -187,6 +198,15 @@ export const REVIEW_SHORTCUTS = {
   verification: { label: "打开验证页签", keys: "Ctrl+Shift+T" },
 } as const;
 
+export const COMPOSER_SHORTCUTS = {
+  "focus-composer": { label: "聚焦输入框", keys: "Ctrl+L" },
+  "cycle-approval-mode": { label: "切换权限模式", keys: "Shift+Tab" },
+  "recall-message": { label: "取回上一条消息", keys: "↑" },
+  "stop-run": { label: "停止任务", keys: "Esc × 2" },
+} as const satisfies Record<ComposerShortcut, { label: string; keys: string }>;
+
+export const STOP_SHORTCUT_WINDOW_MS = 2000;
+
 export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
   {
     label: "全局",
@@ -200,11 +220,15 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { label: "显示或隐藏侧边栏", keys: "Ctrl+Shift+S" },
       REVIEW_SHORTCUTS.changes,
       REVIEW_SHORTCUTS.verification,
+      COMPOSER_SHORTCUTS["focus-composer"],
+      COMPOSER_SHORTCUTS["stop-run"],
     ],
   },
   {
     label: "输入框",
     items: [
+      COMPOSER_SHORTCUTS["cycle-approval-mode"],
+      COMPOSER_SHORTCUTS["recall-message"],
       { label: "引用文件、文件夹或技能", keys: "@" },
       { label: "打开命令菜单", keys: "/" },
       { label: "在菜单中移动", keys: "↑ ↓" },

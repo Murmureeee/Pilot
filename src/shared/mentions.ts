@@ -16,6 +16,31 @@ export function visibleMessageText(parts: readonly UiPart[]): string {
     .join("");
 }
 
+export function draftFromMessageParts(
+  parts: readonly UiPart[],
+  directory?: string | null,
+): ComposerDraft {
+  const draft: ComposerDraft = [];
+  for (const part of parts) {
+    if (part.type === "text") draft.push(part.text);
+    if (part.type !== "mention") continue;
+    const workingDirectory = part.workingDirectory ?? directory;
+    const reference = { id: part.id, label: part.label };
+    if (part.kind === "skill") {
+      draft.push({
+        ...reference,
+        type: "skill",
+        meta: { description: "", workingDirectory: part.workingDirectory },
+      });
+    } else if (workingDirectory) {
+      draft.push({ ...reference, type: part.kind, meta: { workingDirectory } });
+    } else {
+      draft.push("@" + part.label);
+    }
+  }
+  return draft;
+}
+
 export function promptFromDraft(draft: ComposerDraft): PromptInput {
   const mentions: PromptInput["mentions"] = [];
   let text = "";

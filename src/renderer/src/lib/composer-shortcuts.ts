@@ -1,5 +1,5 @@
 // @env browser
-import type { PromptInput } from "@shared/contract";
+import type { ApprovalMode, PromptInput } from "@shared/contract";
 
 import type { ComposerTrigger, SendKey } from "./types";
 
@@ -61,4 +61,18 @@ export function composerEnterAction(
   if (sendKey === "enter") return event.shiftKey ? null : "send";
   if (event.ctrlKey || event.metaKey) return "send";
   return event.shiftKey ? null : "newline";
+}
+
+export function composerEditingShortcut(
+  event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean },
+  empty: boolean,
+): "cycle-approval-mode" | "recall-message" | null {
+  if (event.ctrlKey || event.metaKey || event.altKey) return null;
+  if (event.key === "Tab" && event.shiftKey) return "cycle-approval-mode";
+  return event.key === "ArrowUp" && !event.shiftKey && empty ? "recall-message" : null;
+}
+
+export function nextApprovalMode(mode: ApprovalMode): ApprovalMode {
+  if (mode === "standard") return "read-only";
+  return mode === "read-only" ? "full-access" : "standard";
 }

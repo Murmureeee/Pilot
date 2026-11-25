@@ -1,7 +1,16 @@
 // @env browser
 import { cn } from "cn";
 import { ArrowDownIcon, RotateCcwIcon } from "lucide-react";
-import { Activity, Fragment, useEffect, useMemo, useRef, useState, type JSX } from "react";
+import {
+  Activity,
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+  type Ref,
+} from "react";
 
 import { AssistantReply } from "@renderer/components/ai/assistant-reply";
 import { CompactionMarker } from "@renderer/components/ai/compaction-marker";
@@ -27,7 +36,7 @@ import {
   MessageScrollerViewport,
 } from "@renderer/components/ui/message-scroller";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
-import type { ChatRow } from "@renderer/lib/types";
+import type { ChatRow, ComposerShortcuts } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { UiMessage, UiPart } from "@shared/contract";
 import { visibleMessageText } from "@shared/mentions";
@@ -53,9 +62,13 @@ function chatRows(messages: UiMessage[]): ChatRow[] {
 export function ChatView({
   workingDirectory,
   projectDirectory,
+  shortcutRef,
+  showStopHint,
 }: {
   workingDirectory: string | null;
   projectDirectory: string | null;
+  shortcutRef: Ref<ComposerShortcuts>;
+  showStopHint: boolean;
 }): JSX.Element {
   const locale = useLocale();
   const messages = useAgentStore((s) => s.messages);
@@ -335,6 +348,8 @@ export function ChatView({
               key={composerId}
               composerId={composerId}
               workingDirectory={workingDirectory}
+              shortcutRef={shortcutRef}
+              showStopHint={showStopHint}
             />
           )}
         </Activity>
