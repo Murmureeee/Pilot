@@ -1,9 +1,12 @@
 // @env browser
+import { Toast } from "@base-ui/react/toast";
 import React from "react";
 import ReactDOM from "react-dom/client";
 
 import App from "./App";
 import { AppErrorBoundary } from "./components/app-error-boundary";
+import { FEEDBACK_TIMEOUT_MS } from "./lib/constants";
+import { feedback } from "./lib/feedback";
 import { restoreLocale, watchLocale } from "./lib/i18n";
 
 import "./assets/main.css";
@@ -14,7 +17,9 @@ restoreLocale();
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <AppErrorBoundary>
-      <App />
+      <Toast.Provider toastManager={feedback} timeout={FEEDBACK_TIMEOUT_MS} limit={1}>
+        <App />
+      </Toast.Provider>
     </AppErrorBoundary>
   </React.StrictMode>,
 );

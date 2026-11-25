@@ -37,6 +37,7 @@ export interface Settings {
   workingDirectory?: string;
   commandShell?: CommandShell;
   logLevel?: LogLevel;
+  notificationsEnabled?: boolean;
   persona?: string;
   skillsEnabled?: string[];
   mcpServers?: McpServerConfig[];

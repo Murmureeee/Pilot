@@ -4,6 +4,7 @@ import type { IpcMainInvokeEvent } from "electron";
 import type {
   AGENT_EVENT_CHANNEL,
   IPC,
+  Locale,
   UiAgentEvent,
   UPDATE_STATUS_CHANNEL,
   UpdateStatus,
@@ -17,6 +18,11 @@ import type { VerificationManager } from "../verification";
 import type { parseIpcArgs } from "./validation";
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
+
+export interface RendererContext {
+  locale: Locale;
+  conversationVisible: boolean;
+}
 
 export type InvokeHandler<C extends IpcChannel> = (
   event: IpcMainInvokeEvent,
@@ -36,6 +42,7 @@ export interface IpcContext {
   request: typeof globalThis.fetch;
   getSettings(): Settings;
   saveSettings(settings: Settings): void;
+  onConversationVisibilityChanged(): void;
   host: AgentHost;
   mcp: McpManager;
   updater: DesktopUpdater;

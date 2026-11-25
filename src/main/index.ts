@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { BrowserWindow, Menu, app, nativeTheme, session, shell } from "electron";
 
-import { APP_NAME } from "../shared/constants";
+import { APP_NAME, DEFAULT_LOCALE } from "../shared/constants";
 import { AGENT_EVENT_CHANNEL, UPDATE_STATUS_CHANNEL } from "../shared/contract";
 import { AgentHost } from "./agent-host/host";
 import { McpManager } from "./agent-host/mcp";
@@ -22,12 +22,18 @@ import { DesktopExit } from "./desktop-exit";
 import { DiagnosticLog, errorDetails } from "./diagnostics";
 import { logRendererConsole } from "./diagnostics/renderer";
 import { registerIpc } from "./ipc";
-import { registerRenderer, sendToRenderers } from "./ipc/transport";
+import {
+  getRendererLocale,
+  isConversationVisible,
+  registerRenderer,
+  sendToRenderers,
+} from "./ipc/transport";
 import { createDesktopNetwork } from "./network";
 import { prepareUserDataDirectory } from "./profile";
 import { getLogLevel, loadSettings, saveSettings } from "./settings";
 import type { Settings } from "./settings/types";
 import { createSleepBlocker } from "./sleep-blocker";
+import { TaskNotifications } from "./task-notifications";
 import { DesktopUpdater } from "./updater";
 import { VerificationManager } from "./verification";
 import { revealWindow } from "./window";
@@ -36,7 +42,8 @@ import { loadWindowState, rememberWindow } from "./window-state";
 
 const isDev = !app.isPackaged;
 
-if (process.platform === "win32" && app.isPackaged) app.setAppUserModelId(WINDOWS_APP_ID);
+if (process.platform === "win32")
+  app.setAppUserModelId(app.isPackaged ? WINDOWS_APP_ID : process.execPath);
 
 // Phase 0 无窗冒烟：electron . --smoke → 跑通 pi Agent 即退出
 async function runSmoke(): Promise<void> {
@@ -135,7 +142,8 @@ function startDesktop(): void {
   const logsDir = join(userData, "logs");
   const windowState = join(userData, WINDOW_STATE_FILE_NAME);
   const getSettings = (): ReturnType<typeof loadSettings> => loadSettings(userData);
-  const log = new DiagnosticLog(logsDir, getLogLevel(getSettings()));
+  const initialSettings = getSettings();
+  const log = new DiagnosticLog(logsDir, getLogLevel(initialSettings));
   log.write("info", "main", "startup", { version: app.getVersion() });
   process.on("uncaughtExceptionMonitor", (error) => {
     log.write("error", "main", "uncaught-exception", errorDetails(error));
@@ -149,6 +157,7 @@ function startDesktop(): void {
   const persistSettings = (settings: Settings): void => {
     saveSettings(userData, settings);
     log.setLevel(getLogLevel(settings));
+    notifications.setEnabled(settings.notificationsEnabled !== false);
   };
   const store = new SessionStore(sessionsDir);
   const syncSleepBlocker = (): void =>
@@ -167,6 +176,7 @@ function startDesktop(): void {
     broadcast: (event) => {
       if (event.type === "error") log.write("error", "main", "agent-error");
       sendToRenderers(AGENT_EVENT_CHANNEL, event);
+      notifications.handleEvent(event);
     },
     onActivityChanged: syncSleepBlocker,
     skillsDir,
@@ -196,6 +206,32 @@ function startDesktop(): void {
     updater,
     log,
   });
+  const notifications = new TaskNotifications({
+    enabled: initialSettings.notificationsEnabled !== false,
+    getWindow: () => mainWindow,
+    getLocale: () =>
+      mainWindow && !mainWindow.isDestroyed()
+        ? getRendererLocale(mainWindow.webContents)
+        : DEFAULT_LOCALE,
+    getVisibleSessionId: () =>
+      mainWindow &&
+      !mainWindow.isDestroyed() &&
+      !mainWindow.isMinimized() &&
+      mainWindow.isFocused() &&
+      isConversationVisible(mainWindow.webContents)
+        ? host.selectedSessionId()
+        : null,
+    getSession: (id) => store.getMeta(id),
+    setUnread: (id, unread) => void host.unreadSession(id, unread),
+    openSession: (id) => {
+      if (exit.isExiting() || !store.getMeta(id)) return;
+      const window = getMainWindow();
+      host.revealSession(id);
+      revealWindow(window);
+    },
+    reportError: (action) => log.write("warn", "main", "task-notification-" + action),
+  });
+  app.once("will-quit", () => notifications.dispose());
   registerIpc({
     settingsDir: userData,
     sessionsDir,
@@ -203,6 +239,7 @@ function startDesktop(): void {
     logsDir,
     getSettings,
     saveSettings: persistSettings,
+    onConversationVisibilityChanged: () => notifications.sync(),
     request: network.fetch,
     host,
     mcp,
@@ -215,6 +252,7 @@ function startDesktop(): void {
     if (!mainWindow || mainWindow.isDestroyed()) {
       mainWindow = createWindow(log, windowState);
       exit.watchWindow(mainWindow);
+      notifications.watchWindow(mainWindow);
     }
     return mainWindow;
   };

@@ -74,6 +74,7 @@ const storedSettings = z.looseObject({
     .transform((value) => value ?? undefined),
   commandShell: z.enum(["powershell", "bash"]).optional().catch(undefined),
   logLevel: z.enum(LOG_LEVELS).optional().catch(undefined),
+  notificationsEnabled: z.boolean().optional().catch(undefined),
   persona: optionalText,
   skillsEnabled: z.array(z.string()).optional(),
   mcpServers: z.array(mcpServer).optional(),

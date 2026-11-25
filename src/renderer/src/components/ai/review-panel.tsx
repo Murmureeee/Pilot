@@ -91,6 +91,7 @@ export function ReviewPanel({
   onSave,
   count,
   verificationStatus,
+  feedback,
   changes,
   files,
   verification,
@@ -104,6 +105,7 @@ export function ReviewPanel({
   onSave(width: number): void;
   count?: number;
   verificationStatus?: VerificationStatus;
+  feedback: ReactNode;
   changes: ReactNode;
   files: ReactNode;
   verification: ReactNode;
@@ -215,6 +217,7 @@ export function ReviewPanel({
             <XIcon aria-hidden="true" />
           </Button>
         </header>
+        {feedback}
         {REVIEW_TABS.map(({ value }) => (
           <Tabs.Panel
             key={value}

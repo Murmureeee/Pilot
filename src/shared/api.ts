@@ -66,6 +66,7 @@ export interface PiApi {
   openPath(target: OpenPathTarget): Promise<string>;
   /** 同步界面语言供主进程的原生提示使用。 */
   setLocale(locale: Locale): Promise<void>;
+  setConversationVisible(visible: boolean): Promise<void>;
   /** 同步原生标题栏（窗控按钮）颜色到主题 */
   setTitlebarTheme(theme: ThemeSetting): Promise<void>;
   getUpdateStatus(): Promise<UpdateStatus>;
@@ -143,6 +144,7 @@ export interface PiApi {
   settingsGet(): Promise<PublicSettings>;
   settingsSave(input: SettingsInput): Promise<PublicSettings>;
   settingsSetLogLevel(level: LogLevel): Promise<void>;
+  settingsSetNotificationsEnabled(enabled: boolean): Promise<void>;
   settingsSelectModel(providerId: string, modelId: string): Promise<PublicSettings>;
   settingsSetThinkingLevel(level: ThinkingLevel): Promise<PublicSettings>;
   settingsRevokeToolRule(rule: ToolRule): Promise<PublicSettings>;

@@ -22,6 +22,7 @@ import type {
 import { modelCatalogInput } from "@shared/providers";
 
 import { applyAgentEvent, initialAgentUiState, type AgentUiState } from "../adapters/agent-events";
+import { showFeedback, showFeedbackError } from "../lib/feedback";
 import { currentLocale } from "../lib/i18n";
 import { initialNavState, moveNav, peekNav, pushNav, type NavState } from "../lib/nav";
 import type { ProjectSelection, SettingsSection } from "../lib/types";
@@ -49,6 +50,7 @@ interface AgentStore extends AgentUiState {
   setSessionPersona(id: string, persona: string | null): Promise<void>;
   init(): Promise<void>;
   setView(view: View): void;
+  revealRequest: number;
   prompt(
     input: PromptInput,
     workingDirectory: string | null,
@@ -81,6 +83,7 @@ interface AgentStore extends AgentUiState {
   navForward(): Promise<void>;
   saveSettings(input: SettingsInput): Promise<void>;
   setLogLevel(level: LogLevel): Promise<void>;
+  setNotificationsEnabled(enabled: boolean): Promise<void>;
   dismissSettingsRecovery(): Promise<void>;
   retrySettingsRecovery(): Promise<void>;
   saveToolEnvironment(
@@ -191,6 +194,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   settingsSection: "general",
   initialized: false,
   paletteOpen: false,
+  revealRequest: 0,
   nav: initialNavState(),
 
   setPaletteOpen: (open) => set({ paletteOpen: open }),
@@ -219,10 +223,20 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
           const { snapshot, navigation } = event;
           let nav = state.nav;
           if (navigation === "reset") nav = initialNavState();
-          if (snapshot.sessionId && (navigation === "record" || state.composerId === null)) {
+          if (
+            snapshot.sessionId &&
+            (navigation === "record" || navigation === "reveal" || state.composerId === null)
+          ) {
             nav = pushNav(nav, snapshot.sessionId);
           }
-          return { ...sessionSnapshot(snapshot, state), nav, projectError: null };
+          return {
+            ...sessionSnapshot(snapshot, state),
+            nav,
+            projectError: null,
+            ...(navigation === "reveal"
+              ? { view: "chat", paletteOpen: false, revealRequest: state.revealRequest + 1 }
+              : {}),
+          };
         }
         const next = applyAgentEvent(state, event);
         return event.type === "sessions" && next.sessionId && next.sessionId !== state.sessionId
@@ -328,7 +342,12 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   },
 
   setSessionArchived: async (id, archived) => {
-    await window.pi.sessionArchive(id, archived);
+    try {
+      await window.pi.sessionArchive(id, archived);
+      showFeedback(archived ? "聊天已归档" : "聊天已恢复");
+    } catch (error) {
+      showFeedbackError("无法更新归档状态。请重试。", error);
+    }
   },
 
   setSessionUnread: async (id, unread) => {
@@ -343,8 +362,14 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   /** 会话全文复制到剪贴板（侧栏右键「复制」） */
   copySession: async (id) => {
-    const text = await window.pi.sessionCopy(id);
-    if (text.length > 0) await navigator.clipboard.writeText(text);
+    try {
+      const text = await window.pi.sessionCopy(id);
+      if (!text) return;
+      await navigator.clipboard.writeText(text);
+      showFeedback("已复制聊天全文");
+    } catch (error) {
+      showFeedbackError("无法复制聊天。请重试。", error);
+    }
   },
 
   deleteSession: async (id) => {
@@ -361,6 +386,10 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   setLogLevel: async (logLevel) => {
     await window.pi.settingsSetLogLevel(logLevel);
     set(({ settings }) => (settings ? { settings: { ...settings, logLevel } } : {}));
+  },
+  setNotificationsEnabled: async (notificationsEnabled) => {
+    await window.pi.settingsSetNotificationsEnabled(notificationsEnabled);
+    set(({ settings }) => (settings ? { settings: { ...settings, notificationsEnabled } } : {}));
   },
 
   dismissSettingsRecovery: async () => {

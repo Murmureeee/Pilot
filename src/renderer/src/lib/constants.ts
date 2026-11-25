@@ -88,6 +88,7 @@ export const STARTER_TASKS: readonly { label: string; prompt: string }[] = [
   { label: "审查未提交的改动", prompt: "审查当前未提交的改动，指出问题和风险。" },
 ];
 export const HOME_RECENT_PROJECT_LIMIT = 5;
+export const FEEDBACK_TIMEOUT_MS = 4000;
 
 export const SESSION_STATUS_LABELS: Record<SessionRowStatus, string> = {
   approval: "等待审批",
@@ -114,7 +115,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
 };
 
 export const SETTINGS_SECTION_DESCRIPTIONS: Record<SettingsSection, string> = {
-  general: "输入方式和 Agent 默认的工作环境。",
+  general: "管理输入方式、桌面通知和 Agent 默认的工作环境。",
   appearance: "主题和界面语言。",
   permissions: "决定 Agent 写入文件、运行命令和调用 MCP 工具前是否需要你确认。",
   providers: "管理模型服务、密钥和聊天中可选的模型。",
@@ -130,7 +131,17 @@ export const SETTINGS_SECTION_DESCRIPTIONS: Record<SettingsSection, string> = {
 
 // 分区内设置项的名称，供导航搜索匹配；新增设置项时同步补上。
 export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[]> = {
-  general: ["发送方式", "Enter", "默认工作目录", "命令环境", "PowerShell", "Git Bash"],
+  general: [
+    "发送方式",
+    "Enter",
+    "桌面通知",
+    "系统通知",
+    "任务栏提醒",
+    "默认工作目录",
+    "命令环境",
+    "PowerShell",
+    "Git Bash",
+  ],
   appearance: ["主题", "亮色", "暗色", "跟随系统", "语言"],
   permissions: [
     "默认权限模式",

@@ -1,7 +1,7 @@
 // @env browser
 import { cn } from "cn";
 import { ArrowLeftIcon, SearchIcon, SquareTerminalIcon } from "lucide-react";
-import { useCallback, type JSX, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "@renderer/lib/constants";
@@ -19,6 +19,7 @@ export function SidebarPanel({
   onDragEnd,
   onCollapse,
   collapsed,
+  feedback,
 }: {
   width: number;
   animateWidth: boolean;
@@ -27,6 +28,7 @@ export function SidebarPanel({
   onDragEnd(width: number): void;
   onCollapse(): void;
   collapsed: boolean;
+  feedback: ReactNode;
 }): JSX.Element {
   const locale = useLocale();
   const view = useAgentStore((s) => s.view);
@@ -99,6 +101,7 @@ export function SidebarPanel({
         </Button>
       </div>
 
+      {feedback}
       {inChat ? <SidebarChatList /> : <SettingsNav />}
 
       {/* 拖拽手柄（拖宽 + 拖到阈值收起） */}

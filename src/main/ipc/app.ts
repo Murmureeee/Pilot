@@ -10,7 +10,7 @@ import {
   type PingResponse,
 } from "../../shared/contract";
 import { TITLE_BAR_OVERLAY_COLORS } from "../constants";
-import { handle, setRendererLocale } from "./transport";
+import { handle, setConversationVisible, setRendererLocale } from "./transport";
 import type { IpcContext } from "./types";
 
 /** 菜单动作白名单实现（渲染层传来的 action 必须命中此表） */
@@ -45,7 +45,14 @@ const MENU_ACTIONS: Record<MenuAction, (wc: WebContents) => void> = {
 export function registerAppRoutes(
   ctx: Pick<
     IpcContext,
-    "settingsDir" | "sessionsDir" | "skillsDir" | "logsDir" | "isDev" | "updater" | "exit"
+    | "settingsDir"
+    | "sessionsDir"
+    | "skillsDir"
+    | "logsDir"
+    | "isDev"
+    | "updater"
+    | "exit"
+    | "onConversationVisibilityChanged"
   >,
 ): void {
   handle(IPC.ping, (_event, request): PingResponse => {
@@ -70,6 +77,10 @@ export function registerAppRoutes(
     return shell.openPath(dirs[target]);
   });
   handle(IPC.appSetLocale, (event, locale) => setRendererLocale(event.sender, locale));
+  handle(IPC.appSetConversationVisible, (event, visible) => {
+    setConversationVisible(event.sender, visible);
+    ctx.onConversationVisibilityChanged();
+  });
   handle(IPC.appSetTitlebarTheme, (event, theme) => {
     // 无边框窗口的原生窗控颜色跟随主题（Linux 无 titleBarOverlay，静默忽略）
     const win = BrowserWindow.fromWebContents(event.sender);

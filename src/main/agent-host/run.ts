@@ -62,6 +62,7 @@ import type {
   AgentRunOptions,
   ReferencedUserMessage,
   RunCheckpoint,
+  SessionRunSettlement,
   SavedCompaction,
   SavedGitChanges,
   TimedAssistantMessage,
@@ -85,6 +86,7 @@ export class AgentRun {
   private finishedGitChanges?: Promise<GitChangesView | null>;
   private persistError?: unknown;
   private modelFailure?: ModelFailure;
+  private result?: SessionRunSettlement["result"];
   private latestCompaction?: SavedCompaction;
   private autoCompactionFailed = false;
   private ownsCheckpoint: boolean;
@@ -388,6 +390,7 @@ export class AgentRun {
               ...this.checkpoint,
               failure: { kind: "other", detail: message },
             });
+            this.result = "failed";
             store.setRunResult(sessionId, "failed");
           } catch {
             this.send({ type: "error", message });
@@ -420,6 +423,7 @@ export class AgentRun {
         type: "status",
         status: "idle",
         run: { runId, sessionId },
+        result: this.result,
         interruptedRun: interruptedRunOf(sessionId, checkpoint),
         failedRun: failedRunOf(sessionId, checkpoint),
       });
@@ -867,6 +871,7 @@ export class AgentRun {
       task: this.checkpoint.task,
       result,
     });
+    this.result = result;
     this.deps.view.messages = toUiMessages(
       messages,
       "s",

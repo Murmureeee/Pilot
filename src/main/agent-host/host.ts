@@ -23,6 +23,7 @@ import type {
   PromptInput,
   RunRef,
   SessionMeta,
+  SessionNavigation,
   SessionInstructionSources,
   SessionSettings,
   SessionSettingsInput,
@@ -149,6 +150,10 @@ export class AgentHost {
 
   private getCurrentSession(): SessionMeta | null {
     return this.sessionId ? this.deps.store.getMeta(this.sessionId) : null;
+  }
+
+  selectedSessionId(): string | null {
+    return this.sessionId;
   }
 
   getProjectDirectory(): string | undefined {
@@ -632,6 +637,12 @@ export class AgentHost {
     return this.publishSnapshot(record ? "record" : undefined);
   }
 
+  revealSession(id: string): void {
+    if (!this.deps.store.getMeta(id)) return;
+    if (this.sessionId !== id) this.switchSession(id);
+    this.publishSnapshot("reveal");
+  }
+
   private resetAgent(): void {
     this.agent = null;
     this.agentSessionId = null;
@@ -1062,7 +1073,7 @@ export class AgentHost {
     this.deps.broadcast({ ...event, sessionId });
   }
 
-  publishSnapshot(navigation?: "record" | "reset"): Snapshot {
+  publishSnapshot(navigation?: SessionNavigation): Snapshot {
     const snapshot = this.getSnapshot();
     // Selection and run updates share a channel so a live delta cannot overtake its snapshot.
     this.deps.broadcast({ type: "snapshot", snapshot, navigation });

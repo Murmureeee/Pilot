@@ -139,6 +139,7 @@ export function mergeSettingsInput(current: Settings, input: SettingsInput): Set
     workingDirectory,
     commandShell: input.commandShell ?? current.commandShell,
     logLevel: current.logLevel,
+    notificationsEnabled: current.notificationsEnabled,
     // 人设传 "" 即清空（空串不是 nullish，不会被 ?? 吞掉）；技能启停整表提交
     persona: input.persona ?? current.persona ?? "",
     skillsEnabled: input.skillsEnabled ?? current.skillsEnabled ?? [],
@@ -173,6 +174,7 @@ export function toPublicSettings(settings: Settings): PublicSettings {
     workingDirectory: settings.workingDirectory ?? null,
     commandShell: getCommandShell(settings.commandShell),
     logLevel: getLogLevel(settings),
+    notificationsEnabled: settings.notificationsEnabled !== false,
     persona: settings.persona ?? "",
     skillsEnabled: settings.skillsEnabled ?? [],
     recovery: recoveryPath

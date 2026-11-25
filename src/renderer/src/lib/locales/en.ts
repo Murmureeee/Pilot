@@ -162,6 +162,19 @@ export const EN_MESSAGES: Record<string, string> = {
   置顶: "Pinned",
   最近: "Recent",
   已归档: "Archived",
+  聊天已归档: "Chat archived",
+  聊天已恢复: "Chat restored",
+  已复制聊天全文: "Chat transcript copied",
+  "无法复制聊天。请重试。": "Could not copy the chat. Try again.",
+  "无法更新归档状态。请重试。": "Could not change the archive status. Try again.",
+  已从最近项目移除: "Removed from recent projects",
+  关闭提示: "Dismiss feedback",
+  通知: "Notifications",
+  桌面通知: "Desktop notifications",
+  系统通知: "System notifications",
+  任务栏提醒: "Taskbar alerts",
+  "离开当前对话时提示待审批、完成和失败。Windows 同时提供任务栏提醒。":
+    "Get notified about approvals, completions, and failures while away from a chat. Windows also shows taskbar alerts.",
   还没有聊天: "No chats yet",
   "打开项目或发送第一条消息后，聊天会出现在这里。":
     "Chats appear here after you open a project or send your first message.",
@@ -631,8 +644,8 @@ export const EN_MESSAGES: Record<string, string> = {
   // 设置与首次配置
   外观: "Appearance",
   存储与诊断: "Storage and diagnostics",
-  "输入方式和 Agent 默认的工作环境。":
-    "How you send messages and where the agent works by default.",
+  "管理输入方式、桌面通知和 Agent 默认的工作环境。":
+    "Manage input, desktop notifications, and the default working environment.",
   "主题和界面语言。": "Theme and interface language.",
   "查看、恢复或永久删除已归档的聊天。": "View, restore, or permanently delete archived chats.",
   "本地存储位置和诊断日志。": "Local storage locations and diagnostic logs.",

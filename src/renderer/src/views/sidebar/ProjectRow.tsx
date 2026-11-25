@@ -18,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
+import { showFeedback } from "@renderer/lib/feedback";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { ProjectRowAction } from "@renderer/lib/types";
 import { referenceName } from "@renderer/lib/workspace-links";
@@ -64,6 +65,7 @@ export function ProjectRow({
       if (action === "open") await window.pi.sessionOpenProjectFolder(directory);
       else {
         await window.pi.sessionRemoveRecentProject(directory);
+        showFeedback("已从最近项目移除");
         onRemoved();
       }
     } catch (cause) {

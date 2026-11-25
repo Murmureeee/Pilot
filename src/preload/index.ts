@@ -26,6 +26,7 @@ const api: PiApi = {
   menuAction: (action: MenuAction) => ipcRenderer.invoke(IPC.menuAction, action),
   openPath: (target: OpenPathTarget) => ipcRenderer.invoke(IPC.appOpenPath, target),
   setLocale: (locale: Locale) => ipcRenderer.invoke(IPC.appSetLocale, locale),
+  setConversationVisible: (visible) => ipcRenderer.invoke(IPC.appSetConversationVisible, visible),
   setTitlebarTheme: (theme: ThemeSetting) => ipcRenderer.invoke(IPC.appSetTitlebarTheme, theme),
   getUpdateStatus: () => ipcRenderer.invoke(IPC.appGetUpdateStatus),
   checkForUpdates: () => ipcRenderer.invoke(IPC.appCheckForUpdates),
@@ -108,6 +109,8 @@ const api: PiApi = {
   settingsGet: () => ipcRenderer.invoke(IPC.settingsGet),
   settingsSave: (input: SettingsInput) => ipcRenderer.invoke(IPC.settingsSave, input),
   settingsSetLogLevel: (level) => ipcRenderer.invoke(IPC.settingsSetLogLevel, level),
+  settingsSetNotificationsEnabled: (enabled) =>
+    ipcRenderer.invoke(IPC.settingsSetNotificationsEnabled, enabled),
   settingsSelectModel: (providerId, modelId) =>
     ipcRenderer.invoke(IPC.settingsSelectModel, providerId, modelId),
   settingsSetThinkingLevel: (level) => ipcRenderer.invoke(IPC.settingsSetThinkingLevel, level),

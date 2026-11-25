@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 
 import { ChatHeader } from "@renderer/components/ai/chat-header";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
+import { FeedbackBar } from "@renderer/components/ai/feedback-bar";
 import { ReviewChanges } from "@renderer/components/ai/review-changes";
 import { ReviewPanel } from "@renderer/components/ai/review-panel";
 import { TopBar } from "@renderer/components/ai/top-bar";
@@ -45,6 +46,7 @@ import { LOCALE_DETAILS } from "@shared/constants";
 
 export default function App(): JSX.Element {
   const view = useAgentStore((s) => s.view);
+  const revealRequest = useAgentStore((s) => s.revealRequest);
   const init = useAgentStore((s) => s.init);
   const sessions = useAgentStore((s) => s.sessions);
   const sessionId = useAgentStore((s) => s.sessionId);
@@ -81,6 +83,34 @@ export default function App(): JSX.Element {
     reviewOpen,
     preferredReviewWidth,
   );
+  const reviewOverlay = reviewOpen && layout.overlay;
+  const conversationVisible = view === "chat" && !sidebarOverlay && !reviewOverlay;
+
+  useEffect(() => {
+    void window.pi.setConversationVisible(conversationVisible).catch(() => {});
+  }, [conversationVisible]);
+
+  useEffect(() => {
+    if (!revealRequest) return;
+    useReviewStore.getState().close();
+    let focusFrame = 0;
+    const revealFrame = requestAnimationFrame(() => {
+      setOpenSidebarScope(null);
+      focusFrame = requestAnimationFrame(() => {
+        const main = document.querySelector("main");
+        const target =
+          main?.querySelector<HTMLElement>("[data-permission-card]") ??
+          main?.querySelector<HTMLElement>("[data-model-failure] button") ??
+          main?.querySelector<HTMLElement>('[contenteditable="true"]') ??
+          main;
+        target?.focus({ preventScroll: true });
+      });
+    });
+    return () => {
+      cancelAnimationFrame(revealFrame);
+      cancelAnimationFrame(focusFrame);
+    };
+  }, [revealRequest]);
   const git = useGitReview(canReview ? composerId : null, workingDirectory);
   const verificationStatus = useVerificationStatus(canReview ? composerId : null);
   const messages = useAgentStore((state) => (git.view ? null : state.messages));
@@ -251,11 +281,13 @@ export default function App(): JSX.Element {
                 else rememberCollapsed(true);
               }}
               collapsed={sidebarCollapsed}
+              feedback={sidebarOverlay && <FeedbackBar />}
             />
           </div>
           <div className="relative flex min-h-0 min-w-0 flex-1">
             <main
-              inert={sidebarOverlay || (reviewOpen && layout.overlay)}
+              inert={sidebarOverlay || reviewOverlay}
+              tabIndex={-1}
               className="flex min-h-0 min-w-0 flex-1 flex-col"
             >
               {view === "chat" ? (
@@ -270,13 +302,17 @@ export default function App(): JSX.Element {
                     changeCount={changeCount}
                     verificationStatus={verificationStatus}
                   />
+                  {!sidebarOverlay && !reviewOverlay && <FeedbackBar />}
                   <ChatView
                     workingDirectory={workingDirectory}
                     projectDirectory={projectDirectory}
                   />
                 </>
               ) : (
-                <SettingsView />
+                <>
+                  {!sidebarOverlay && <FeedbackBar />}
+                  <SettingsView />
+                </>
               )}
             </main>
             {reviewAttached && composerId && (
@@ -291,6 +327,7 @@ export default function App(): JSX.Element {
                 onSave={saveReviewWidth}
                 count={changeCount}
                 verificationStatus={verificationStatus}
+                feedback={reviewOverlay && !sidebarOverlay && <FeedbackBar />}
                 changes={
                   <ReviewChanges
                     composerId={composerId}

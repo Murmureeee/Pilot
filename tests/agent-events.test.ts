@@ -46,10 +46,16 @@ describe("agent-events adapter", () => {
       workingDirectory: "E:/a",
       failure: { kind: "server", detail: "503" },
     } as const;
-    const ended = applyRunEvent(waiting, { type: "status", status: "idle", failedRun });
+    const terminal = { type: "status", status: "idle", result: "failed", failedRun } as const;
+    const ended = applyRunEvent(waiting, terminal);
     expect(ended).toMatchObject({ activeRun: null, interruptedRun: null, failedRun });
     const next = { ...run, runId: "next", workingDirectory: "E:/a", status: "streaming" } as const;
     expect(applyAgentEvent(ended, { type: "run_started", run: next }).failedRun).toBeNull();
+    expect(applyRunEvent(other, terminal)).toMatchObject({
+      activeRun: null,
+      failedRun: null,
+      messages: other.messages,
+    });
   });
 
   it("keeps verification output separate from agent messages and usage", () => {

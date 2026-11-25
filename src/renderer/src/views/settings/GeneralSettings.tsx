@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
+import { Switch } from "@renderer/components/ui/switch";
 import { COMMAND_SHELL_LABELS, SEND_KEY_LABELS } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { loadSendKey, saveSendKey } from "@renderer/lib/preferences";
@@ -176,6 +177,55 @@ function ToolEnvironmentForm({
   );
 }
 
+function NotificationPreferences({ enabled }: { enabled: boolean }): JSX.Element {
+  const locale = useLocale();
+  const setNotificationsEnabled = useAgentStore((s) => s.setNotificationsEnabled);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const save = async (checked: boolean): Promise<void> => {
+    if (saving) return;
+    setSaving(true);
+    setError(undefined);
+    try {
+      await setNotificationsEnabled(checked);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const label = t("桌面通知", locale);
+  return (
+    <SettingsGroup id="settings-notifications" title={t("通知", locale)}>
+      <div className="settings-list">
+        <SettingsItem
+          label={label}
+          htmlFor="settings-desktop-notifications"
+          description={t(
+            "离开当前对话时提示待审批、完成和失败。Windows 同时提供任务栏提醒。",
+            locale,
+          )}
+        >
+          <Switch
+            id="settings-desktop-notifications"
+            aria-label={label}
+            aria-busy={saving || undefined}
+            checked={enabled}
+            onCheckedChange={(checked) => void save(checked)}
+          />
+        </SettingsItem>
+      </div>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {localizeError(error, locale)}
+        </p>
+      )}
+    </SettingsGroup>
+  );
+}
+
 export function GeneralSettings({
   settings,
   isWindows,
@@ -220,6 +270,7 @@ export function GeneralSettings({
         </div>
       </SettingsGroup>
       <ToolEnvironmentForm settings={settings} isWindows={isWindows} />
+      <NotificationPreferences enabled={settings.notificationsEnabled} />
     </div>
   );
 }

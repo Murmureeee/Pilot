@@ -17,6 +17,9 @@ export function registerSettingsRoutes(
   ctx: Pick<IpcContext, "host" | "skillsDir" | "getSettings" | "saveSettings" | "request">,
 ): void {
   handle(IPC.settingsGet, () => toPublicSettings(ctx.getSettings()));
+  handle(IPC.settingsSetNotificationsEnabled, (_event, notificationsEnabled) => {
+    ctx.saveSettings({ ...ctx.getSettings(), notificationsEnabled });
+  });
   handle(IPC.settingsSetLogLevel, (_event, logLevel) => {
     ctx.saveSettings({ ...ctx.getSettings(), logLevel });
   });

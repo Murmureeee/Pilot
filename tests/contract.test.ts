@@ -23,6 +23,11 @@ describe("IPC contract", () => {
     expect(IPC.settingsSetLogLevel).toBe("settings:set-log-level");
   });
 
+  it("keeps notification preferences and renderer visibility on separate invoke channels", () => {
+    expect(IPC.appSetConversationVisible).toBe("app:set-conversation-visible");
+    expect(IPC.settingsSetNotificationsEnabled).toBe("settings:set-notifications-enabled");
+  });
+
   it("uses the settings namespace for acknowledging a settings recovery", () => {
     expect(IPC.settingsDismissRecovery).toBe("settings:dismiss-recovery");
   });

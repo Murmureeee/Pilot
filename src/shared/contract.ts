@@ -9,6 +9,7 @@ export const IPC = {
   menuAction: "app:menu-action",
   appOpenPath: "app:open-path",
   appSetLocale: "app:set-locale",
+  appSetConversationVisible: "app:set-conversation-visible",
   appSetTitlebarTheme: "app:set-titlebar-theme",
   appGetUpdateStatus: "app:get-update-status",
   appCheckForUpdates: "app:check-for-updates",
@@ -71,6 +72,7 @@ export const IPC = {
   settingsGet: "settings:get",
   settingsSave: "settings:save",
   settingsSetLogLevel: "settings:set-log-level",
+  settingsSetNotificationsEnabled: "settings:set-notifications-enabled",
   settingsSelectModel: "settings:select-model",
   settingsSetThinkingLevel: "settings:set-thinking-level",
   settingsRevokeToolRule: "settings:revoke-tool-rule",
@@ -331,7 +333,13 @@ export interface UsageTotals {
 }
 
 export type AgentRunEvent =
-  | { type: "status"; status: AgentStatus; interruptedRun?: InterruptedRun; failedRun?: FailedRun }
+  | {
+      type: "status";
+      status: AgentStatus;
+      result?: Exclude<SessionRunResult, "interrupted">;
+      interruptedRun?: InterruptedRun;
+      failedRun?: FailedRun;
+    }
   | { type: "model_retry"; retry: ModelRetryProgress | null; resetReplyId?: string }
   | { type: "context_compacting"; compacting: boolean }
   | { type: "context_compacted"; compaction: ContextCompaction; contextTokens: number }
@@ -368,8 +376,10 @@ export type AgentRunEvent =
   | { type: "permission_resolved"; requestId: string }
   | { type: "error"; message: string };
 
+export type SessionNavigation = "record" | "reset" | "reveal";
+
 export type UiAgentEvent =
-  | { type: "snapshot"; snapshot: Snapshot; navigation?: "record" | "reset" }
+  | { type: "snapshot"; snapshot: Snapshot; navigation?: SessionNavigation }
   | {
       type: "sessions";
       sessions: SessionMeta[];
@@ -671,6 +681,7 @@ export interface PublicSettings {
   workingDirectory: string | null;
   commandShell: CommandShell;
   logLevel: LogLevel;
+  notificationsEnabled: boolean;
   /** 全局人设/自定义指令（设置页「个性化」编辑） */
   persona: string;
   /** 启用的技能 id 列表 */
