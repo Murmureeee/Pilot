@@ -2,9 +2,14 @@
 import type {
   ModelCapabilities,
   ModelCatalogEntry,
+  PromptTemplate,
   ProviderInput,
   ProviderKind,
 } from "@shared/contract";
+
+export type PromptTemplateChange =
+  | { kind: "edit"; template?: PromptTemplate }
+  | { kind: "remove"; template: PromptTemplate };
 
 export interface DraftModel extends ModelCatalogEntry {
   automatic?: ModelCapabilities;

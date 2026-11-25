@@ -2,14 +2,18 @@
 // 命令面板条目模型与过滤（纯函数，NFR-6 测试覆盖）。
 import type { SessionSearchHit, SessionSearchResults } from "@shared/contract";
 
-export type PaletteTab = "all" | "actions" | "chats";
+import type { SettingsSection, WorkbenchCommand } from "./types";
+
+export type PaletteTab = "all" | "action" | "project" | "chat" | "settings";
 
 export interface PaletteEntry {
-  kind: "action" | "chat";
+  kind: Exclude<PaletteTab, "all">;
   id: string;
   label: string;
-  /** 操作快捷键提示或会话相对时间 */
   detail?: string;
+  terms?: readonly string[];
+  command?: WorkbenchCommand;
+  section?: SettingsSection;
   hit?: SessionSearchHit;
   findQuery?: string;
 }
@@ -22,8 +26,10 @@ export interface PaletteSearch {
 
 export const PALETTE_TABS: { value: PaletteTab; label: string }[] = [
   { value: "all", label: "全部" },
-  { value: "actions", label: "操作" },
-  { value: "chats", label: "聊天" },
+  { value: "action", label: "操作" },
+  { value: "project", label: "项目" },
+  { value: "chat", label: "聊天" },
+  { value: "settings", label: "设置" },
 ];
 
 export function filterEntries(
@@ -31,11 +37,12 @@ export function filterEntries(
   query: string,
   tab: PaletteTab,
 ): PaletteEntry[] {
-  const q = query.trim().toLowerCase();
+  const q = query.trim().normalize("NFKC").toLowerCase();
   return entries.filter((entry) => {
-    if (tab === "actions" && entry.kind !== "action") return false;
-    if (tab === "chats" && entry.kind !== "chat") return false;
+    if (tab !== "all" && entry.kind !== tab) return false;
     if (q.length === 0) return true;
-    return entry.label.toLowerCase().includes(q);
+    return [entry.label, ...(entry.terms ?? [])].some((text) =>
+      text.normalize("NFKC").toLowerCase().includes(q),
+    );
   });
 }

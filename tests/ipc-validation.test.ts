@@ -120,6 +120,7 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.skillsImport]: ["en", sessionId],
   [IPC.skillsToggle]: [sessionId, "example-skill", true],
   [IPC.settingsGet]: [],
+  [IPC.settingsSetPromptTemplates]: [[{ name: "audit", text: "Review {{file}}." }]],
   [IPC.settingsSave]: [settings],
   [IPC.settingsSetLogLevel]: ["debug"],
   [IPC.settingsSetNotificationsEnabled]: [false],
@@ -293,6 +294,17 @@ describe("IPC argument validation", () => {
     [IPC.settingsSetNotificationsEnabled, [0]],
     [IPC.settingsSelectModel, ["local", ""]],
     [IPC.settingsSetThinkingLevel, ["ultra"]],
+    [IPC.settingsSetPromptTemplates, [[{ name: "two words", text: "Review" }]]],
+    [IPC.settingsSetPromptTemplates, [[{ name: "audit", text: "  " }]]],
+    [
+      IPC.settingsSetPromptTemplates,
+      [
+        [
+          { name: "Audit", text: "One" },
+          { name: "audit", text: "Two" },
+        ],
+      ],
+    ],
     [IPC.settingsSave, [{ ...settings, thinkingLevels: [] }]],
     [IPC.settingsSave, [{ ...settings, toolRules: [{ toolName: "bash" }] }]],
     [IPC.settingsRevokeToolRule, [{ toolName: "write_file", pathPrefix: 7 }]],

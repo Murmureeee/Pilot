@@ -1,7 +1,7 @@
 // @env browser
 import { cn } from "cn";
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
-import { useState, type JSX } from "react";
+import type { JSX } from "react";
 
 import {
   Select,
@@ -13,7 +13,7 @@ import {
 } from "@renderer/components/ui/select";
 import { THEME_LABELS } from "@renderer/lib/constants";
 import { setLocale, t, useLocale } from "@renderer/lib/i18n";
-import { applyTheme, loadTheme } from "@renderer/lib/theme";
+import { applyTheme, useTheme } from "@renderer/lib/theme";
 import { LOCALE_DETAILS, SUPPORTED_LOCALES } from "@shared/constants";
 import type { Locale, ThemeSetting } from "@shared/contract";
 
@@ -27,7 +27,7 @@ const THEME_ICONS: Record<ThemeSetting, typeof SunIcon> = {
 
 export function AppearanceSettings(): JSX.Element {
   const locale = useLocale();
-  const [theme, setTheme] = useState<ThemeSetting>(loadTheme);
+  const theme = useTheme();
 
   return (
     <div className="settings-list">
@@ -46,10 +46,7 @@ export function AppearanceSettings(): JSX.Element {
                 key={value}
                 type="button"
                 aria-pressed={theme === value}
-                onClick={() => {
-                  setTheme(value);
-                  applyTheme(value);
-                }}
+                onClick={() => applyTheme(value)}
                 className={cn(
                   "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
                   theme === value && "bg-background text-foreground shadow-xs",

@@ -4,6 +4,10 @@ export const WORKSPACE_QUERY_LENGTH = 512;
 export const CONVERSATION_QUERY_LENGTH = 512;
 export const EXECUTION_APPROVAL_MODES = ["standard", "read-only", "full-access"] as const;
 export const PLAN_PROPOSAL_MAX_LENGTH = 12_000;
+export const PROMPT_TEMPLATE_PREFIX = "prompt-";
+export const PROMPT_TEMPLATE_NAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}_-]{0,39}$/u;
+export const PROMPT_TEMPLATE_TEXT_LIMIT = 12_000;
+export const PROMPT_TEMPLATE_LIMIT = 50;
 export const MENTION_CONTEXT_HEADING =
   "Selected mentions (file and folder paths are relative to the workspace):";
 export const DEFAULT_THINKING_LEVEL = "medium";

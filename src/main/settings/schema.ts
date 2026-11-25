@@ -1,7 +1,14 @@
 // @env node
 import { z } from "zod";
 
-import { EXECUTION_APPROVAL_MODES, LOG_LEVELS, THINKING_LEVELS } from "../../shared/constants";
+import {
+  EXECUTION_APPROVAL_MODES,
+  LOG_LEVELS,
+  PROMPT_TEMPLATE_LIMIT,
+  PROMPT_TEMPLATE_NAME_PATTERN,
+  PROMPT_TEMPLATE_TEXT_LIMIT,
+  THINKING_LEVELS,
+} from "../../shared/constants";
 import { normalizeModelCatalog } from "./models";
 import type { Settings } from "./types";
 
@@ -54,6 +61,16 @@ const importedPlugin = z.looseObject({
   serverIds: z.array(z.string()),
 });
 
+export const promptTemplatesSchema = z
+  .array(
+    z.strictObject({
+      name: z.string().trim().normalize("NFKC").toLowerCase().regex(PROMPT_TEMPLATE_NAME_PATTERN),
+      text: z.string().trim().min(1).max(PROMPT_TEMPLATE_TEXT_LIMIT),
+    }),
+  )
+  .max(PROMPT_TEMPLATE_LIMIT)
+  .refine((templates) => new Set(templates.map(({ name }) => name)).size === templates.length);
+
 const storedSettings = z.looseObject({
   providers: z.array(provider),
   activeProviderId: z.string().default(""),
@@ -76,6 +93,7 @@ const storedSettings = z.looseObject({
   logLevel: z.enum(LOG_LEVELS).optional().catch(undefined),
   notificationsEnabled: z.boolean().optional().catch(undefined),
   persona: optionalText,
+  promptTemplates: promptTemplatesSchema.optional(),
   skillsEnabled: z.array(z.string()).optional(),
   mcpServers: z.array(mcpServer).optional(),
   importedPlugins: z.array(importedPlugin).optional(),

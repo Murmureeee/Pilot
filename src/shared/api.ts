@@ -29,6 +29,7 @@ import type {
   PlanDecision,
   ProjectGitHead,
   PromptInput,
+  PromptTemplate,
   ProviderInput,
   ProviderTestResult,
   PublicSettings,
@@ -162,6 +163,7 @@ export interface PiApi {
   sessionRerunVerification(composerId: string, runId: string): Promise<VerificationResult>;
   settingsGet(): Promise<PublicSettings>;
   settingsSave(input: SettingsInput): Promise<PublicSettings>;
+  settingsSetPromptTemplates(templates: PromptTemplate[]): Promise<PublicSettings>;
   settingsSetLogLevel(level: LogLevel): Promise<void>;
   settingsSetNotificationsEnabled(enabled: boolean): Promise<void>;
   settingsSelectModel(providerId: string, modelId: string): Promise<PublicSettings>;

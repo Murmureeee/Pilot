@@ -1,6 +1,8 @@
 // @env browser
 // 主题（FR-5.5：亮/暗/跟随系统）：documentElement 的 .dark class + localStorage 持久化；
 // 切换时同步原生标题栏窗控颜色（system 档由主进程 nativeTheme 解析）。
+import { useSyncExternalStore } from "react";
+
 import type { ThemeSetting } from "@shared/contract";
 
 const STORAGE_KEY = "pilot-theme";
@@ -19,6 +21,16 @@ export function applyTheme(theme: ThemeSetting): void {
     (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", dark);
   void window.pi?.setTitlebarTheme(theme).catch(() => {});
+  window.dispatchEvent(new Event("pilot-theme-change"));
+}
+
+function subscribeTheme(onChange: () => void): () => void {
+  window.addEventListener("pilot-theme-change", onChange);
+  return () => window.removeEventListener("pilot-theme-change", onChange);
+}
+
+export function useTheme(): ThemeSetting {
+  return useSyncExternalStore(subscribeTheme, loadTheme);
 }
 
 /** 跟随系统时监听系统主题变化（返回退订函数） */

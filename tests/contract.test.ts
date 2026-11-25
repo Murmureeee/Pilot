@@ -42,6 +42,10 @@ describe("IPC contract", () => {
     expect(IPC.settingsSetThinkingLevel).toBe("settings:set-thinking-level");
   });
 
+  it("exposes a dedicated settings route for prompt templates", () => {
+    expect(IPC.settingsSetPromptTemplates).toBe("settings:set-prompt-templates");
+  });
+
   it("exposes Phase 3 wrap-up channels (重命名/删除/清空队列/数据目录/标题栏主题)", () => {
     expect(IPC.sessionRename).toBe("session:rename");
     expect(IPC.sessionDelete).toBe("session:delete");

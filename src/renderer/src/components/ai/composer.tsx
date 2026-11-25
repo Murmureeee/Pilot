@@ -65,17 +65,16 @@ import {
 import type { ComposerSelection } from "@renderer/lib/composer/types";
 import {
   APPROVAL_MODE_OPTIONS,
-  COMPOSER_COMMANDS,
   COMPOSER_SURFACE_CLASS,
   PERMISSION_ATTENTION_TEXT,
 } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { loadSendKey } from "@renderer/lib/preferences";
 import type {
-  ComposerCommand,
   ComposerShortcuts,
   ComposerSuggestion,
   ComposerToolbarMenu,
+  WorkbenchCommand,
 } from "@renderer/lib/types";
 import {
   selectApprovalMode,
@@ -131,11 +130,13 @@ export function Composer({
   workingDirectory,
   shortcutRef,
   showStopHint,
+  commands,
 }: {
   composerId: string;
   workingDirectory: string | null;
   shortcutRef: Ref<ComposerShortcuts>;
   showStopHint: boolean;
+  commands: readonly WorkbenchCommand[];
 }): JSX.Element {
   const locale = useLocale();
   const status = useAgentStore((s) => s.status);
@@ -176,10 +177,6 @@ export function Composer({
   const updateSessionSettings = useAgentStore((s) => s.updateSessionSettings);
   const savedMode = useAgentStore((s) => selectComposerSettings(s).approvalMode);
   const planning = useAgentStore((s) => Boolean(selectComposerSettings(s).planMode));
-  const newSession = useAgentStore((s) => s.newSession);
-  const archiveSession = useAgentStore((s) => s.setSessionArchived);
-  const setView = useAgentStore((s) => s.setView);
-  const setSettingsSection = useAgentStore((s) => s.setSettingsSection);
   const selectProject = useAgentStore((s) => s.selectProject);
   const choosingProject = useAgentStore((s) => s.choosingProject);
   const projectError = useAgentStore((s) => s.projectError);
@@ -290,25 +287,22 @@ export function Composer({
     }
   };
 
-  const chooseCommand = async (command: ComposerCommand): Promise<void> => {
-    if (trigger?.kind !== "command" || !editor.current) return;
-    const range = trigger.range.cloneRange();
-    if (command.id !== "plan") range.setEnd(editor.current, editor.current.childNodes.length);
-    selectComposerRange(editor.current, range);
-    document.execCommand("delete");
-    readEditor();
+  const runCommand = async (
+    command: WorkbenchCommand,
+    range: Range,
+    argument?: string,
+  ): Promise<void> => {
+    const field = editor.current;
+    if (!field) return;
+    const replace = (text = ""): void => {
+      if (!field.isConnected || !field.contains(range.commonAncestorContainer)) return;
+      selectComposerRange(field, range);
+      document.execCommand(text ? "insertText" : "delete", false, text);
+      readEditor();
+    };
     try {
-      await command.action({
-        newChat: newSession,
-        archiveChat: () => (sessionId ? archiveSession(sessionId, true) : Promise.resolve()),
-        compactContext: () => useAgentStore.getState().compactContext(composerId),
-        togglePlanMode: () => window.pi.sessionSetPlanMode(composerId, !planning),
-        openMenu: setToolbarMenu,
-        openSettings: (section) => {
-          setSettingsSection(section);
-          setView("settings");
-        },
-      });
+      if (!command.insertsPrompt) replace();
+      await command.run({ argument, insert: replace });
     } catch (error) {
       setSendError(error instanceof Error ? error.message : String(error));
     }
@@ -335,14 +329,17 @@ export function Composer({
       select: () => chooseMention(mention),
     });
   };
-  const commands =
+  const matchedCommands =
     rawTrigger?.kind === "command"
-      ? COMPOSER_COMMANDS.filter((command) => {
-          if (command.requiresSession && !sessionId) return false;
+      ? commands.filter((command) => {
+          if (!command.slash) return false;
           const query = rawTrigger.query;
-          return [command.id, command.label, t(command.label, locale)].some((label) =>
-            matchesComposerQuery(label, query),
-          );
+          return [
+            command.slash,
+            ...(command.slashAliases ?? []),
+            command.label,
+            t(command.label, locale),
+          ].some((label) => matchesComposerQuery(label, query));
         })
       : [];
   const matchedSkills = rawTrigger
@@ -355,18 +352,17 @@ export function Composer({
       })
     : [];
   if (trigger?.kind === "command") {
-    for (const command of commands) {
+    const term = trigger.query.normalize("NFKC").toLowerCase();
+    for (const command of matchedCommands) {
+      const name = command.slashAliases?.find((alias) => alias === term) ?? command.slash;
       options.push({
         id: command.id,
         label: t(command.label, locale),
-        detail: t(
-          command.id === "plan" && planning ? "退出计划模式。" : command.description,
-          locale,
-        ),
-        shortcut: "/" + command.id,
+        detail: command.description && t(command.description, locale),
+        shortcut: "/" + name,
         icon: command.icon,
-        attached: command.id === "plan" && planning,
-        select: () => void chooseCommand(command),
+        attached: command.checked,
+        select: () => void runCommand(command, trigger.range.cloneRange()),
       });
     }
   }
@@ -425,13 +421,23 @@ export function Composer({
   const localizedLookupError = lookupError ? localizeError(lookupError, locale) : undefined;
   const commandPending =
     rawTrigger?.kind === "command" &&
-    (!isDismissed || commands.length > 0 || matchedSkills.length > 0);
-  const isCompact = draft.mentions.length === 0 && compactFocus(draft.text) !== undefined;
+    (!isDismissed || matchedCommands.length > 0 || matchedSkills.length > 0);
+  const commandText =
+    draft.mentions.length === 0 ? draft.text.trim().normalize("NFKC").toLowerCase() : "";
+  const focus = compactFocus(commandText ? draft.text : "");
+  const standalone = commandText.startsWith("/")
+    ? commands.find(({ id, slash, slashAliases }) =>
+        focus === undefined
+          ? slash && [slash, ...(slashAliases ?? [])].includes(commandText.slice(1))
+          : id === "compact",
+      )
+    : undefined;
+  const shouldRunCommand = Boolean(standalone) || focus !== undefined;
   const canSend =
     status !== "stopping" &&
     !composing &&
     draft.text.trim().length > 0 &&
-    (!commandPending || isCompact);
+    (shouldRunCommand ? Boolean(standalone) : !commandPending);
   const placeholder = busy
     ? t("输入插话消息…", locale)
     : planning
@@ -440,6 +446,12 @@ export function Composer({
 
   const send = async (): Promise<void> => {
     if (!canSend || submitting) return;
+    if (standalone && editor.current) {
+      const range = document.createRange();
+      range.selectNodeContents(editor.current);
+      await runCommand(standalone, range, focus);
+      return;
+    }
     setSubmitting(true);
     setSendError(null);
     setBlockedSend(null);
@@ -493,7 +505,21 @@ export function Composer({
     readEditor();
   };
 
-  useImperativeHandle(shortcutRef, (): ComposerShortcuts => ({ cycleMode, recallMessage }));
+  const appendPrompt = (text: string): void => {
+    const field = editor.current;
+    if (!field) return;
+    const separator = draft.text.trim() ? "\n\n" : "";
+    selectComposerRange(field, null);
+    document.execCommand("insertText", false, separator + text);
+    readEditor();
+  };
+
+  useImperativeHandle(shortcutRef, (): ComposerShortcuts => ({
+    cycleMode,
+    recallMessage,
+    openMenu: setToolbarMenu,
+    appendPrompt,
+  }));
 
   const onSuggestionKey = (event: KeyboardEvent<HTMLElement>): boolean => {
     if (!trigger && !pickerOpen) return false;
@@ -523,7 +549,18 @@ export function Composer({
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.defaultPrevented || composing || event.nativeEvent.isComposing) return;
     const action = composerEnterAction(event, loadSendKey());
-    if (!(isCompact && action === "send") && onSuggestionKey(event)) return;
+    if (
+      standalone &&
+      highlighted === null &&
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      (focus === undefined || action === "send")
+    ) {
+      event.preventDefault();
+      void send();
+      return;
+    }
+    if (onSuggestionKey(event)) return;
     const shortcut = composerEditingShortcut(event, draft.text.length === 0);
     if (shortcut === "cycle-approval-mode") {
       event.preventDefault();

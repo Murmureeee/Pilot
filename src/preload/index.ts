@@ -121,6 +121,8 @@ const api: PiApi = {
     ipcRenderer.invoke(IPC.sessionRerunVerification, id, runId),
   settingsGet: () => ipcRenderer.invoke(IPC.settingsGet),
   settingsSave: (input: SettingsInput) => ipcRenderer.invoke(IPC.settingsSave, input),
+  settingsSetPromptTemplates: (templates) =>
+    ipcRenderer.invoke(IPC.settingsSetPromptTemplates, templates),
   settingsSetLogLevel: (level) => ipcRenderer.invoke(IPC.settingsSetLogLevel, level),
   settingsSetNotificationsEnabled: (enabled) =>
     ipcRenderer.invoke(IPC.settingsSetNotificationsEnabled, enabled),

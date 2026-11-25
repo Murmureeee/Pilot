@@ -30,7 +30,7 @@ import {
 } from "@renderer/components/ui/message-scroller";
 import { useTranscriptLocation } from "@renderer/hooks/use-transcript-location";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
-import type { ChatRow, ComposerShortcuts } from "@renderer/lib/types";
+import type { ChatRow, ComposerShortcuts, WorkbenchCommand } from "@renderer/lib/types";
 import { selectPlanReview, useAgentStore } from "@renderer/stores/agent";
 import type { UiMessage, UiPart } from "@shared/contract";
 import { visibleMessageText } from "@shared/mentions";
@@ -61,11 +61,13 @@ export function ChatView({
   projectDirectory,
   shortcutRef,
   showStopHint,
+  commands,
 }: {
   workingDirectory: string | null;
   projectDirectory: string | null;
   shortcutRef: Ref<ComposerShortcuts>;
   showStopHint: boolean;
+  commands: readonly WorkbenchCommand[];
 }): JSX.Element {
   const locale = useLocale();
   const messages = useAgentStore((s) => s.messages);
@@ -414,6 +416,7 @@ export function ChatView({
               workingDirectory={workingDirectory}
               shortcutRef={shortcutRef}
               showStopHint={showStopHint}
+              commands={commands}
             />
           )}
         </Activity>

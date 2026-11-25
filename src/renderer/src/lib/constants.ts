@@ -1,14 +1,4 @@
 // @env browser
-import {
-  ArchiveIcon,
-  ClipboardListIcon,
-  CpuIcon,
-  Minimize2Icon,
-  PlugIcon,
-  ShieldCheckIcon,
-  SquarePenIcon,
-} from "lucide-react";
-
 import type {
   ApprovalMode,
   CommandDanger,
@@ -27,67 +17,12 @@ import type {
 import type { ExternalImportKind } from "@shared/imports";
 
 import type {
-  ComposerCommand,
   ComposerShortcut,
   SendKey,
   SessionRowStatus,
   SettingsSection,
   ShortcutGroup,
 } from "./types";
-
-export const COMPOSER_COMMANDS: readonly ComposerCommand[] = [
-  {
-    id: "plan",
-    label: "计划模式",
-    description: "先读取和搜索，再提交计划供你确认。",
-    icon: ClipboardListIcon,
-    action: (actions) => actions.togglePlanMode(),
-  },
-  {
-    id: "compact",
-    label: "压缩上下文",
-    description: "整理较早的对话，可在 /compact 后填写保留重点",
-    icon: Minimize2Icon,
-    requiresSession: true,
-    action: (actions) => actions.compactContext(),
-  },
-  {
-    id: "new",
-    label: "新聊天",
-    description: "打开一个空白会话",
-    icon: SquarePenIcon,
-    action: (actions) => actions.newChat(),
-  },
-  {
-    id: "model",
-    label: "选择模型",
-    description: "浏览当前提供方的可用模型",
-    icon: CpuIcon,
-    action: (actions) => actions.openMenu("model"),
-  },
-  {
-    id: "permissions",
-    label: "权限模式",
-    description: "调整 Agent 操作的审批方式",
-    icon: ShieldCheckIcon,
-    action: (actions) => actions.openMenu("permissions"),
-  },
-  {
-    id: "mcp",
-    label: "MCP 服务",
-    description: "打开 MCP 服务设置",
-    icon: PlugIcon,
-    action: (actions) => actions.openSettings("mcp"),
-  },
-  {
-    id: "archive",
-    label: "归档当前聊天",
-    description: "把聊天移到已归档列表",
-    icon: ArchiveIcon,
-    requiresSession: true,
-    action: (actions) => actions.archiveChat(),
-  },
-];
 
 // 首页的起步任务：label 是按钮文字，prompt 是填进输入框的草稿。
 export const STARTER_TASKS: readonly { label: string; prompt: string }[] = [
@@ -131,7 +66,7 @@ export const SETTINGS_SECTION_DESCRIPTIONS: Record<SettingsSection, string> = {
   appearance: "主题和界面语言。",
   permissions: "决定 Agent 写入文件、运行命令和调用 MCP 工具前是否需要你确认。",
   providers: "管理模型服务、密钥和聊天中可选的模型。",
-  persona: "告诉 Agent 你的偏好和约定，它会在每次任务中遵循。",
+  persona: "管理 Agent 的自定义指令和可重复使用的提示词模板。",
   shortcuts: "当前可用的键盘操作。",
   archived: "查看、恢复或永久删除已归档的聊天。",
   data: "本地存储位置和诊断日志。",
@@ -177,7 +112,7 @@ export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[
     "Anthropic",
     "OpenAI",
   ],
-  persona: ["自定义指令", "指令生效顺序", "AGENTS.md"],
+  persona: ["自定义指令", "提示词模板", "指令生效顺序", "AGENTS.md"],
   shortcuts: [
     "Ctrl",
     "Shift",

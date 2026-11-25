@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "rea
 import { ChatHeader } from "@renderer/components/ai/chat-header";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
 import { FeedbackBar } from "@renderer/components/ai/feedback-bar";
+import { PromptTemplateDialog } from "@renderer/components/ai/prompt-template-dialog";
 import { ReviewChanges } from "@renderer/components/ai/review-changes";
 import { ReviewPanel } from "@renderer/components/ai/review-panel";
 import { TopBar } from "@renderer/components/ai/top-bar";
@@ -13,6 +14,7 @@ import { WorkspaceReferencePanel } from "@renderer/components/ai/workspace-refer
 import { useGitReview } from "@renderer/hooks/use-git-review";
 import { useStopShortcut } from "@renderer/hooks/use-stop-shortcut";
 import { useVerificationStatus } from "@renderer/hooks/use-verification-status";
+import { useWorkbenchCommands } from "@renderer/hooks/use-workbench-commands";
 import { REVIEW_THREE_COLUMN_WIDTH, REVIEW_TWO_COLUMN_WIDTH } from "@renderer/lib/constants";
 import {
   changesForReply,
@@ -28,10 +30,17 @@ import {
   saveSidebarCollapsed,
   saveSidebarWidth,
 } from "@renderer/lib/preferences";
+import { promptParameters } from "@renderer/lib/prompt-templates";
 import { reviewLayout } from "@renderer/lib/review-layout";
 import { popupOwnsShortcut } from "@renderer/lib/shortcut-overlays";
 import { applyTheme, loadTheme, watchSystemTheme } from "@renderer/lib/theme";
-import type { ComposerShortcut, ComposerShortcuts } from "@renderer/lib/types";
+import type {
+  ComposerAction,
+  ComposerShortcut,
+  ComposerShortcuts,
+  PromptTemplateRequest,
+  ReviewTab,
+} from "@renderer/lib/types";
 import { windowShortcutAction } from "@renderer/lib/window-shortcuts";
 import {
   selectPlanReview,
@@ -66,10 +75,8 @@ export default function App(): JSX.Element {
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
   const [preferredReviewWidth, setReviewWidth] = useState(loadReviewWidth);
   const [openSidebarScope, setOpenSidebarScope] = useState<string | null>(null);
-  const [composerAction, setComposerAction] = useState<Exclude<
-    ComposerShortcut,
-    "stop-run" | "find-chat"
-  > | null>(null);
+  const [composerAction, setComposerAction] = useState<ComposerAction | null>(null);
+  const [templateRequest, setTemplateRequest] = useState<PromptTemplateRequest | null>(null);
   const composerShortcuts = useRef<ComposerShortcuts>(null);
   const canEdit = useAgentStore((state) =>
     Boolean(state.composerId && !state.pendingPermissions.length && !selectPlanReview(state)),
@@ -138,6 +145,24 @@ export default function App(): JSX.Element {
     });
   }, []);
 
+  const editComposer = useCallback((action: ComposerAction): void => {
+    useAgentStore.getState().setView("chat");
+    setOpenSidebarScope(null);
+    if (window.innerWidth < REVIEW_TWO_COLUMN_WIDTH) useReviewStore.getState().close();
+    setComposerAction(action);
+  }, []);
+
+  const openCommandReview = (target: ReviewTab): void => {
+    const agent = useAgentStore.getState();
+    if (!agent.composerId) return;
+    const trigger = document.activeElement;
+    agent.setView("chat");
+    setOpenSidebarScope(null);
+    useReviewStore
+      .getState()
+      .show(agent.composerId, target, trigger instanceof HTMLElement ? trigger : undefined);
+  };
+
   const runComposerShortcut = useCallback(
     (shortcut: ComposerShortcut): void => {
       if (!enabledComposerShortcuts[shortcut]) return;
@@ -151,25 +176,30 @@ export default function App(): JSX.Element {
         if (store.activeRun?.runId === stoppableRunId) store.abort(store.activeRun);
         return;
       }
-      store.setView("chat");
-      setOpenSidebarScope(null);
-      if (window.innerWidth < REVIEW_TWO_COLUMN_WIDTH) useReviewStore.getState().close();
-      setComposerAction(shortcut);
+      editComposer({ shortcut });
     },
-    [clear, enabledComposerShortcuts, openChatFind, stoppableRunId],
+    [clear, editComposer, enabledComposerShortcuts, openChatFind, stoppableRunId],
   );
 
   useEffect(() => {
     if (!composerAction || !conversationVisible) return;
     const frame = requestAnimationFrame(() => {
+      setComposerAction(null);
+      if (
+        "composerId" in composerAction &&
+        useAgentStore.getState().composerId !== composerAction.composerId
+      )
+        return;
       document
         .querySelector<HTMLElement>(
           "main :is([data-permission-card], [data-plan-review], [data-composer-editor])",
         )
         ?.focus();
-      if (composerAction === "cycle-approval-mode") composerShortcuts.current?.cycleMode();
-      if (composerAction === "recall-message") composerShortcuts.current?.recallMessage();
-      setComposerAction(null);
+      const editor = composerShortcuts.current;
+      if ("menu" in composerAction) editor?.openMenu(composerAction.menu);
+      else if ("prompt" in composerAction) editor?.appendPrompt(composerAction.prompt);
+      else if (composerAction.shortcut === "cycle-approval-mode") editor?.cycleMode();
+      else if (composerAction.shortcut === "recall-message") editor?.recallMessage();
     });
     return () => cancelAnimationFrame(frame);
   }, [composerAction, conversationVisible]);
@@ -200,6 +230,19 @@ export default function App(): JSX.Element {
     };
   }, [revealRequest]);
   const git = useGitReview(canReview ? composerId : null, workingDirectory);
+  const commands = useWorkbenchCommands({
+    canEdit,
+    canReview,
+    hasGit: Boolean(git.view),
+    shortcuts: enabledComposerShortcuts,
+    runShortcut: runComposerShortcut,
+    editComposer,
+    openReview: openCommandReview,
+    requestTemplate: (template, insert) => {
+      if (promptParameters(template.text).length) setTemplateRequest({ template, insert });
+      else insert(template.text);
+    },
+  });
   const verificationStatus = useVerificationStatus(canReview ? composerId : null);
   const messages = useAgentStore((state) => (git.view ? null : state.messages));
   const latestReply = useMemo(
@@ -441,6 +484,7 @@ export default function App(): JSX.Element {
                     projectDirectory={projectDirectory}
                     shortcutRef={composerShortcuts}
                     showStopHint={showHint}
+                    commands={commands}
                   />
                 </>
               ) : (
@@ -497,12 +541,10 @@ export default function App(): JSX.Element {
         </div>
       </div>
 
-      <CommandPalette
-        canReview={view === "chat" && canReview}
-        composerShortcuts={enabledComposerShortcuts}
-        onComposerShortcut={runComposerShortcut}
-        onOpenChatFind={openChatFind}
-      />
+      <CommandPalette commands={commands} onOpenChatFind={openChatFind} />
+      {templateRequest && (
+        <PromptTemplateDialog request={templateRequest} onClose={() => setTemplateRequest(null)} />
+      )}
     </div>
   );
 }

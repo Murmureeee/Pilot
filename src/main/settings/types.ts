@@ -3,6 +3,7 @@ import type {
   ApprovalMode,
   CommandShell,
   LogLevel,
+  PromptTemplate,
   ProviderFields,
   ThinkingLevel,
   ToolRule,
@@ -39,6 +40,7 @@ export interface Settings {
   logLevel?: LogLevel;
   notificationsEnabled?: boolean;
   persona?: string;
+  promptTemplates?: PromptTemplate[];
   skillsEnabled?: string[];
   mcpServers?: McpServerConfig[];
   importedPlugins?: ImportedPlugin[];

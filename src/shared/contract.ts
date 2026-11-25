@@ -84,6 +84,7 @@ export const IPC = {
   skillsToggle: "skills:toggle",
   settingsGet: "settings:get",
   settingsSave: "settings:save",
+  settingsSetPromptTemplates: "settings:set-prompt-templates",
   settingsSetLogLevel: "settings:set-log-level",
   settingsSetNotificationsEnabled: "settings:set-notifications-enabled",
   settingsSelectModel: "settings:select-model",
@@ -758,6 +759,11 @@ export interface SettingsRecovery {
   path: string;
 }
 
+export interface PromptTemplate {
+  name: string;
+  text: string;
+}
+
 export interface PublicSettings {
   providers: PublicProvider[];
   activeProviderId: string;
@@ -771,6 +777,7 @@ export interface PublicSettings {
   notificationsEnabled: boolean;
   /** 全局人设/自定义指令（设置页「个性化」编辑） */
   persona: string;
+  promptTemplates: PromptTemplate[];
   /** 启用的技能 id 列表 */
   skillsEnabled: string[];
   recovery?: SettingsRecovery;

@@ -5,7 +5,9 @@ import { Button } from "@renderer/components/ui/button";
 import { Textarea } from "@renderer/components/ui/textarea";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
+import type { PromptTemplate } from "@shared/contract";
 
+import { PromptTemplateSettings } from "./PromptTemplateSettings";
 import { SettingsGroup } from "./SettingsGroup";
 
 const INSTRUCTION_ORDER = [
@@ -17,8 +19,10 @@ const INSTRUCTION_ORDER = [
 
 export function PersonalizationSettings({
   savedInstructions,
+  templates,
 }: {
   savedInstructions: string;
+  templates: readonly PromptTemplate[];
 }): JSX.Element {
   const locale = useLocale();
   const savePersona = useAgentStore((s) => s.savePersona);
@@ -85,6 +89,7 @@ export function PersonalizationSettings({
           </p>
         )}
       </div>
+      <PromptTemplateSettings templates={templates} />
       <SettingsGroup
         id="settings-instruction-order"
         title={t("指令生效顺序", locale)}

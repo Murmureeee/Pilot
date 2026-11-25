@@ -21,20 +21,34 @@ describe("filterEntries", () => {
   });
 
   it("tab=actions keeps only actions", () => {
-    const result = filterEntries(ENTRIES, "", "actions");
+    const result = filterEntries(ENTRIES, "", "action");
     expect(result.every((e) => e.kind === "action")).toBe(true);
     expect(result).toHaveLength(2);
   });
 
   it("tab=chats keeps only chats", () => {
-    const result = filterEntries(ENTRIES, "", "chats");
+    const result = filterEntries(ENTRIES, "", "chat");
     expect(result.every((e) => e.kind === "chat")).toBe(true);
     expect(result).toHaveLength(2);
   });
 
   it("combines query with tab filter", () => {
-    const result = filterEntries(ENTRIES, "开发", "chats");
+    const result = filterEntries(ENTRIES, "开发", "chat");
     expect(result.map((e) => e.id)).toEqual(["s2"]);
+  });
+
+  it("finds slash commands, project paths and settings keywords in their categories", () => {
+    const entries: PaletteEntry[] = [
+      { kind: "action", id: "clear", label: "New chat", terms: ["/clear"] },
+      { kind: "project", id: "p1", label: "Pilot", terms: ["D:/clients/Pilot"] },
+      { kind: "settings", id: "persona", label: "Personalization", terms: ["Prompt templates"] },
+    ];
+    expect(filterEntries(entries, "/CLEAR", "all").map(({ id }) => id)).toEqual(["clear"]);
+    expect(filterEntries(entries, "clients", "project").map(({ id }) => id)).toEqual(["p1"]);
+    expect(filterEntries(entries, "templates", "settings").map(({ id }) => id)).toEqual([
+      "persona",
+    ]);
+    expect(filterEntries(entries, "/clear", "chat")).toEqual([]);
   });
 });
 

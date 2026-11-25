@@ -5,6 +5,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type {
   FileChangeSummary,
   GitChangesView,
+  PromptTemplate,
   TranscriptLocation,
   UiMessage,
   UiPart,
@@ -33,22 +34,24 @@ export interface ComposerTrigger {
   query: string;
 }
 
-interface ComposerCommandActions {
-  newChat(): Promise<void>;
-  archiveChat(): Promise<void>;
-  compactContext(): Promise<void>;
-  togglePlanMode(): Promise<void>;
-  openMenu(menu: ComposerToolbarMenu): void;
-  openSettings(section: SettingsSection): void;
-}
-
-export interface ComposerCommand {
+export interface WorkbenchCommand {
   id: string;
   label: string;
-  description: string;
+  description?: string;
   icon: LucideIcon;
-  requiresSession?: boolean;
-  action(actions: ComposerCommandActions): void | Promise<void>;
+  slash?: string;
+  slashAliases?: readonly string[];
+  shortcut?: string;
+  checked?: boolean;
+  attention?: boolean;
+  palette?: false;
+  insertsPrompt?: boolean;
+  run(input?: { argument?: string; insert?: (text: string) => void }): void | Promise<void>;
+}
+
+export interface PromptTemplateRequest {
+  template: PromptTemplate;
+  insert(text: string): void;
 }
 
 export interface ComposerSuggestion {
@@ -74,7 +77,14 @@ export type ComposerShortcut =
 export interface ComposerShortcuts {
   cycleMode(): void;
   recallMessage(): void;
+  openMenu(menu: ComposerToolbarMenu): void;
+  appendPrompt(text: string): void;
 }
+
+export type ComposerAction =
+  | { shortcut: Exclude<ComposerShortcut, "stop-run" | "find-chat"> }
+  | { menu: ComposerToolbarMenu; composerId: string }
+  | { prompt: string; composerId: string };
 
 export interface ComposerModelControlsProps {
   menu: ComposerToolbarMenu | null;

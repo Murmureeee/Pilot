@@ -1,7 +1,8 @@
 // @env node
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -13,10 +14,12 @@ import { stopProcessTree } from "./windows-process.mjs";
 import { startModelFixture } from "./windows-ui/model.mjs";
 import {
   verifyApprovals,
+  verifyCommandsAndTemplates,
   verifyFirstRun,
   verifyLayouts,
   verifyPlanDraft,
   verifyPlanExecution,
+  verifyRestoredPromptTemplates,
   verifyRestoredSettings,
   verifySearchAndExport,
   verifySettings,
@@ -117,10 +120,16 @@ const temp = realpathSync.native(tmpdir());
 const scratch = realpathSync.native(mkdtempSync(join(temp, "pilot-windows-ui-")));
 const profile = join(scratch, "profile");
 const project = join(scratch, "fixture-project");
+const commandProject = join(scratch, "commands-project");
 let model;
 try {
   mkdirSync(profile);
   mkdirSync(project);
+  mkdirSync(commandProject);
+  execFileSync("git", ["init", "-q", commandProject]);
+  writeFileSync(join(commandProject, "package.json"), JSON.stringify({
+    scripts: { test: 'node -e "console.log(123456789)"' },
+  }));
   model = await startModelFixture();
   await withApp(profile, async (page, window, app) => {
     await runScene("First-run model configuration", () =>
@@ -150,6 +159,14 @@ try {
     );
     await runScene("Restore and execute the approved plan", () =>
       verifyPlanExecution(page, model, project),
+    );
+    await runScene("Run shared commands and expand a prompt template", () =>
+      verifyCommandsAndTemplates(page, app, model, project, commandProject),
+    );
+  });
+  await withApp(profile, async (page) => {
+    await runScene("Restore, edit, and remove a prompt template", () =>
+      verifyRestoredPromptTemplates(page),
     );
   });
 } finally {

@@ -142,6 +142,7 @@ export function mergeSettingsInput(current: Settings, input: SettingsInput): Set
     notificationsEnabled: current.notificationsEnabled,
     // 人设传 "" 即清空（空串不是 nullish，不会被 ?? 吞掉）；技能启停整表提交
     persona: input.persona ?? current.persona ?? "",
+    promptTemplates: current.promptTemplates,
     skillsEnabled: input.skillsEnabled ?? current.skillsEnabled ?? [],
     mcpServers: current.mcpServers,
     importedPlugins: current.importedPlugins,
@@ -176,6 +177,7 @@ export function toPublicSettings(settings: Settings): PublicSettings {
     logLevel: getLogLevel(settings),
     notificationsEnabled: settings.notificationsEnabled !== false,
     persona: settings.persona ?? "",
+    promptTemplates: settings.promptTemplates ?? [],
     skillsEnabled: settings.skillsEnabled ?? [],
     recovery: recoveryPath
       ? { status: settings.recoveryBlocked ? "blocked" : "recovered", path: recoveryPath }

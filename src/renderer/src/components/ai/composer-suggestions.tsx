@@ -109,23 +109,26 @@ export function ComposerSuggestions({
                 aria-selected={index === activeIndex}
                 aria-description={group}
                 className={cn(
-                  "flex h-7 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[13px] leading-5 whitespace-nowrap",
+                  "flex min-h-7 cursor-pointer items-start gap-2 rounded-md px-2.5 py-1 text-[13px] leading-5",
                   index === activeIndex && "bg-accent",
                 )}
                 onMouseMove={() => setActiveIndex(index)}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={select}
               >
-                <Icon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="flex min-w-0 flex-1 items-baseline gap-2">
-                  <span
-                    className={cn("min-w-0 truncate", detail && "max-w-[48%] shrink-0")}
-                    title={name}
-                  >
+                <Icon
+                  aria-hidden="true"
+                  className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+                />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate" title={name}>
                     {name}
                   </span>
                   {detail && (
-                    <span className="min-w-0 truncate text-xs text-muted-foreground" title={detail}>
+                    <span
+                      className="line-clamp-2 text-xs wrap-anywhere text-muted-foreground"
+                      title={detail}
+                    >
                       {detail}
                     </span>
                   )}
@@ -133,12 +136,12 @@ export function ComposerSuggestions({
                 {shortcut && (
                   <kbd
                     title={shortcut}
-                    className="max-w-[26%] shrink-0 truncate font-mono text-[11px] text-muted-foreground"
+                    className="max-w-[32%] shrink-0 truncate font-mono text-[11px] text-muted-foreground"
                   >
                     {shortcut}
                   </kbd>
                 )}
-                {attached && <CheckIcon aria-hidden="true" className="size-3.5 shrink-0" />}
+                {attached && <CheckIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />}
               </div>
             </Fragment>
           ),

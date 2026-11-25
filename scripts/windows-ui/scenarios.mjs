@@ -19,6 +19,9 @@ const plannedFile = "plan-mode.txt";
 const revisedPlan = "1. Write the revised fixture note.\n2. Verify the file contents.";
 const planningDraft = "Keep this draft while a plan awaits confirmation.";
 const shellSearch = 'Write-Output "PilotFindCommand"';
+const templateName = "audit-note";
+const templateCommand = "/prompt-" + templateName;
+const templateText = "Check {{file}} against {{rule}} and summarize {{file}}.";
 
 const locales = [
   {
@@ -314,10 +317,11 @@ async function verifyReviewLayout(page, locale, overlay) {
 
 async function verifyFindLayout(page) {
   await page.keyboard.press("Control+k");
-  const palette = page.getByRole("dialog");
+  const palette = page.getByRole("dialog", { name: /^(Search|搜索)$/ });
   await assertFits(palette);
   await assertFits(palette.getByRole("textbox"));
   await assertFits(palette.getByRole("combobox"));
+  for (const tab of await palette.getByRole("button", { pressed: false }).all()) await assertFits(tab);
   await page.keyboard.press("Escape");
   await palette.waitFor({ state: "hidden" });
 
@@ -329,6 +333,15 @@ async function verifyFindLayout(page) {
   for (const control of await bar.getByRole("button").all()) await assertFits(control);
   await field.press("Escape");
   await bar.waitFor({ state: "hidden" });
+  await page.waitForFunction(() => document.activeElement?.id === "review-trigger");
+
+  const composer = editor(page);
+  const original = await composer.innerText();
+  await composer.fill("/permissions");
+  await composer.press("End");
+  await assertFits(page.getByRole("option", { selected: true }).filter({ hasText: "/permissions" }));
+  await composer.press("Escape");
+  await composer.fill(original);
 }
 
 export async function verifyLayouts(page, window) {
@@ -674,7 +687,181 @@ export async function verifySearchAndExport(page, app, model, project) {
   assert.ok(!existsSync(destination));
   await exportItem(false);
   await page.getByText("Chat exported", { exact: true }).waitFor();
+  await page.getByRole("menuitem", { name: "Export Markdown…", exact: true }).waitFor({ state: "hidden" });
+  await button(page.locator("main"), "More actions").focus();
   const markdown = readFileSync(destination, "utf8");
   for (const value of ["# Desktop stream scene", "## User", "## Assistant", "**Search fixture**", shellSearch, approvedFile])
     assert.ok(markdown.includes(value), "Markdown must include " + value);
+}
+
+async function choosePalette(page, query, name, category = /^(All|全部)$/) {
+  await page.keyboard.press("Control+k");
+  const palette = page.getByRole("dialog", { name: /^(Search|搜索)$/ });
+  await button(palette, category).click();
+  const search = palette.getByRole("textbox");
+  await search.fill(query);
+  await palette.getByRole("option", { name, selected: true }).waitFor();
+  await search.press("Enter");
+  await palette.waitFor({ state: "hidden" });
+}
+
+async function chooseSlash(page, command) {
+  const composer = editor(page);
+  await composer.fill(command);
+  await composer.press("End");
+  await page
+    .getByRole("option", { selected: true })
+    .getByText(command, { exact: true })
+    .waitFor();
+  await composer.press("Enter");
+}
+
+async function waitForProjectDraft(page, directory) {
+  await page.waitForFunction(async (project) => {
+    const snapshot = await window.pi.getSnapshot();
+    return !snapshot.sessionId && snapshot.draftWorkingDirectory === project;
+  }, directory);
+}
+
+export async function verifyCommandsAndTemplates(page, app, model, originalProject, project) {
+  await app.evaluate(({ dialog }, folder) => {
+    const original = dialog.showOpenDialog;
+    dialog.showOpenDialog = async () => {
+      dialog.showOpenDialog = original;
+      return { canceled: false, filePaths: [folder] };
+    };
+  }, project);
+  await choosePalette(page, "open-project", /^Open project…/);
+  await waitForProjectDraft(page, project);
+  await choosePalette(page, basename(originalProject), /^fixture-project/, "Projects");
+  await waitForProjectDraft(page, originalProject);
+  await choosePalette(page, basename(project), /^commands-project/, "Projects");
+  await waitForProjectDraft(page, project);
+
+  await choosePalette(page, "theme-light", /^Switch theme/);
+  await page.waitForFunction(() => !document.documentElement.classList.contains("dark"));
+  await choosePalette(page, "locale-zh", /^Switch language/);
+  await page.waitForFunction(() => document.documentElement.lang === "zh-CN");
+  await choosePalette(page, "locale-en", /^切换语言/);
+  await page.waitForFunction(() => document.documentElement.lang === "en");
+  await choosePalette(page, "theme-dark", /^Switch theme/);
+  await page.waitForFunction(() => document.documentElement.classList.contains("dark"));
+
+  await choosePalette(page, "Prompt templates", /^Personalization/, "Settings");
+  await page.waitForFunction(() => document.activeElement?.matches("[data-settings-heading]"));
+  await button(page, "Add template").press("Enter");
+  const create = page.getByRole("dialog", { name: "Add prompt template" });
+  await assertFits(create);
+  await create.getByRole("textbox", { name: "Command name" }).fill(templateName);
+  await create.getByRole("textbox", { name: "Prompt text" }).fill(templateText);
+  await button(create, "Save").press("Enter");
+  await create.waitFor({ state: "hidden" });
+  await page.getByText(templateCommand, { exact: true }).waitFor();
+  await page.keyboard.press("Control+l");
+  const initialCount = await page.locator("[data-session-id]").count();
+
+  await chooseSlash(page, templateCommand);
+  const parameters = page.getByRole("dialog", { name: "Fill template parameters" });
+  await assertFits(parameters);
+  await page.keyboard.press("Escape");
+  await parameters.waitFor({ state: "hidden" });
+  await page.waitForFunction(() => document.activeElement?.matches("[data-composer-editor]"));
+  assert.equal(await editor(page).innerText(), templateCommand);
+  await editor(page).press("Enter");
+  await parameters.getByRole("textbox", { name: "file", exact: true }).fill("main.ts");
+  await parameters.getByRole("textbox", { name: "rule", exact: true }).fill("project policy");
+  await button(parameters, "Insert into draft").press("Enter");
+  await parameters.waitFor({ state: "hidden" });
+  await page.waitForFunction(() =>
+    document.querySelector("[data-composer-editor]")?.innerText ===
+    "Check main.ts against project policy and summarize main.ts.",
+  );
+  await waitForProjectDraft(page, project);
+  assert.equal(await page.locator("[data-session-id]").count(), initialCount);
+
+  await choosePalette(page, templateCommand, /^audit-note/);
+  await parameters.getByRole("textbox", { name: "file", exact: true }).fill("other.ts");
+  await parameters.getByRole("textbox", { name: "rule", exact: true }).fill("second rule");
+  await button(parameters, "Insert into draft").press("Enter");
+  await page.waitForFunction(() => {
+    const value = document.querySelector("[data-composer-editor]")?.innerText ?? "";
+    return value.startsWith("Check main.ts") && value.endsWith("summarize other.ts.");
+  });
+
+  await chooseSlash(page, "/init");
+  await page.waitForFunction(() => document.querySelector("[data-composer-editor]")?.innerText.includes("Create or update AGENTS.md"));
+  const instructionsPath = join(project, "AGENTS.md");
+  await waitForProjectDraft(page, project);
+  assert.ok(!existsSync(instructionsPath));
+  await editor(page).press("Enter");
+  const init = await model.nextCompletion();
+  assert.match(init.input.messages.at(-1).content, /Create or update AGENTS\.md/);
+  sendTool(init, "command-init-write", "write_file", { path: "AGENTS.md", content: "# Project fixture\n" });
+  const approval = page.locator("[data-permission-card]");
+  await approval.getByText(instructionsPath, { exact: true }).waitFor();
+  assert.ok(!existsSync(instructionsPath));
+  await button(approval, "Allow once").click();
+  const created = await model.nextCompletion();
+  created.write({ content: "Created the command fixture instructions." });
+  created.finish();
+  await page.getByText("Created the command fixture instructions.", { exact: true }).waitFor();
+  await button(page, "Send").waitFor();
+  assert.equal(readFileSync(instructionsPath, "utf8"), "# Project fixture\n");
+
+  await chooseSlash(page, "/diff");
+  await page.getByRole("tab", { name: /^Changes/, selected: true }).waitFor();
+  await page.keyboard.press("Control+l");
+  await chooseSlash(page, "/review");
+  await page.waitForFunction(() => document.querySelector("[data-composer-editor]")?.innerText.includes("Review the uncommitted changes"));
+  await editor(page).press("Enter");
+  const review = await model.nextCompletion();
+  assert.match(review.input.messages.at(-1).content, /including staged, unstaged, and untracked files/);
+  review.write({ content: "The command fixture review is complete." });
+  review.finish();
+  await page.getByText("The command fixture review is complete.", { exact: true }).waitFor();
+  await button(page, "Send").waitFor();
+
+  await send(page, "/compact retain the project decision");
+  const compact = await model.nextCompletion();
+  assert.match(JSON.stringify(compact.input.messages.at(-1).content), /retain the project decision/);
+  compact.write({ content: "The workspace has a short AGENTS.md." });
+  compact.finish();
+  await page.locator("[data-context-compaction]").waitFor();
+  await button(page, "Send").waitFor();
+
+  await choosePalette(page, "verify-test", /^Run verification/);
+  await page.getByRole("tab", { name: /^Verify/, selected: true }).waitFor();
+  await page.waitForFunction(() => document.querySelector("[data-verification-exit-code]")?.textContent === "0");
+  const output = button(page.locator("[data-verification-detail]"), "Output");
+  if (await output.getAttribute("aria-expanded") === "false") await output.click();
+  await page.locator("[data-verification-output]").filter({ hasText: "123456789" }).waitFor();
+
+  const active = page.locator('[data-session-id][aria-current="page"]');
+  const sessionId = await active.getAttribute("data-session-id");
+  await page.keyboard.press("Control+l");
+  await chooseSlash(page, "/clear");
+  await waitForProjectDraft(page, project);
+  await active.waitFor({ state: "hidden" });
+  assert.equal(await page.locator('[data-session-id="' + sessionId + '"]').count(), 1);
+  assert.equal(await page.locator("[data-session-id]").count(), initialCount + 1);
+}
+
+export async function verifyRestoredPromptTemplates(page) {
+  await page.waitForFunction(() => document.documentElement.lang === "en");
+  await editor(page).focus();
+  const { settings } = await page.evaluate(() => window.pi.getSnapshot());
+  assert.deepEqual(settings.promptTemplates, [{ name: templateName, text: templateText }]);
+  await choosePalette(page, "Prompt templates", /^Personalization/, "Settings");
+  await page.getByText(templateText, { exact: true }).waitFor();
+  await button(page, "Edit " + templateCommand).press("Enter");
+  const edit = page.getByRole("dialog", { name: "Edit prompt template" });
+  await edit.getByRole("textbox", { name: "Prompt text" }).fill("Review {{file}}.");
+  await button(edit, "Save").press("Enter");
+  await page.getByText("Review {{file}}.", { exact: true }).waitFor();
+
+  await button(page, "Delete " + templateCommand).press("Enter");
+  const remove = page.getByRole("dialog", { name: "Delete prompt template?" });
+  await button(remove, "Delete").press("Enter");
+  await remove.waitFor({ state: "hidden" });
+  await page.getByText(templateCommand, { exact: true }).waitFor({ state: "hidden" });
 }

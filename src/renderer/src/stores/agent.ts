@@ -10,6 +10,7 @@ import type {
   PermissionDecision,
   PlanMode,
   PromptInput,
+  PromptTemplate,
   PublicSettings,
   RunRef,
   SessionMeta,
@@ -88,6 +89,7 @@ interface AgentStore extends AgentUiState {
   navBack(): Promise<void>;
   navForward(): Promise<void>;
   saveSettings(input: SettingsInput): Promise<void>;
+  savePromptTemplates(templates: PromptTemplate[]): Promise<void>;
   setLogLevel(level: LogLevel): Promise<void>;
   setNotificationsEnabled(enabled: boolean): Promise<void>;
   dismissSettingsRecovery(): Promise<void>;
@@ -422,6 +424,11 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
 
   saveSettings: async (input) => {
     const settings = await window.pi.settingsSave(input);
+    set({ settings });
+  },
+
+  savePromptTemplates: async (templates) => {
+    const settings = await window.pi.settingsSetPromptTemplates(templates);
     set({ settings });
   },
 

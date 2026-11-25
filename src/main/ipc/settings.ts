@@ -17,6 +17,11 @@ export function registerSettingsRoutes(
   ctx: Pick<IpcContext, "host" | "skillsDir" | "getSettings" | "saveSettings" | "request">,
 ): void {
   handle(IPC.settingsGet, () => toPublicSettings(ctx.getSettings()));
+  handle(IPC.settingsSetPromptTemplates, (_event, promptTemplates) => {
+    const settings = { ...ctx.getSettings(), promptTemplates };
+    ctx.saveSettings(settings);
+    return toPublicSettings(settings);
+  });
   handle(IPC.settingsSetNotificationsEnabled, (_event, notificationsEnabled) => {
     ctx.saveSettings({ ...ctx.getSettings(), notificationsEnabled });
   });

@@ -11,7 +11,7 @@ import {
   WORKSPACE_QUERY_LENGTH,
 } from "../../shared/constants";
 import { IPC, VERIFICATION_KINDS } from "../../shared/contract";
-import { toolRuleSchema } from "../settings/schema";
+import { promptTemplatesSchema, toolRuleSchema } from "../settings/schema";
 import type { IpcChannel } from "./types";
 
 const none = z.tuple([]);
@@ -286,6 +286,7 @@ const inputs = {
   [IPC.skillsToggle]: z.tuple([z.uuid(), mentionId, z.boolean()]),
   [IPC.settingsGet]: none,
   [IPC.settingsSave]: z.tuple([settings]),
+  [IPC.settingsSetPromptTemplates]: z.tuple([promptTemplatesSchema]),
   [IPC.settingsSetLogLevel]: z.tuple([z.enum(LOG_LEVELS)]),
   [IPC.settingsSetNotificationsEnabled]: z.tuple([z.boolean()]),
   [IPC.settingsSelectModel]: z.tuple([id, nonBlank]),
