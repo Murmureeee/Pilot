@@ -36,6 +36,7 @@ import { visibleMessageText } from "../../shared/mentions";
 import { insertCompactionMarker } from "../../shared/message-events";
 import { applyPlanUpdate } from "../../shared/plan";
 import { findTranscript, transcriptSegments } from "../../shared/transcript-search";
+import { isWebTool, webSources } from "../../shared/web";
 import {
   NEW_CHAT_DRAFTS_FILE,
   SESSION_DRAFT_EXTENSION,
@@ -204,6 +205,7 @@ export function toUiMessages(
       part.output = output;
       part.state = message.isError ? "error" : "success";
       part.error = message.isError ? output || "工具执行失败" : undefined;
+      if (!message.isError && isWebTool(message.toolName)) part.sources = webSources(details);
       if (typeof message.durationMs === "number") part.durationMs = message.durationMs;
       const { pilotApproval } = message as ApprovedToolResult;
       if (pilotApproval && ["once", "deny", "session", "global"].includes(pilotApproval.decision)) {

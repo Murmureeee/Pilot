@@ -5,7 +5,7 @@ export function toolInput(source: string | undefined): { preview: string; detail
     const input: unknown = JSON.parse(source);
     if (!input || typeof input !== "object") return { preview: source, details: source };
     const fields = input as Record<string, unknown>;
-    const primary = [fields.command, fields.path, fields.pattern].find(
+    const primary = [fields.command, fields.path, fields.pattern, fields.url, fields.query].find(
       (value): value is string => typeof value === "string" && Boolean(value.trim()),
     );
     return {

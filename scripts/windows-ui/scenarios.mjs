@@ -391,6 +391,143 @@ function sendTool(completion, id, name, args) {
   completion.finish("tool_calls");
 }
 
+export async function verifyWebTools(page, window, app, model) {
+  const firstUrl = "https://docs.pilot.example/guide";
+  const otherUrl = "https://other.pilot.example/latest";
+  const searchQuery = "Pilot public web fixture";
+  await app.evaluate(({ app, session, shell }, { firstUrl, otherUrl }) => {
+    const requireApp = process.getBuiltinModule("node:module").createRequire(app.getAppPath() + "/package.json");
+    const dns = process.getBuiltinModule("node:dns").promises;
+    const { Readable } = process.getBuiltinModule("node:stream");
+    const undici = requireApp("undici");
+    const requests = [];
+    const opened = [];
+    globalThis.pilotWebTest = { requests, opened };
+    const domains = ["docs.pilot.example", "other.pilot.example"];
+    const oldLookup = dns.lookup;
+    dns.lookup = (host, options) => domains.includes(host) && options?.all
+      ? Promise.resolve([{ address: "93.184.215.14", family: 4 }])
+      : oldLookup(host, options);
+    const oldRequest = undici.request;
+    undici.request = async (input, options) => {
+      const host = options?.headers?.Host;
+      if (!domains.includes(host)) return oldRequest(input, options);
+      const url = new URL(String(input));
+      requests.push({ host, path: url.pathname, query: url.searchParams.get("q") });
+      if (url.pathname === "/redirect")
+        return { statusCode: 302, headers: { location: otherUrl }, body: Readable.from([]) };
+      const body = "<title>Pilot fixture guide</title><nav>fixture navigation</nav><main><p>Fixture body</p><p>" +
+        "z".repeat(13_000) + "</p></main><script>fixture script</script>";
+      return { statusCode: 200, headers: { "content-type": "text/html; charset=utf-8" }, body: Readable.from([Buffer.from(body)]) };
+    };
+    const browser = session.fromPartition("pilot-network", { cache: false });
+    const oldFetch = browser.fetch.bind(browser);
+    browser.fetch = async (input, options) => {
+      const url = new URL(typeof input === "string" ? input : input.url ?? input.href);
+      if (url.hostname !== "html.duckduckgo.com") return oldFetch(input, options);
+      requests.push({ host: url.host, path: url.pathname, query: url.searchParams.get("q") });
+      const body = '<div class="result"><a class="result__a" href="' + firstUrl +
+        '">Pilot web fixture source</a><div class="result__snippet">A search snippet</div></div>';
+      return new Response(body, { headers: { "content-type": "text/html; charset=utf-8" } });
+    };
+    const oldOpen = shell.openExternal;
+    shell.openExternal = async (url, options) => {
+      if (url === firstUrl) opened.push(url);
+      else return oldOpen(url, options);
+    };
+  }, { firstUrl, otherUrl });
+  const receipts = () => app.evaluate(() => globalThis.pilotWebTest);
+  await resize(page, window, wide);
+  await page.waitForFunction(() => document.documentElement.lang === "en");
+  await send(page, "Find and read the public web fixture.");
+  const initial = await model.nextCompletion();
+  for (const name of ["web_search", "web_fetch"])
+    assert.ok(initial.input.tools.some((tool) => tool.function.name === name));
+  sendTool(initial, "fixture-search", "web_search", { query: searchQuery });
+  const card = page.locator("[data-permission-card]");
+  await card.locator("[data-permission-domain]").getByText("html.duckduckgo.com").waitFor();
+  await card.locator("[data-permission-input]").getByText(searchQuery, { exact: true }).waitFor();
+  assert.deepEqual((await receipts()).requests, []);
+
+  let current = locales[1];
+  for (const size of [wide, narrow]) {
+    await resize(page, window, size);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme, "[data-permission-card]");
+        current = locale;
+        await assertFits(card.locator("[data-permission-domain]"));
+        await assertFits(card.getByRole("button", { name: /^(Allow once|本次允许)$/ }));
+      }
+    }
+  }
+  await resize(page, window, narrow, 1.5);
+  await assertFits(card.getByRole("button", { name: /^Allow once$/ }));
+  await assertFits(card.getByRole("button", { name: /^More approval options$/ }));
+  await card.focus();
+  await page.keyboard.press("Enter");
+  const results = await model.nextCompletion();
+  assert.match(results.input.messages.at(-1).content, /Pilot web fixture source[\s\S]*A search snippet/);
+  assert.ok(results.input.messages.at(-1).content.includes(firstUrl));
+  assert.deepEqual((await receipts()).requests, [{
+    host: "html.duckduckgo.com", path: "/html/", query: searchQuery,
+  }]);
+
+  await resize(page, window, wide);
+  sendTool(results, "fixture-read", "web_fetch", { url: firstUrl });
+  await card.locator("[data-permission-domain]").getByText("docs.pilot.example").waitFor();
+  await card.locator("[data-permission-input]").getByText(firstUrl, { exact: true }).waitFor();
+  await button(card, "More approval options").press("Enter");
+  const grant = page.getByRole("menuitem", { name: /^Always allow Only docs\.pilot\.example$/ });
+  await assertFits(grant);
+  await grant.press("Enter");
+  const read = await model.nextCompletion();
+  const text = read.input.messages.at(-1).content;
+  assert.match(text, /Fixture body[\s\S]*Page text truncated/);
+  assert.doesNotMatch(text, /fixture navigation|fixture script|z{12001}/);
+  const { toolRules } = await page.evaluate(() => window.pi.settingsGet());
+  assert.ok(toolRules.some(({ toolName, domain }) => toolName === "web_fetch" && domain === "docs.pilot.example"));
+
+  sendTool(read, "fixture-same-domain", "web_fetch", { url: new URL("/next", firstUrl).href });
+  const allowed = await model.nextCompletion();
+  assert.match(allowed.input.messages.at(-1).content, /Fixture body/);
+  sendTool(allowed, "fixture-redirect", "web_fetch", { url: new URL("/redirect", firstUrl).href });
+  const redirected = await model.nextCompletion();
+  assert.ok(redirected.input.messages.at(-1).content.includes(otherUrl));
+  assert.ok((await receipts()).requests.every(({ host }) => host !== "other.pilot.example"));
+  sendTool(redirected, "fixture-other-domain", "web_fetch", { url: otherUrl });
+  await card.locator("[data-permission-domain]").getByText("other.pilot.example").waitFor();
+  await card.focus();
+  await page.keyboard.press("Escape");
+  const denied = await model.nextCompletion();
+  assert.match(denied.input.messages.at(-1).content, /用户拒绝/);
+  assert.ok((await receipts()).requests.every(({ host }) => host !== "other.pilot.example"));
+  denied.write({ content: "The web source fixture is complete." });
+  denied.finish();
+  await page.getByText("The web source fixture is complete.", { exact: true }).waitFor();
+  await button(page, "Send").waitFor();
+
+  await page.reload();
+  await page.getByText("The web source fixture is complete.", { exact: true }).waitFor();
+  const activity = page.locator("[data-reply-activity]").last();
+  await button(activity, /^(Worked for|Steps taken:)/).press("Enter");
+  await button(activity, new RegExp("^Search the web " + searchQuery)).press("Enter");
+  const source = activity.getByRole("link", { name: "Pilot web fixture source", exact: true });
+  await assertFits(source);
+  assert.equal(await source.getAttribute("href"), firstUrl);
+  await source.press("Enter");
+  await page.waitForFunction(() => document.querySelector("[data-tool-sources] a") === document.activeElement);
+  assert.deepEqual((await receipts()).opened, [firstUrl]);
+
+  await openSettings(page, locales[1], "Permissions");
+  const row = page.locator(".settings-row").filter({ hasText: "Only docs.pilot.example" });
+  await row.getByText("Read web page", { exact: true }).waitFor();
+  await button(row, "Revoke rule").press("Enter");
+  await row.waitFor({ state: "hidden" });
+  const revoked = await page.evaluate(() => window.pi.settingsGet());
+  assert.ok(!revoked.toolRules?.some(({ domain }) => domain === "docs.pilot.example"));
+}
+
 function terminalRecords(page, composerId) {
   return page.evaluate((id) => window.pi.sessionTerminals(id), composerId);
 }

@@ -41,6 +41,7 @@ import { TaskNotifications } from "./task-notifications";
 import { TerminalManager } from "./terminal";
 import { DesktopUpdater } from "./updater";
 import { VerificationManager } from "./verification";
+import { createSearchRequest, createWebRequest } from "./web/request";
 import { revealWindow } from "./window";
 import { registerWindowRecovery } from "./window-recovery";
 import { loadWindowState, rememberWindow } from "./window-state";
@@ -178,7 +179,15 @@ function startDesktop(): void {
     (result) => sendToRenderers(AGENT_EVENT_CHANNEL, { type: "verification_updated", result }),
     syncSleepBlocker,
   );
-  const network = createDesktopNetwork(session.fromPartition("pilot-network", { cache: false }));
+  const networkSession = session.fromPartition("pilot-network", { cache: false });
+  const network = createDesktopNetwork(networkSession);
+  const webRequest = createWebRequest(
+    async (url) => {
+      await network.configureProxy(networkSession);
+      return networkSession.resolveProxy(url.href);
+    },
+    APP_NAME + "/" + app.getVersion(),
+  );
   const mcp = new McpManager(getSettings, app.getVersion(), network.fetch);
   const host = new AgentHost({
     store,
@@ -194,6 +203,7 @@ function startDesktop(): void {
     mcp,
     terminal,
     request: network.fetch,
+    webRequests: { page: webRequest, search: createSearchRequest(network.fetch) },
   });
 
   if (!isDev) {

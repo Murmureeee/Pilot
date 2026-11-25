@@ -9,10 +9,12 @@ import {
   PROMPT_TEMPLATE_TEXT_LIMIT,
   THINKING_LEVELS,
 } from "../../shared/constants";
+import { WEB_DOMAIN_PATTERN } from "../../shared/web";
 import { normalizeModelCatalog } from "./models";
 import type { Settings } from "./types";
 
 const optionalText = z.string().optional();
+const domain = z.string().regex(WEB_DOMAIN_PATTERN).optional();
 const commandPrefix = z.strictObject({
   shell: z.enum(["powershell", "bash"]),
   args: z
@@ -24,6 +26,7 @@ export const toolRuleSchema = z.object({
   toolName: z.string(),
   pathPrefix: optionalText,
   commandPrefix: commandPrefix.optional(),
+  domain,
 });
 
 const provider = z.looseObject({
@@ -75,7 +78,12 @@ const storedSettings = z.looseObject({
   providers: z.array(provider),
   activeProviderId: z.string().default(""),
   toolRules: z
-    .array(toolRuleSchema.extend({ commandPrefix: commandPrefix.optional().catch(undefined) }))
+    .array(
+      toolRuleSchema.extend({
+        commandPrefix: commandPrefix.optional().catch(undefined),
+        domain: domain.catch(undefined),
+      }),
+    )
     .optional(),
   approvalMode: z.enum(EXECUTION_APPROVAL_MODES).optional(),
   thinkingLevel: z.enum(THINKING_LEVELS).optional().catch(undefined),

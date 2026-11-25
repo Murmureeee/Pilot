@@ -30,6 +30,7 @@ import {
   verifySettings,
   verifyStreamingReply,
   verifyUnsentDraft,
+  verifyWebTools,
 } from "./windows-ui/scenarios.mjs";
 
 const require = createRequire(import.meta.url);
@@ -205,6 +206,11 @@ try {
   await runScene("Cancel exit with a terminal open, then quit and stop its shell", () =>
     assert.throws(() => process.kill(terminalPid, 0), { code: "ESRCH" }),
   );
+  await withApp(profile, async (page, window, app) => {
+    await runScene("Approve web requests, read sources, and revoke a domain grant", () =>
+      verifyWebTools(page, window, app, model),
+    );
+  });
 } finally {
   try {
     await model?.close();

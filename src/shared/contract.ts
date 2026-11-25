@@ -280,7 +280,10 @@ export type UiPart =
       durationMs?: number;
       fileChange?: FileChangeSummary;
       approval?: ToolApproval;
+      sources?: WebSource[];
     });
+
+export type WebSource = { title: string; url: string };
 
 export interface AssistantTiming {
   runId: string;
@@ -405,6 +408,7 @@ export interface PermissionRequest {
   position?: { index: number; total: number };
   file?: PermissionFilePreview;
   mcp?: { server: string; tool: string };
+  web?: { domain: string; url: string; query?: string };
   rule?: ToolRule;
 }
 
@@ -444,6 +448,7 @@ export type AgentRunEvent =
       output?: string;
       error?: string;
       durationMs?: number;
+      sources?: WebSource[];
     }
   | { type: "file_change"; callId: string; change: FileChangeSummary }
   | {
@@ -491,6 +496,7 @@ export interface ToolRule {
   toolName: string;
   pathPrefix?: string;
   commandPrefix?: CommandPrefix;
+  domain?: string;
 }
 
 export interface SessionModelSelection {

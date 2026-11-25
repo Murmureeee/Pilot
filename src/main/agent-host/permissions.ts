@@ -12,6 +12,8 @@ import type {
   ToolRule,
 } from "@shared/contract";
 
+import { isWebTool } from "../../shared/web";
+import { webTarget } from "../web/targets";
 import { createToolPathResolver, isWithinDirectory } from "../workspace/paths";
 import { getCommandShell } from "../workspace/shell";
 import { findCommandDanger } from "./command-danger";
@@ -45,6 +47,7 @@ function ruleFor(toolName: string, args: unknown): ToolRule {
 }
 
 function ruleMatches(rule: ToolRule, args: unknown): boolean {
+  if (rule.domain) return false;
   if (!rule.pathPrefix) return true;
   const path = pathOfArgs(args);
   if (path === undefined || isAbsolute(path) !== isAbsolute(rule.pathPrefix)) return false;
@@ -87,6 +90,18 @@ export class PermissionManager {
     if (toolName === STOP_BACKGROUND_TOOL_NAME) return { kind: "allow" };
     const mode = this.getApprovalMode();
     if (mode === "read-only") return { kind: "block" };
+
+    const web = webTarget(toolName, args);
+    if (web) {
+      const sameDomain = (rule: ToolRule): boolean =>
+        rule.toolName === toolName &&
+        rule.domain === web.domain &&
+        !rule.pathPrefix &&
+        !rule.commandPrefix;
+      if (this.sessionRules.some(sameDomain) || this.getGlobalRules().some(sameDomain))
+        return { kind: "allow" };
+      return { kind: "ask", web, rule: { toolName, domain: web.domain } };
+    }
 
     const command =
       toolName === "bash" &&
@@ -147,10 +162,12 @@ export class PermissionManager {
         block: true,
         reason: this.planning
           ? "计划模式只允许读取、搜索和提交计划。"
-          : "当前为只读模式，已拒绝该写操作（可在输入框左下角切换权限模式）",
+          : isWebTool(toolName)
+            ? "当前为只读模式。请切换权限模式后再使用网页工具。"
+            : "当前为只读模式，已拒绝该写操作（可在输入框左下角切换权限模式）",
       };
     }
-    const { command, commandDanger, rule } = access;
+    const { command, commandDanger, rule, web } = access;
     const details = describe?.();
     const decision = await this.ask({
       type: "permission_request",
@@ -158,13 +175,14 @@ export class PermissionManager {
       callId,
       toolName,
       label: policy?.label ?? labelOf(toolName),
-      inputSummary: details?.file?.diff ? "" : summarizeArgs(args, Boolean(policy)),
+      inputSummary: web || details?.file?.diff ? "" : summarizeArgs(args, Boolean(policy)),
       danger: Boolean(commandDanger) || isProtectedFile(toolName, args),
       commandDanger,
-      workingDirectory: createToolPathResolver(environment.workingDirectory)("."),
+      workingDirectory: web ? undefined : createToolPathResolver(environment.workingDirectory)("."),
       command,
       commandShell: command === undefined ? undefined : environment.commandShell,
       mcp: policy && { server: policy.serverName, tool: policy.toolName },
+      web,
       rule,
       ...details,
     });

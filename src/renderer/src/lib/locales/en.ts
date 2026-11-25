@@ -624,6 +624,36 @@ export const EN_MESSAGES: Record<string, string> = {
   复制输出: "Copy output",
   已复制输出: "Output copied",
   已退出: "Exited",
+  读取网页: "Read web page",
+  搜索网页: "Search the web",
+  目标域名: "Destination domain",
+  网页地址: "Page address",
+  搜索词: "Search terms",
+  网页来源: "Web sources",
+  "仅域名 {0}": "Only {0}",
+  "此联网授权缺少有效域名。请重新授权。":
+    "This web permission needs a valid domain. Approve it again.",
+  "请输入公开网页的 HTTP 或 HTTPS 地址。": "Enter the HTTP or HTTPS address of a public web page.",
+  "请输入有效的搜索词。": "Enter valid search terms.",
+  "该域名未解析到公开地址。请选择其他网页。":
+    "This domain did not resolve to a public address. Choose another page.",
+  "无法连接该网站。请检查网络或代理后重试。":
+    "Could not connect. Check the network or proxy and try again.",
+  "当前代理协议不支持网页工具。请使用 HTTP、HTTPS 或 SOCKS5 代理。":
+    "Use an HTTP, HTTPS, or SOCKS5 proxy for web tools.",
+  "网页请求超时。请检查网络后重试。": "The web request timed out. Check the network and try again.",
+  "网页跳转到了另一个域名。请对目标网址发起新的请求。":
+    "The page redirected to another domain. Request the destination separately.",
+  "无法继续网页跳转。请检查网址后重试。":
+    "Could not follow the redirect. Check the URL and try again.",
+  "此地址未返回 HTML 或纯文本。请提供可读取的网页地址。":
+    "This URL returned a different format. Choose an HTML or plain-text page.",
+  "未提取到网页正文。请尝试提供其他来源。": "Could not extract page text. Try another source.",
+  "DuckDuckGo 暂未返回可读取的搜索结果。请稍后重试或提供网页地址。":
+    "DuckDuckGo did not return readable search results. Try again or provide a URL.",
+  "网页请求失败。请检查网址后重试。": "The web request failed. Check the URL and try again.",
+  "当前为只读模式。请切换权限模式后再使用网页工具。":
+    "Switch from read-only mode to use web tools.",
   "按 Ctrl+` 返回终端页签。按 Ctrl+Shift+C 复制输出。":
     "Press Ctrl+` to return to the Terminal tab. Press Ctrl+Shift+C to copy output.",
   重试读取输出: "Retry reading output",

@@ -16,6 +16,7 @@ import type {
 } from "@shared/contract";
 import type { ExternalImportKind } from "@shared/imports";
 
+import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL } from "../../../shared/web";
 import type {
   ComposerShortcut,
   SendKey,
@@ -240,6 +241,8 @@ export const TOOL_RULE_LABELS: Readonly<Record<string, string>> = {
   write_file: "写入文件",
   edit_file: "编辑文件",
   bash: "执行命令",
+  [WEB_FETCH_TOOL]: "读取网页",
+  [WEB_SEARCH_TOOL]: "搜索网页",
 };
 
 export const COMMAND_SHELL_LABELS: Record<CommandShell, string> = {

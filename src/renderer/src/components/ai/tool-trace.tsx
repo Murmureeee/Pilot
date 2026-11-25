@@ -2,6 +2,7 @@
 import {
   FilePenLineIcon,
   FileTextIcon,
+  GlobeIcon,
   LayersIcon,
   LoaderCircleIcon,
   PlugIcon,
@@ -27,8 +28,9 @@ import { describeToolScope } from "@renderer/lib/tool-rules";
 import { parseToolFailure, stackDisplayPath } from "@renderer/lib/tool-trace";
 import type { ToolFailure } from "@renderer/lib/types";
 import { selectWorkingDirectory, useAgentStore } from "@renderer/stores/agent";
-import type { TranscriptLocation, UiPart } from "@shared/contract";
+import type { TranscriptLocation, UiPart, WebSource } from "@shared/contract";
 import { toolInput } from "@shared/tool-input";
+import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL, isWebTool, webLink } from "@shared/web";
 
 import { InlineWorkspaceReference } from "./workspace-reference";
 
@@ -39,7 +41,35 @@ const TOOL_ICONS = {
   edit_file: FilePenLineIcon,
   glob: SearchIcon,
   grep: SearchIcon,
+  [WEB_FETCH_TOOL]: GlobeIcon,
+  [WEB_SEARCH_TOOL]: SearchIcon,
 } satisfies Record<string, typeof TerminalIcon>;
+
+function SourceLinks({ sources }: { sources: WebSource[] }): JSX.Element {
+  const locale = useLocale();
+  return (
+    <ul aria-label={t("网页来源", locale)} data-tool-sources className="grid min-w-0 gap-2">
+      {sources.map((source) => {
+        const url = webLink(source.url);
+        if (!url) return null;
+        return (
+          <li key={url.href} className="flex min-w-0 flex-col gap-0.5">
+            <a
+              href={url.href}
+              target="_blank"
+              rel="noreferrer"
+              title={url.href}
+              className="w-fit max-w-full rounded-sm text-xs wrap-anywhere text-brand underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {source.title}
+            </a>
+            <bdi className="text-xs wrap-anywhere text-muted-foreground">{url.hostname}</bdi>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 function ToolOutput({ text }: { text: string }): JSX.Element {
   return (
@@ -81,20 +111,24 @@ function FailureDetails({
   failure,
   output,
   revealOutput = false,
+  translateFirstLine = false,
 }: {
   failure: ToolFailure;
   output: string;
   revealOutput?: boolean;
+  translateFirstLine?: boolean;
 }): JSX.Element {
   const locale = useLocale();
   const workspace = useAgentStore(selectWorkingDirectory) ?? undefined;
   const project = failure.frames.filter((frame) => !frame.framework);
   const framework = failure.frames.filter((frame) => frame.framework);
   const [frameworkOpen, setFrameworkOpen] = useState(false);
+  const message = failure.frames.length ? failure.summary : failure.message;
+  const [first, ...rest] = message.split("\n");
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
       <p className="max-h-56 overflow-auto overscroll-contain font-mono text-xs leading-relaxed wrap-anywhere whitespace-pre-wrap text-destructive">
-        {t(failure.frames.length ? failure.summary : failure.message, locale)}
+        {translateFirstLine ? [t(first, locale), ...rest].join("\n") : t(message, locale)}
       </p>
       {project.length > 0 && (
         <ol className="grid max-h-48 min-w-0 gap-1 overflow-auto overscroll-contain px-px text-[13px]">
@@ -200,8 +234,8 @@ export function ToolTrace({
     </TraceLine>
   );
 
-  const { approval } = part;
-  if (!output && !failure && !input.details && !approval) return line;
+  const { approval, sources } = part;
+  if (!output && !failure && !input.details && !approval && !sources) return line;
 
   const showArguments =
     input.details && (failure || input.details !== input.preview || input.details.includes("\n"));
@@ -225,12 +259,14 @@ export function ToolTrace({
               )}
             </div>
           )}
+          {sources && <SourceLinks sources={sources} />}
           {failure ? (
             <div data-transcript-field="output">
               <FailureDetails
                 failure={failure}
                 output={failureText}
                 revealOutput={searchField === "output"}
+                translateFirstLine={isWebTool(part.toolName)}
               />
             </div>
           ) : (

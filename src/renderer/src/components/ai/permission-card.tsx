@@ -5,6 +5,7 @@ import {
   CornerDownLeftIcon,
   EllipsisIcon,
   FilePenLineIcon,
+  GlobeIcon,
   PlugIcon,
   SquareIcon,
   TerminalIcon,
@@ -56,7 +57,9 @@ export function PermissionCard({
       ? TerminalIcon
       : file
         ? FilePenLineIcon
-        : PlugIcon;
+        : request.web
+          ? GlobeIcon
+          : PlugIcon;
   const index = request.position?.index ?? 1;
   const total = Math.max(request.position?.total ?? 1, index + pendingCount - 1);
   const scope = request.rule && describeToolScope(request.rule, locale);
@@ -161,6 +164,14 @@ export function PermissionCard({
             {request.mcp && (
               <p className="text-xs wrap-anywhere text-muted-foreground" data-permission-mcp-server>
                 {t("MCP 服务 {0}", locale, [request.mcp.server])}
+              </p>
+            )}
+            {request.web && (
+              <p className="text-xs wrap-anywhere text-muted-foreground">
+                {t("目标域名", locale)}{" "}
+                <bdi className="font-mono" data-permission-domain>
+                  {request.web.domain}
+                </bdi>
               </p>
             )}
             {request.commandShell && (

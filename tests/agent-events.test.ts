@@ -237,6 +237,27 @@ describe("agent-events adapter", () => {
     expect(part).toMatchObject({ type: "tool", state: "error", error: "boom" });
   });
 
+  it("attaches web sources to the matching tool step without changing usage", () => {
+    let state = initialRunUiState();
+    state = applyRunEvent(state, { type: "assistant_start", id: "a", timing });
+    state = applyRunEvent(state, {
+      type: "tool_start",
+      callId: "web-1",
+      toolName: "web_fetch",
+      label: "读取网页",
+    });
+    const sources = [{ title: "Guide", url: "https://example.com/guide" }];
+    const next = applyRunEvent(state, {
+      type: "tool_end",
+      callId: "web-1",
+      state: "success",
+      output: "document",
+      sources,
+    });
+    expect(next.messages[0].parts[0]).toMatchObject({ callId: "web-1", sources });
+    expect(next.usage).toBe(state.usage);
+  });
+
   it("keeps dispatch order and immutable snapshots when tools finish out of order", () => {
     let state = applyRunEvent(initialRunUiState(), { type: "assistant_start", id: "a", timing });
     const first = {

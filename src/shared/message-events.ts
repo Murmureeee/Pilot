@@ -123,6 +123,7 @@ export function applyMessageEvent(messages: UiMessage[], event: AgentRunEvent): 
       return updateTool(messages, event.callId, (part) => ({
         ...part,
         state: event.state,
+        sources: event.sources,
         output: event.output ?? part.output,
         error: event.error,
         durationMs: event.durationMs,

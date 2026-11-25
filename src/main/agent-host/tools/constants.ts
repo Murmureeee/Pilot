@@ -1,4 +1,6 @@
 // @env node
+import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL } from "../../../shared/web";
+
 export const PLAN_TOOL_NAME = "update_plan";
 export const PROPOSE_PLAN_TOOL_NAME = "propose_plan";
 export const READ_SKILL_TOOL_NAME = "read_skill";
@@ -21,6 +23,8 @@ export const TOOL_LABELS: Readonly<Record<string, string>> = {
   bash: "执行命令",
   glob: "查找文件",
   grep: "搜索内容",
+  [WEB_FETCH_TOOL]: "读取网页",
+  [WEB_SEARCH_TOOL]: "搜索网页",
   [PLAN_TOOL_NAME]: "任务计划",
   [PROPOSE_PLAN_TOOL_NAME]: "提交计划",
 };

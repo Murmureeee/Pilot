@@ -31,6 +31,7 @@ import type {
 
 import { visibleMessageText } from "../../shared/mentions";
 import { applyMessageEvent } from "../../shared/message-events";
+import { isWebTool, webSources } from "../../shared/web";
 import { sameToolRule } from "../settings/tool-rules";
 import { readFileChange } from "../workspace/file-changes";
 import { relativeGitPath } from "../workspace/git";
@@ -70,6 +71,7 @@ import { createBashTool } from "./tools/bash";
 import { PLAN_TOOL_NAME, PROPOSE_PLAN_TOOL_NAME } from "./tools/constants";
 import { proposePlanTool, readPlanProposal, readPlanSteps } from "./tools/plan";
 import { createReadSkillTool } from "./tools/read-skill";
+import { createWebTools } from "./tools/web";
 import type {
   AgentRunOptions,
   ApprovedToolResult,
@@ -382,7 +384,7 @@ export class AgentRun {
   }
 
   private async execute(): Promise<void> {
-    const { agent, initialMessage, store, tools, terminal, environment } = this.deps;
+    const { agent, initialMessage, store, tools, terminal, environment, webRequests } = this.deps;
     const { runId, sessionId } = this.state;
     const run = { runId, sessionId };
     const { signal } = this.preparation;
@@ -467,6 +469,7 @@ export class AgentRun {
       });
       if (this.planning) localTools.push(proposePlanTool);
       else if (terminal) localTools.push(...createBackgroundTools(terminal, run));
+      if (!this.planning && webRequests) localTools.push(...createWebTools(webRequests));
       if (this.listedSkills.size) {
         localTools.push(
           createReadSkillTool((id) => {
@@ -908,6 +911,10 @@ export class AgentRun {
         output,
         error: event.isError ? (output ?? "工具执行失败") : undefined,
         durationMs: event.durationMs,
+        sources:
+          !event.isError && isWebTool(event.toolName)
+            ? webSources(event.result.details)
+            : undefined,
       });
       return;
     }

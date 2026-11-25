@@ -33,6 +33,8 @@ export function PermissionPreview({ request }: { request: PermissionRequest }): 
   }
 
   const text =
+    request.web?.query ??
+    request.web?.url ??
     request.command ??
     (request.mcp ? request.inputSummary : toolInput(request.inputSummary).details);
   if (!text && !request.file?.error) return null;
@@ -46,7 +48,16 @@ export function PermissionPreview({ request }: { request: PermissionRequest }): 
       {text && (
         <CodeBlock size="sm" variant={request.danger ? "destructive" : "default"}>
           <CodeBlockContent
-            aria-label={t(request.command === undefined ? "参数" : "命令", locale)}
+            aria-label={t(
+              request.web
+                ? request.web.query === undefined
+                  ? "网页地址"
+                  : "搜索词"
+                : request.command === undefined
+                  ? "参数"
+                  : "命令",
+              locale,
+            )}
             wrap
             tabIndex={0}
             data-permission-input

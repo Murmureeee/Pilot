@@ -30,6 +30,7 @@ import type {
 
 import type { Settings } from "../settings/types";
 import type { TerminalManager } from "../terminal";
+import type { WebRequests } from "../web/types";
 import type {
   GitCheckpointFile,
   GitCommitPlan,
@@ -59,6 +60,7 @@ export interface HostDeps {
   mcp: McpManager;
   terminal?: TerminalManager;
   request?: typeof globalThis.fetch;
+  webRequests?: WebRequests;
 }
 
 export interface AgentSessionView {
@@ -72,7 +74,14 @@ export interface AgentSessionView {
 
 export interface AgentRunOptions extends Pick<
   HostDeps,
-  "store" | "mcp" | "terminal" | "broadcast" | "getSettings" | "saveSettings" | "request"
+  | "store"
+  | "mcp"
+  | "terminal"
+  | "broadcast"
+  | "getSettings"
+  | "saveSettings"
+  | "request"
+  | "webRequests"
 > {
   agent: Agent;
   sessionId: string;
@@ -184,7 +193,7 @@ export type ApprovedToolResult = ToolResultMessage & { pilotApproval?: ToolAppro
 export type ToolAccess =
   | { kind: "allow" }
   | { kind: "block" }
-  | ({ kind: "ask" } & Pick<PermissionRequest, "command" | "commandDanger" | "rule">);
+  | ({ kind: "ask" } & Pick<PermissionRequest, "command" | "commandDanger" | "rule" | "web">);
 
 export type PermissionDetails = Pick<PermissionRequest, "file" | "position">;
 

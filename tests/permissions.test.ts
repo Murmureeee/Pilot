@@ -48,6 +48,44 @@ function gateTool(
 }
 
 describe("PermissionManager", () => {
+  it("asks for public web requests in full access and scopes saved rules to one tool and exact domain", async () => {
+    const { manager, events, addedGlobal } = makeManager(
+      [{ toolName: "web_fetch" }],
+      "full-access",
+    );
+    const url = "https://docs.example.com/guide";
+    const pending = gateTool(manager, "web_fetch", { url });
+    await flush();
+    expect(events[0]).toMatchObject({
+      web: { domain: "docs.example.com", url },
+      rule: { toolName: "web_fetch", domain: "docs.example.com" },
+      inputSummary: "",
+    });
+    manager.respond(events[0].requestId, "global");
+    await expect(pending).resolves.toBeUndefined();
+    expect(addedGlobal).toEqual([{ toolName: "web_fetch", domain: "docs.example.com" }]);
+    await expect(
+      gateTool(manager, "web_fetch", { url: "https://DOCS.example.com./next" }),
+    ).resolves.toBeUndefined();
+    expect(manager.needsConfirmation("web_fetch", { url: "https://sub.docs.example.com/" })).toBe(
+      true,
+    );
+    expect(manager.needsConfirmation("web_search", { query: "Example docs" })).toBe(true);
+    expect(events).toHaveLength(1);
+  });
+
+  it("keeps web tools blocked in plan and read-only modes despite saved rules", async () => {
+    const rules: ToolRule[] = [{ toolName: "web_search", domain: "html.duckduckgo.com" }];
+    const readonly = makeManager(rules, "read-only");
+    const planning = makeManager(rules, "full-access", [], true);
+    for (const { manager, events } of [readonly, planning]) {
+      await expect(gateTool(manager, "web_search", { query: "test" })).resolves.toMatchObject({
+        block: true,
+      });
+      expect(events).toHaveLength(0);
+    }
+  });
+
   it("auto-allows read-only tools without asking", async () => {
     const { manager, events } = makeManager();
     const result = await gateTool(manager, "read_file", { path: "C:\\tmp\\a.txt" });
