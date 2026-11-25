@@ -6,6 +6,7 @@
 
 ### 2026-11-25
 
+- **统一审查面板。** 变更、文件预览与验证共用右侧面板。顶栏显示去重后的变更文件数和验证状态，并排时可拖拽或用方向键调宽。Windows 隔离实例实测三档布局、页签和文件选择、滚动与焦点恢复，重启后恢复面板宽度和四条会话验证记录。Git 场景覆盖暂存、选择性提交和检查点撤销，普通文件夹覆盖工具差异与确认撤销。验证场景覆盖实时输出、退出码、失败重跑、成功折叠和停止。中英文、亮暗主题在 1100 × 750 与 720 × 480 下共复核八种组合，并在 150% 缩放下验证键盘切换。八步流水线通过，Vitest 通过 443 项，Electron 冒烟返回 `ok: true`，开发版成功挂载且无未捕获异常。测试进程与临时数据已清理。[设计规范](./DESIGN.md#210-审查面板) · [提交 3081c53](https://github.com/Murmureeee/Pilot/commit/3081c53b2769de8abc1ab7ae086b4700ce81db77)
 - **Pilot v0.4.0 发布。** 交付里程碑 4「安全与可靠性」。GitHub Releases 提供 Windows x64 安装包、更新清单和 blockmap，以及 Linux x64 AppImage 和 Debian `.deb`。本地八步验证和 440 项测试通过。CI 验证了 Windows 新装、卸载、HTTPS 更新和自定义安装目录保留，并在隔离环境启动了两种 Linux 包。Windows 从公开 HTTPS 更新源由 `0.1.0` 升级到 `0.4.0`，安装包 SHA-512 与 `latest.yml` 一致，重启后保留了会话、设置、语言、主题和已启用的技能。另在 Windows 使用同一路径分别启动 `v0.3.1` 和 `v0.4.0` 正式安装包内的应用，确认原会话、设置、语言和主题得到保留，旧的无范围命令规则显示为停用且下次运行会重新询问。测试进程已退出，隔离目录已移入回收站。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.4.0) · [打包与安装验收](https://github.com/Murmureeee/Pilot/actions/runs/45429790005) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/45433991131) · [发版提交 599934d](https://github.com/Murmureeee/Pilot/commit/599934ddff3ad2593b700d4c94c3a71c6078cb12)
 
 ### 2026-11-24
