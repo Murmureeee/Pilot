@@ -160,8 +160,17 @@ export async function verifyFirstRun(page, window, app, model, project) {
 }
 
 export async function verifyStreamingReply(page, model) {
-  await send(page, streamPrompt);
+  await editor(page).waitFor();
+  assert.equal(await editor(page).innerText(), streamPrompt);
+  const before = await page.evaluate(() => window.pi.getSnapshot());
+  assert.equal(before.sessionId, null);
+  assert.deepEqual(before.sessions, []);
+  await editor(page).press("Enter");
   const reply = await model.nextCompletion();
+  const after = await page.evaluate(() => window.pi.getSnapshot());
+  assert.equal(after.sessionId, before.composerId);
+  assert.equal(after.sessions.length, 1);
+  await page.locator("[data-session-id]").waitFor();
   assert.equal(reply.input.messages.at(-1).content, streamPrompt);
   reply.write({ content: firstChunk });
   await page.getByText(firstChunk, { exact: true }).waitFor();
@@ -171,6 +180,39 @@ export async function verifyStreamingReply(page, model) {
   await page.getByText(streamReply, { exact: true }).waitFor();
   await button(page, "停止").waitFor({ state: "hidden" });
   await waitForIdle(page);
+}
+
+export async function verifyUnsentDraft(page) {
+  const composer = editor(page);
+  await composer.fill(streamPrompt);
+  const draftStatus = () => page.evaluate(() => window.pi.getSnapshot());
+  const typed = await draftStatus();
+  assert.equal(typed.sessionId, null);
+  assert.deepEqual(typed.sessions, []);
+  assert.deepEqual(typed.composerDraft, [streamPrompt]);
+  assert.equal(await page.locator("[data-session-id]").count(), 0);
+  await composer.press("Shift+Tab");
+  await button(page, "只读").waitFor();
+  await composer.fill("/plan");
+  await page.getByRole("option", { name: /^计划模式/ }).waitFor();
+  await composer.press("Enter");
+  await page.locator("[data-plan-mode]").waitFor();
+  const planning = await draftStatus();
+  assert.equal(planning.sessionId, null);
+  assert.deepEqual(planning.sessions, []);
+  assert.equal(planning.composerId, typed.composerId);
+  await composer.fill("/plan");
+  await composer.press("Enter");
+  await page.locator("[data-plan-mode]").waitFor({ state: "hidden" });
+  await composer.press("Shift+Tab");
+  await button(page, "完全访问").waitFor();
+  await composer.press("Shift+Tab");
+  await button(page, "确认模式").waitFor();
+  await composer.fill(streamPrompt);
+  const saved = await draftStatus();
+  assert.equal(saved.sessionId, null);
+  assert.deepEqual(saved.sessions, []);
+  assert.deepEqual(saved.composerDraft, [streamPrompt]);
 }
 
 export async function verifyApprovals(page, window, model, project) {

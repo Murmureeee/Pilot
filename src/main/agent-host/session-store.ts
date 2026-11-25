@@ -33,6 +33,7 @@ import { visibleMessageText } from "../../shared/mentions";
 import { insertCompactionMarker } from "../../shared/message-events";
 import { applyPlanUpdate } from "../../shared/plan";
 import {
+  NEW_CHAT_DRAFTS_FILE,
   SESSION_DRAFT_EXTENSION,
   SESSION_FILE_ID,
   SESSION_INDEX_SAVE_BLOCKED,
@@ -43,7 +44,7 @@ import { toolRuleSchema } from "../settings/schema";
 import { readFileChange } from "../workspace/file-changes";
 import { legacyMentionParts } from "./mentions";
 import { completeToolResults } from "./recovery";
-import { parseSessionIndex } from "./session-index";
+import { parseNewChatDrafts, parseSessionIndex } from "./session-index";
 import { labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
@@ -52,6 +53,7 @@ import type {
   CheckpointAppend,
   MessageHistory,
   MessageRollbackJournal,
+  NewChatDraft,
   ReferencedUserMessage,
   RunCheckpoint,
   SavedCompaction,
@@ -215,6 +217,7 @@ export function toUiMessages(
 export class SessionStore {
   private indexBackupPending = false;
   private index: SessionIndex = { sessions: [] };
+  private newChatDrafts: NewChatDraft[];
   private readonly checkpoints = new Map<string, RunCheckpoint | null>();
   private readonly gitChanges = new Map<string, SavedGitChanges | null>();
   private readonly contextCompactions = new Map<string, SavedCompaction[]>();
@@ -224,6 +227,7 @@ export class SessionStore {
   constructor(private readonly dir: string) {
     mkdirSync(dir, { recursive: true });
     this.index = this.readIndex();
+    this.newChatDrafts = this.readNewChatDrafts();
   }
 
   private readIndex(): SessionIndex {
@@ -343,12 +347,42 @@ export class SessionStore {
     return join(this.dir, `${id}${SESSION_DRAFT_EXTENSION}`);
   }
 
+  private readNewChatDrafts(): NewChatDraft[] {
+    try {
+      return parseNewChatDrafts(readFileSync(join(this.dir, NEW_CHAT_DRAFTS_FILE), "utf-8"));
+    } catch {
+      return [];
+    }
+  }
+
+  newChatDraft(directory?: string | null): NewChatDraft | undefined {
+    return this.newChatDrafts.findLast(
+      (draft) =>
+        !this.getMeta(draft.id) &&
+        (directory === undefined || (draft.workingDirectory ?? null) === directory),
+    );
+  }
+
+  saveNewChatDraft(draft: NewChatDraft): void {
+    this.writeNewChatDrafts([...this.newChatDrafts.filter(({ id }) => id !== draft.id), draft]);
+  }
+
+  private writeNewChatDrafts(drafts: NewChatDraft[]): void {
+    writeJsonAtomic(join(this.dir, NEW_CHAT_DRAFTS_FILE), drafts);
+    this.newChatDrafts = drafts;
+  }
+
+  private removeNewChatDraft(id: string): void {
+    const drafts = this.newChatDrafts.filter((draft) => draft.id !== id);
+    if (drafts.length !== this.newChatDrafts.length) this.writeNewChatDrafts(drafts);
+  }
+
   loadDraft(id: string): ComposerDraft {
     try {
       const draft: unknown = JSON.parse(readFileSync(this.draftPath(id), "utf-8"));
       return Array.isArray(draft) ? (draft as ComposerDraft) : [];
     } catch {
-      return [];
+      return this.newChatDrafts.find((draft) => draft.id === id)?.draft ?? [];
     }
   }
 
@@ -356,6 +390,7 @@ export class SessionStore {
     const path = this.draftPath(id);
     if (draft.length) writeJsonAtomic(path, draft);
     else rmSync(path, { force: true });
+    this.removeNewChatDraft(id);
   }
 
   list(): SessionMeta[] {
@@ -585,6 +620,7 @@ export class SessionStore {
     const path = this.filePath(id);
     if (existsSync(path)) rmSync(path, { force: true });
     rmSync(this.draftPath(id), { force: true });
+    this.removeNewChatDraft(id);
     this.checkpoints.delete(id);
     this.gitChanges.delete(id);
     this.contextCompactions.delete(id);

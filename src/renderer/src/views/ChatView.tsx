@@ -366,7 +366,6 @@ export function ChatView({
         </Activity>
         {isEmpty && !dockBlocked && !interruptedRun && (
           <HomeStart
-            sessionId={sessionId}
             projectDirectory={projectDirectory}
             workingDirectory={workingDirectory}
             needsSetup={needsSetup}

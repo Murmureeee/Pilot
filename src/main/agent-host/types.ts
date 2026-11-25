@@ -5,6 +5,7 @@ import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil
 import type {
   ApprovalMode,
   AssistantTiming,
+  ComposerDraft,
   GitChangesView,
   ContextCompaction,
   MessageRollbackPreview,
@@ -39,6 +40,13 @@ import type {
 import type { McpManager } from "./mcp";
 import type { SessionStore } from "./session-store";
 import type { ToolEnvironment } from "./tools/types";
+
+export interface NewChatDraft {
+  id: string;
+  draft: ComposerDraft;
+  settings: SessionSettings;
+  workingDirectory?: string;
+}
 
 export interface HostDeps {
   store: SessionStore;

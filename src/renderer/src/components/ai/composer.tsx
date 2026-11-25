@@ -77,7 +77,12 @@ import type {
   ComposerSuggestion,
   ComposerToolbarMenu,
 } from "@renderer/lib/types";
-import { selectActiveSession, selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
+import {
+  selectApprovalMode,
+  selectComposerSettings,
+  selectProjectBinding,
+  useAgentStore,
+} from "@renderer/stores/agent";
 import { compactFocus } from "@shared/compact-command";
 import { APP_NAME, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
 import type { ActiveRun, ApprovalMode, PromptMention, SkillMeta } from "@shared/contract";
@@ -169,8 +174,8 @@ export function Composer({
   const clearQueue = useAgentStore((s) => s.clearQueue);
   const loadSession = useAgentStore((s) => s.loadSession);
   const updateSessionSettings = useAgentStore((s) => s.updateSessionSettings);
-  const savedMode = useAgentStore((s) => selectActiveSession(s)?.approvalMode);
-  const planning = useAgentStore((s) => Boolean(selectActiveSession(s)?.planMode));
+  const savedMode = useAgentStore((s) => selectComposerSettings(s).approvalMode);
+  const planning = useAgentStore((s) => Boolean(selectComposerSettings(s).planMode));
   const newSession = useAgentStore((s) => s.newSession);
   const archiveSession = useAgentStore((s) => s.setSessionArchived);
   const setView = useAgentStore((s) => s.setView);
@@ -258,9 +263,8 @@ export function Composer({
   };
 
   const pickDirectory = async (): Promise<void> => {
-    const { sessionId: activeId, composerDraft } = useAgentStore.getState();
     await selectProject({
-      sessionId: activeId ?? (composerDraft.length ? composerId : undefined),
+      sessionId: selectProjectBinding(useAgentStore.getState()),
     });
     (pickerInput.current ?? editor.current)?.focus();
   };

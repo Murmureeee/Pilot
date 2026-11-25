@@ -7,7 +7,7 @@ import type { JSX } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import { t, useLocale } from "@renderer/lib/i18n";
-import { selectActiveSession, useAgentStore } from "@renderer/stores/agent";
+import { selectComposerSettings, useAgentStore } from "@renderer/stores/agent";
 import { LOCALE_DETAILS } from "@shared/constants";
 import { effectiveModelCapabilities, modelTokenLimit } from "@shared/model-capabilities";
 import { selectedCatalogModel } from "@shared/providers";
@@ -24,7 +24,7 @@ export function ContextUsage(): JSX.Element {
     if (state.activeRun && state.activeRun.sessionId === state.sessionId)
       return state.activeRun.modelCapabilities?.contextWindow ?? state.contextWindow;
     const model =
-      state.settings && selectedCatalogModel(state.settings, selectActiveSession(state)?.model);
+      state.settings && selectedCatalogModel(state.settings, selectComposerSettings(state).model);
     return model
       ? effectiveModelCapabilities(model.automatic, model.overrides).contextWindow
       : null;

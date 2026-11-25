@@ -773,6 +773,7 @@ export interface Snapshot {
   sessionId: string | null;
   composerId: string;
   composerDraft: ComposerDraft;
+  draftSettings: SessionSettings;
   draftWorkingDirectory: string | null;
   sessions: SessionMeta[];
   recentProjects: string[];

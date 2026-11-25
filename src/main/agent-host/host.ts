@@ -99,6 +99,7 @@ import type {
   HostDeps,
   GitCommitOperation,
   MessageRollbackOperation,
+  NewChatDraft,
   ReferencedUserMessage,
   SavedGitChanges,
 } from "./types";
@@ -132,10 +133,19 @@ export class AgentHost {
   private applyingGitSelection = false;
   private readonly sessionRules = new Map<string, ToolRule[]>();
   private sessionId: string | null = null;
-  private composerId: string = randomUUID();
-  private draftWorkingDirectory?: string;
+  private newChatDraft: NewChatDraft;
 
-  constructor(private readonly deps: HostDeps) {}
+  constructor(private readonly deps: HostDeps) {
+    this.newChatDraft = deps.store.newChatDraft() ?? this.emptyDraft();
+  }
+
+  private emptyDraft(workingDirectory?: string): NewChatDraft {
+    return { id: randomUUID(), workingDirectory, draft: [], settings: {} };
+  }
+
+  private get composerId(): string {
+    return this.sessionId ?? this.newChatDraft.id;
+  }
 
   private selectedRun(ref: RunRef): AgentRun | undefined {
     const run = this.run;
@@ -165,8 +175,12 @@ export class AgentHost {
     return this.sessionId ? this.deps.store.getMeta(this.sessionId) : null;
   }
 
-  private executionMode(session = this.getCurrentSession()): ApprovalMode {
-    return session?.approvalMode ?? this.deps.getSettings().approvalMode ?? "standard";
+  private get currentSettings(): SessionSettings {
+    return this.getCurrentSession() ?? this.newChatDraft.settings;
+  }
+
+  private executionMode(settings = this.currentSettings): ApprovalMode {
+    return settings.approvalMode ?? this.deps.getSettings().approvalMode ?? "standard";
   }
 
   selectedSessionId(): string | null {
@@ -174,7 +188,9 @@ export class AgentHost {
   }
 
   getProjectDirectory(): string | undefined {
-    return this.sessionId ? this.getCurrentSession()?.workingDirectory : this.draftWorkingDirectory;
+    return this.sessionId
+      ? this.getCurrentSession()?.workingDirectory
+      : this.newChatDraft.workingDirectory;
   }
 
   getWorkingDirectory(): string | undefined {
@@ -189,13 +205,29 @@ export class AgentHost {
     return this.run !== undefined;
   }
 
-  private ensureSession(workingDirectory: string | undefined, settings?: SessionSettings): string {
-    if (this.sessionId) return this.sessionId;
-    const meta = this.deps.store.create(workingDirectory, this.composerId, settings);
+  private startSession(workingDirectory: string | undefined): void {
+    const { id, settings } = this.newChatDraft;
+    const meta = this.deps.store.create(workingDirectory, id, settings);
     this.sessionId = meta.id;
-    this.draftWorkingDirectory = undefined;
     this.sendSessions(meta.id);
-    return meta.id;
+  }
+
+  private saveNewChatDraft(draft: NewChatDraft): void {
+    this.deps.store.saveNewChatDraft(draft);
+    this.newChatDraft = draft;
+  }
+
+  private updateCurrentSettings(changes: SessionSettings): void {
+    if (this.sessionId) {
+      this.deps.store.updateSettings(this.sessionId, changes);
+      this.sendSessions();
+    } else {
+      this.saveNewChatDraft({
+        ...this.newChatDraft,
+        settings: { ...this.currentSettings, ...changes },
+      });
+      this.publishSnapshot();
+    }
   }
 
   getInstructionSources(composerId: string): SessionInstructionSources {
@@ -267,14 +299,14 @@ export class AgentHost {
   /** 确保当前会话有 Agent 实例；跨会话或 provider/模型/systemPrompt 变更时重建（转录从落盘恢复） */
   private ensureAgent(workingDirectory: string | undefined, skills?: readonly SkillMeta[]): Agent {
     const settings = this.deps.getSettings();
-    const selection = resolveSessionModel(settings, this.getCurrentSession()?.model);
+    const selection = resolveSessionModel(settings, this.currentSettings.model);
     const provider = selection && settings.providers.find((p) => p.id === selection.providerId);
     if (!selection || !provider) throw new Error("尚未配置 provider，请先到设置页添加");
     const active = { ...provider, modelId: selection.modelId };
     const entry = active.models?.find(({ id }) => id === active.modelId);
 
     if (workingDirectory) createToolPathResolver(workingDirectory)(".");
-    const sessionId = this.ensureSession(workingDirectory);
+    const sessionId = this.composerId;
     const instructions = this.loadInstructions(settings, workingDirectory, skills);
     const toolEnvironment: ToolEnvironment = {
       workingDirectory,
@@ -326,6 +358,7 @@ export class AgentHost {
       getApiKey: () => apiKey,
     });
 
+    if (!this.sessionId) this.startSession(workingDirectory);
     this.agent = agent;
     this.agentSessionId = sessionId;
     this.agentProvider = active;
@@ -356,7 +389,7 @@ export class AgentHost {
     composerId: string,
     expectedDirectory?: string,
   ): {
-    sessionId: string | null;
+    sessionId: string;
     workingDirectory: string | null;
     task?: VerificationTask;
   } {
@@ -367,21 +400,20 @@ export class AgentHost {
     if (expectedDirectory !== undefined) {
       if (workingDirectory !== expectedDirectory)
         throw new Error("工作目录已变更，请重新打开验证。");
-      this.ensureSession(workingDirectory);
+      if (!this.sessionId) this.deps.store.saveNewChatDraft(this.newChatDraft);
     }
     const sessionId = this.sessionId;
     const checkpoint = sessionId ? this.deps.store.checkpoint(sessionId) : undefined;
     const task = checkpoint
       ? (checkpoint.task ?? { taskId: checkpoint.runId, agentRunId: checkpoint.runId })
       : this.getCurrentSession()?.lastTask;
-    return { sessionId, workingDirectory, task };
+    return { sessionId: composerId, workingDirectory, task };
   }
 
   saveSessionDraft(id: string, draft: ComposerDraft): void {
     this.checkComposerId(id);
-    if (!this.sessionId && !draft.length) return;
-    const sessionId = this.ensureSession(this.getWorkingDirectory());
-    this.deps.store.saveDraft(sessionId, draft);
+    if (this.sessionId) this.deps.store.saveDraft(this.sessionId, draft);
+    else this.saveNewChatDraft({ ...this.newChatDraft, draft });
   }
 
   updateSessionSettings(id: string, input: SessionSettingsInput): void {
@@ -392,7 +424,7 @@ export class AgentHost {
     const changes: SessionSettings = {};
     if (input.model !== undefined) changes.model = input.model ?? undefined;
     if (input.approvalMode !== undefined) {
-      const planMode = this.getCurrentSession()?.planMode;
+      const planMode = this.currentSettings.planMode;
       if (planMode?.proposal) throw new Error("请先确认或放弃此计划。");
       changes.approvalMode = input.approvalMode ?? undefined;
       if (planMode)
@@ -401,35 +433,24 @@ export class AgentHost {
           executionMode: changes.approvalMode ?? this.deps.getSettings().approvalMode ?? "standard",
         };
     }
-    if (!this.sessionId) {
-      if (changes.model || changes.approvalMode) {
-        this.ensureSession(this.getWorkingDirectory(), changes);
-      }
-      return;
-    }
-    this.deps.store.updateSettings(this.sessionId, changes);
-    this.sendSessions();
+    this.updateCurrentSettings(changes);
   }
 
   setPlanMode(id: string, enabled: boolean): void {
     this.checkComposerId(id);
-    const current = this.getCurrentSession()?.planMode;
+    const current = this.currentSettings.planMode;
     if (enabled === Boolean(current)) return;
     if (current?.proposal) throw new Error("请先确认或放弃此计划。");
     if (this.run?.state.sessionId === id) throw new Error("请等待当前回复结束后再切换计划模式。");
-    const changes = { planMode: enabled ? { executionMode: this.executionMode() } : undefined };
-    if (!this.sessionId) {
-      this.ensureSession(this.getWorkingDirectory(), changes);
-      return;
-    }
-    this.deps.store.updateSettings(id, changes);
-    this.sendSessions();
+    this.updateCurrentSettings({
+      planMode: enabled ? { executionMode: this.executionMode() } : undefined,
+    });
   }
 
   reviewPlan(id: string, proposalId: string, decision: PlanDecision): Promise<void> | void {
     this.checkComposerId(id);
     const { store } = this.deps;
-    const planMode = this.getCurrentSession()?.planMode;
+    const planMode = this.currentSettings.planMode;
     const proposal = planMode?.proposal;
     if (!planMode || proposal?.id !== proposalId || store.checkpoint(id))
       throw new Error("计划已更新，请重新打开会话。");
@@ -498,7 +519,7 @@ export class AgentHost {
     ) {
       return run.state;
     }
-    const planMode = this.getCurrentSession()?.planMode;
+    const planMode = this.currentSettings.planMode;
     if (!run && planMode?.proposal) throw new Error("请先确认或放弃此计划。");
     if (expectedDirectory !== undefined) this.checkWorkingDirectory(expectedDirectory);
     const workingDirectory = this.getWorkingDirectory();
@@ -513,6 +534,7 @@ export class AgentHost {
       typeof input === "string"
         ? { text: input }
         : prepareMentionPrompt(input, (directory) => directory === workingDirectory, skills);
+    const clearDraftFor = composerId ?? (this.sessionId === null ? this.composerId : undefined);
     const agent = run && this.agent ? this.agent : this.ensureAgent(workingDirectory, skills);
     const message: ReferencedUserMessage = {
       role: "user",
@@ -526,7 +548,7 @@ export class AgentHost {
       return Promise.resolve();
     }
 
-    return this.beginRun(agent, { initialMessage: message, clearDraftFor: composerId });
+    return this.beginRun(agent, { initialMessage: message, clearDraftFor });
   }
 
   resume(ref: RunRef, compact = false): Promise<void> | ActiveRun {
@@ -663,7 +685,7 @@ export class AgentHost {
     const directory = this.deps.store.getMeta(id)?.workingDirectory;
     this.deps.store.setArchived(id, archived);
     if (archived && this.sessionId === id) {
-      this.switchSession(null, directory);
+      this.switchSession(null, this.projectDraft(directory));
       return this.publishSnapshot("reset");
     }
     this.sendSessions();
@@ -736,23 +758,22 @@ export class AgentHost {
     this.sessionRules.delete(id);
     if (this.agentSessionId === id) this.resetAgent();
     if (this.sessionId === id) {
-      this.switchSession(null, directory);
+      this.switchSession(null, this.projectDraft(directory));
       return this.publishSnapshot("reset");
     }
     this.sendSessions();
     return this.getSnapshot();
   }
 
-  /** 在首次编辑草稿、改会话设置或主动发送时才创建会话记录。 */
   newSession(): Snapshot {
-    this.switchSession(null, this.getProjectDirectory());
+    this.switchSession(null, this.emptyDraft(this.getProjectDirectory()));
     return this.publishSnapshot();
   }
 
   openProject(directory: string): Snapshot {
     const workingDirectory = normalizeWorkingDirectory(directory);
     this.deps.store.rememberProject(workingDirectory);
-    this.switchSession(null, workingDirectory);
+    this.switchSession(null, this.projectDraft(workingDirectory));
     return this.publishSnapshot();
   }
 
@@ -772,8 +793,13 @@ export class AgentHost {
   }
 
   async bindProject(id: string, directory: string): Promise<Snapshot> {
-    if (this.sessionId !== id) throw new Error("会话已切换，请重新关联项目。");
+    if (this.composerId !== id) throw new Error("会话已切换，请重新关联项目。");
     const workingDirectory = normalizeWorkingDirectory(directory);
+    if (!this.sessionId) {
+      this.deps.store.rememberProject(workingDirectory);
+      this.saveNewChatDraft({ ...this.newChatDraft, workingDirectory });
+      return this.publishSnapshot();
+    }
     if (this.run?.state.sessionId === id) await this.stopOwnedRun(id);
     if (this.sessionId !== id) throw new Error("会话已切换，请重新关联项目。");
     this.deps.store.bindProject(id, workingDirectory);
@@ -804,12 +830,17 @@ export class AgentHost {
     this.view = createSessionView();
   }
 
-  private switchSession(id: string | null, draftWorkingDirectory?: string): void {
+  private projectDraft(workingDirectory?: string): NewChatDraft {
+    return (
+      this.deps.store.newChatDraft(workingDirectory ?? null) ?? this.emptyDraft(workingDirectory)
+    );
+  }
+
+  private switchSession(id: string | null, draft?: NewChatDraft): void {
     this.gitCommit = undefined;
     this.messageRollback = undefined;
     this.sessionId = id;
-    this.composerId = id ?? randomUUID();
-    this.draftWorkingDirectory = draftWorkingDirectory;
+    if (!id) this.newChatDraft = draft ?? this.emptyDraft();
   }
 
   private sessionFileChange(
@@ -1342,7 +1373,7 @@ export class AgentHost {
     const checkpoint =
       !ownRun && this.sessionId ? this.deps.store.checkpoint(this.sessionId) : undefined;
     const settings = toPublicSettings(this.deps.getSettings());
-    const selected = selectedCatalogModel(settings, this.getCurrentSession()?.model);
+    const selected = selectedCatalogModel(settings, this.currentSettings.model);
     const configured = selected
       ? effectiveModelCapabilities(selected.automatic, selected.overrides)
       : null;
@@ -1354,8 +1385,11 @@ export class AgentHost {
     return {
       sessionId: this.sessionId,
       composerId: this.composerId,
-      composerDraft: this.sessionId ? this.deps.store.loadDraft(this.sessionId) : [],
-      draftWorkingDirectory: this.draftWorkingDirectory ?? null,
+      composerDraft: this.sessionId
+        ? this.deps.store.loadDraft(this.sessionId)
+        : this.newChatDraft.draft,
+      draftSettings: this.sessionId ? {} : this.newChatDraft.settings,
+      draftWorkingDirectory: this.sessionId ? null : (this.newChatDraft.workingDirectory ?? null),
       sessions,
       recentProjects: this.deps.store.listRecentProjects(sessions),
       messages:

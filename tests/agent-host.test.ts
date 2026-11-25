@@ -97,7 +97,11 @@ it("plans with read-only tools, restores the edited plan after restart, and exec
   const host = createHost();
   const { composerId } = host.openProject(root);
   host.setPlanMode(composerId, true);
-  expect(host.getSnapshot().sessions[0].approvalMode).toBeUndefined();
+  expect(host.getSnapshot()).toMatchObject({
+    sessionId: null,
+    sessions: [],
+    draftSettings: { planMode: { executionMode: "standard" } },
+  });
   // The plan must retain the permissions it was created with even if the global default changes.
   settings.approvalMode = "full-access";
   const planning = host.prompt("Prepare a note");
@@ -357,10 +361,12 @@ it("publishes the result for a background failure and clears it after a successf
   expect(resolve).toHaveBeenCalled();
 });
 
-it("restores separate session settings and structured drafts in the same project", async () => {
+it("restores project drafts and their settings before creating a chat on the first send", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-session-settings-"));
   const root = realpathSync(profile.path);
   const sessions = join(root, "sessions");
+  const next = join(root, "next");
+  mkdirSync(next);
   const providers = [
     { id: "default", kind: "faux", name: "Default", modelId: "general" },
     { id: "alpha", kind: "faux", name: "Alpha", modelId: "model-a" },
@@ -396,30 +402,42 @@ it("restores separate session settings and structured drafts in the same project
   const draftB: ComposerDraft = [" BETA\n "];
   const modelA = { providerId: "alpha", modelId: "model-a" };
   const modelB = { providerId: "beta", modelId: "model-b" };
-  const a = (await host.openProject(root)).composerId;
+  const a = host.getSnapshot().composerId;
   host.saveSessionDraft(a, draftA);
   host.updateSessionSettings(a, { model: modelA, approvalMode: "read-only" });
+  expect(await host.bindProject(a, root)).toMatchObject({
+    composerId: a,
+    composerDraft: draftA,
+    draftWorkingDirectory: root,
+    sessionId: null,
+    sessions: [],
+  });
 
-  const b = (await host.newSession()).composerId;
+  const b = host.openProject(next).composerId;
   expect(b).not.toBe(a);
   expect(() => host.saveSessionDraft(a, ["stale"])).toThrow("会话已切换");
   host.updateSessionSettings(b, { model: modelB, approvalMode: "full-access" });
   host.saveSessionDraft(b, draftB);
+  expect(host.verificationScope(b, next)).toMatchObject({ sessionId: b, workingDirectory: next });
+  expect(() => host.prompt("Stale project", b, root)).toThrow("工作目录已变更");
+  expect(host.getSnapshot().sessions).toEqual([]);
 
   for (const current of [host, createHost()]) {
-    const alpha = await current.loadSession(a);
-    expect(alpha.composerDraft).toEqual(draftA);
-    expect(alpha.sessions.find(({ id }) => id === a)).toMatchObject({
-      workingDirectory: root,
-      model: modelA,
-      approvalMode: "read-only",
+    const alpha = current.openProject(root);
+    expect(alpha).toMatchObject({
+      composerId: a,
+      composerDraft: draftA,
+      draftWorkingDirectory: root,
+      draftSettings: { model: modelA, approvalMode: "read-only" },
+      sessions: [],
     });
-    const beta = await current.loadSession(b);
-    expect(beta.composerDraft).toEqual(draftB);
-    expect(beta.sessions.find(({ id }) => id === b)).toMatchObject({
-      workingDirectory: root,
-      model: modelB,
-      approvalMode: "full-access",
+    const beta = current.openProject(next);
+    expect(beta).toMatchObject({
+      composerId: b,
+      composerDraft: draftB,
+      draftWorkingDirectory: next,
+      draftSettings: { model: modelB, approvalMode: "full-access" },
+      sessions: [],
     });
     expect(beta.settings).toMatchObject({ activeProviderId: "default", approvalMode: "standard" });
   }
@@ -427,16 +445,21 @@ it("restores separate session settings and structured drafts in the same project
   const restarted = createHost();
   const resolve = vi.spyOn(models, "resolveModel");
   try {
-    await restarted.loadSession(a);
+    restarted.openProject(root);
     await restarted.prompt("A 演示", a);
     const file = join(root, "pilot-demo.txt");
     expect(existsSync(file)).toBe(false);
-    expect(restarted.getSnapshot().composerDraft).toEqual([]);
+    expect(restarted.getSnapshot()).toMatchObject({
+      sessionId: a,
+      composerDraft: [],
+      sessions: [{ id: a, approvalMode: "read-only", model: modelA }],
+    });
 
-    await restarted.loadSession(b);
+    restarted.openProject(next);
     expect(restarted.getSnapshot().composerDraft).toEqual(draftB);
     await restarted.prompt("B 演示", b);
-    expect(existsSync(file)).toBe(true);
+    expect(existsSync(join(next, "pilot-demo.txt"))).toBe(true);
+    expect(restarted.getSnapshot().sessionId).toBe(b);
     expect(permissionRequests).toEqual([]);
     expect(resolve.mock.calls.map(([provider]) => [provider.id, provider.modelId])).toEqual([
       ["alpha", "model-a"],
@@ -670,20 +693,20 @@ it("keeps the original run, approval, and transcript while another project is se
   });
   const a = host.openProject(original).composerId;
   host.saveSessionDraft(a, ["Original 演示"]);
-  host.renameSession(a, "A");
   const b = host.openProject(next).composerId;
   host.updateSessionSettings(b, { approvalMode: "full-access" });
   host.saveSessionDraft(b, ["B draft"]);
-  host.loadSession(a);
+  host.openProject(original);
 
   const running = host.prompt("Original 演示", a);
   const ref = host.getSnapshot().activeRun!;
   const invalid = { sessionId: a, runId: b };
   try {
     await vi.waitFor(() => expect(tools).toHaveBeenCalledWith(original, expect.any(AbortSignal)));
-    expect(host.loadSession(b)).toMatchObject({
+    expect(host.openProject(next)).toMatchObject({
       status: "idle",
-      sessionId: b,
+      sessionId: null,
+      composerId: b,
       composerDraft: ["B draft"],
       messages: [],
       pendingPermissions: [],
@@ -711,10 +734,11 @@ it("keeps the original run, approval, and transcript while another project is se
     host.respondPermission(ref, request.requestId, "once");
     expect(host.getSnapshot()).toMatchObject({ status: "streaming", pendingPermissions: [] });
 
-    host.loadSession(b);
+    host.openProject(next);
     await running;
     expect(host.getSnapshot()).toMatchObject({
-      sessionId: b,
+      sessionId: null,
+      composerId: b,
       activeRun: null,
       messages: [],
       composerDraft: ["B draft"],
@@ -745,20 +769,20 @@ it("holds the run lock while stopping and ignores stop and queue actions from an
   vi.spyOn(mcp, "tools")
     .mockReturnValueOnce(firstPreparation.promise)
     .mockReturnValueOnce(secondPreparation.promise);
+  const store = new SessionStore(join(profile.path, "sessions"));
+  const b = store.create().id;
+  store.saveDraft(b, ["Second chat"]);
   const host = new AgentHost({
     getSettings: () => settings,
     saveSettings: vi.fn<(value: Settings) => void>(),
     broadcast: vi.fn<(event: UiAgentEvent) => void>(),
-    store: new SessionStore(join(profile.path, "sessions")),
+    store,
     skillsDir: join(profile.path, "skills"),
     mcp,
   });
 
   const a = host.newSession().composerId;
   host.saveSessionDraft(a, ["First"]);
-  const b = host.newSession().composerId;
-  host.saveSessionDraft(b, ["Second chat"]);
-  host.loadSession(a);
   const first = host.prompt("First", a);
   const previous = host.getSnapshot().activeRun!;
   try {

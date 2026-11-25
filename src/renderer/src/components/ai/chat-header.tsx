@@ -158,11 +158,7 @@ export function ChatHeader({
   return (
     <header className="@container flex h-10 shrink-0 items-center gap-2 border-b border-border/65 pr-2 pl-5">
       <SessionTitle key={session?.id ?? ""} title={title} session={session} />
-      <ProjectChip
-        sessionId={session?.id ?? null}
-        projectDirectory={projectDirectory}
-        workingDirectory={workingDirectory}
-      />
+      <ProjectChip projectDirectory={projectDirectory} workingDirectory={workingDirectory} />
       {head && <ProjectBranch head={head} />}
       {composerId && (
         <div className="ml-auto flex shrink-0 items-center gap-1">

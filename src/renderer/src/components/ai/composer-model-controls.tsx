@@ -17,7 +17,7 @@ import { COMPOSER_MODEL_OPTION_CLASS } from "@renderer/lib/constants";
 import { displayProviderName, t, useLocale } from "@renderer/lib/i18n";
 import { levelLabel } from "@renderer/lib/thinking-level";
 import type { ComposerModelControlsProps } from "@renderer/lib/types";
-import { selectActiveSession, useAgentStore } from "@renderer/stores/agent";
+import { selectComposerSettings, useAgentStore } from "@renderer/stores/agent";
 import { THINKING_LEVELS } from "@shared/constants";
 import type { SessionModelSelection, ThinkingLevel } from "@shared/contract";
 import { effectiveModelCapabilities } from "@shared/model-capabilities";
@@ -33,7 +33,7 @@ export function ComposerModelControls({
   const settings = useAgentStore((state) => state.settings);
   const updateSessionSettings = useAgentStore((state) => state.updateSessionSettings);
   const setThinkingLevel = useAgentStore((state) => state.setThinkingLevel);
-  const sessionModel = useAgentStore((state) => selectActiveSession(state)?.model);
+  const sessionModel = useAgentStore((state) => selectComposerSettings(state).model);
   const selection = settings ? resolveSessionModel(settings, sessionModel) : undefined;
   const providers = settings?.providers.filter(({ models }) => models.length > 0) ?? [];
   const provider = providers.find(({ id }) => id === selection?.providerId);

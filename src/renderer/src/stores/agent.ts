@@ -13,6 +13,7 @@ import type {
   PublicSettings,
   RunRef,
   SessionMeta,
+  SessionSettings,
   SessionSettingsInput,
   SettingsInput,
   Snapshot,
@@ -34,6 +35,7 @@ interface AgentStore extends AgentUiState {
   settings: PublicSettings | null;
   composerId: string | null;
   composerDraft: ComposerDraft;
+  draftSettings: SessionSettings;
   draftWorkingDirectory: string | null;
   choosingProject: boolean;
   projectError: string | null;
@@ -122,9 +124,15 @@ export function selectActiveSession(
 }
 
 export function selectApprovalMode(
-  state: Pick<AgentStore, "sessionId" | "sessions" | "settings">,
+  state: Pick<AgentStore, "sessionId" | "sessions" | "draftSettings" | "settings">,
 ): ApprovalMode {
-  return selectActiveSession(state)?.approvalMode ?? state.settings?.approvalMode ?? "standard";
+  return selectComposerSettings(state).approvalMode ?? state.settings?.approvalMode ?? "standard";
+}
+
+export function selectComposerSettings(
+  state: Pick<AgentStore, "sessionId" | "sessions" | "draftSettings">,
+): SessionSettings {
+  return selectActiveSession(state) ?? state.draftSettings;
 }
 
 export function selectPlanReview(
@@ -142,6 +150,12 @@ export function selectProjectDirectory(
     return selectActiveSession(state)?.workingDirectory ?? null;
   }
   return state.draftWorkingDirectory;
+}
+
+export function selectProjectBinding(state: AgentStore): string | undefined {
+  if (selectProjectDirectory(state)) return undefined;
+  const hasDraft = state.composerDraft.length || Object.values(state.draftSettings).some(Boolean);
+  return state.sessionId || (hasDraft ? (state.composerId ?? undefined) : undefined);
 }
 
 export function selectWorkingDirectory(
@@ -167,12 +181,16 @@ function sessionSnapshot(
   snapshot: Snapshot,
   current: Pick<AgentStore, "composerId" | "composerDraft">,
 ): AgentUiState &
-  Pick<AgentStore, "draftWorkingDirectory" | "composerId" | "composerDraft" | "settings"> {
+  Pick<
+    AgentStore,
+    "draftWorkingDirectory" | "draftSettings" | "composerId" | "composerDraft" | "settings"
+  > {
   return {
     sessionId: snapshot.sessionId,
     composerId: snapshot.composerId,
     composerDraft:
       snapshot.composerId === current.composerId ? current.composerDraft : snapshot.composerDraft,
+    draftSettings: snapshot.draftSettings,
     draftWorkingDirectory: snapshot.draftWorkingDirectory,
     sessions: snapshot.sessions,
     recentProjects: snapshot.recentProjects,
@@ -196,6 +214,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   settings: null,
   composerId: null,
   composerDraft: [],
+  draftSettings: {},
   draftWorkingDirectory: null,
   choosingProject: false,
   projectError: null,

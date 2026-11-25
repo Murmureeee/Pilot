@@ -23,18 +23,16 @@ import {
 import { REVIEW_PANEL_ID, REVIEW_TRIGGER_ID } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { referenceName } from "@renderer/lib/workspace-links";
-import { useAgentStore } from "@renderer/stores/agent";
+import { selectProjectBinding, useAgentStore } from "@renderer/stores/agent";
 import { activateReview } from "@renderer/stores/review";
 import type { ProjectGitHead, VerificationStatus } from "@shared/contract";
 
 import { ChangeCount, VerificationMark } from "./review-indicators";
 
 export function ProjectChip({
-  sessionId,
   projectDirectory,
   workingDirectory,
 }: {
-  sessionId: string | null;
   projectDirectory: string | null;
   workingDirectory: string | null;
 }): JSX.Element {
@@ -42,8 +40,7 @@ export function ProjectChip({
   const recentProjects = useAgentStore((s) => s.recentProjects);
   const selectProject = useAgentStore((s) => s.selectProject);
   const choosingProject = useAgentStore((s) => s.choosingProject);
-  // 已保存但还没有项目的会话只能补关联；其余情况是换到另一个项目开始新聊天。
-  const bindTo = projectDirectory ? undefined : (sessionId ?? undefined);
+  const bindTo = useAgentStore(selectProjectBinding);
   const openFolderPicker = (): void => void selectProject({ sessionId: bindTo });
   const title =
     projectDirectory ??

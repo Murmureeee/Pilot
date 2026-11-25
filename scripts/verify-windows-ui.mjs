@@ -20,6 +20,7 @@ import {
   verifyRestoredSettings,
   verifySettings,
   verifyStreamingReply,
+  verifyUnsentDraft,
 } from "./windows-ui/scenarios.mjs";
 
 const require = createRequire(import.meta.url);
@@ -124,7 +125,12 @@ try {
     await runScene("First-run model configuration", () =>
       verifyFirstRun(page, window, app, model, project),
     );
-    await runScene("Send and render a streaming reply", () => verifyStreamingReply(page, model));
+    await runScene("Edit a draft without starting a chat", () => verifyUnsentDraft(page));
+  });
+  await withApp(profile, async (page, window) => {
+    await runScene("Restore the draft and create a chat on first send", () =>
+      verifyStreamingReply(page, model),
+    );
     await runScene("Allow and deny file writes", () =>
       verifyApprovals(page, window, model, project),
     );

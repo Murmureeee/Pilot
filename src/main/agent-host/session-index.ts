@@ -2,18 +2,18 @@
 import { z } from "zod";
 
 import { EXECUTION_APPROVAL_MODES, PLAN_PROPOSAL_MAX_LENGTH } from "../../shared/constants";
-import { SESSION_RUN_RESULTS, type SessionMeta } from "../../shared/contract";
+import {
+  SESSION_RUN_RESULTS,
+  type ComposerDraft,
+  type SessionMeta,
+  type SessionSettings,
+} from "../../shared/contract";
 import { SESSION_FILE_ID } from "../constants";
-import type { SessionIndex } from "./types";
+import type { NewChatDraft, SessionIndex } from "./types";
 
 const optionalText = z.string().optional();
 const executionMode = z.enum(EXECUTION_APPROVAL_MODES);
-const sessionMeta = z.looseObject({
-  id: z.string().regex(SESSION_FILE_ID),
-  title: z.string(),
-  createdAt: z.number(),
-  updatedAt: z.number(),
-  workingDirectory: optionalText,
+const sessionSettings = z.object({
   approvalMode: executionMode.optional(),
   planMode: z
     .object({
@@ -28,6 +28,15 @@ const sessionMeta = z.looseObject({
     })
     .optional(),
   model: z.object({ providerId: z.string(), modelId: z.string() }).optional(),
+}) satisfies z.ZodType<SessionSettings>;
+
+const sessionMeta = z.looseObject({
+  ...sessionSettings.shape,
+  id: z.string().regex(SESSION_FILE_ID),
+  title: z.string(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  workingDirectory: optionalText,
   lastTask: z
     .object({ taskId: z.string(), agentRunId: optionalText, title: optionalText })
     .optional(),
@@ -38,6 +47,22 @@ const sessionMeta = z.looseObject({
   unread: z.boolean().optional(),
   personaOverride: optionalText,
 }) satisfies z.ZodType<SessionMeta>;
+
+const newChatDraft = z.object({
+  id: z.uuid(),
+  draft: z.custom<ComposerDraft>(Array.isArray),
+  settings: sessionSettings,
+  workingDirectory: optionalText,
+}) satisfies z.ZodType<NewChatDraft>;
+
+export function parseNewChatDrafts(text: string): NewChatDraft[] {
+  const raw: unknown = JSON.parse(text);
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((value) => {
+    const entry = newChatDraft.safeParse(value);
+    return entry.success ? [entry.data] : [];
+  });
+}
 
 const indexFields = z.looseObject({
   sessions: z.unknown().optional(),

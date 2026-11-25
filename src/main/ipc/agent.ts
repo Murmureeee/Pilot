@@ -154,7 +154,6 @@ export function registerAgentRoutes({
     runId: string,
   ): { sessionId: string; runId: string } => {
     const { sessionId } = host.verificationScope(composerId);
-    if (!sessionId) throw new Error("找不到这次验证。");
     return { sessionId, runId };
   };
   handle(IPC.sessionVerificationRun, (_event, composerId, runId) =>
@@ -163,7 +162,6 @@ export function registerAgentRoutes({
   handle(IPC.sessionStartVerification, (_event, composerId, request) => {
     exit.checkWorkAllowed();
     const { sessionId, task } = host.verificationScope(composerId, request.workingDirectory);
-    if (!sessionId) throw new Error("请先选择工作目录。");
     return verification.start({
       ...request,
       sessionId,

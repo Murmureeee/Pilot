@@ -6,7 +6,7 @@ import { Button } from "@renderer/components/ui/button";
 import { HOME_RECENT_PROJECT_LIMIT, STARTER_TASKS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { referenceName } from "@renderer/lib/workspace-links";
-import { useAgentStore } from "@renderer/stores/agent";
+import { selectProjectBinding, useAgentStore } from "@renderer/stores/agent";
 
 function StarterTasks({ onPick }: { onPick: (prompt: string) => void }): JSX.Element {
   const locale = useLocale();
@@ -30,11 +30,9 @@ function StarterTasks({ onPick }: { onPick: (prompt: string) => void }): JSX.Ele
 }
 
 function ProjectEntry({
-  sessionId,
   workingDirectory,
   primary,
 }: {
-  sessionId: string | null;
   workingDirectory: string | null;
   primary: boolean;
 }): JSX.Element {
@@ -42,7 +40,7 @@ function ProjectEntry({
   const recentProjects = useAgentStore((s) => s.recentProjects);
   const selectProject = useAgentStore((s) => s.selectProject);
   const choosingProject = useAgentStore((s) => s.choosingProject);
-  const bindTo = sessionId ?? undefined;
+  const bindTo = useAgentStore(selectProjectBinding);
   const recent = recentProjects.slice(0, HOME_RECENT_PROJECT_LIMIT);
 
   return (
@@ -106,20 +104,16 @@ function ProjectEntry({
 
 /** 空会话输入框下方的入口：有项目给起步任务，没有项目先引导打开项目。 */
 export function HomeStart({
-  sessionId,
   projectDirectory,
   workingDirectory,
   needsSetup,
   onPick,
 }: {
-  sessionId: string | null;
   projectDirectory: string | null;
   workingDirectory: string | null;
   needsSetup: boolean;
   onPick: (prompt: string) => void;
 }): JSX.Element {
   if (projectDirectory) return <StarterTasks onPick={onPick} />;
-  return (
-    <ProjectEntry sessionId={sessionId} workingDirectory={workingDirectory} primary={!needsSetup} />
-  );
+  return <ProjectEntry workingDirectory={workingDirectory} primary={!needsSetup} />;
 }
