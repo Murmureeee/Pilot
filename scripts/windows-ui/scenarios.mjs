@@ -1,6 +1,6 @@
 // @env node
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { stripVTControlCharacters } from "node:util";
@@ -40,6 +40,10 @@ const locales = [
     editPlan: "编辑计划",
     discardPlan: "放弃计划",
     executePlan: "确认并执行",
+    more: "更多操作",
+    instructionSources: "指令来源",
+    instructionOrder: "指令生效顺序",
+    close: "关闭",
   },
   {
     lang: "en",
@@ -55,6 +59,10 @@ const locales = [
     editPlan: "Edit plan",
     discardPlan: "Discard plan",
     executePlan: "Confirm and execute",
+    more: "More actions",
+    instructionSources: "Instruction sources",
+    instructionOrder: "Instruction order",
+    close: "Close",
   },
 ];
 
@@ -389,6 +397,129 @@ function sendTool(completion, id, name, args) {
     ],
   });
   completion.finish("tool_calls");
+}
+
+async function openInstructionSources(page, locale) {
+  const trigger = button(page.locator("main"), locale.more);
+  await trigger.press("Enter");
+  await page.getByRole("menuitem", { name: locale.instructionSources + "…", exact: true }).press("Enter");
+  const dialog = page.getByRole("dialog", { name: locale.instructionSources, exact: true });
+  await dialog.waitFor();
+  const order = dialog.getByRole("region", { name: locale.instructionOrder, exact: true });
+  return { dialog, order, trigger };
+}
+
+async function closeInstructionSources(page, { dialog, trigger }) {
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "hidden" });
+  await page.waitForFunction((label) => document.activeElement?.getAttribute("aria-label") === label,
+    await trigger.getAttribute("aria-label"));
+}
+
+export async function verifyProjectInstructions(page, app, model, project) {
+  const files = {
+    "CLAUDE.md": "Fixture root guidance",
+    "features/CLAUDE.md": "Fixture parent guidance",
+    "features/forms/AGENTS.md": "Fixture form guidance",
+    "features/forms/CLAUDE.md": "Fixture shadowed guidance",
+    "features/forms/scope-note.txt": "Use this file to find form guidance.",
+    "delivery/AGENTS.md": "Fixture delivery guidance",
+  };
+  for (const path of ["features/forms", "delivery"])
+    mkdirSync(join(project, path), { recursive: true });
+  for (const [path, content] of Object.entries(files)) writeFileSync(join(project, path), content);
+  await app.evaluate(({ dialog }, folder) => {
+    const original = dialog.showOpenDialog;
+    dialog.showOpenDialog = async () => {
+      dialog.showOpenDialog = original;
+      return { canceled: false, filePaths: [folder] };
+    };
+  }, project);
+  await page.keyboard.press("Control+l");
+  await page.keyboard.press("Control+o");
+  await waitForProjectDraft(page, project);
+
+  const composer = editor(page);
+  await composer.fill("Check @scope-note");
+  await composer.press("End");
+  await page.getByRole("option", { name: /^scope-note\.txt/ }).waitFor();
+  await composer.press("Enter");
+  await composer.locator("[data-mention]").waitFor();
+
+  const shown = await openInstructionSources(page, locales[1]);
+  await shown.order.getByText("Applies within features/forms/", { exact: true }).waitFor();
+  assert.deepEqual(await shown.order.locator("[data-instruction-scope]").evaluateAll((rows) =>
+    rows.map((row) => row.dataset.instructionScope)), ["features/forms", "features", "."]);
+  assert.equal((await page.evaluate(() => window.pi.getSnapshot())).sessionId, null);
+  await closeInstructionSources(page, shown);
+
+  await composer.press("Enter");
+  const first = await model.nextCompletion();
+  const systemInstructions = (request) => request.input.messages
+    .filter(({ role }) => role === "system" || role === "developer")
+    .map(({ content }) => content).join("\n");
+  assert.match(systemInstructions(first), /Fixture form guidance[\s\S]*Fixture parent guidance[\s\S]*Fixture root guidance/);
+  assert.doesNotMatch(systemInstructions(first), /Fixture shadowed guidance|Fixture delivery guidance/);
+  const running = await openInstructionSources(page, locales[1]);
+  const target = "delivery/result.txt";
+  sendTool(first, "discover-delivery", "write_file", { path: target, content: "Too early" });
+  const review = await model.nextCompletion();
+  assert.match(systemInstructions(review), /Fixture delivery guidance/);
+  assert.match(review.input.messages.at(-1).content, /请按这些指令检查并重试文件操作/);
+  assert.ok(!existsSync(join(project, target)));
+  assert.equal(await page.locator("[data-permission-card]").count(), 0);
+  await running.order.getByText("Applies within delivery/", { exact: true }).waitFor();
+  await closeInstructionSources(page, running);
+
+  sendTool(review, "write-to-delivery", "write_file", { path: target, content: "Reviewed" });
+  await button(page.locator("[data-permission-card]"), "Allow once").press("Enter");
+  const done = await model.nextCompletion();
+  assert.equal(readFileSync(join(project, target), "utf8"), "Reviewed");
+  done.write({ content: "The scoped instructions fixture is complete." });
+  done.finish();
+  await button(page, "Send").waitFor();
+  const snapshot = await page.evaluate(() => window.pi.getSnapshot());
+  assert.ok(snapshot.sessionId);
+  return snapshot.sessionId;
+}
+
+export async function verifyInstructionSourceLayouts(page, window, sessionId) {
+  await page.evaluate((id) => window.pi.sessionLoad(id), sessionId);
+  let current = locales[1];
+  let contrast = Infinity;
+  for (const size of [wide, narrow]) {
+    await resize(page, window, size);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        const shown = await openInstructionSources(page, locale);
+        await shown.order.locator('[data-instruction-scope="delivery"]').waitFor();
+        await assertFits(shown.dialog);
+        await assertFits(shown.order);
+        await assertFits(shown.dialog.getByRole("heading", { name: locale.instructionSources }));
+        await assertFits(button(shown.dialog, locale.close));
+        contrast = Math.min(contrast, await minimumTextContrast(shown.dialog, "h2, p"));
+        await closeInstructionSources(page, shown);
+        console.log("Checked instruction sources at " + size.width + " × " + size.height + " " + locale.lang + " " + theme);
+      }
+    }
+  }
+
+  assert.ok(contrast >= 4.5, "Instruction source text must meet the contrast requirement");
+  console.log("Instruction source text minimum contrast " + contrast.toFixed(2) + ":1");
+  await resize(page, window, narrow, 1.5);
+  const zoomed = await openInstructionSources(page, current);
+  await zoomed.order.locator('[data-instruction-scope="delivery"]').waitFor();
+  await assertFits(zoomed.dialog);
+  await assertFits(zoomed.order);
+  await zoomed.order.press("End");
+  await page.waitForFunction(() => {
+    const region = document.activeElement;
+    return region?.matches('[role="region"]:focus-visible') && region.scrollTop > 0;
+  });
+  await closeInstructionSources(page, zoomed);
+  await resize(page, window, wide);
 }
 
 export async function verifyWebTools(page, window, app, model) {
@@ -761,11 +892,8 @@ export async function prepareTerminalExit(page, app) {
   return pid;
 }
 
-async function verifyPlanLayout(card, locale) {
-  await assertFits(card.getByRole("heading", { name: locale.plan }));
-  for (const name of [locale.discardPlan, locale.editPlan, locale.executePlan])
-    await assertFits(button(card, name));
-  const contrast = await card.getByRole("heading", { name: locale.plan }).evaluate((heading) => {
+function minimumTextContrast(container, selector) {
+  return container.evaluate((element, textSelector) => {
     const context = document.createElement("canvas").getContext("2d");
     const luminance = (color) => {
       context.fillStyle = color;
@@ -777,12 +905,21 @@ async function verifyPlanLayout(card, locale) {
         return total + weight * linear;
       }, 0);
     };
-    const foreground = luminance(getComputedStyle(heading).color);
-    const background = luminance(
-      getComputedStyle(heading.closest("[data-plan-review]")).backgroundColor,
-    );
-    return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
-  });
+    const background = luminance(getComputedStyle(element).backgroundColor);
+    const ratios = Array.from(element.querySelectorAll(textSelector), (text) => {
+      const foreground = luminance(getComputedStyle(text).color);
+      return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+    });
+    if (!ratios.length) throw new Error("There is no text to measure");
+    return Math.min(...ratios);
+  }, selector);
+}
+
+async function verifyPlanLayout(card, locale) {
+  await assertFits(card.getByRole("heading", { name: locale.plan }));
+  for (const name of [locale.discardPlan, locale.editPlan, locale.executePlan])
+    await assertFits(button(card, name));
+  const contrast = await minimumTextContrast(card, "h2");
   assert.ok(contrast >= 4.5, "The plan status must meet text contrast requirements");
   return contrast;
 }

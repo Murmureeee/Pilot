@@ -23,6 +23,11 @@ export const SKILL_FILE_BYTES = 2 * 1024 * 1024;
 export const PROJECT_SKILL_FOLDERS = [".agents/skills", ".claude/skills"] as const;
 export const SKILL_UNAVAILABLE = "所选技能已不可用，请重新选择。";
 export const SKILL_FILE_UNAVAILABLE = "无法读取技能文件。请检查文件是否存在并且位于技能目录内。";
+export const PROJECT_INSTRUCTION_FILES = ["AGENTS.md", "CLAUDE.md"] as const;
+export const PROJECT_INSTRUCTION_PRIORITY =
+  "When instructions supplied by Pilot conflict, follow application instructions first, then applicable project instructions, then chat instructions or their global personalization fallback, and finally skills. Directory-specific instructions apply only to paths within that directory. For a particular path the closest applicable directory takes precedence over its ancestors.";
+export const PROJECT_INSTRUCTIONS_RETRY =
+  "已加载目标目录的项目指令。请按这些指令检查并重试文件操作。";
 export const SKILL_CATALOG_INSTRUCTIONS =
   "For a relevant skill or one explicitly selected by the user, call read_skill with its skillId to read SKILL.md before following the skill. For bundled files, pass a path relative to that skill directory. To run a bundled script, use the bash tool with its absolute path and follow the normal command approval rules.";
 export const PLAN_MODE_INSTRUCTIONS = [

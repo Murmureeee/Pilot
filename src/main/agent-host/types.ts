@@ -14,7 +14,9 @@ import type {
   PermissionDecision,
   PermissionFilePreview,
   PermissionRequest,
+  ProjectInstructionSource,
   SessionInstructionSources,
+  ScopedProjectInstructionSource,
   SkillMeta,
   SessionMeta,
   SessionSettings,
@@ -87,8 +89,7 @@ export interface AgentRunOptions extends Pick<
   sessionId: string;
   environment: ToolEnvironment;
   tools: AgentTool[];
-  skills: readonly SkillMeta[];
-  systemPrompt: string;
+  instructions: AgentInstructions;
   view: AgentSessionView;
   sessionRules: ToolRule[];
   initialMessage?: ReferencedUserMessage;
@@ -248,9 +249,20 @@ export interface SessionRecord {
 }
 
 export interface AgentInstructions {
-  prompt: string;
+  appPrompt: string;
+  contextPrompt: string;
+  projectDirectory?: string;
   sources: Omit<SessionInstructionSources, "running">;
   skills: readonly SkillMeta[];
+}
+
+export interface ProjectInstruction {
+  source: ProjectInstructionSource;
+  body?: string;
+}
+
+export interface ScopedProjectInstruction extends ScopedProjectInstructionSource {
+  body?: string;
 }
 
 export interface PendingPermission {

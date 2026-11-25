@@ -20,10 +20,12 @@ import {
   verifyFirstRun,
   verifyImageConversation,
   verifyImageDraft,
+  verifyInstructionSourceLayouts,
   verifyInteractiveTerminal,
   verifyLayouts,
   verifyPlanDraft,
   verifyPlanExecution,
+  verifyProjectInstructions,
   verifyRestoredPromptTemplates,
   verifyRestoredSettings,
   verifySearchAndExport,
@@ -127,6 +129,7 @@ const scratch = realpathSync.native(mkdtempSync(join(temp, "pilot-windows-ui-"))
 const profile = join(scratch, "profile");
 const project = join(scratch, "fixture-project");
 const commandProject = join(scratch, "commands-project");
+const instructionProject = join(scratch, "instructions-project");
 const imageFixture = {
   chosen: join(scratch, "chosen.png"),
   dropped: join(scratch, "dropped.png"),
@@ -134,10 +137,12 @@ const imageFixture = {
   outside: join(scratch, "outside.txt"),
 };
 let model;
+let instructionSession;
 try {
   mkdirSync(profile);
   mkdirSync(project);
   mkdirSync(commandProject);
+  mkdirSync(instructionProject);
   execFileSync("git", ["init", "-q", commandProject]);
   writeFileSync(join(commandProject, "package.json"), JSON.stringify({
     scripts: { test: 'node -e "console.log(123456789)"' },
@@ -209,6 +214,14 @@ try {
   await withApp(profile, async (page, window, app) => {
     await runScene("Approve web requests, read sources, and revoke a domain grant", () =>
       verifyWebTools(page, window, app, model),
+    );
+    await runScene("Load project instructions for draft references and tool targets", async () => {
+      instructionSession = await verifyProjectInstructions(page, app, model, instructionProject);
+    });
+  });
+  await withApp(profile, async (page, window) => {
+    await runScene("Restore instruction scopes and check wide and narrow dialog layouts", () =>
+      verifyInstructionSourceLayouts(page, window, instructionSession),
     );
   });
 } finally {

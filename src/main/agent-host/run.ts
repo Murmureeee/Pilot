@@ -15,11 +15,13 @@ import { validateToolArguments, type AssistantMessageEvent } from "@earendil-wor
 import type {
   ActiveRun,
   AgentRunEvent,
+  ApprovalMode,
   GitChangesView,
   ModelFailure,
   ModelRetryProgress,
   PermissionDecision,
   PermissionRequest,
+  ScopedProjectInstructionSource,
   SessionSettings,
   SkillMeta,
   ToolRule,
@@ -44,7 +46,11 @@ import type {
   GitSnapshot,
   RecordedFileChange,
 } from "../workspace/types";
-import { CONTEXT_COMPACTION_RATIO, PLAN_MODE_INSTRUCTIONS } from "./constants";
+import {
+  CONTEXT_COMPACTION_RATIO,
+  PLAN_MODE_INSTRUCTIONS,
+  PROJECT_INSTRUCTIONS_RETRY,
+} from "./constants";
 import {
   assistantUsage,
   compactContext,
@@ -56,6 +62,7 @@ import { previewFileApproval, verifyApprovedFile } from "./file-approval";
 import { capabilitiesFromModel } from "./model-capabilities";
 import { withModelRetry } from "./model-retry";
 import { PermissionManager } from "./permissions";
+import { ProjectInstructionScopes } from "./project-instructions";
 import {
   actionFingerprint,
   approvalForCall,
@@ -82,6 +89,7 @@ import type {
   SessionRunSettlement,
   SavedCompaction,
   SavedGitChanges,
+  ScopedProjectInstruction,
   TimedAssistantMessage,
 } from "./types";
 
@@ -92,6 +100,9 @@ export class AgentRun {
   private readonly preparation = new AbortController();
   private readonly completion = Promise.withResolvers<void>();
   private readonly permissions: PermissionManager;
+  private readonly approvalMode: ApprovalMode;
+  private readonly projectScopes: ProjectInstructionScopes;
+  private suppliedScopes: ReadonlySet<string> = new Set();
   private readonly previousActions: ReadonlySet<string>;
   private readonly finishedTools = new Map<string, ApprovedToolResult>();
   private readonly previewedFiles = new Map<string, FileApprovalBaseline>();
@@ -116,9 +127,14 @@ export class AgentRun {
   readonly gitBaseline: Promise<GitSnapshot>;
 
   constructor(private readonly deps: AgentRunOptions) {
-    const { agent, sessionId, environment, store, initialMessage, clearDraftFor } = deps;
-    this.listedSkills = new Map(deps.skills.map((skill) => [skill.id, skill]));
+    const { agent, sessionId, environment, store, initialMessage, clearDraftFor, instructions } =
+      deps;
+    this.listedSkills = new Map(instructions.skills.map((skill) => [skill.id, skill]));
     const previous = store.checkpoint(sessionId);
+    this.projectScopes = new ProjectInstructionScopes(instructions.projectDirectory);
+    if (previous && previous.workingDirectory === instructions.projectDirectory)
+      this.projectScopes.includeHistory(agent.state.messages.slice(previous.startIndex));
+    if (initialMessage) this.projectScopes.includeMessage(initialMessage);
     this.latestCompaction = store.compactions(sessionId).at(-1);
     this.ownsCheckpoint = deps.compaction === undefined;
     const { workingDirectory } = environment;
@@ -156,7 +172,7 @@ export class AgentRun {
       store.startCheckpoint(sessionId, agent.state.messages, this.checkpoint, deps.settingsOnStart);
     this.savedMessageCount = agent.state.messages.length;
     if (clearDraftFor !== undefined) store.clearDraft(clearDraftFor);
-    const approvalMode =
+    this.approvalMode =
       deps.approvedPlanMode ??
       store.getMeta(sessionId)?.approvalMode ??
       deps.getSettings().approvalMode ??
@@ -168,7 +184,7 @@ export class AgentRun {
       },
       () => deps.getSettings().toolRules ?? [],
       (rule) => this.addGlobalRule(rule),
-      () => approvalMode,
+      () => this.approvalMode,
       deps.sessionRules,
       this.planning,
     );
@@ -194,6 +210,10 @@ export class AgentRun {
 
   get planning(): boolean {
     return this.deps.planning;
+  }
+
+  instructionSources(): ScopedProjectInstructionSource[] {
+    return this.projectScopes.sources();
   }
 
   get gitChangesAtEnd(): Promise<GitChangesView | null> | undefined {
@@ -303,6 +323,7 @@ export class AgentRun {
     signal?.throwIfAborted();
     const { toolCall, args } = context;
     const { environment, mcp } = this.deps;
+    const scopes = this.projectScopes.includeTool(toolCall.name, args);
     const action = actionFingerprint(toolCall.name, args, environment.workingDirectory);
     if (action && this.previousActions.has(action)) {
       return {
@@ -312,6 +333,9 @@ export class AgentRun {
       };
     }
     if (this.persistError) throw this.persistError;
+    // Tool arguments were generated from the preceding request's instructions.
+    if (this.isWritableFileTool(toolCall.name) && this.hasNewInstructions(scopes))
+      return { block: true, reason: PROJECT_INSTRUCTIONS_RETRY };
     const result = await this.permissions.gate(
       toolCall,
       args,
@@ -326,6 +350,14 @@ export class AgentRun {
       this.reportTool("tool_start", toolCall.id, toolCall.name, toolCall.arguments);
     }
     return result;
+  }
+
+  private isWritableFileTool(name: string): boolean {
+    return this.approvalMode !== "read-only" && (name === "write_file" || name === "edit_file");
+  }
+
+  private hasNewInstructions(scopes: readonly ScopedProjectInstruction[]): boolean {
+    return scopes.some(({ body, directory }) => body && !this.suppliedScopes.has(directory));
   }
 
   private describePermission({
@@ -350,6 +382,11 @@ export class AgentRun {
           const input: unknown = validateToolArguments(tool, { ...candidate, arguments: prepared });
           const action = actionFingerprint(candidate.name, input, workingDirectory);
           if (action && this.previousActions.has(action)) continue;
+          if (
+            this.isWritableFileTool(candidate.name) &&
+            this.hasNewInstructions(this.projectScopes.includeTool(candidate.name, input))
+          )
+            continue;
           if (
             this.permissions.needsConfirmation(
               candidate.name,
@@ -570,9 +607,12 @@ export class AgentRun {
     stream: StreamFn,
     signal: AbortSignal,
   ): Promise<AgentMessage[]> {
+    const scoped = this.projectScopes.prompt();
+    this.suppliedScopes = scoped.directories;
+    const systemPrompt = this.projectSystemPrompt(scoped.text);
     const instructions = this.planning
-      ? PLAN_MODE_INSTRUCTIONS + "\n\n" + this.deps.systemPrompt
-      : this.deps.systemPrompt;
+      ? PLAN_MODE_INSTRUCTIONS + "\n\n" + systemPrompt
+      : systemPrompt;
     const prepared = this.prepareRequestMessages(messages, instructions);
     const projected = compactedContext(prepared, this.latestCompaction, messages);
     const { contextWindow } = this.deps.agent.state.model;
@@ -582,7 +622,7 @@ export class AgentRun {
     )
       return projected;
     try {
-      if (await this.compact(messages, stream, signal, false, ""))
+      if (await this.compact(messages, stream, signal, false, "", systemPrompt))
         return compactedContext(prepared, this.latestCompaction, messages);
     } catch {
       signal.throwIfAborted();
@@ -597,10 +637,11 @@ export class AgentRun {
     signal: AbortSignal,
     force: boolean,
     focus: string,
+    systemPrompt = this.projectSystemPrompt(this.projectScopes.prompt().text),
   ): Promise<boolean> {
     signal.throwIfAborted();
     const { agent, store } = this.deps;
-    const prepared = this.prepareRequestMessages(messages, this.deps.systemPrompt);
+    const prepared = this.prepareRequestMessages(messages, systemPrompt);
     this.currentState = { ...this.state, compacting: true };
     this.send({ type: "context_compacting", compacting: true });
     try {
@@ -645,6 +686,11 @@ export class AgentRun {
       this.currentState = { ...this.state, compacting: false };
       this.send({ type: "context_compacting", compacting: false });
     }
+  }
+
+  private projectSystemPrompt(scoped: string): string {
+    const { appPrompt, contextPrompt } = this.deps.instructions;
+    return [appPrompt, scoped, contextPrompt].filter(Boolean).join("\n\n");
   }
 
   private addUsage(usage: Snapshot["usage"]): void {
@@ -806,6 +852,7 @@ export class AgentRun {
     if (event.type === "message_start") {
       const message = event.message;
       if (message.role === "user") {
+        if (message !== this.deps.initialMessage) this.projectScopes.includeMessage(message);
         this.send({
           type: "user_message",
           message: {

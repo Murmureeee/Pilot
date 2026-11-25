@@ -1,6 +1,7 @@
 // @env node
 // Agent 宿主负责会话选择、Agent 缓存和工作区审查。
 import { randomUUID } from "node:crypto";
+import { basename } from "node:path";
 
 import { Agent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
@@ -80,7 +81,11 @@ import type {
   GitWorktree,
   RecordedFileChange,
 } from "../workspace/types";
-import { APPROVED_PLAN_INSTRUCTIONS, SKILL_CATALOG_INSTRUCTIONS } from "./constants";
+import {
+  APPROVED_PLAN_INSTRUCTIONS,
+  PROJECT_INSTRUCTION_PRIORITY,
+  SKILL_CATALOG_INSTRUCTIONS,
+} from "./constants";
 import { compactedContext, contextSize, transcriptUsage } from "./context-compaction";
 import { droppedWorkspaceReferences, prepareMentionPrompt } from "./mentions";
 import { messageIndex } from "./message-operations";
@@ -90,7 +95,7 @@ import {
   recoverMessageRollbackFiles,
 } from "./message-rollback";
 import { resolveModel } from "./models";
-import { loadProjectInstructions } from "./project-instructions";
+import { ProjectInstructionScopes, loadProjectInstructions } from "./project-instructions";
 import { failedRunOf, interruptedRunOf } from "./recovery";
 import { AgentRun, finishedGitView } from "./run";
 import { messageParts, toUiMessages } from "./session-store";
@@ -237,11 +242,37 @@ export class AgentHost {
 
   getInstructionSources(composerId: string): SessionInstructionSources {
     this.checkComposerId(composerId);
-    if (this.run?.state.sessionId === this.sessionId && this.agentInstructions) {
-      return { ...this.agentInstructions.sources, running: true };
+    const running = this.run;
+    if (running && running.state.sessionId === this.sessionId && this.agentInstructions) {
+      const scopedProject = running.instructionSources();
+      return {
+        ...this.agentInstructions.sources,
+        ...(scopedProject.length && { scopedProject }),
+        running: true,
+      };
     }
-    const { sources } = this.loadInstructions(this.deps.getSettings(), this.getWorkingDirectory());
-    return { ...sources, running: false };
+    const { sources, projectDirectory } = this.loadInstructions(
+      this.deps.getSettings(),
+      this.getWorkingDirectory(),
+    );
+    const scopes = new ProjectInstructionScopes(projectDirectory);
+    if (projectDirectory) {
+      const { store } = this.deps;
+      const id = this.sessionId;
+      const draft = id ? store.loadDraft(id) : this.newChatDraft.draft;
+      if (!scopes.includeDraft(draft) && id) {
+        const { messages, checkpoint, messageHistory } = store.read(id);
+        if (checkpoint?.workingDirectory === projectDirectory)
+          scopes.includeHistory([...messages.slice(checkpoint.startIndex), ...checkpoint.pending]);
+        else {
+          const last = messageHistory.tasks.at(-1);
+          if (last?.workingDirectory === projectDirectory)
+            scopes.includeHistory(messages.slice(last.startIndex, last.endIndex));
+        }
+      }
+    }
+    const scopedProject = scopes.sources();
+    return { ...sources, ...(scopedProject.length && { scopedProject }), running: false };
   }
 
   listSkills(composerId: string): SkillMeta[] {
@@ -262,36 +293,35 @@ export class AgentHost {
       workingDirectory,
     ),
   ): AgentInstructions {
-    const sections = [
-      BASE_SYSTEM_PROMPT,
-      "When instructions supplied by Pilot conflict, give application instructions highest priority, followed by the linked project's AGENTS.md, chat instructions or their global personalization fallback, and finally skills, including skills selected for this request.",
-    ];
+    const application = [BASE_SYSTEM_PROMPT, PROJECT_INSTRUCTION_PRIORITY];
     if (workingDirectory) {
-      sections.push(
+      application.push(
         "When citing a known workspace item in a reply, link to its workspace-relative path in Markdown. Use a trailing / for folders and add #L followed by the line number for files when known. URL-encode spaces and brackets in the link target.",
       );
     }
 
-    const projectDirectory = this.sessionId ? this.getProjectDirectory() : workingDirectory;
-    const project = loadProjectInstructions(
-      projectDirectory === workingDirectory ? projectDirectory : undefined,
-    );
-    if (project.body) sections.push(`## Project instructions (AGENTS.md)\n\n${project.body}`);
+    const context: string[] = [];
+    const linkedDirectory = this.sessionId ? this.getProjectDirectory() : workingDirectory;
+    const projectDirectory = linkedDirectory === workingDirectory ? linkedDirectory : undefined;
+    const project = loadProjectInstructions(projectDirectory);
+    if (project.body && "path" in project.source)
+      context.push(`## Project instructions (${basename(project.source.path)})\n\n${project.body}`);
 
     const chatInstructions = this.getCurrentSession()?.personaOverride?.trim();
     const custom = chatInstructions || settings.persona?.trim();
     if (custom) {
-      sections.push(
+      context.push(
         `## ${chatInstructions ? "Chat instructions" : "Global personalization"}\n\n${custom}`,
       );
     }
 
     const enabledSkills = skills.filter(({ enabled }) => enabled);
-    if (skills.length) sections.push(SKILL_CATALOG_INSTRUCTIONS);
-    if (enabledSkills.length)
-      sections.push("## Available skills\n\n" + skillCatalog(enabledSkills));
+    if (skills.length) context.push(SKILL_CATALOG_INSTRUCTIONS);
+    if (enabledSkills.length) context.push("## Available skills\n\n" + skillCatalog(enabledSkills));
     return {
-      prompt: sections.join("\n\n"),
+      appPrompt: application.join("\n\n"),
+      contextPrompt: context.join("\n\n"),
+      projectDirectory,
       skills,
       sources: {
         project: project.source,
@@ -330,7 +360,8 @@ export class AgentHost {
       this.agentProvider.apiKey === active.apiKey &&
       JSON.stringify(this.agentProvider.models?.find(({ id }) => id === active.modelId)) ===
         JSON.stringify(entry) &&
-      this.agentInstructions?.prompt === instructions.prompt &&
+      this.agentInstructions?.appPrompt === instructions.appPrompt &&
+      this.agentInstructions.contextPrompt === instructions.contextPrompt &&
       this.agentToolEnvironment?.workingDirectory === toolEnvironment.workingDirectory &&
       this.agentToolEnvironment?.commandShell === toolEnvironment.commandShell
     ) {
@@ -671,8 +702,7 @@ export class AgentHost {
       sessionId,
       environment: this.agentToolEnvironment!,
       tools: this.localTools,
-      skills: this.agentInstructions!.skills,
-      systemPrompt: this.agentInstructions!.prompt,
+      instructions: this.agentInstructions!,
       view: this.view,
       sessionRules,
       planning,

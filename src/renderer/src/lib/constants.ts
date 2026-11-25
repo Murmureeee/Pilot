@@ -113,7 +113,7 @@ export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[
     "Anthropic",
     "OpenAI",
   ],
-  persona: ["自定义指令", "提示词模板", "指令生效顺序", "AGENTS.md"],
+  persona: ["自定义指令", "提示词模板", "指令生效顺序", "AGENTS.md", "CLAUDE.md"],
   shortcuts: [
     "Ctrl",
     "Shift",

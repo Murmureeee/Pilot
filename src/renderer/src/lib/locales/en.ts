@@ -530,9 +530,20 @@ export const EN_MESSAGES: Record<string, string> = {
   将用于下一次请求: "Applies to the next request",
   "指令冲突时，列表上方的来源优先。":
     "When instructions conflict, sources higher in this list take priority.",
-  "项目根目录没有 AGENTS.md。": "There is no AGENTS.md in the project root.",
-  "AGENTS.md 没有内容。": "AGENTS.md is empty.",
-  "无法读取 AGENTS.md。": "Could not read AGENTS.md.",
+  "在项目根目录添加 AGENTS.md 或 CLAUDE.md 即可加载。":
+    "Add AGENTS.md or CLAUDE.md to the project root to load it.",
+  "指令文件为空。可补充项目约定。": "The instructions file is empty. Add project guidance to it.",
+  "无法读取指令文件。请检查文件是否在项目内且可访问。":
+    "Could not read the instructions file. Check its location and access.",
+  项目根目录: "Project root",
+  "适用目录 {0}": "Applies within {0}",
+  按目标路径加载: "Loads for matching paths",
+  "同一路径上，越接近目标的目录越优先。":
+    "For each path, instructions from the closest directory take priority.",
+  "空闲时根据草稿引用或最近任务的目标路径核对。":
+    "While idle, this list uses draft references or paths from the last task.",
+  "已加载目标目录的项目指令。请按这些指令检查并重试文件操作。":
+    "Project instructions for this directory are ready. Review them before retrying the file operation.",
   "未设置会话指令或全局个性化。": "No chat instructions or global personalization set.",
   "按需读取技能，也可在消息中指定。":
     "Skills are read as needed. You can also select them in a message.",
@@ -962,7 +973,8 @@ export const EN_MESSAGES: Record<string, string> = {
   "内容冲突时，排在前面的优先。": "When instructions conflict, the earlier one wins.",
   应用内置指令: "Built-in app instructions",
   "安全与工具使用规则，始终优先。": "Safety and tool-use rules. Always first.",
-  "会话所在项目根目录的 AGENTS.md。": "AGENTS.md in the root of the chat's project.",
+  "读取 AGENTS.md 或 CLAUDE.md。同一路径上，越接近目标的目录越优先。":
+    "Loads AGENTS.md or CLAUDE.md. For each path, instructions from the closest directory take priority.",
   "未单独设置时使用上面的自定义指令。": "Falls back to the custom instructions above when not set.",
   已启用的技能: "Enabled skills",
   "任务需要时读取技能指令。": "Skill instructions are read when the task needs them.",

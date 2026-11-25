@@ -532,8 +532,14 @@ export type ProjectInstructionSource =
   | { status: "unlinked" }
   | { status: "loaded" | "missing" | "empty" | "unavailable"; path: string };
 
+export interface ScopedProjectInstructionSource {
+  directory: string;
+  source: Exclude<ProjectInstructionSource, { status: "unlinked" }>;
+}
+
 export interface SessionInstructionSources {
   project: ProjectInstructionSource;
+  scopedProject?: ScopedProjectInstructionSource[];
   personalization: "session" | "global" | null;
   enabledSkills: string[];
   running: boolean;

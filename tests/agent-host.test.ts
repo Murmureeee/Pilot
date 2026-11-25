@@ -7,6 +7,7 @@ import {
   mkdtempDisposableSync,
   readFileSync,
   realpathSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -28,6 +29,7 @@ import { expect, it, vi } from "vitest";
 import { AgentHost } from "../src/main/agent-host/host";
 import { McpManager } from "../src/main/agent-host/mcp";
 import * as models from "../src/main/agent-host/models";
+import { loadProjectInstructions } from "../src/main/agent-host/project-instructions";
 import { actionFingerprint } from "../src/main/agent-host/recovery";
 import { SessionStore, toUiMessages } from "../src/main/agent-host/session-store";
 import type { Settings } from "../src/main/settings/types";
@@ -37,6 +39,7 @@ import { searchWorkspace } from "../src/main/workspace/search";
 import type { GitSnapshot } from "../src/main/workspace/types";
 import { MENTION_CONTEXT_HEADING } from "../src/shared/constants";
 import type { ComposerDraft, UiAgentEvent } from "../src/shared/contract";
+import { promptFromDraft } from "../src/shared/mentions";
 
 vi.mock("electron", () => ({ safeStorage: {} }));
 
@@ -1094,8 +1097,9 @@ it("loads the selected project's instructions ahead of personalization and skill
   mkdirSync(beta);
   mkdirSync(join(skillsDir, "review"), { recursive: true });
   const fileA = join(alpha, "AGENTS.md");
-  const fileB = join(beta, "AGENTS.md");
+  const fileB = join(beta, "CLAUDE.md");
   writeFileSync(fileA, "ALPHA_PROJECT_GUIDANCE");
+  writeFileSync(join(alpha, "CLAUDE.md"), "ALPHA_FALLBACK_GUIDANCE");
   writeFileSync(fileB, "BETA_PROJECT_GUIDANCE");
   writeFileSync(
     join(skillsDir, "review", "SKILL.md"),
@@ -1150,7 +1154,7 @@ it("loads the selected project's instructions ahead of personalization and skill
     );
     expect(prompts[0]).toContain(".agents/skills/checklist");
     expect(prompts[0]).not.toMatch(
-      /BETA_PROJECT_GUIDANCE|GLOBAL_GUIDANCE|SKILL_GUIDANCE|ALPHA_SKILL_BODY/,
+      /ALPHA_FALLBACK_GUIDANCE|BETA_PROJECT_GUIDANCE|GLOBAL_GUIDANCE|SKILL_GUIDANCE|ALPHA_SKILL_BODY/,
     );
     expect(JSON.stringify(store.load(a.id))).not.toContain("ALPHA_PROJECT_GUIDANCE");
 
@@ -1180,6 +1184,158 @@ it("loads the selected project's instructions ahead of personalization and skill
   } finally {
     resolveModel.mockRestore();
   }
+});
+
+it("loads only the selected instruction file and reports an unusable first choice", () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-instruction-files-"));
+  const root = realpathSync(profile.path);
+  const agents = join(root, "AGENTS.md");
+  const claude = join(root, "CLAUDE.md");
+  expect(loadProjectInstructions(root)).toEqual({ source: { path: agents, status: "missing" } });
+  writeFileSync(claude, "Fallback guidance");
+  expect(loadProjectInstructions(root)).toEqual({
+    source: { path: claude, status: "loaded" },
+    body: "Fallback guidance",
+  });
+  writeFileSync(agents, " \n");
+  expect(loadProjectInstructions(root)).toEqual({ source: { path: agents, status: "empty" } });
+  writeFileSync(agents, Buffer.from([0xff]));
+  expect(loadProjectInstructions(root)).toEqual({
+    source: { path: agents, status: "unavailable" },
+  });
+});
+
+it("scopes project instructions to references and tool targets before a file write is approved", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-instruction-scopes-"));
+  const root = realpathSync(profile.path);
+  const project = join(root, "project");
+  const outside = join(root, "outside");
+  for (const path of ["features/editor", "notes", "ops", "unrelated"])
+    mkdirSync(join(project, path), { recursive: true });
+  mkdirSync(outside);
+  symlinkSync(outside, join(project, "outside-link"), "junction");
+  for (const [path, body] of Object.entries({
+    "AGENTS.md": "ROOT_GUIDANCE",
+    "features/CLAUDE.md": "FEATURE_GUIDANCE",
+    "features/editor/AGENTS.md": "EDITOR_GUIDANCE",
+    "features/editor/CLAUDE.md": "SHADOWED_GUIDANCE",
+    "features/editor/note.txt": "Editor notes",
+    "notes/AGENTS.md": "NOTES_GUIDANCE",
+    "notes/input.txt": "Input from the notes folder",
+    "ops/AGENTS.md": "OPS_GUIDANCE",
+    "unrelated/AGENTS.md": "UNRELATED_GUIDANCE",
+  }))
+    writeFileSync(join(project, path), body);
+  writeFileSync(join(outside, "AGENTS.md"), "OUTSIDE_GUIDANCE");
+
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = {
+    providers: [provider],
+    activeProviderId: provider.id,
+    persona: "PERSONAL_GUIDANCE",
+  };
+  const faux = fauxProvider({ tokensPerSecond: 100_000 });
+  const target = "ops/output.txt";
+  faux.appendResponses([
+    fauxAssistantMessage([
+      fauxToolCall("read_file", { path: "notes/input.txt" }),
+      fauxToolCall("read_file", { path: "outside-link/AGENTS.md" }),
+      fauxToolCall("write_file", { path: target, content: "First attempt" }),
+    ]),
+    fauxAssistantMessage([fauxToolCall("write_file", { path: target, content: "Reviewed" })]),
+    fauxAssistantMessage([fauxText("Done.")]),
+    fauxAssistantMessage([fauxText("A separate task.")]),
+  ]);
+  const catalog = createModels();
+  catalog.setProvider(faux.provider);
+  const requests: { system: string; results: string[] }[] = [];
+  using resolve = vi.spyOn(models, "resolveModel").mockReturnValue({
+    model: faux.getModel()!,
+    streamFn: (model, context, options) => {
+      requests.push({
+        system: getCurrentSystemPrompt(context.messages),
+        results: context.messages.flatMap((message) =>
+          message.role === "toolResult"
+            ? message.content.flatMap((part) => (part.type === "text" ? [part.text] : []))
+            : [],
+        ),
+      });
+      return catalog.streamSimple(model, context, options);
+    },
+  });
+  const approvedOnRequest: number[] = [];
+  const openHost = (): AgentHost => {
+    const host = new AgentHost({
+      getSettings: () => settings,
+      saveSettings: () => {},
+      broadcast: (event) => {
+        if (event.type !== "permission_request") return;
+        approvedOnRequest.push(requests.length);
+        setTimeout(() => host.respondPermission(event.run, event.requestId, "once"), 0);
+      },
+      store: new SessionStore(join(root, "sessions")),
+      skillsDir: join(root, "skills"),
+      mcp: new McpManager(() => settings, "0.0.0"),
+    });
+    return host;
+  };
+  const host = openHost();
+  const { composerId } = host.openProject(project);
+  const draft: ComposerDraft = [
+    "Implement the change described in ",
+    {
+      type: "file",
+      id: "features/editor/note.txt",
+      label: "note.txt",
+      meta: { workingDirectory: project },
+    },
+  ];
+  host.saveSessionDraft(composerId, draft);
+  const editorScopes = [
+    {
+      directory: "features/editor",
+      source: { path: join(project, "features/editor/AGENTS.md"), status: "loaded" },
+    },
+    {
+      directory: "features",
+      source: { path: join(project, "features/CLAUDE.md"), status: "loaded" },
+    },
+  ];
+  expect(host.getInstructionSources(composerId).scopedProject).toEqual(editorScopes);
+  expect(host.getSnapshot().sessionId).toBeNull();
+  const running = host.prompt(promptFromDraft(draft), composerId, project);
+  expect(host.getInstructionSources(composerId)).toMatchObject({
+    scopedProject: editorScopes,
+    running: true,
+  });
+  await running;
+
+  expect(requests).toHaveLength(3);
+  expect(requests[0].system).toMatch(
+    /EDITOR_GUIDANCE[\s\S]*FEATURE_GUIDANCE[\s\S]*ROOT_GUIDANCE[\s\S]*PERSONAL_GUIDANCE/,
+  );
+  expect(requests[0].system).not.toMatch(/NOTES_GUIDANCE|OPS_GUIDANCE/);
+  expect(requests[1].system).toContain("NOTES_GUIDANCE");
+  expect(requests[1].system).toContain("OPS_GUIDANCE");
+  expect(requests[1].results.join("\n")).toContain("Input from the notes folder");
+  expect(requests[1].results.join("\n")).toContain("请按这些指令检查并重试文件操作");
+  expect(JSON.stringify(requests)).not.toMatch(
+    /OUTSIDE_GUIDANCE|SHADOWED_GUIDANCE|UNRELATED_GUIDANCE/,
+  );
+  expect(approvedOnRequest).toEqual([2]);
+  expect(readFileSync(join(project, target), "utf8")).toBe("Reviewed");
+
+  const reopened = openHost();
+  reopened.loadSession(composerId);
+  expect(
+    reopened.getInstructionSources(composerId).scopedProject?.map(({ directory }) => directory),
+  ).toEqual(["features/editor", "features", "notes", "ops"]);
+  await reopened.prompt("A separate task with no target path");
+  expect(requests[3].system).toContain("ROOT_GUIDANCE");
+  expect(requests[3].system).not.toMatch(
+    /EDITOR_GUIDANCE|FEATURE_GUIDANCE|NOTES_GUIDANCE|OPS_GUIDANCE/,
+  );
+  expect(resolve).toHaveBeenCalledTimes(2);
 });
 
 it("reads an explicitly selected disabled skill only during the selected task", async () => {
