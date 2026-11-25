@@ -1,6 +1,7 @@
 // @env browser
 import {
   ArchiveIcon,
+  ClipboardListIcon,
   CpuIcon,
   Minimize2Icon,
   PlugIcon,
@@ -35,6 +36,13 @@ import type {
 } from "./types";
 
 export const COMPOSER_COMMANDS: readonly ComposerCommand[] = [
+  {
+    id: "plan",
+    label: "计划模式",
+    description: "先读取和搜索，再提交计划供你确认。",
+    icon: ClipboardListIcon,
+    action: (actions) => actions.togglePlanMode(),
+  },
   {
     id: "compact",
     label: "压缩上下文",
@@ -269,7 +277,6 @@ export const APPROVAL_MODE_OPTIONS: Record<ApprovalMode, { label: string; descri
     description: "写入、命令和 MCP 调用需确认，已有授权可直接执行。",
   },
   "read-only": { label: "只读", description: "阻止文件写入、命令和 MCP 工具调用。" },
-  plan: { label: "计划模式", description: "先读取项目并制定计划，确认后使用原权限执行。" },
   "full-access": {
     label: "完全访问",
     description: "允许写入和运行命令。危险命令始终需要确认，MCP 服务可单独要求确认。",

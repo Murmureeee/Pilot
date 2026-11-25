@@ -77,12 +77,7 @@ import type {
   ComposerSuggestion,
   ComposerToolbarMenu,
 } from "@renderer/lib/types";
-import {
-  selectActiveSession,
-  selectApprovalMode,
-  selectCanChangeApprovalMode,
-  useAgentStore,
-} from "@renderer/stores/agent";
+import { selectActiveSession, selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
 import { compactFocus } from "@shared/compact-command";
 import { APP_NAME, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
 import type { ActiveRun, ApprovalMode, PromptMention, SkillMeta } from "@shared/contract";
@@ -113,11 +108,6 @@ const MODE_META: Record<
     ...APPROVAL_MODE_OPTIONS["full-access"],
     icon: ZapIcon,
     tone: "amber",
-  },
-  plan: {
-    ...APPROVAL_MODE_OPTIONS.plan,
-    icon: ClipboardListIcon,
-    tone: "neutral",
   },
 };
 
@@ -180,7 +170,7 @@ export function Composer({
   const loadSession = useAgentStore((s) => s.loadSession);
   const updateSessionSettings = useAgentStore((s) => s.updateSessionSettings);
   const savedMode = useAgentStore((s) => selectActiveSession(s)?.approvalMode);
-  const canChangeMode = useAgentStore(selectCanChangeApprovalMode);
+  const planning = useAgentStore((s) => Boolean(selectActiveSession(s)?.planMode));
   const newSession = useAgentStore((s) => s.newSession);
   const archiveSession = useAgentStore((s) => s.setSessionArchived);
   const setView = useAgentStore((s) => s.setView);
@@ -299,7 +289,7 @@ export function Composer({
   const chooseCommand = async (command: ComposerCommand): Promise<void> => {
     if (trigger?.kind !== "command" || !editor.current) return;
     const range = trigger.range.cloneRange();
-    range.setEnd(editor.current, editor.current.childNodes.length);
+    if (command.id !== "plan") range.setEnd(editor.current, editor.current.childNodes.length);
     selectComposerRange(editor.current, range);
     document.execCommand("delete");
     readEditor();
@@ -308,6 +298,7 @@ export function Composer({
         newChat: newSession,
         archiveChat: () => (sessionId ? archiveSession(sessionId, true) : Promise.resolve()),
         compactContext: () => useAgentStore.getState().compactContext(composerId),
+        togglePlanMode: () => window.pi.sessionSetPlanMode(composerId, !planning),
         openMenu: setToolbarMenu,
         openSettings: (section) => {
           setSettingsSection(section);
@@ -364,9 +355,13 @@ export function Composer({
       options.push({
         id: command.id,
         label: t(command.label, locale),
-        detail: t(command.description, locale),
+        detail: t(
+          command.id === "plan" && planning ? "退出计划模式。" : command.description,
+          locale,
+        ),
         shortcut: "/" + command.id,
         icon: command.icon,
+        attached: command.id === "plan" && planning,
         select: () => void chooseCommand(command),
       });
     }
@@ -435,7 +430,7 @@ export function Composer({
     (!commandPending || isCompact);
   const placeholder = busy
     ? t("输入插话消息…", locale)
-    : mode === "plan"
+    : planning
       ? t("描述要规划的任务…", locale)
       : t("给 {0} 发消息…", locale, [APP_NAME]);
 
@@ -463,7 +458,7 @@ export function Composer({
   };
 
   const changeApprovalMode = (approvalMode: ApprovalMode | null): void => {
-    if (modeUpdating.current || !selectCanChangeApprovalMode(useAgentStore.getState())) return;
+    if (modeUpdating.current) return;
     setSendError(null);
     modeUpdating.current = true;
     void updateSessionSettings({ approvalMode })
@@ -527,7 +522,6 @@ export function Composer({
     if (!(isCompact && action === "send") && onSuggestionKey(event)) return;
     const shortcut = composerEditingShortcut(event, draft.text.length === 0);
     if (shortcut === "cycle-approval-mode") {
-      if (!canChangeMode) return;
       event.preventDefault();
       if (!event.repeat) cycleMode();
       return;
@@ -642,6 +636,16 @@ export function Composer({
         </p>
       )}
       <InputGroup className={COMPOSER_SURFACE_CLASS}>
+        {planning && (
+          <p
+            role="status"
+            data-plan-mode
+            className="flex w-full items-center gap-2 px-3 pt-2 text-xs text-muted-foreground"
+          >
+            <ClipboardListIcon className="size-3.5" aria-hidden="true" />
+            {t("计划模式", locale)}
+          </p>
+        )}
         <div
           ref={attachEditor}
           contentEditable
@@ -773,7 +777,6 @@ export function Composer({
               }
             >
               <DropdownMenuTrigger
-                disabled={!canChangeMode}
                 render={
                   <button
                     type="button"
@@ -814,15 +817,13 @@ export function Composer({
                         )}
                       </span>
                     </span>
-                    {!savedMode && mode !== "plan" && (
-                      <CheckIcon className="mt-0.5 shrink-0" aria-hidden="true" />
-                    )}
+                    {!savedMode && <CheckIcon className="mt-0.5 shrink-0" aria-hidden="true" />}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   {(Object.keys(MODE_META) as ApprovalMode[]).map((m) => {
                     const meta = MODE_META[m];
                     const Icon = meta.icon;
-                    const current = mode === "plan" ? m === "plan" : savedMode === m;
+                    const current = savedMode === m;
                     return (
                       // 规范（AGENTS.md）：主标题 + 上下结构的次级说明行（muted + 小字号）；选中态用右侧 ✓；
                       // 图标带语义色时，标题文字跟随同色（主次一体）

@@ -75,7 +75,8 @@ export interface AgentRunOptions extends Pick<
   initialMessage?: ReferencedUserMessage;
   clearDraftFor?: string;
   compaction?: CompactionRequest;
-  planApprovalMode?: ApprovalMode;
+  planning: boolean;
+  approvedPlanMode?: ApprovalMode;
   settingsOnStart?: SessionSettings;
   onStarted: () => void;
   onSessionUpdated: () => void;
@@ -160,7 +161,7 @@ export interface RunCheckpoint {
   gitBaseline?: GitSnapshot;
   task?: VerificationTask;
   failure?: ModelFailure;
-  planApprovalMode?: ApprovalMode;
+  planApprovalMode?: "plan" | ApprovalMode;
 }
 
 export interface RecordedApproval {

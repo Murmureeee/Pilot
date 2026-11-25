@@ -341,24 +341,54 @@ export async function verifyPlanDraft(page, window, model, project) {
   await page.keyboard.press("Control+n");
   await page.keyboard.press("Control+l");
   await page.waitForFunction(() => document.activeElement?.matches("[data-composer-editor]"));
-  for (const mode of ["Read-only", "Full access", "Plan mode", "Ask first"]) {
+  for (const mode of ["Read-only", "Full access", "Ask first"]) {
     await page.keyboard.press("Shift+Tab");
     await button(page, mode).waitFor();
   }
-  await page.keyboard.press("Control+k");
-  const palette = page.getByRole("dialog", { name: "Search" });
-  const search = palette.getByRole("textbox", { name: "Search" });
-  await search.fill("Approval mode: Plan mode");
-  await search.press("Enter");
-  await palette.waitFor({ state: "hidden" });
-  const mode = button(page, "Plan mode");
-  await mode.press("Enter");
+  const planningMode = page.locator("[data-plan-mode]");
+  await planningMode.waitFor({ state: "hidden" });
+  await button(page, "Ask first").press("Enter");
   const menu = page.getByRole("menu");
-  const selected = menu.getByRole("menuitem", { name: /^Plan mode/ });
-  await selected.waitFor();
-  assert.equal(await selected.locator("svg").count(), 2, "The selected mode shows a checkmark");
+  await menu.waitFor();
+  assert.equal(await menu.getByRole("menuitem", { name: /^Plan mode/ }).count(), 0);
   await page.keyboard.press("Escape");
-  await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "Plan mode");
+  await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "Ask first");
+
+  const planCommand = page.getByRole("option", { name: /^Plan mode/ });
+  await editor(page).fill("Keep this /plan draft.");
+  await editor(page).evaluate((field) => {
+    const caret = document.createRange();
+    caret.setStart(field.firstChild, "Keep this /plan".length);
+    caret.collapse(true);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(caret);
+  });
+  await assertFits(planCommand);
+  await page.keyboard.press("Enter");
+  await planningMode.waitFor();
+  assert.equal((await editor(page).innerText()).replace(/\s+/g, " "), "Keep this draft.");
+  await button(page, "Ask first").waitFor();
+  for (const mode of ["Read-only", "Full access", "Ask first"]) {
+    await page.keyboard.press("Shift+Tab");
+    await button(page, mode).waitFor();
+    await planningMode.waitFor();
+  }
+  await editor(page).fill("/plan");
+  await planCommand.getByText("Exit Plan mode.").waitFor();
+  await page.keyboard.press("Enter");
+  await planningMode.waitFor({ state: "hidden" });
+  await button(page, "Ask first").waitFor();
+
+  await resize(page, window, narrow);
+  await selectAppearance(page, locales[1], locales[0], "light");
+  await editor(page).fill("/plan");
+  const chinesePlanCommand = page.getByRole("option", { name: /^计划模式/ });
+  await assertFits(chinesePlanCommand);
+  await chinesePlanCommand.click();
+  await assertFits(planningMode);
+  await button(page, "确认模式").waitFor();
+  await resize(page, window, wide);
+  await selectAppearance(page, locales[0], locales[1], "dark");
   await send(page, planPrompt);
   const research = await model.nextCompletion();
   assert.deepEqual(research.input.tools.map((tool) => tool.function.name), [

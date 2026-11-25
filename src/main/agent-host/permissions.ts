@@ -62,6 +62,7 @@ export class PermissionManager {
     private readonly addGlobalRule: (rule: ToolRule) => void,
     private readonly getApprovalMode: () => ApprovalMode = () => "standard",
     private readonly sessionRules: ToolRule[] = [],
+    private readonly planning = false,
   ) {}
 
   needsConfirmation(
@@ -81,9 +82,9 @@ export class PermissionManager {
   ): ToolAccess {
     if (isReadOnly(toolName)) return { kind: "allow" };
 
+    if (this.planning) return { kind: toolName === PROPOSE_PLAN_TOOL_NAME ? "allow" : "block" };
     const mode = this.getApprovalMode();
-    if (mode === "plan" && toolName === PROPOSE_PLAN_TOOL_NAME) return { kind: "allow" };
-    if (mode === "read-only" || mode === "plan") return { kind: "block" };
+    if (mode === "read-only") return { kind: "block" };
 
     const command =
       toolName === "bash" &&
@@ -142,10 +143,9 @@ export class PermissionManager {
     if (access.kind === "block") {
       return {
         block: true,
-        reason:
-          this.getApprovalMode() === "plan"
-            ? "计划模式只允许读取、搜索和提交计划。"
-            : "当前为只读模式，已拒绝该写操作（可在输入框左下角切换权限模式）",
+        reason: this.planning
+          ? "计划模式只允许读取、搜索和提交计划。"
+          : "当前为只读模式，已拒绝该写操作（可在输入框左下角切换权限模式）",
       };
     }
     const { command, commandDanger, rule } = access;

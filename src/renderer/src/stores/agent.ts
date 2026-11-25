@@ -5,7 +5,6 @@ import type {
   ActiveRun,
   ApprovalMode,
   ComposerDraft,
-  ExecutionApprovalMode,
   LogLevel,
   MenuAction,
   PermissionDecision,
@@ -95,7 +94,7 @@ interface AgentStore extends AgentUiState {
   menuAction(action: MenuAction): Promise<void>;
   /** 清空排队中的插话 */
   clearQueue(run: RunRef): void;
-  setDefaultApprovalMode(mode: ExecutionApprovalMode): Promise<void>;
+  setDefaultApprovalMode(mode: ApprovalMode): Promise<void>;
   setThinkingLevel(level: ThinkingLevel): Promise<void>;
   removeToolRule(rule: ToolRule): Promise<void>;
 }
@@ -125,9 +124,7 @@ export function selectActiveSession(
 export function selectApprovalMode(
   state: Pick<AgentStore, "sessionId" | "sessions" | "settings">,
 ): ApprovalMode {
-  const session = selectActiveSession(state);
-  if (session?.planMode) return "plan";
-  return session?.approvalMode ?? state.settings?.approvalMode ?? "standard";
+  return selectActiveSession(state)?.approvalMode ?? state.settings?.approvalMode ?? "standard";
 }
 
 export function selectPlanReview(
@@ -136,11 +133,6 @@ export function selectPlanReview(
   if (state.status !== "idle" || state.failedRun || state.interruptedRun) return undefined;
   const planMode = selectActiveSession(state)?.planMode;
   return planMode?.proposal ? planMode : undefined;
-}
-
-export function selectCanChangeApprovalMode(state: AgentStore): boolean {
-  const planning = state.activeRun?.sessionId === state.sessionId && state.activeRun.planning;
-  return !planning && !selectPlanReview(state);
 }
 
 export function selectProjectDirectory(

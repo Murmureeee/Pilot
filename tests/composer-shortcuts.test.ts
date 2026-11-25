@@ -125,8 +125,7 @@ describe("composer shortcuts", () => {
   it("cycles from the effective session approval mode", () => {
     expect(nextApprovalMode("standard")).toBe("read-only");
     expect(nextApprovalMode("read-only")).toBe("full-access");
-    expect(nextApprovalMode("full-access")).toBe("plan");
-    expect(nextApprovalMode("plan")).toBe("standard");
+    expect(nextApprovalMode("full-access")).toBe("standard");
   });
 
   it("recalls the original file and skill references, including legacy file paths", () => {

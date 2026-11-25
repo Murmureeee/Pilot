@@ -14,11 +14,11 @@ import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { describeToolScope } from "@renderer/lib/tool-rules";
 import { useAgentStore } from "@renderer/stores/agent";
 import { EXECUTION_APPROVAL_MODES } from "@shared/constants";
-import type { ExecutionApprovalMode, PublicSettings } from "@shared/contract";
+import type { ApprovalMode, PublicSettings } from "@shared/contract";
 
 import { SettingsGroup } from "./SettingsGroup";
 
-const MODE_ICONS: Record<ExecutionApprovalMode, typeof EyeIcon> = {
+const MODE_ICONS: Record<ApprovalMode, typeof EyeIcon> = {
   standard: ShieldCheckIcon,
   "read-only": EyeIcon,
   "full-access": ZapIcon,

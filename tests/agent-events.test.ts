@@ -398,6 +398,7 @@ describe("agent-events adapter", () => {
         title: "Plan",
         createdAt: 1,
         updatedAt: 2,
+        approvalMode: "read-only",
         planMode: {
           executionMode: "standard",
           proposal: { id: run.runId, markdown: "Review files", workingDirectory: null },

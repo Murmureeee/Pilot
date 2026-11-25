@@ -13,7 +13,7 @@ import {
 } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { PLAN_PROPOSAL_MAX_LENGTH } from "@shared/constants";
-import type { ExecutionApprovalMode, PlanDecision, PlanProposal } from "@shared/contract";
+import type { ApprovalMode, PlanDecision, PlanProposal } from "@shared/contract";
 
 import { Response } from "./response";
 
@@ -24,7 +24,7 @@ export function PlanReviewCard({
 }: {
   composerId: string;
   proposal: PlanProposal;
-  executionMode: ExecutionApprovalMode;
+  executionMode: ApprovalMode;
 }): JSX.Element {
   const locale = useLocale();
   const titleId = useId();

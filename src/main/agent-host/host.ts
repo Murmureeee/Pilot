@@ -7,8 +7,8 @@ import type { ToolResultMessage } from "@earendil-works/pi-ai";
 
 import type {
   ActiveRun,
+  ApprovalMode,
   ComposerDraft,
-  ExecutionApprovalMode,
   FileDiff,
   GitCheckpointDiff,
   GitChangesView,
@@ -24,7 +24,6 @@ import type {
   MessageRollbackPreview,
   PermissionDecision,
   PlanDecision,
-  PlanMode,
   PromptInput,
   RunRef,
   SessionMeta,
@@ -166,7 +165,7 @@ export class AgentHost {
     return this.sessionId ? this.deps.store.getMeta(this.sessionId) : null;
   }
 
-  private executionMode(session = this.getCurrentSession()): ExecutionApprovalMode {
+  private executionMode(session = this.getCurrentSession()): ApprovalMode {
     return session?.approvalMode ?? this.deps.getSettings().approvalMode ?? "standard";
   }
 
@@ -395,17 +394,15 @@ export class AgentHost {
     if (input.approvalMode !== undefined) {
       const planMode = this.getCurrentSession()?.planMode;
       if (planMode?.proposal) throw new Error("请先确认或放弃此计划。");
-      if (this.run?.state.sessionId === id && this.run.planning)
-        throw new Error("请等待本轮规划结束后再切换权限模式。");
-      if (input.approvalMode === "plan") {
-        changes.planMode = planMode ?? { executionMode: this.executionMode() };
-      } else {
-        changes.approvalMode = input.approvalMode ?? undefined;
-        changes.planMode = undefined;
-      }
+      changes.approvalMode = input.approvalMode ?? undefined;
+      if (planMode)
+        changes.planMode = {
+          ...planMode,
+          executionMode: changes.approvalMode ?? this.deps.getSettings().approvalMode ?? "standard",
+        };
     }
     if (!this.sessionId) {
-      if (changes.model || changes.approvalMode || changes.planMode) {
+      if (changes.model || changes.approvalMode) {
         this.ensureSession(this.getWorkingDirectory(), changes);
       }
       return;
@@ -414,14 +411,19 @@ export class AgentHost {
     this.sendSessions();
   }
 
-  private restorePlanMode({ executionMode }: PlanMode): SessionSettings {
-    return {
-      planMode: undefined,
-      approvalMode:
-        this.executionMode() === executionMode
-          ? this.getCurrentSession()?.approvalMode
-          : executionMode,
-    };
+  setPlanMode(id: string, enabled: boolean): void {
+    this.checkComposerId(id);
+    const current = this.getCurrentSession()?.planMode;
+    if (enabled === Boolean(current)) return;
+    if (current?.proposal) throw new Error("请先确认或放弃此计划。");
+    if (this.run?.state.sessionId === id) throw new Error("请等待当前回复结束后再切换计划模式。");
+    const changes = { planMode: enabled ? { executionMode: this.executionMode() } : undefined };
+    if (!this.sessionId) {
+      this.ensureSession(this.getWorkingDirectory(), changes);
+      return;
+    }
+    this.deps.store.updateSettings(id, changes);
+    this.sendSessions();
   }
 
   reviewPlan(id: string, proposalId: string, decision: PlanDecision): Promise<void> | void {
@@ -441,9 +443,8 @@ export class AgentHost {
       this.sendSessions();
       return;
     }
-    const settingsOnStart = this.restorePlanMode(planMode);
     if (decision.type === "discard") {
-      store.updateSettings(id, settingsOnStart);
+      store.updateSettings(id, { planMode: undefined });
       this.sendSessions();
       return;
     }
@@ -463,8 +464,9 @@ export class AgentHost {
           parts: [{ type: "text", text: proposal.markdown }],
         },
       },
-      planApprovalMode: planMode.executionMode,
-      settingsOnStart,
+      planning: false,
+      approvedPlanMode: planMode.executionMode,
+      settingsOnStart: { planMode: undefined },
     });
   }
 
@@ -541,8 +543,10 @@ export class AgentHost {
       throw new Error("该任务没有上下文超限错误。");
     const directory = checkpoint.workingDirectory ?? undefined;
     const agent = this.ensureAgent(directory);
-    const planApprovalMode = checkpoint.planApprovalMode;
+    const savedMode = checkpoint.planApprovalMode;
     const planMode = this.getCurrentSession()?.planMode;
+    const planning = savedMode === undefined ? Boolean(planMode) : savedMode === "plan";
+    const approvedPlanMode = savedMode === "plan" ? undefined : savedMode;
     const last = agent.state.messages.at(-1);
     const message: ReferencedUserMessage | undefined =
       !last || last.role === "assistant"
@@ -550,18 +554,15 @@ export class AgentHost {
             role: "user",
             content: "Continue the interrupted task from the saved conversation.",
             timestamp: Date.now(),
-            pilotPlanning:
-              planApprovalMode === "plan" || (!planApprovalMode && planMode) ? true : undefined,
+            pilotPlanning: planning ? true : undefined,
           }
         : undefined;
     return this.beginRun(agent, {
       initialMessage: message,
       compaction: compact ? { mode: "retry" } : undefined,
-      planApprovalMode,
-      settingsOnStart:
-        planApprovalMode && planApprovalMode !== "plan" && planMode?.proposal
-          ? this.restorePlanMode(planMode)
-          : undefined,
+      planning,
+      approvedPlanMode,
+      settingsOnStart: approvedPlanMode && planMode?.proposal ? { planMode: undefined } : undefined,
     });
   }
 
@@ -576,9 +577,16 @@ export class AgentHost {
 
   private beginRun(
     agent: Agent,
-    options: Pick<
-      AgentRunOptions,
-      "initialMessage" | "clearDraftFor" | "compaction" | "planApprovalMode" | "settingsOnStart"
+    options: Partial<
+      Pick<
+        AgentRunOptions,
+        | "initialMessage"
+        | "clearDraftFor"
+        | "compaction"
+        | "planning"
+        | "approvedPlanMode"
+        | "settingsOnStart"
+      >
     > = {},
   ): Promise<void> {
     const sessionId = this.sessionId!;
@@ -587,7 +595,7 @@ export class AgentHost {
     const sessionRules = this.sessionRules.get(sessionId) ?? [];
     this.sessionRules.set(sessionId, sessionRules);
     const sessionMode = this.getCurrentSession()?.planMode;
-    const planApprovalMode = options.planApprovalMode ?? (sessionMode ? "plan" : undefined);
+    const planning = options.planning ?? Boolean(sessionMode);
     const run = new AgentRun({
       ...this.deps,
       ...options,
@@ -599,10 +607,10 @@ export class AgentHost {
       systemPrompt: this.agentInstructions!.prompt,
       view: this.view,
       sessionRules,
-      planApprovalMode,
+      planning,
       settingsOnStart:
         options.settingsOnStart ??
-        (planApprovalMode === "plan" && !sessionMode
+        (planning && !sessionMode
           ? { planMode: { executionMode: this.executionMode() } }
           : undefined),
       onStarted: () => this.deps.onActivityChanged?.(),

@@ -145,14 +145,14 @@ export class AgentRun {
       actions: previous?.actions ?? [],
       gitBaseline: previous?.gitBaseline,
       task,
-      planApprovalMode: deps.planApprovalMode,
+      planApprovalMode: this.planning ? "plan" : deps.approvedPlanMode,
     };
     if (this.ownsCheckpoint)
       store.startCheckpoint(sessionId, agent.state.messages, this.checkpoint, deps.settingsOnStart);
     this.savedMessageCount = agent.state.messages.length;
     if (clearDraftFor !== undefined) store.saveDraft(clearDraftFor, []);
     const approvalMode =
-      deps.planApprovalMode ??
+      deps.approvedPlanMode ??
       store.getMeta(sessionId)?.approvalMode ??
       deps.getSettings().approvalMode ??
       "standard";
@@ -165,6 +165,7 @@ export class AgentRun {
       (rule) => this.addGlobalRule(rule),
       () => approvalMode,
       deps.sessionRules,
+      this.planning,
     );
     this.previousActions = new Set(previous?.actions);
     this.resumed = previous !== undefined;
@@ -187,7 +188,7 @@ export class AgentRun {
   }
 
   get planning(): boolean {
-    return this.deps.planApprovalMode === "plan";
+    return this.deps.planning;
   }
 
   get gitChangesAtEnd(): Promise<GitChangesView | null> | undefined {

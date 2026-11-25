@@ -13,6 +13,7 @@ function makeManager(
   globalRules: ToolRule[] = [],
   mode: ApprovalMode = "standard",
   sessionRules: ToolRule[] = [],
+  planning = false,
 ) {
   const events: PermissionRequest[] = [];
   const addedGlobal: ToolRule[] = [];
@@ -27,6 +28,7 @@ function makeManager(
     },
     () => mode,
     sessionRules,
+    planning,
   );
   return { manager, events, addedGlobal, allRules };
 }
@@ -56,8 +58,9 @@ describe("PermissionManager", () => {
   it("allows research and plan proposals while ignoring saved grants for side effects", async () => {
     const { manager, events } = makeManager(
       [{ toolName: "write_file" }, commandRule("powershell", "git", "status")],
-      "plan",
+      "full-access",
       [{ toolName: "mcp__fixture__change" }],
+      true,
     );
     for (const tool of ["read_file", "glob", "grep", "read_skill", "update_plan", "propose_plan"])
       expect(await gateTool(manager, tool, {})).toBeUndefined();

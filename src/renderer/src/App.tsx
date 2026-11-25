@@ -34,7 +34,6 @@ import { applyTheme, loadTheme, watchSystemTheme } from "@renderer/lib/theme";
 import type { ComposerShortcut, ComposerShortcuts } from "@renderer/lib/types";
 import { windowShortcutAction } from "@renderer/lib/window-shortcuts";
 import {
-  selectCanChangeApprovalMode,
   selectPlanReview,
   selectProjectDirectory,
   selectWorkingDirectory,
@@ -74,7 +73,6 @@ export default function App(): JSX.Element {
   const canEdit = useAgentStore((state) =>
     Boolean(state.composerId && !state.pendingPermissions.length && !selectPlanReview(state)),
   );
-  const canChangeMode = useAgentStore(selectCanChangeApprovalMode);
   const canRecall = useAgentStore(
     (state) =>
       state.composerDraft.length === 0 && state.messages.some(({ role }) => role === "user"),
@@ -114,11 +112,11 @@ export default function App(): JSX.Element {
   const enabledComposerShortcuts = useMemo<Record<ComposerShortcut, boolean>>(
     () => ({
       "focus-composer": Boolean(composerId),
-      "cycle-approval-mode": canEdit && canChangeMode,
+      "cycle-approval-mode": canEdit,
       "recall-message": canEdit && canRecall,
       "stop-run": stoppableRunId !== null,
     }),
-    [composerId, canEdit, canChangeMode, canRecall, stoppableRunId],
+    [composerId, canEdit, canRecall, stoppableRunId],
   );
 
   const runComposerShortcut = useCallback(

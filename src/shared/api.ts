@@ -95,6 +95,7 @@ export interface PiApi {
   sessionNew(): Promise<Snapshot>;
   sessionSaveDraft(composerId: string, draft: ComposerDraft): Promise<void>;
   sessionUpdateSettings(composerId: string, input: SessionSettingsInput): Promise<void>;
+  sessionSetPlanMode(composerId: string, enabled: boolean): Promise<void>;
   sessionReviewPlan(composerId: string, proposalId: string, decision: PlanDecision): Promise<void>;
   sessionSelectProject(locale: Locale, sessionId?: string): Promise<Snapshot | null>;
   sessionUseRecentProject(directory: string, sessionId?: string): Promise<Snapshot>;

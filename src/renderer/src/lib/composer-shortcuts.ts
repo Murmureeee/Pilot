@@ -74,6 +74,5 @@ export function composerEditingShortcut(
 
 export function nextApprovalMode(mode: ApprovalMode): ApprovalMode {
   if (mode === "standard") return "read-only";
-  if (mode === "read-only") return "full-access";
-  return mode === "full-access" ? "plan" : "standard";
+  return mode === "read-only" ? "full-access" : "standard";
 }

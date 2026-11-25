@@ -192,12 +192,10 @@ const inputs = {
     z.uuid(),
     z.strictObject({
       model: z.strictObject({ providerId: nonBlank, modelId: nonBlank }).nullable().optional(),
-      approvalMode: z
-        .enum([...EXECUTION_APPROVAL_MODES, "plan"])
-        .nullable()
-        .optional(),
+      approvalMode: executionApprovalMode.nullable().optional(),
     }),
   ]),
+  [IPC.sessionSetPlanMode]: sessionFlag,
   [IPC.sessionReviewPlan]: z.tuple([
     z.uuid(),
     z.uuid(),

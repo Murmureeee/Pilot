@@ -50,6 +50,9 @@ export function registerAgentRoutes({
   handle(IPC.sessionUpdateSettings, (_event, composerId, input) =>
     host.updateSessionSettings(composerId, input),
   );
+  handle(IPC.sessionSetPlanMode, (_event, composerId, enabled) =>
+    host.setPlanMode(composerId, enabled),
+  );
   handle(IPC.sessionReviewPlan, (_event, composerId, proposalId, decision) => {
     if (decision.type === "execute") exit.checkWorkAllowed();
     void host.reviewPlan(composerId, proposalId, decision);

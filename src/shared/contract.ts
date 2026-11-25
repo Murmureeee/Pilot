@@ -31,6 +31,7 @@ export const IPC = {
   sessionNew: "session:new",
   sessionSaveDraft: "session:save-draft",
   sessionUpdateSettings: "session:update-settings",
+  sessionSetPlanMode: "session:set-plan-mode",
   sessionReviewPlan: "session:review-plan",
   sessionSelectProject: "session:select-project",
   sessionUseRecentProject: "session:use-recent-project",
@@ -451,7 +452,7 @@ export interface SessionModelSelection {
 
 export interface SessionSettings {
   model?: SessionModelSelection;
-  approvalMode?: ExecutionApprovalMode;
+  approvalMode?: ApprovalMode;
   planMode?: PlanMode;
 }
 
@@ -461,7 +462,7 @@ export interface SessionSettingsInput {
 }
 
 export interface PlanMode {
-  executionMode: ExecutionApprovalMode;
+  executionMode: ApprovalMode;
   proposal?: PlanProposal;
 }
 
@@ -662,8 +663,7 @@ export interface StartVerification {
 export type ProviderKind = "anthropic" | "openai-compatible" | "openai-responses" | "faux";
 
 /** 确认模式使用授权规则，完全访问放行常规操作，只读模式阻止写入与命令。危险命令始终需要单次确认。 */
-export type ExecutionApprovalMode = (typeof EXECUTION_APPROVAL_MODES)[number];
-export type ApprovalMode = ExecutionApprovalMode | "plan";
+export type ApprovalMode = (typeof EXECUTION_APPROVAL_MODES)[number];
 
 /** 模型思考强度（pi 的 7 档离散值，composer 滑块选择） */
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
@@ -736,7 +736,7 @@ export interface PublicSettings {
   providers: PublicProvider[];
   activeProviderId: string;
   toolRules?: ToolRule[];
-  approvalMode: ExecutionApprovalMode;
+  approvalMode: ApprovalMode;
   thinkingLevel: ThinkingLevel;
   thinkingLevels: ThinkingLevel[];
   workingDirectory: string | null;
@@ -757,7 +757,7 @@ export interface ProviderInput extends ProviderFields {
 export interface SettingsInput {
   providers: ProviderInput[];
   activeProviderId: string;
-  approvalMode?: ExecutionApprovalMode;
+  approvalMode?: ApprovalMode;
   thinkingLevel?: ThinkingLevel;
   thinkingLevels?: ThinkingLevel[];
   /** null 恢复主目录；缺省保留原设置 */

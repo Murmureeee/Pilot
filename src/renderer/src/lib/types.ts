@@ -36,6 +36,7 @@ interface ComposerCommandActions {
   newChat(): Promise<void>;
   archiveChat(): Promise<void>;
   compactContext(): Promise<void>;
+  togglePlanMode(): Promise<void>;
   openMenu(menu: ComposerToolbarMenu): void;
   openSettings(section: SettingsSection): void;
 }

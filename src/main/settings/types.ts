@@ -1,6 +1,6 @@
 // @env node
 import type {
-  ExecutionApprovalMode,
+  ApprovalMode,
   CommandShell,
   LogLevel,
   ProviderFields,
@@ -31,7 +31,7 @@ export interface Settings {
   providers: ProviderConfig[];
   activeProviderId: string;
   toolRules?: ToolRule[];
-  approvalMode?: ExecutionApprovalMode;
+  approvalMode?: ApprovalMode;
   thinkingLevel?: ThinkingLevel;
   thinkingLevels?: ThinkingLevel[];
   workingDirectory?: string;

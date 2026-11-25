@@ -96,14 +96,13 @@ it("plans with read-only tools, restores the edited plan after restart, and exec
 
   const host = createHost();
   const { composerId } = host.openProject(root);
-  host.updateSessionSettings(composerId, { approvalMode: "plan" });
+  host.setPlanMode(composerId, true);
+  expect(host.getSnapshot().sessions[0].approvalMode).toBeUndefined();
   // The plan must retain the permissions it was created with even if the global default changes.
   settings.approvalMode = "full-access";
   const planning = host.prompt("Prepare a note");
   expect(host.getSnapshot().activeRun?.planning).toBe(true);
-  expect(() => host.updateSessionSettings(composerId, { approvalMode: "full-access" })).toThrow(
-    "请等待本轮规划结束",
-  );
+  expect(() => host.setPlanMode(composerId, false)).toThrow("请等待当前回复结束");
   await planning;
   expect(requests).toHaveLength(3);
   for (const request of requests) {
@@ -146,7 +145,7 @@ it("plans with read-only tools, restores the edited plan after restart, and exec
   expect(mcpTools).toHaveBeenCalledOnce();
   expect(resolve).toHaveBeenCalledTimes(2);
   expect(readFileSync(output, "utf8")).toBe("Revised");
-  expect(restarted.getSnapshot().sessions[0]).toMatchObject({ approvalMode: "standard" });
+  expect(restarted.getSnapshot().sessions[0].approvalMode).toBeUndefined();
   expect(restarted.getSnapshot().sessions[0].planMode).toBeUndefined();
 });
 
@@ -180,11 +179,12 @@ it("keeps a failed planning turn read-only on retry and discards the proposal wi
     mcp: new McpManager(() => settings, "0.0.0"),
   });
   const { composerId } = host.openProject(root);
-  host.updateSessionSettings(composerId, { approvalMode: "plan" });
+  host.setPlanMode(composerId, true);
   await host.prompt("Review the workspace before editing");
   const failed = host.getSnapshot().failedRun!;
   expect(failed).toBeTruthy();
   expect(store.getMeta(composerId)?.planMode?.proposal).toBeUndefined();
+  host.setPlanMode(composerId, false);
   host.updateSessionSettings(composerId, { approvalMode: "full-access" });
   await host.resume(failed);
   expect(existsSync(join(root, "unsafe.txt"))).toBe(false);
