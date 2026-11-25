@@ -189,6 +189,7 @@ export const EN_MESSAGES: Record<string, string> = {
     "Chats appear here after you open a project or send your first message.",
   未读: "Unread",
   等待审批: "Waiting for approval",
+  等待确认计划: "Plan awaiting confirmation",
   运行中: "Running",
   正在停止: "Stopping",
   在此项目新建聊天: "New chat in this project",
@@ -304,6 +305,30 @@ export const EN_MESSAGES: Record<string, string> = {
     "Check your connection or model settings, then send the message again.",
   确认模式: "Ask first",
   只读: "Read-only",
+  计划模式: "Plan mode",
+  "先读取项目并制定计划，确认后使用原权限执行。":
+    "Read the project and draft a plan. Confirm to run it with the previous permissions.",
+  "描述要规划的任务…": "Describe the task to plan…",
+  "确认后使用「{0}」执行此计划。": "Confirm to execute this plan in {0} mode.",
+  计划内容: "Plan contents",
+  提交计划: "Propose plan",
+  编辑计划: "Edit plan",
+  保存计划: "Save plan",
+  取消编辑: "Cancel editing",
+  放弃计划: "Discard plan",
+  确认并执行: "Confirm and execute",
+  "正在启动…": "Starting…",
+  "计划模式只允许读取、搜索和提交计划。":
+    "Plan mode allows reading, searching, and proposing a plan.",
+  "请等待本轮规划结束后再切换权限模式。":
+    "Wait for this planning turn to finish before changing the approval mode.",
+  "请先确认或放弃此计划。": "Confirm or discard this plan first.",
+  "计划已更新，请重新打开会话。": "The plan has changed. Reopen the chat to review it.",
+  "请输入有效的计划内容。": "Enter a valid plan.",
+  "请等待当前操作结束后再执行计划。":
+    "Wait for the current operation to finish, then execute the plan.",
+  "计划的工作目录已更改。请放弃此计划并重新规划。":
+    "The working directory changed. Discard this plan and create a new one.",
   完全访问: "Full access",
   "写入、命令和 MCP 调用需确认，已有授权可直接执行。":
     "Ask before writing files, running commands, or calling MCP tools unless already allowed.",
@@ -389,6 +414,7 @@ export const EN_MESSAGES: Record<string, string> = {
   "（当前）": " (current)",
   "权限模式：只读": "Approval mode: Read-only",
   "权限模式：完全访问": "Approval mode: Full access",
+  "权限模式：计划模式": "Approval mode: Plan mode",
   "搜索操作与会话…": "Search actions and chats…",
   没有匹配的结果: "No matching results",
   快捷操作: "Actions",

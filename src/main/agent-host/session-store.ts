@@ -537,8 +537,13 @@ export class SessionStore {
     return this.rename(meta.id, `分叉：${origin.title.slice(0, 21)}`);
   }
 
-  branchFromMessage(origin: SessionMeta, messages: AgentMessage[], draft: ComposerDraft): string {
-    const settings = { model: origin.model, approvalMode: origin.approvalMode };
+  branchFromMessage(
+    origin: SessionMeta,
+    messages: AgentMessage[],
+    draft: ComposerDraft,
+    planMode?: SessionSettings["planMode"],
+  ): string {
+    const settings = { model: origin.model, approvalMode: origin.approvalMode, planMode };
     const { id } = this.create(origin.workingDirectory, undefined, settings);
     try {
       const compactions = this.compactions(origin.id).filter(
@@ -686,7 +691,12 @@ export class SessionStore {
     return { messages, checkpoint, gitChanges, compactions: saved, messageHistory };
   }
 
-  startCheckpoint(id: string, messages: AgentMessage[], checkpoint: RunCheckpoint): void {
+  startCheckpoint(
+    id: string,
+    messages: AgentMessage[],
+    checkpoint: RunCheckpoint,
+    settings?: SessionSettings,
+  ): void {
     const state = this.transcriptWriteState(id);
     if (
       !state.appendable ||
@@ -698,7 +708,7 @@ export class SessionStore {
     } else {
       this.appendCheckpoint(id, state.messageCount === 0 ? messages : [], checkpoint);
     }
-    this.saveSessionMeta(id, messages, checkpoint, "interrupted");
+    this.saveSessionMeta(id, messages, checkpoint, "interrupted", { settings });
   }
 
   appendCheckpoint(
@@ -779,7 +789,13 @@ export class SessionStore {
       ...previousIndex,
       sessions: previousIndex.sessions.map((session) =>
         session.id === id
-          ? { ...session, updatedAt: Date.now(), lastTask: task?.task, lastRunResult: task?.result }
+          ? {
+              ...session,
+              planMode: session.planMode && { executionMode: session.planMode.executionMode },
+              updatedAt: Date.now(),
+              lastTask: task?.task,
+              lastRunResult: task?.result,
+            }
           : session,
       ),
     });
@@ -798,13 +814,14 @@ export class SessionStore {
     messages: AgentMessage[],
     checkpoint?: RunCheckpoint,
     lastRunResult?: SessionRunResult,
-    settlement?: SessionRunSettlement,
+    settlement?: Pick<SessionRunSettlement, "task" | "settings">,
   ): SessionMeta {
     const title = sessionTitle(messages, checkpoint);
     const previous = this.getMeta(id);
     const now = Date.now();
     const meta: SessionMeta = {
       ...previous,
+      ...settlement?.settings,
       id,
       title: previous?.titleCustom ? previous.title : title,
       createdAt: previous?.createdAt ?? now,

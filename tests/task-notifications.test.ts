@@ -5,7 +5,7 @@ import type { BrowserWindow, NotificationConstructorOptions } from "electron";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import { TaskNotifications } from "../src/main/task-notifications";
-import type { NoticeKind, TaskNotificationOptions } from "../src/main/task-notifications/types";
+import type { TaskNotificationOptions } from "../src/main/task-notifications/types";
 import type { Locale, SessionMeta, UiAgentEvent } from "../src/shared/contract";
 
 const native = vi.hoisted(() => ({
@@ -61,7 +61,7 @@ const respond = (requestId: string): UiAgentEvent => ({
   approval: { decision: "once" },
 });
 
-function idle(result?: Exclude<NoticeKind, "approval"> | "stopped"): UiAgentEvent {
+function idle(result?: "success" | "failed" | "stopped"): UiAgentEvent {
   return { type: "status", status: "idle", run, result };
 }
 
@@ -93,7 +93,7 @@ function fixture(locale: Locale = "zh") {
     reportError: vi.fn<TaskNotificationOptions["reportError"]>(),
   });
   controller.watchWindow(window as unknown as BrowserWindow);
-  return { controller, view, openSession, setUnread, window };
+  return { controller, view, openSession, session, setUnread, window };
 }
 
 it("alerts once for a pending approval when the user leaves its chat", () => {
@@ -137,6 +137,24 @@ it("only announces terminal results outside the chat and reads a completion on r
   expect(native.items[1].options.title).toBe("Task failed");
   expect(native.items[0].close).toHaveBeenCalledOnce();
   expect(setUnread).toHaveBeenCalledTimes(2);
+});
+
+it("announces pending plans and dismisses their notice after the plan is discarded", () => {
+  const { controller, view, session, window } = fixture("en");
+  view.visible = "other-chat";
+  session.planMode = {
+    executionMode: "standard",
+    proposal: { id: run.runId, workingDirectory: null, markdown: "Inspect the project." },
+  };
+  controller.handleEvent(idle("success"));
+  expect(native.items[0].options).toEqual({
+    title: "Plan awaiting confirmation",
+    body: session.title,
+  });
+  session.planMode = undefined;
+  controller.handleEvent({ type: "sessions", sessions: [session], recentProjects: [] });
+  expect(native.items[0].close).toHaveBeenCalledOnce();
+  expect(window.flashFrame.mock.calls).toEqual(isWindows ? [[true], [false]] : []);
 });
 
 it("keeps unread state active with desktop notifications disabled", () => {

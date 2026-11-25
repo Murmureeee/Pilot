@@ -58,6 +58,7 @@ const valid: Record<IpcChannel, unknown[]> = {
     sessionId,
     { model: { providerId: "local", modelId: "example" }, approvalMode: null },
   ],
+  [IPC.sessionReviewPlan]: [sessionId, run.runId, { type: "save", markdown: "1. Inspect a file." }],
   [IPC.sessionSelectProject]: ["zh"],
   [IPC.sessionUseRecentProject]: ["E:/projects/Pilot"],
   [IPC.sessionOpenProjectFolder]: ["E:/projects/Pilot"],
@@ -162,6 +163,16 @@ describe("IPC argument validation", () => {
     expect(parseIpcArgs(IPC.agentResume, [run, true])).toEqual([run, true]);
   });
 
+  it("accepts plan mode per chat and requires a proposal revision for review decisions", () => {
+    const mode = [sessionId, { approvalMode: "plan" }];
+    expect(parseIpcArgs(IPC.sessionUpdateSettings, mode)).toEqual(mode);
+    const decision = [sessionId, run.runId, { type: "execute" }];
+    expect(parseIpcArgs(IPC.sessionReviewPlan, decision)).toEqual(decision);
+    expect(() => parseIpcArgs(IPC.settingsSave, [{ ...settings, approvalMode: "plan" }])).toThrow(
+      /Invalid IPC arguments/,
+    );
+  });
+
   it("accepts Responses providers for catalog, connection tests, and settings", () => {
     const responses = { ...draft, kind: "openai-responses", modelId: "test-model" };
     expect(parseIpcArgs(IPC.settingsModelCatalog, [responses])).toEqual([responses]);
@@ -233,6 +244,8 @@ describe("IPC argument validation", () => {
     [IPC.sessionSaveDraft, [sessionId, [{ type: "file", id: "note" }]]],
     [IPC.sessionUpdateSettings, [sessionId, { model: { providerId: "local", modelId: "" } }]],
     [IPC.sessionUpdateSettings, [sessionId, { approvalMode: "unknown" }]],
+    [IPC.sessionReviewPlan, [sessionId, "stale", { type: "execute" }]],
+    [IPC.sessionReviewPlan, [sessionId, run.runId, { type: "execute", markdown: "other" }]],
     [IPC.sessionUndoFileChange, [sessionId, "C:/some/path"]],
     [
       IPC.sessionStartVerification,

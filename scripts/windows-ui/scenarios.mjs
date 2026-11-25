@@ -14,6 +14,10 @@ const instructions = "Use the desktop scene fixture when verifying this profile.
 const approvedFile = "approved.txt";
 const deniedFile = "denied.txt";
 const fileContents = "Approved in the desktop scene.\n";
+const planPrompt = "Plan a change to a desktop fixture file.";
+const plannedFile = "plan-mode.txt";
+const revisedPlan = "1. Write the revised fixture note.\n2. Verify the file contents.";
+const planningDraft = "Keep this draft while a plan awaits confirmation.";
 
 const locales = [
   {
@@ -26,6 +30,10 @@ const locales = [
     dark: "暗色",
     tabs: ["变更", "文件", "验证"],
     back: "返回对话",
+    plan: "等待确认计划",
+    editPlan: "编辑计划",
+    discardPlan: "放弃计划",
+    executePlan: "确认并执行",
   },
   {
     lang: "en",
@@ -37,6 +45,10 @@ const locales = [
     dark: "Dark",
     tabs: ["Changes", "Files", "Verify"],
     back: "Back to chat",
+    plan: "Plan awaiting confirmation",
+    editPlan: "Edit plan",
+    discardPlan: "Discard plan",
+    executePlan: "Confirm and execute",
   },
 ];
 
@@ -221,7 +233,7 @@ export async function verifySettings(page) {
   await page.getByRole("heading", { name: "个性化", exact: true }).waitFor();
 }
 
-async function selectAppearance(page, current, locale, theme) {
+async function selectAppearance(page, current, locale, theme, focusTarget = "[data-composer-editor]") {
   await openSettings(page, current, current.appearance);
   if (locale !== current) {
     await page.locator("#settings-language").click();
@@ -234,7 +246,7 @@ async function selectAppearance(page, current, locale, theme) {
     theme === "dark",
   );
   await page.keyboard.press("Control+l");
-  await page.waitForFunction(() => document.activeElement?.matches("[data-composer-editor]"));
+  await page.waitForFunction((target) => document.activeElement?.matches(target), focusTarget);
 }
 
 async function verifyReviewLayout(page, locale, overlay) {
@@ -283,6 +295,178 @@ export async function verifyLayouts(page, window) {
   await page.keyboard.press("Control+l");
   await assertFits(editor(page));
   await resize(page, window, wide);
+}
+
+function sendTool(completion, id, name, args) {
+  completion.write({
+    tool_calls: [
+      {
+        index: 0,
+        id,
+        type: "function",
+        function: { name, arguments: JSON.stringify(args) },
+      },
+    ],
+  });
+  completion.finish("tool_calls");
+}
+
+async function verifyPlanLayout(card, locale) {
+  await assertFits(card.getByRole("heading", { name: locale.plan }));
+  for (const name of [locale.discardPlan, locale.editPlan, locale.executePlan])
+    await assertFits(button(card, name));
+  const contrast = await card.getByRole("heading", { name: locale.plan }).evaluate((heading) => {
+    const context = document.createElement("canvas").getContext("2d");
+    const luminance = (color) => {
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      const rgb = context.getImageData(0, 0, 1, 1).data.slice(0, 3);
+      return [0.2126, 0.7152, 0.0722].reduce((total, weight, index) => {
+        const value = rgb[index] / 255;
+        const linear = value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+        return total + weight * linear;
+      }, 0);
+    };
+    const foreground = luminance(getComputedStyle(heading).color);
+    const background = luminance(
+      getComputedStyle(heading.closest("[data-plan-review]")).backgroundColor,
+    );
+    return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+  });
+  assert.ok(contrast >= 4.5, "The plan status must meet text contrast requirements");
+  return contrast;
+}
+
+export async function verifyPlanDraft(page, window, model, project) {
+  await page.keyboard.press("Control+n");
+  await page.keyboard.press("Control+l");
+  await page.waitForFunction(() => document.activeElement?.matches("[data-composer-editor]"));
+  for (const mode of ["Read-only", "Full access", "Plan mode", "Ask first"]) {
+    await page.keyboard.press("Shift+Tab");
+    await button(page, mode).waitFor();
+  }
+  await page.keyboard.press("Control+k");
+  const palette = page.getByRole("dialog", { name: "Search" });
+  const search = palette.getByRole("textbox", { name: "Search" });
+  await search.fill("Approval mode: Plan mode");
+  await search.press("Enter");
+  await palette.waitFor({ state: "hidden" });
+  const mode = button(page, "Plan mode");
+  await mode.press("Enter");
+  const menu = page.getByRole("menu");
+  const selected = menu.getByRole("menuitem", { name: /^Plan mode/ });
+  await selected.waitFor();
+  assert.equal(await selected.locator("svg").count(), 2, "The selected mode shows a checkmark");
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "Plan mode");
+  await send(page, planPrompt);
+  const research = await model.nextCompletion();
+  assert.deepEqual(research.input.tools.map((tool) => tool.function.name), [
+    "read_file",
+    "glob",
+    "grep",
+    "update_plan",
+    "propose_plan",
+  ]);
+  await editor(page).fill(planningDraft);
+  sendTool(research, "fixture-plan-read", "read_file", { path: approvedFile });
+  const proposal = await model.nextCompletion();
+  assert.match(proposal.input.messages.at(-1).content, /Approved in the desktop scene/);
+  sendTool(proposal, "fixture-plan-proposal", "propose_plan", {
+    markdown: "1. Write the fixture note.\n2. Verify the file.",
+  });
+  const planning = await model.nextCompletion();
+  planning.write({ content: "The plan is ready." });
+  planning.finish();
+
+  const target = "[data-plan-review]";
+  const card = page.locator(target);
+  await card.waitFor();
+  await editor(page).waitFor({ state: "hidden" });
+  await page.waitForFunction((selector) => document.activeElement?.matches(selector), target);
+  assert.ok(!existsSync(join(project, plannedFile)));
+
+  let current = locales[1];
+  let minContrast = Infinity;
+  for (const size of [wide, narrow]) {
+    await resize(page, window, size);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme, target);
+        current = locale;
+        minContrast = Math.min(minContrast, await verifyPlanLayout(card, locale));
+        console.log(`Checked plan review at ${size.width} × ${size.height} ${locale.lang} ${theme}`);
+      }
+    }
+  }
+  console.log("Plan status text minimum contrast " + minContrast.toFixed(2) + ":1");
+  await resize(page, window, narrow, 1.5);
+  await verifyPlanLayout(card, current);
+  const edit = button(card, current.editPlan);
+  await edit.press("Enter");
+  const field = card.getByRole("textbox", { name: "Plan contents" });
+  await page.waitForFunction(() => document.activeElement?.matches("[data-plan-review] textarea"));
+  await field.press("Escape");
+  await page.waitForFunction(
+    (name) => document.activeElement?.textContent?.trim() === name,
+    current.editPlan,
+  );
+  await page.keyboard.press("Enter");
+  await field.fill(revisedPlan);
+  await button(card, "Save plan").press("Enter");
+  await card.getByText("Write the revised fixture note.", { exact: true }).waitFor();
+  await page.waitForFunction(
+    (name) => document.activeElement?.textContent?.trim() === name,
+    current.editPlan,
+  );
+  await resize(page, window, wide);
+}
+
+export async function verifyPlanExecution(page, model, project) {
+  await page.keyboard.press("Control+k");
+  const search = page.getByRole("dialog", { name: "Search" }).getByRole("textbox", { name: "Search" });
+  await search.fill(planPrompt.slice(0, 20));
+  await search.press("Enter");
+  const card = page.locator("[data-plan-review]");
+  await card.getByText("Write the revised fixture note.", { exact: true }).waitFor();
+  await card.getByText("Confirm to execute this plan in Ask first mode.", { exact: true }).waitFor();
+  assert.ok(!existsSync(join(project, plannedFile)));
+  await page.keyboard.press("Control+l");
+  await page.waitForFunction(() => document.activeElement?.matches("[data-plan-review]"));
+  const execute = button(card, "Confirm and execute");
+  const focusStops = [];
+  for (let index = 0; index < 8; index++) {
+    await page.keyboard.press("Tab");
+    if (await execute.evaluate((element) => element === document.activeElement)) break;
+    focusStops.push(await page.evaluate(() => document.activeElement?.textContent?.trim().slice(0, 60)));
+  }
+  assert.ok(
+    await execute.evaluate((element) => element === document.activeElement),
+    "Plan confirmation must be reachable with Tab. Focus reached: " + focusStops.join(", "),
+  );
+  await page.keyboard.press("Enter");
+  const implementation = await model.nextCompletion();
+  assert.match(implementation.input.messages.at(-1).content, /Write the revised fixture note/);
+  assert.match(implementation.input.messages.at(-1).content, /The user approved the plan/);
+  assert.ok(implementation.input.tools.some((tool) => tool.function.name === "write_file"));
+  sendTool(implementation, "fixture-plan-write", "write_file", {
+    path: plannedFile,
+    content: "Revised plan implemented.\n",
+  });
+  const permission = page.locator("[data-permission-card]");
+  await permission.getByText(join(project, plannedFile), { exact: true }).waitFor();
+  assert.ok(!existsSync(join(project, plannedFile)), "Plan confirmation keeps tool approvals in effect");
+  await page.waitForFunction(() => document.activeElement?.matches("[data-permission-card]"));
+  await page.keyboard.press("Enter");
+  const done = await model.nextCompletion();
+  assert.equal(readFileSync(join(project, plannedFile), "utf8"), "Revised plan implemented.\n");
+  done.write({ content: "The revised plan is implemented." });
+  done.finish();
+  await page.getByText("The revised plan is implemented.", { exact: true }).waitFor();
+  await button(page, "Send").waitFor();
+  assert.equal(await editor(page).innerText(), planningDraft);
+  await page.waitForFunction(() => document.activeElement?.matches("[data-composer-editor]"));
+  await button(page, "Ask first").waitFor();
 }
 
 export async function verifyRestoredSettings(page, model) {

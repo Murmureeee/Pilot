@@ -26,6 +26,7 @@ import type {
   PermissionDecision,
   PingRequest,
   PingResponse,
+  PlanDecision,
   ProjectGitHead,
   PromptInput,
   ProviderInput,
@@ -94,6 +95,7 @@ export interface PiApi {
   sessionNew(): Promise<Snapshot>;
   sessionSaveDraft(composerId: string, draft: ComposerDraft): Promise<void>;
   sessionUpdateSettings(composerId: string, input: SessionSettingsInput): Promise<void>;
+  sessionReviewPlan(composerId: string, proposalId: string, decision: PlanDecision): Promise<void>;
   sessionSelectProject(locale: Locale, sessionId?: string): Promise<Snapshot | null>;
   sessionUseRecentProject(directory: string, sessionId?: string): Promise<Snapshot>;
   sessionOpenProjectFolder(directory: string): Promise<void>;

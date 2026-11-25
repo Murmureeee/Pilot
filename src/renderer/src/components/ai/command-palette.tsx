@@ -3,6 +3,7 @@
 import { cn } from "cn";
 import {
   ArrowUpIcon,
+  ClipboardListIcon,
   EyeIcon,
   FileDiffIcon,
   FileTextIcon,
@@ -29,7 +30,11 @@ import {
 } from "@renderer/lib/palette";
 import { relativeTime } from "@renderer/lib/relative-time";
 import type { ComposerShortcut } from "@renderer/lib/types";
-import { selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
+import {
+  selectApprovalMode,
+  selectCanChangeApprovalMode,
+  useAgentStore,
+} from "@renderer/stores/agent";
 import { activateReview } from "@renderer/stores/review";
 import type { ApprovalMode } from "@shared/contract";
 
@@ -59,6 +64,8 @@ function EntryIcon({ entry }: { entry: PaletteEntry }): JSX.Element {
       return <EyeIcon className="size-4 shrink-0" />;
     case "mode-full":
       return <ZapIcon className="size-4 shrink-0" />;
+    case "mode-plan":
+      return <ClipboardListIcon className="size-4 shrink-0" />;
     default:
       return <MessageSquareIcon className="size-4 shrink-0" />;
   }
@@ -78,6 +85,7 @@ export function CommandPalette({
   const setOpen = useAgentStore((s) => s.setPaletteOpen);
   const sessions = useAgentStore((s) => s.sessions);
   const approvalMode = useAgentStore(selectApprovalMode);
+  const canChangeMode = useAgentStore(selectCanChangeApprovalMode);
   const newSession = useAgentStore((s) => s.newSession);
   const loadSession = useAgentStore((s) => s.loadSession);
   const setView = useAgentStore((s) => s.setView);
@@ -94,28 +102,36 @@ export function CommandPalette({
     const actions: PaletteEntry[] = [
       { kind: "action", id: "new-chat", label: t("新聊天", locale), detail: "Ctrl+N" },
       { kind: "action", id: "open-settings", label: t("打开设置", locale) },
-      {
-        kind: "action",
-        id: "mode-standard",
-        label: `${t("权限模式：确认模式", locale)}${
-          approvalMode === "standard" ? t("（当前）", locale) : ""
-        }`,
-      },
-      {
-        kind: "action",
-        id: "mode-readonly",
-        label: `${t("权限模式：只读", locale)}${
-          approvalMode === "read-only" ? t("（当前）", locale) : ""
-        }`,
-      },
-      {
-        kind: "action",
-        id: "mode-full",
-        label: `${t("权限模式：完全访问", locale)}${
-          approvalMode === "full-access" ? t("（当前）", locale) : ""
-        }`,
-      },
     ];
+    if (canChangeMode)
+      actions.push(
+        {
+          kind: "action",
+          id: "mode-standard",
+          label: `${t("权限模式：确认模式", locale)}${
+            approvalMode === "standard" ? t("（当前）", locale) : ""
+          }`,
+        },
+        {
+          kind: "action",
+          id: "mode-readonly",
+          label: `${t("权限模式：只读", locale)}${
+            approvalMode === "read-only" ? t("（当前）", locale) : ""
+          }`,
+        },
+        {
+          kind: "action",
+          id: "mode-full",
+          label: `${t("权限模式：完全访问", locale)}${
+            approvalMode === "full-access" ? t("（当前）", locale) : ""
+          }`,
+        },
+        {
+          kind: "action",
+          id: "mode-plan",
+          label: `${t("权限模式：计划模式", locale)}${approvalMode === "plan" ? t("（当前）", locale) : ""}`,
+        },
+      );
     if (canReview) {
       actions.push(
         {
@@ -145,7 +161,7 @@ export function CommandPalette({
       detail: relativeTime(s.updatedAt, locale),
     }));
     return [...actions, ...chats];
-  }, [locale, sessions, approvalMode, canReview, composerShortcuts]);
+  }, [locale, sessions, approvalMode, canChangeMode, canReview, composerShortcuts]);
 
   const filtered = useMemo(() => filterEntries(entries, query, tab), [entries, query, tab]);
 
@@ -198,6 +214,9 @@ export function CommandPalette({
         return;
       case "mode-full":
         changeApprovalMode("full-access");
+        return;
+      case "mode-plan":
+        changeApprovalMode("plan");
         return;
       case "focus-composer":
       case "cycle-approval-mode":

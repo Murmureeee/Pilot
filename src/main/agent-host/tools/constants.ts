@@ -1,5 +1,6 @@
 // @env node
 export const PLAN_TOOL_NAME = "update_plan";
+export const PROPOSE_PLAN_TOOL_NAME = "propose_plan";
 export const READ_SKILL_TOOL_NAME = "read_skill";
 
 export const COMMAND_OUTPUT_LIMIT = 100_000;
@@ -17,4 +18,5 @@ export const TOOL_LABELS: Readonly<Record<string, string>> = {
   glob: "查找文件",
   grep: "搜索内容",
   [PLAN_TOOL_NAME]: "任务计划",
+  [PROPOSE_PLAN_TOOL_NAME]: "提交计划",
 };

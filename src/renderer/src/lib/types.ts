@@ -136,6 +136,7 @@ export type SendKey = "enter" | "mod-enter";
 
 export type SessionRowStatus =
   | "approval"
+  | "plan"
   | "running"
   | "stopping"
   | "failed"

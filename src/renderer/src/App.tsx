@@ -34,6 +34,8 @@ import { applyTheme, loadTheme, watchSystemTheme } from "@renderer/lib/theme";
 import type { ComposerShortcut, ComposerShortcuts } from "@renderer/lib/types";
 import { windowShortcutAction } from "@renderer/lib/window-shortcuts";
 import {
+  selectCanChangeApprovalMode,
+  selectPlanReview,
   selectProjectDirectory,
   selectWorkingDirectory,
   useAgentStore,
@@ -70,8 +72,9 @@ export default function App(): JSX.Element {
   > | null>(null);
   const composerShortcuts = useRef<ComposerShortcuts>(null);
   const canEdit = useAgentStore((state) =>
-    Boolean(state.composerId && !state.pendingPermissions.length),
+    Boolean(state.composerId && !state.pendingPermissions.length && !selectPlanReview(state)),
   );
+  const canChangeMode = useAgentStore(selectCanChangeApprovalMode);
   const canRecall = useAgentStore(
     (state) =>
       state.composerDraft.length === 0 && state.messages.some(({ role }) => role === "user"),
@@ -111,11 +114,11 @@ export default function App(): JSX.Element {
   const enabledComposerShortcuts = useMemo<Record<ComposerShortcut, boolean>>(
     () => ({
       "focus-composer": Boolean(composerId),
-      "cycle-approval-mode": canEdit,
+      "cycle-approval-mode": canEdit && canChangeMode,
       "recall-message": canEdit && canRecall,
       "stop-run": stoppableRunId !== null,
     }),
-    [composerId, canEdit, canRecall, stoppableRunId],
+    [composerId, canEdit, canChangeMode, canRecall, stoppableRunId],
   );
 
   const runComposerShortcut = useCallback(
@@ -139,7 +142,9 @@ export default function App(): JSX.Element {
     if (!composerAction || !conversationVisible) return;
     const frame = requestAnimationFrame(() => {
       document
-        .querySelector<HTMLElement>("main [data-permission-card], main [data-composer-editor]")
+        .querySelector<HTMLElement>(
+          "main :is([data-permission-card], [data-plan-review], [data-composer-editor])",
+        )
         ?.focus();
       if (composerAction === "cycle-approval-mode") composerShortcuts.current?.cycleMode();
       if (composerAction === "recall-message") composerShortcuts.current?.recallMessage();
@@ -161,7 +166,7 @@ export default function App(): JSX.Element {
       focusFrame = requestAnimationFrame(() => {
         const main = document.querySelector("main");
         const target =
-          main?.querySelector<HTMLElement>("[data-permission-card]") ??
+          main?.querySelector<HTMLElement>("[data-permission-card], [data-plan-review]") ??
           main?.querySelector<HTMLElement>("[data-model-failure] button") ??
           main?.querySelector<HTMLElement>('[contenteditable="true"]') ??
           main;

@@ -19,6 +19,7 @@ import type {
   ModelRetryProgress,
   PermissionDecision,
   PermissionRequest,
+  SessionSettings,
   SkillMeta,
   ToolRule,
   Snapshot,
@@ -41,7 +42,7 @@ import type {
   GitSnapshot,
   RecordedFileChange,
 } from "../workspace/types";
-import { CONTEXT_COMPACTION_RATIO } from "./constants";
+import { CONTEXT_COMPACTION_RATIO, PLAN_MODE_INSTRUCTIONS } from "./constants";
 import {
   assistantUsage,
   compactContext,
@@ -62,9 +63,9 @@ import {
 } from "./recovery";
 import { messageParts, messageText, toUiMessages } from "./session-store";
 import { skillCatalog } from "./skills";
-import { labelOf } from "./tools";
-import { PLAN_TOOL_NAME } from "./tools/constants";
-import { readPlanSteps } from "./tools/plan";
+import { isReadOnly, labelOf } from "./tools";
+import { PLAN_TOOL_NAME, PROPOSE_PLAN_TOOL_NAME } from "./tools/constants";
+import { proposePlanTool, readPlanProposal, readPlanSteps } from "./tools/plan";
 import { createReadSkillTool } from "./tools/read-skill";
 import type {
   AgentRunOptions,
@@ -132,6 +133,7 @@ export class AgentRun {
       runId,
       workingDirectory: workingDirectory ?? null,
       status: "streaming",
+      ...(this.planning ? { planning: true } : {}),
       modelCapabilities: capabilitiesFromModel(agent.state.model),
     };
     this.checkpoint = {
@@ -143,13 +145,17 @@ export class AgentRun {
       actions: previous?.actions ?? [],
       gitBaseline: previous?.gitBaseline,
       task,
+      planApprovalMode: deps.planApprovalMode,
     };
     if (this.ownsCheckpoint)
-      store.startCheckpoint(sessionId, agent.state.messages, this.checkpoint);
+      store.startCheckpoint(sessionId, agent.state.messages, this.checkpoint, deps.settingsOnStart);
     this.savedMessageCount = agent.state.messages.length;
     if (clearDraftFor !== undefined) store.saveDraft(clearDraftFor, []);
     const approvalMode =
-      store.getMeta(sessionId)?.approvalMode ?? deps.getSettings().approvalMode ?? "standard";
+      deps.planApprovalMode ??
+      store.getMeta(sessionId)?.approvalMode ??
+      deps.getSettings().approvalMode ??
+      "standard";
     this.permissions = new PermissionManager(
       (request) => {
         this.sendStatus("waiting_approval");
@@ -178,6 +184,10 @@ export class AgentRun {
 
   get acceptsPrompts(): boolean {
     return this.ownsCheckpoint;
+  }
+
+  get planning(): boolean {
+    return this.deps.planApprovalMode === "plan";
   }
 
   get gitChangesAtEnd(): Promise<GitChangesView | null> | undefined {
@@ -411,12 +421,14 @@ export class AgentRun {
         this.gitFilesBefore = await captureGitCheckpointBase(directory, gitBaseline);
       if (this.checkpoint.gitBaseline === undefined)
         this.saveCheckpoint({ ...this.checkpoint, gitBaseline });
-      const externalTools = signal.aborted
-        ? []
-        : await this.deps.mcp.tools(directory, signal).catch((error: unknown) => {
-            if (signal.aborted) return [];
-            throw error;
-          });
+      // Loading MCP tools can start a stdio server before any tool call is made.
+      const externalTools =
+        this.planning || signal.aborted
+          ? []
+          : await this.deps.mcp.tools(directory, signal).catch((error: unknown) => {
+              if (signal.aborted) return [];
+              throw error;
+            });
       if (signal.aborted) {
         if (this.interruptedForExit) return;
         const messages = initialMessage
@@ -427,12 +439,14 @@ export class AgentRun {
         return;
       }
       // pi takes a snapshot of these tool declarations when starting the prompt.
-      const localTools = tools.map((tool) => {
+      const available = this.planning ? tools.filter(({ name }) => isReadOnly(name)) : tools;
+      const localTools = available.map((tool) => {
         if (tool.name === "bash") return this.observeGitCommand(tool);
         if (tool.name === "write_file" || tool.name === "edit_file")
           return this.guardApprovedFile(tool);
         return tool;
       });
+      if (this.planning) localTools.push(proposePlanTool);
       if (this.listedSkills.size) {
         localTools.push(
           createReadSkillTool((id) => {
@@ -530,7 +544,10 @@ export class AgentRun {
     stream: StreamFn,
     signal: AbortSignal,
   ): Promise<AgentMessage[]> {
-    const prepared = this.prepareRequestMessages(messages, this.deps.systemPrompt);
+    const instructions = this.planning
+      ? PLAN_MODE_INSTRUCTIONS + "\n\n" + this.deps.systemPrompt
+      : this.deps.systemPrompt;
+    const prepared = this.prepareRequestMessages(messages, instructions);
     const projected = compactedContext(prepared, this.latestCompaction, messages);
     const { contextWindow } = this.deps.agent.state.model;
     if (
@@ -1003,6 +1020,7 @@ export class AgentRun {
       task: this.checkpoint.task,
       result,
       messageRange: { startIndex: this.checkpoint.startIndex, workingDirectory, workspace },
+      settings: this.planning && result === "success" ? this.proposedPlan(messages) : undefined,
     });
     this.result = result;
     this.deps.view.messages = toUiMessages(
@@ -1017,6 +1035,23 @@ export class AgentRun {
     if (last?.role === "assistant" && last.stopReason === "error") {
       this.send({ type: "error", message: last.errorMessage ?? "模型返回错误" });
     }
+  }
+
+  private proposedPlan(messages: AgentMessage[]): SessionSettings | undefined {
+    const { runId, sessionId, workingDirectory } = this.state;
+    const planMode = this.deps.store.getMeta(sessionId)?.planMode;
+    if (!planMode) return undefined;
+    const lastUser = messages.findLastIndex(({ role }) => role === "user");
+    const turn = messages.slice(Math.max(this.checkpoint.startIndex, lastUser + 1));
+    const proposal = turn.findLast(
+      (message) =>
+        message.role === "toolResult" &&
+        message.toolName === PROPOSE_PLAN_TOOL_NAME &&
+        !message.isError,
+    );
+    const markdown = proposal?.role === "toolResult" && readPlanProposal(proposal.details);
+    if (!markdown) return undefined;
+    return { planMode: { ...planMode, proposal: { id: runId, markdown, workingDirectory } } };
   }
 
   private toolLabel(name: string): string {

@@ -3,6 +3,7 @@ import type { Agent, AgentMessage, AgentTool } from "@earendil-works/pi-agent-co
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 
 import type {
+  ApprovalMode,
   AssistantTiming,
   GitChangesView,
   ContextCompaction,
@@ -15,6 +16,7 @@ import type {
   SessionInstructionSources,
   SkillMeta,
   SessionMeta,
+  SessionSettings,
   SessionRunResult,
   Snapshot,
   ToolRule,
@@ -73,17 +75,20 @@ export interface AgentRunOptions extends Pick<
   initialMessage?: ReferencedUserMessage;
   clearDraftFor?: string;
   compaction?: CompactionRequest;
+  planApprovalMode?: ApprovalMode;
+  settingsOnStart?: SessionSettings;
   onStarted: () => void;
   onSessionUpdated: () => void;
   onFinished: () => void;
 }
 
-export type CompactionRequest = { mode: "manual"; focus: string } | { mode: "retry" };
+type CompactionRequest = { mode: "manual"; focus: string } | { mode: "retry" };
 
 export interface SessionRunSettlement {
   task?: VerificationTask;
   result: Exclude<SessionRunResult, "interrupted">;
   messageRange?: Pick<SavedMessageTask, "startIndex" | "workingDirectory" | "workspace">;
+  settings?: SessionSettings;
 }
 
 type MessageTaskWorkspace =
@@ -155,6 +160,7 @@ export interface RunCheckpoint {
   gitBaseline?: GitSnapshot;
   task?: VerificationTask;
   failure?: ModelFailure;
+  planApprovalMode?: ApprovalMode;
 }
 
 export interface RecordedApproval {
@@ -264,7 +270,10 @@ interface PromptReference {
   parts: UiUserPart[];
 }
 
-export type ReferencedUserMessage = UserMessage & { pilotReference?: PromptReference };
+export type ReferencedUserMessage = UserMessage & {
+  pilotReference?: PromptReference;
+  pilotPlanning?: true;
+};
 
 export interface DisplayMention {
   offset: number;

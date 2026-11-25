@@ -5,7 +5,7 @@ import type { SessionRowStatus } from "./types";
 
 /** 侧栏状态位每行只显示优先级最高的一种，顺序与 DESIGN 的状态模型一致。 */
 export function sessionRowStatus(
-  session: Pick<SessionMeta, "id" | "unread" | "lastRunResult">,
+  session: Pick<SessionMeta, "id" | "unread" | "lastRunResult" | "planMode">,
   activeRun: ActiveRun | null,
   interruptedRun: InterruptedRun | null,
   failedRun: FailedRun | null = null,
@@ -17,6 +17,7 @@ export function sessionRowStatus(
   if (failedRun?.sessionId === session.id || session.lastRunResult === "failed") return "failed";
   if (interruptedRun?.sessionId === session.id || session.lastRunResult === "interrupted")
     return "interrupted";
+  if (session.planMode?.proposal) return "plan";
   return session.unread ? "unread" : null;
 }
 

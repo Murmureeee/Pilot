@@ -1,7 +1,7 @@
 // @env node
 import { z } from "zod";
 
-import { LOG_LEVELS, THINKING_LEVELS } from "../../shared/constants";
+import { EXECUTION_APPROVAL_MODES, LOG_LEVELS, THINKING_LEVELS } from "../../shared/constants";
 import { normalizeModelCatalog } from "./models";
 import type { Settings } from "./types";
 
@@ -60,7 +60,7 @@ const storedSettings = z.looseObject({
   toolRules: z
     .array(toolRuleSchema.extend({ commandPrefix: commandPrefix.optional().catch(undefined) }))
     .optional(),
-  approvalMode: z.enum(["standard", "read-only", "full-access"]).optional(),
+  approvalMode: z.enum(EXECUTION_APPROVAL_MODES).optional(),
   thinkingLevel: z.enum(THINKING_LEVELS).optional().catch(undefined),
   thinkingLevels: z
     .unknown()

@@ -8,6 +8,7 @@ import type { ToolResultMessage } from "@earendil-works/pi-ai";
 import type {
   ActiveRun,
   ComposerDraft,
+  ExecutionApprovalMode,
   FileDiff,
   GitCheckpointDiff,
   GitChangesView,
@@ -22,6 +23,8 @@ import type {
   MessageBranchAction,
   MessageRollbackPreview,
   PermissionDecision,
+  PlanDecision,
+  PlanMode,
   PromptInput,
   RunRef,
   SessionMeta,
@@ -36,7 +39,7 @@ import type {
 } from "@shared/contract";
 
 import { compactFocus } from "../../shared/compact-command";
-import { APP_NAME, DEFAULT_THINKING_LEVEL } from "../../shared/constants";
+import { APP_NAME, DEFAULT_THINKING_LEVEL, PLAN_PROPOSAL_MAX_LENGTH } from "../../shared/constants";
 import { draftFromMessageParts, promptFromDraft } from "../../shared/mentions";
 import { applyMessageEvent } from "../../shared/message-events";
 import { effectiveModelCapabilities } from "../../shared/model-capabilities";
@@ -73,7 +76,7 @@ import type {
   GitWorktree,
   RecordedFileChange,
 } from "../workspace/types";
-import { SKILL_CATALOG_INSTRUCTIONS } from "./constants";
+import { APPROVED_PLAN_INSTRUCTIONS, SKILL_CATALOG_INSTRUCTIONS } from "./constants";
 import { compactedContext, contextSize, transcriptUsage } from "./context-compaction";
 import { prepareMentionPrompt } from "./mentions";
 import { messageIndex } from "./message-operations";
@@ -92,8 +95,8 @@ import { createTools } from "./tools";
 import type { ToolEnvironment } from "./tools/types";
 import type {
   AgentInstructions,
+  AgentRunOptions,
   AgentSessionView,
-  CompactionRequest,
   HostDeps,
   GitCommitOperation,
   MessageRollbackOperation,
@@ -161,6 +164,10 @@ export class AgentHost {
 
   private getCurrentSession(): SessionMeta | null {
     return this.sessionId ? this.deps.store.getMeta(this.sessionId) : null;
+  }
+
+  private executionMode(session = this.getCurrentSession()): ExecutionApprovalMode {
+    return session?.approvalMode ?? this.deps.getSettings().approvalMode ?? "standard";
   }
 
   selectedSessionId(): string | null {
@@ -385,15 +392,80 @@ export class AgentHost {
     }
     const changes: SessionSettings = {};
     if (input.model !== undefined) changes.model = input.model ?? undefined;
-    if (input.approvalMode !== undefined) changes.approvalMode = input.approvalMode ?? undefined;
+    if (input.approvalMode !== undefined) {
+      const planMode = this.getCurrentSession()?.planMode;
+      if (planMode?.proposal) throw new Error("请先确认或放弃此计划。");
+      if (this.run?.state.sessionId === id && this.run.planning)
+        throw new Error("请等待本轮规划结束后再切换权限模式。");
+      if (input.approvalMode === "plan") {
+        changes.planMode = planMode ?? { executionMode: this.executionMode() };
+      } else {
+        changes.approvalMode = input.approvalMode ?? undefined;
+        changes.planMode = undefined;
+      }
+    }
     if (!this.sessionId) {
-      if (changes.model || changes.approvalMode) {
+      if (changes.model || changes.approvalMode || changes.planMode) {
         this.ensureSession(this.getWorkingDirectory(), changes);
       }
       return;
     }
     this.deps.store.updateSettings(this.sessionId, changes);
     this.sendSessions();
+  }
+
+  private restorePlanMode({ executionMode }: PlanMode): SessionSettings {
+    return {
+      planMode: undefined,
+      approvalMode:
+        this.executionMode() === executionMode
+          ? this.getCurrentSession()?.approvalMode
+          : executionMode,
+    };
+  }
+
+  reviewPlan(id: string, proposalId: string, decision: PlanDecision): Promise<void> | void {
+    this.checkComposerId(id);
+    const { store } = this.deps;
+    const planMode = this.getCurrentSession()?.planMode;
+    const proposal = planMode?.proposal;
+    if (!planMode || proposal?.id !== proposalId || store.checkpoint(id))
+      throw new Error("计划已更新，请重新打开会话。");
+    if (decision.type === "save") {
+      const markdown = decision.markdown.trim();
+      if (!markdown || markdown.length > PLAN_PROPOSAL_MAX_LENGTH)
+        throw new Error("请输入有效的计划内容。");
+      store.updateSettings(id, {
+        planMode: { ...planMode, proposal: { ...proposal, id: randomUUID(), markdown } },
+      });
+      this.sendSessions();
+      return;
+    }
+    const settingsOnStart = this.restorePlanMode(planMode);
+    if (decision.type === "discard") {
+      store.updateSettings(id, settingsOnStart);
+      this.sendSessions();
+      return;
+    }
+    if (this.run || this.applyingGitRollback || this.applyingGitSelection)
+      throw new Error("请等待当前操作结束后再执行计划。");
+    const directory = this.getWorkingDirectory();
+    if ((directory ?? null) !== proposal.workingDirectory)
+      throw new Error("计划的工作目录已更改。请放弃此计划并重新规划。");
+    const agent = this.ensureAgent(directory);
+    return this.beginRun(agent, {
+      initialMessage: {
+        role: "user",
+        content: proposal.markdown,
+        timestamp: Date.now(),
+        pilotReference: {
+          context: APPROVED_PLAN_INSTRUCTIONS,
+          parts: [{ type: "text", text: proposal.markdown }],
+        },
+      },
+      planApprovalMode: planMode.executionMode,
+      settingsOnStart,
+    });
   }
 
   /** 运行中 = 插话（steer），空闲 = 发起新一轮 */
@@ -424,6 +496,8 @@ export class AgentHost {
     ) {
       return run.state;
     }
+    const planMode = this.getCurrentSession()?.planMode;
+    if (!run && planMode?.proposal) throw new Error("请先确认或放弃此计划。");
     if (expectedDirectory !== undefined) this.checkWorkingDirectory(expectedDirectory);
     const workingDirectory = this.getWorkingDirectory();
     const skills = run
@@ -443,13 +517,14 @@ export class AgentHost {
       content: prepared.text,
       timestamp: Date.now(),
       pilotReference: "reference" in prepared ? prepared.reference : undefined,
+      pilotPlanning: (run ? run.planning : Boolean(planMode)) ? true : undefined,
     };
     if (run) {
       run.enqueue(message, composerId);
       return Promise.resolve();
     }
 
-    return this.beginRun(agent, message, composerId);
+    return this.beginRun(agent, { initialMessage: message, clearDraftFor: composerId });
   }
 
   resume(ref: RunRef, compact = false): Promise<void> | ActiveRun {
@@ -466,6 +541,8 @@ export class AgentHost {
       throw new Error("该任务没有上下文超限错误。");
     const directory = checkpoint.workingDirectory ?? undefined;
     const agent = this.ensureAgent(directory);
+    const planApprovalMode = checkpoint.planApprovalMode;
+    const planMode = this.getCurrentSession()?.planMode;
     const last = agent.state.messages.at(-1);
     const message: ReferencedUserMessage | undefined =
       !last || last.role === "assistant"
@@ -473,9 +550,19 @@ export class AgentHost {
             role: "user",
             content: "Continue the interrupted task from the saved conversation.",
             timestamp: Date.now(),
+            pilotPlanning:
+              planApprovalMode === "plan" || (!planApprovalMode && planMode) ? true : undefined,
           }
         : undefined;
-    return this.beginRun(agent, message, undefined, compact ? { mode: "retry" } : undefined);
+    return this.beginRun(agent, {
+      initialMessage: message,
+      compaction: compact ? { mode: "retry" } : undefined,
+      planApprovalMode,
+      settingsOnStart:
+        planApprovalMode && planApprovalMode !== "plan" && planMode?.proposal
+          ? this.restorePlanMode(planMode)
+          : undefined,
+    });
   }
 
   compact(composerId: string, focus = "", clearDraftFor?: string): Promise<void> {
@@ -484,22 +571,26 @@ export class AgentHost {
       throw new Error("请在当前操作结束后压缩上下文。");
     if (!this.sessionId) throw new Error("没有足够的较早内容可压缩。");
     const agent = this.ensureAgent(this.getWorkingDirectory());
-    return this.beginRun(agent, undefined, clearDraftFor, { mode: "manual", focus });
+    return this.beginRun(agent, { clearDraftFor, compaction: { mode: "manual", focus } });
   }
 
   private beginRun(
     agent: Agent,
-    message?: ReferencedUserMessage,
-    clearDraftFor?: string,
-    compaction?: CompactionRequest,
+    options: Pick<
+      AgentRunOptions,
+      "initialMessage" | "clearDraftFor" | "compaction" | "planApprovalMode" | "settingsOnStart"
+    > = {},
   ): Promise<void> {
     const sessionId = this.sessionId!;
     if (this.deps.store.messageHistory(sessionId).rollback)
       throw new Error("此聊天有未完成的撤销。请重新打开「回到此处」。");
     const sessionRules = this.sessionRules.get(sessionId) ?? [];
     this.sessionRules.set(sessionId, sessionRules);
+    const sessionMode = this.getCurrentSession()?.planMode;
+    const planApprovalMode = options.planApprovalMode ?? (sessionMode ? "plan" : undefined);
     const run = new AgentRun({
       ...this.deps,
+      ...options,
       agent,
       sessionId,
       environment: this.agentToolEnvironment!,
@@ -508,9 +599,12 @@ export class AgentHost {
       systemPrompt: this.agentInstructions!.prompt,
       view: this.view,
       sessionRules,
-      initialMessage: message,
-      clearDraftFor,
-      compaction,
+      planApprovalMode,
+      settingsOnStart:
+        options.settingsOnStart ??
+        (planApprovalMode === "plan" && !sessionMode
+          ? { planMode: { executionMode: this.executionMode() } }
+          : undefined),
       onStarted: () => this.deps.onActivityChanged?.(),
       onSessionUpdated: () => {
         this.sendSessions();
@@ -599,10 +693,16 @@ export class AgentHost {
     const draft =
       action === "fork" ? [] : draftFromMessageParts(messageParts(messages[userIndex]), directory);
     const end = action === "fork" ? index + 1 : userIndex;
+    const planning = (messages[userIndex] as ReferencedUserMessage).pilotPlanning;
+    const planMode =
+      planning || origin.planMode
+        ? { executionMode: origin.planMode?.executionMode ?? this.executionMode(origin) }
+        : undefined;
     const id = this.deps.store.branchFromMessage(
       origin,
       messages.slice(0, end),
       action === "edit" ? draft : [],
+      planMode,
     );
     this.switchSession(id);
     const snapshot = this.publishSnapshot("reveal");

@@ -4,6 +4,7 @@ import {
   ArrowUpIcon,
   BlocksIcon,
   CheckIcon,
+  ClipboardListIcon,
   EyeIcon,
   FileIcon,
   FolderIcon,
@@ -76,7 +77,12 @@ import type {
   ComposerSuggestion,
   ComposerToolbarMenu,
 } from "@renderer/lib/types";
-import { selectActiveSession, selectApprovalMode, useAgentStore } from "@renderer/stores/agent";
+import {
+  selectActiveSession,
+  selectApprovalMode,
+  selectCanChangeApprovalMode,
+  useAgentStore,
+} from "@renderer/stores/agent";
 import { compactFocus } from "@shared/compact-command";
 import { APP_NAME, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
 import type { ActiveRun, ApprovalMode, PromptMention, SkillMeta } from "@shared/contract";
@@ -107,6 +113,11 @@ const MODE_META: Record<
     ...APPROVAL_MODE_OPTIONS["full-access"],
     icon: ZapIcon,
     tone: "amber",
+  },
+  plan: {
+    ...APPROVAL_MODE_OPTIONS.plan,
+    icon: ClipboardListIcon,
+    tone: "neutral",
   },
 };
 
@@ -169,6 +180,7 @@ export function Composer({
   const loadSession = useAgentStore((s) => s.loadSession);
   const updateSessionSettings = useAgentStore((s) => s.updateSessionSettings);
   const savedMode = useAgentStore((s) => selectActiveSession(s)?.approvalMode);
+  const canChangeMode = useAgentStore(selectCanChangeApprovalMode);
   const newSession = useAgentStore((s) => s.newSession);
   const archiveSession = useAgentStore((s) => s.setSessionArchived);
   const setView = useAgentStore((s) => s.setView);
@@ -421,7 +433,11 @@ export function Composer({
     !composing &&
     draft.text.trim().length > 0 &&
     (!commandPending || isCompact);
-  const placeholder = busy ? t("输入插话消息…", locale) : t("给 {0} 发消息…", locale, [APP_NAME]);
+  const placeholder = busy
+    ? t("输入插话消息…", locale)
+    : mode === "plan"
+      ? t("描述要规划的任务…", locale)
+      : t("给 {0} 发消息…", locale, [APP_NAME]);
 
   const send = async (): Promise<void> => {
     if (!canSend || submitting) return;
@@ -447,7 +463,7 @@ export function Composer({
   };
 
   const changeApprovalMode = (approvalMode: ApprovalMode | null): void => {
-    if (modeUpdating.current) return;
+    if (modeUpdating.current || !selectCanChangeApprovalMode(useAgentStore.getState())) return;
     setSendError(null);
     modeUpdating.current = true;
     void updateSessionSettings({ approvalMode })
@@ -511,6 +527,7 @@ export function Composer({
     if (!(isCompact && action === "send") && onSuggestionKey(event)) return;
     const shortcut = composerEditingShortcut(event, draft.text.length === 0);
     if (shortcut === "cycle-approval-mode") {
+      if (!canChangeMode) return;
       event.preventDefault();
       if (!event.repeat) cycleMode();
       return;
@@ -756,6 +773,7 @@ export function Composer({
               }
             >
               <DropdownMenuTrigger
+                disabled={!canChangeMode}
                 render={
                   <button
                     type="button"
@@ -796,13 +814,15 @@ export function Composer({
                         )}
                       </span>
                     </span>
-                    {!savedMode && <CheckIcon className="mt-0.5 shrink-0" aria-hidden="true" />}
+                    {!savedMode && mode !== "plan" && (
+                      <CheckIcon className="mt-0.5 shrink-0" aria-hidden="true" />
+                    )}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   {(Object.keys(MODE_META) as ApprovalMode[]).map((m) => {
                     const meta = MODE_META[m];
                     const Icon = meta.icon;
-                    const current = savedMode === m;
+                    const current = mode === "plan" ? m === "plan" : savedMode === m;
                     return (
                       // 规范（AGENTS.md）：主标题 + 上下结构的次级说明行（muted + 小字号）；选中态用右侧 ✓；
                       // 图标带语义色时，标题文字跟随同色（主次一体）

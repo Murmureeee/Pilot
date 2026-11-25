@@ -13,11 +13,12 @@ import {
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { describeToolScope } from "@renderer/lib/tool-rules";
 import { useAgentStore } from "@renderer/stores/agent";
-import type { ApprovalMode, PublicSettings } from "@shared/contract";
+import { EXECUTION_APPROVAL_MODES } from "@shared/constants";
+import type { ExecutionApprovalMode, PublicSettings } from "@shared/contract";
 
 import { SettingsGroup } from "./SettingsGroup";
 
-const MODE_ICONS: Record<ApprovalMode, typeof EyeIcon> = {
+const MODE_ICONS: Record<ExecutionApprovalMode, typeof EyeIcon> = {
   standard: ShieldCheckIcon,
   "read-only": EyeIcon,
   "full-access": ZapIcon,
@@ -58,7 +59,7 @@ export function PermissionSettings({ settings }: { settings: PublicSettings }): 
         )}
       >
         <fieldset aria-labelledby="settings-approval-mode" className="settings-list min-w-0">
-          {(Object.keys(APPROVAL_MODE_OPTIONS) as ApprovalMode[]).map((option) => {
+          {EXECUTION_APPROVAL_MODES.map((option) => {
             const Icon = MODE_ICONS[option];
             const selected = option === mode;
             const risk = option === "full-access" && RISK_TEXT;

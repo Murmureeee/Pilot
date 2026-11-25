@@ -384,6 +384,32 @@ describe("agent-events adapter", () => {
     expect(next.sessionId).toBe(session.id);
   });
 
+  it("keeps a completed background plan with its originating chat without changing selection", () => {
+    const other = { ...initialAgentUiState(), sessionId: "other" };
+    const started = applyAgentEvent(other, {
+      type: "run_started",
+      run: { ...run, status: "streaming", workingDirectory: null, planning: true },
+    });
+    expect(started.activeRun?.planning).toBe(true);
+    expect(started.status).toBe("idle");
+    const sessions = [
+      {
+        id: run.sessionId,
+        title: "Plan",
+        createdAt: 1,
+        updatedAt: 2,
+        planMode: {
+          executionMode: "standard",
+          proposal: { id: run.runId, markdown: "Review files", workingDirectory: null },
+        },
+      },
+    ] satisfies SessionMeta[];
+    const updated = applyAgentEvent(started, { type: "sessions", sessions, recentProjects: [] });
+    const settled = applyRunEvent(updated, { type: "status", status: "idle", result: "success" });
+    expect(settled).toMatchObject({ sessionId: "other", activeRun: null, sessions });
+    expect(settled.pendingPermissions).toEqual([]);
+  });
+
   it("queues permission requests in arrival order and clears them when approval ends", () => {
     const first = {
       type: "permission_request" as const,

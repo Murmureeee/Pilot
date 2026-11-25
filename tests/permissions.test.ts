@@ -53,6 +53,28 @@ describe("PermissionManager", () => {
     expect(events).toHaveLength(0);
   });
 
+  it("allows research and plan proposals while ignoring saved grants for side effects", async () => {
+    const { manager, events } = makeManager(
+      [{ toolName: "write_file" }, commandRule("powershell", "git", "status")],
+      "plan",
+      [{ toolName: "mcp__fixture__change" }],
+    );
+    for (const tool of ["read_file", "glob", "grep", "read_skill", "update_plan", "propose_plan"])
+      expect(await gateTool(manager, tool, {})).toBeUndefined();
+    for (const [tool, args] of [
+      ["write_file", { path: "note.txt" }],
+      ["edit_file", { path: "note.txt" }],
+      ["bash", { command: "git status" }],
+      ["mcp__fixture__change", {}],
+    ] as const) {
+      expect(await gateTool(manager, tool, args)).toEqual({
+        block: true,
+        reason: "计划模式只允许读取、搜索和提交计划。",
+      });
+    }
+    expect(events).toHaveLength(0);
+  });
+
   it("asks and blocks on deny", async () => {
     const { manager, events } = makeManager();
     const promise = gateTool(manager, "write_file", { path: "C:\\tmp\\a.txt", content: "x" });

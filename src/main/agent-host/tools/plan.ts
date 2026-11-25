@@ -2,8 +2,9 @@
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { arr, compile, obj, oneOf, str } from "@earendil-works/pi-schema";
 
+import { PLAN_PROPOSAL_MAX_LENGTH } from "../../../shared/constants";
 import { PLAN_STATUSES, type PlanStep } from "../../../shared/contract";
-import { PLAN_TOOL_NAME, TOOL_LABELS } from "./constants";
+import { PLAN_TOOL_NAME, PROPOSE_PLAN_TOOL_NAME, TOOL_LABELS } from "./constants";
 
 const planParams = obj({
   steps: arr(
@@ -33,4 +34,27 @@ export const planTool: AgentTool<typeof planParams> = {
 
 export function readPlanSteps(details: unknown): PlanStep[] | undefined {
   return schema.check(details) ? details.steps : undefined;
+}
+
+const proposalParams = obj({
+  markdown: str({ minLength: 1, maxLength: PLAN_PROPOSAL_MAX_LENGTH }),
+});
+
+const proposalSchema = compile(proposalParams);
+
+export const proposePlanTool: AgentTool<typeof proposalParams> = {
+  name: PROPOSE_PLAN_TOOL_NAME,
+  label: TOOL_LABELS[PROPOSE_PLAN_TOOL_NAME],
+  description: "Submit the complete Markdown implementation plan for the user's review in Pilot.",
+  parameters: proposalParams,
+  executionMode: "sequential",
+  execute: async (_id, params): Promise<AgentToolResult> => {
+    const markdown = params.markdown.trim();
+    if (!markdown) throw new Error("The proposed plan is empty.");
+    return { content: [{ type: "text", text: markdown }], details: { markdown } };
+  },
+};
+
+export function readPlanProposal(details: unknown): string | undefined {
+  return proposalSchema.check(details) ? details.markdown.trim() || undefined : undefined;
 }

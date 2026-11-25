@@ -2,7 +2,9 @@
 import { z } from "zod";
 
 import {
+  EXECUTION_APPROVAL_MODES,
   LOG_LEVELS,
+  PLAN_PROPOSAL_MAX_LENGTH,
   SUPPORTED_LOCALES,
   THINKING_LEVELS,
   WORKSPACE_QUERY_LENGTH,
@@ -62,7 +64,7 @@ const gitRollbackSelection = z.strictObject({
   revision: z.uuid(),
   hunks: z.array(z.number().int().nonnegative()).min(1).max(700).optional(),
 });
-const approvalMode = z.enum(["standard", "read-only", "full-access"]);
+const executionApprovalMode = z.enum(EXECUTION_APPROVAL_MODES);
 const modelCapabilities = z.strictObject({
   contextWindow: z.number().int().positive().optional(),
   maxTokens: z.number().int().positive().optional(),
@@ -125,7 +127,7 @@ const mcpServer = z.strictObject({
 const settings = z.strictObject({
   providers: z.array(provider),
   activeProviderId: z.string(),
-  approvalMode: approvalMode.optional(),
+  approvalMode: executionApprovalMode.optional(),
   thinkingLevel: z.enum(THINKING_LEVELS).optional(),
   thinkingLevels: z.array(z.enum(THINKING_LEVELS)).min(1).optional(),
   workingDirectory: z.string().nullable().optional(),
@@ -190,8 +192,22 @@ const inputs = {
     z.uuid(),
     z.strictObject({
       model: z.strictObject({ providerId: nonBlank, modelId: nonBlank }).nullable().optional(),
-      approvalMode: approvalMode.nullable().optional(),
+      approvalMode: z
+        .enum([...EXECUTION_APPROVAL_MODES, "plan"])
+        .nullable()
+        .optional(),
     }),
+  ]),
+  [IPC.sessionReviewPlan]: z.tuple([
+    z.uuid(),
+    z.uuid(),
+    z.discriminatedUnion("type", [
+      z.strictObject({
+        type: z.literal("save"),
+        markdown: z.string().max(PLAN_PROPOSAL_MAX_LENGTH),
+      }),
+      z.strictObject({ type: z.enum(["execute", "discard"]) }),
+    ]),
   ]),
   [IPC.sessionSelectProject]: z.tuple([z.enum(SUPPORTED_LOCALES), z.uuid().optional()]),
   [IPC.sessionUseRecentProject]: z.tuple([nonBlank, z.uuid().optional()]),

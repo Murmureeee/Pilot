@@ -22,6 +22,7 @@ import { ModelFailureCard } from "@renderer/components/ai/model-feedback";
 import { OnboardingDialog } from "@renderer/components/ai/onboarding-dialog";
 import { PermissionCard } from "@renderer/components/ai/permission-card";
 import { PlanBar } from "@renderer/components/ai/plan-card";
+import { PlanReviewCard } from "@renderer/components/ai/plan-review-card";
 import { SettingsRecoveryNotice } from "@renderer/components/ai/settings-recovery-notice";
 import { InlineWorkspaceReference } from "@renderer/components/ai/workspace-reference";
 import { Bubble, BubbleContent } from "@renderer/components/ui/bubble";
@@ -37,7 +38,7 @@ import {
 } from "@renderer/components/ui/message-scroller";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { ChatRow, ComposerShortcuts } from "@renderer/lib/types";
-import { useAgentStore } from "@renderer/stores/agent";
+import { selectPlanReview, useAgentStore } from "@renderer/stores/agent";
 import type { UiMessage, UiPart } from "@shared/contract";
 import { visibleMessageText } from "@shared/mentions";
 import { isLocalOpenAiProvider } from "@shared/providers";
@@ -76,6 +77,8 @@ export function ChatView({
   const composerId = useAgentStore((s) => s.composerId);
   const busy = useAgentStore((s) => s.status !== "idle");
   const permission = useAgentStore((s) => s.pendingPermissions[0]);
+  const planReview = useAgentStore(selectPlanReview);
+  const dockBlocked = Boolean(permission || planReview);
   const activeRun = useAgentStore((s) => s.activeRun);
   const interruptedRun = useAgentStore((s) => s.interruptedRun);
   const failedRun = useAgentStore((s) => s.failedRun);
@@ -113,14 +116,14 @@ export function ChatView({
   const wasAwaitingApproval = useRef(false);
 
   useEffect(() => {
-    const restoreFocus = wasAwaitingApproval.current && !permission;
-    wasAwaitingApproval.current = Boolean(permission);
+    const restoreFocus = wasAwaitingApproval.current && !dockBlocked;
+    wasAwaitingApproval.current = dockBlocked;
     if (restoreFocus && document.activeElement === document.body) {
       composerColumn.current?.querySelector<HTMLElement>("[contenteditable=true]")?.focus({
         preventScroll: true,
       });
     }
-  }, [permission]);
+  }, [dockBlocked]);
 
   const fillDraft = (text: string): void => {
     const editor = composerColumn.current?.querySelector<HTMLElement>("[contenteditable=true]");
@@ -342,7 +345,15 @@ export function ChatView({
         {permission && activeRun && (
           <PermissionCard key={permission.requestId} request={permission} run={activeRun} />
         )}
-        <Activity mode={permission ? "hidden" : "visible"}>
+        {composerId && planReview?.proposal && (
+          <PlanReviewCard
+            key={composerId}
+            composerId={composerId}
+            proposal={planReview.proposal}
+            executionMode={planReview.executionMode}
+          />
+        )}
+        <Activity mode={dockBlocked ? "hidden" : "visible"}>
           {composerId && (
             <Composer
               key={composerId}
@@ -353,7 +364,7 @@ export function ChatView({
             />
           )}
         </Activity>
-        {isEmpty && !permission && !interruptedRun && (
+        {isEmpty && !dockBlocked && !interruptedRun && (
           <HomeStart
             sessionId={sessionId}
             projectDirectory={projectDirectory}

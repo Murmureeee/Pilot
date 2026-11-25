@@ -18,6 +18,7 @@ import { findCommandDanger } from "./command-danger";
 import { commandPrefixMatches, parseCommandScope } from "./command-scope";
 import type { McpToolPolicy } from "./mcp/types";
 import { isReadOnly, labelOf, pathOfArgs } from "./tools";
+import { PROPOSE_PLAN_TOOL_NAME } from "./tools/constants";
 import type { ToolEnvironment } from "./tools/types";
 import type { PendingPermission, PermissionDetails, ToolAccess } from "./types";
 
@@ -80,9 +81,9 @@ export class PermissionManager {
   ): ToolAccess {
     if (isReadOnly(toolName)) return { kind: "allow" };
 
-    // 权限模式三档（composer 徽章切换）
     const mode = this.getApprovalMode();
-    if (mode === "read-only") return { kind: "block" };
+    if (mode === "plan" && toolName === PROPOSE_PLAN_TOOL_NAME) return { kind: "allow" };
+    if (mode === "read-only" || mode === "plan") return { kind: "block" };
 
     const command =
       toolName === "bash" &&
@@ -141,7 +142,10 @@ export class PermissionManager {
     if (access.kind === "block") {
       return {
         block: true,
-        reason: "当前为只读模式，已拒绝该写操作（可在输入框左下角切换权限模式）",
+        reason:
+          this.getApprovalMode() === "plan"
+            ? "计划模式只允许读取、搜索和提交计划。"
+            : "当前为只读模式，已拒绝该写操作（可在输入框左下角切换权限模式）",
       };
     }
     const { command, commandDanger, rule } = access;

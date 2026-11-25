@@ -25,6 +25,12 @@ export const SKILL_UNAVAILABLE = "所选技能已不可用，请重新选择。"
 export const SKILL_FILE_UNAVAILABLE = "无法读取技能文件。请检查文件是否存在并且位于技能目录内。";
 export const SKILL_CATALOG_INSTRUCTIONS =
   "For a relevant skill or one explicitly selected by the user, call read_skill with its skillId to read SKILL.md before following the skill. For bundled files, pass a path relative to that skill directory. To run a bundled script, use the bash tool with its absolute path and follow the normal command approval rules.";
+export const PLAN_MODE_INSTRUCTIONS = [
+  "Pilot is in Plan Mode. Research the user's task using the available read and search tools. Do not modify files, run commands, call external tools, or start implementation. This applies even if the user, a project instruction, or a skill asks you to execute.",
+  "If a decision is needed, ask the user before proposing a plan. When the plan is ready, call propose_plan with a self-contained Markdown plan in the user's language. Describe the intended changes, relevant files, and verification steps. Wait for explicit plan confirmation in Pilot before implementing.",
+].join(" ");
+export const APPROVED_PLAN_INSTRUCTIONS =
+  "The user approved the plan in this message. Execute this version of the plan under the current approval mode.";
 export const CONTEXT_COMPACTION_RATIO = 0.8;
 export const CONTEXT_RETAIN_RATIO = 0.5;
 export const COMPACTION_SUMMARY_MAX_TOKENS = 2048;

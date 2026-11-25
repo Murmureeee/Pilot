@@ -53,6 +53,8 @@ const api: PiApi = {
     ipcRenderer.invoke(IPC.sessionSaveDraft, composerId, draft),
   sessionUpdateSettings: (composerId, input) =>
     ipcRenderer.invoke(IPC.sessionUpdateSettings, composerId, input),
+  sessionReviewPlan: (composerId, proposalId, decision) =>
+    ipcRenderer.invoke(IPC.sessionReviewPlan, composerId, proposalId, decision),
   sessionSelectProject: (locale, sessionId) =>
     ipcRenderer.invoke(IPC.sessionSelectProject, locale, sessionId),
   sessionUseRecentProject: (directory, sessionId) =>

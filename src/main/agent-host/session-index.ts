@@ -1,18 +1,32 @@
 // @env node
 import { z } from "zod";
 
+import { EXECUTION_APPROVAL_MODES, PLAN_PROPOSAL_MAX_LENGTH } from "../../shared/constants";
 import { SESSION_RUN_RESULTS, type SessionMeta } from "../../shared/contract";
 import { SESSION_FILE_ID } from "../constants";
 import type { SessionIndex } from "./types";
 
 const optionalText = z.string().optional();
+const executionMode = z.enum(EXECUTION_APPROVAL_MODES);
 const sessionMeta = z.looseObject({
   id: z.string().regex(SESSION_FILE_ID),
   title: z.string(),
   createdAt: z.number(),
   updatedAt: z.number(),
   workingDirectory: optionalText,
-  approvalMode: z.enum(["standard", "read-only", "full-access"]).optional(),
+  approvalMode: executionMode.optional(),
+  planMode: z
+    .object({
+      executionMode,
+      proposal: z
+        .object({
+          id: z.uuid(),
+          markdown: z.string().trim().min(1).max(PLAN_PROPOSAL_MAX_LENGTH),
+          workingDirectory: z.string().nullable(),
+        })
+        .optional(),
+    })
+    .optional(),
   model: z.object({ providerId: z.string(), modelId: z.string() }).optional(),
   lastTask: z
     .object({ taskId: z.string(), agentRunId: optionalText, title: optionalText })

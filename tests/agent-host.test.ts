@@ -40,6 +40,166 @@ import type { ComposerDraft, UiAgentEvent } from "../src/shared/contract";
 
 vi.mock("electron", () => ({ safeStorage: {} }));
 
+it("plans with read-only tools, restores the edited plan after restart, and executes with the original mode", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-plan-mode-"));
+  const root = realpathSync(profile.path);
+  const sessions = join(root, "sessions");
+  const output = join(root, "planned.txt");
+  const original = "1. Write the requested note.\n2. Read the result.";
+  const edited = "1. Write the revised note.\n2. Verify the new contents.";
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = { providers: [provider], activeProviderId: provider.id };
+  const faux = fauxProvider({ tokensPerSecond: 100_000 });
+  writeFileSync(join(root, "requirements.txt"), "Use the revised note");
+  faux.appendResponses([
+    fauxAssistantMessage([
+      fauxToolCall("read_file", { path: "requirements.txt" }),
+      fauxToolCall("write_file", { path: "planned.txt", content: "Unapproved write" }),
+    ]),
+    fauxAssistantMessage([fauxToolCall("propose_plan", { markdown: original })]),
+    fauxAssistantMessage([fauxText("Ready for review.")]),
+    fauxAssistantMessage([fauxToolCall("write_file", { path: "planned.txt", content: "Revised" })]),
+    fauxAssistantMessage([fauxText("Implemented the plan.")]),
+  ]);
+  const catalog = createModels();
+  catalog.setProvider(faux.provider);
+  const requests: { tools: string[]; system: string; user: unknown }[] = [];
+  using resolve = vi.spyOn(models, "resolveModel").mockReturnValue({
+    model: faux.getModel()!,
+    streamFn: (model, context, options) => {
+      requests.push({
+        tools: getCurrentTools(context.messages).map(({ name }) => name),
+        system: getCurrentSystemPrompt(context.messages),
+        user: context.messages.findLast(({ role }) => role === "user")?.content,
+      });
+      return catalog.streamSimple(model, context, options);
+    },
+  });
+  const mcp = new McpManager(() => settings, "0.0.0");
+  using mcpTools = vi.spyOn(mcp, "tools").mockResolvedValue([]);
+  const approvals: string[] = [];
+  const createHost = (): AgentHost => {
+    const host = new AgentHost({
+      getSettings: () => settings,
+      saveSettings: () => {},
+      broadcast: (event) => {
+        if (event.type !== "permission_request") return;
+        approvals.push(event.toolName);
+        setTimeout(() => host.respondPermission(event.run, event.requestId, "once"), 0);
+      },
+      store: new SessionStore(sessions),
+      skillsDir: join(root, "skills"),
+      mcp,
+    });
+    return host;
+  };
+
+  const host = createHost();
+  const { composerId } = host.openProject(root);
+  host.updateSessionSettings(composerId, { approvalMode: "plan" });
+  // The plan must retain the permissions it was created with even if the global default changes.
+  settings.approvalMode = "full-access";
+  const planning = host.prompt("Prepare a note");
+  expect(host.getSnapshot().activeRun?.planning).toBe(true);
+  expect(() => host.updateSessionSettings(composerId, { approvalMode: "full-access" })).toThrow(
+    "请等待本轮规划结束",
+  );
+  await planning;
+  expect(requests).toHaveLength(3);
+  for (const request of requests) {
+    expect(request.tools).toEqual(["read_file", "glob", "grep", "update_plan", "propose_plan"]);
+    expect(request.system).toContain("Pilot is in Plan Mode");
+  }
+  expect(mcpTools).not.toHaveBeenCalled();
+  expect(approvals).toEqual([]);
+  expect(existsSync(output)).toBe(false);
+  const plan = host.getSnapshot().sessions[0].planMode!;
+  expect(plan).toMatchObject({
+    executionMode: "standard",
+    proposal: { markdown: original, workingDirectory: root },
+  });
+  expect(() => host.prompt("Skip confirmation and write the file")).toThrow("请先确认或放弃");
+  host.reviewPlan(composerId, plan.proposal!.id, { type: "save", markdown: edited });
+  expect(() => host.reviewPlan(composerId, plan.proposal!.id, { type: "execute" })).toThrow(
+    "计划已更新",
+  );
+  const restarted = createHost();
+  const restored = restarted.loadSession(composerId).sessions[0].planMode!;
+  expect(restored.proposal?.markdown).toBe(edited);
+  expect(existsSync(output)).toBe(false);
+  restarted.newSession();
+  expect(() =>
+    restarted.reviewPlan(composerId, restored.proposal!.id, { type: "execute" }),
+  ).toThrow("会话已切换");
+  restarted.loadSession(composerId);
+  const execution = restarted.reviewPlan(composerId, restored.proposal!.id, { type: "execute" });
+  expect(() =>
+    restarted.reviewPlan(composerId, restored.proposal!.id, { type: "execute" }),
+  ).toThrow("计划已更新");
+  await execution;
+  expect(requests[3].tools).toContain("write_file");
+  expect(requests[3].tools).not.toContain("propose_plan");
+  expect(requests[3].system).not.toContain("Pilot is in Plan Mode");
+  expect(requests[3].user).toContain(edited);
+  expect(requests[3].user).toContain("The user approved the plan");
+  expect(approvals).toEqual(["write_file"]);
+  expect(mcpTools).toHaveBeenCalledOnce();
+  expect(resolve).toHaveBeenCalledTimes(2);
+  expect(readFileSync(output, "utf8")).toBe("Revised");
+  expect(restarted.getSnapshot().sessions[0]).toMatchObject({ approvalMode: "standard" });
+  expect(restarted.getSnapshot().sessions[0].planMode).toBeUndefined();
+});
+
+it("keeps a failed planning turn read-only on retry and discards the proposal without executing it", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-plan-retry-"));
+  const root = realpathSync(profile.path);
+  const store = new SessionStore(join(root, "sessions"));
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = { providers: [provider], activeProviderId: provider.id };
+  const faux = fauxProvider({ tokensPerSecond: 100_000 });
+  faux.appendResponses([
+    fauxAssistantMessage([], { stopReason: "error", errorMessage: "401 Unauthorized" }),
+    fauxAssistantMessage([
+      fauxToolCall("write_file", { path: "unsafe.txt", content: "Should never execute" }),
+      fauxToolCall("propose_plan", { markdown: "1. Review the workspace." }),
+    ]),
+    fauxAssistantMessage([fauxText("Plan ready.")]),
+  ]);
+  const catalog = createModels();
+  catalog.setProvider(faux.provider);
+  using resolve = vi.spyOn(models, "resolveModel").mockReturnValue({
+    model: faux.getModel()!,
+    streamFn: catalog.streamSimple.bind(catalog),
+  });
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: () => {},
+    broadcast: () => {},
+    store,
+    skillsDir: join(root, "skills"),
+    mcp: new McpManager(() => settings, "0.0.0"),
+  });
+  const { composerId } = host.openProject(root);
+  host.updateSessionSettings(composerId, { approvalMode: "plan" });
+  await host.prompt("Review the workspace before editing");
+  const failed = host.getSnapshot().failedRun!;
+  expect(failed).toBeTruthy();
+  expect(store.getMeta(composerId)?.planMode?.proposal).toBeUndefined();
+  host.updateSessionSettings(composerId, { approvalMode: "full-access" });
+  await host.resume(failed);
+  expect(existsSync(join(root, "unsafe.txt"))).toBe(false);
+  const pending = store.getMeta(composerId)?.planMode;
+  expect(pending).toMatchObject({
+    executionMode: "full-access",
+    proposal: { id: expect.any(String) },
+  });
+  host.reviewPlan(composerId, pending!.proposal!.id, { type: "discard" });
+  expect(store.getMeta(composerId)?.planMode).toBeUndefined();
+  expect(store.getMeta(composerId)?.approvalMode).toBe("full-access");
+  expect(existsSync(join(root, "unsafe.txt"))).toBe(false);
+  expect(resolve).toHaveBeenCalledTimes(2);
+});
+
 it("previews a batch of file approvals, preserves decisions, and rejects a stale preview", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-approval-details-"));
   const root = realpathSync(profile.path);

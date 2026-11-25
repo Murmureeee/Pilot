@@ -59,7 +59,7 @@ function SessionStatusMark({ status }: { status: SessionRowStatus | null }): JSX
               aria-hidden="true"
               className={cn(
                 "size-2 rounded-full",
-                status === "approval" && "bg-amber-500",
+                (status === "approval" || status === "plan") && "bg-amber-500",
                 status === "failed" && "bg-destructive",
                 status === "interrupted" && "border border-muted-foreground",
                 status === "unread" && "bg-brand",

@@ -15,6 +15,8 @@ import {
   verifyApprovals,
   verifyFirstRun,
   verifyLayouts,
+  verifyPlanDraft,
+  verifyPlanExecution,
   verifyRestoredSettings,
   verifySettings,
   verifyStreamingReply,
@@ -128,10 +130,16 @@ try {
     );
     await runScene("Navigate settings and save", () => verifySettings(page));
     await runScene("Wide and narrow workbench layouts", () => verifyLayouts(page, window));
+    await runScene("Draft and edit a read-only plan", () =>
+      verifyPlanDraft(page, window, model, project),
+    );
   });
   await withApp(profile, async (page) => {
     await runScene("Restore preferences and conversation after restarting", () =>
       verifyRestoredSettings(page, model),
+    );
+    await runScene("Restore and execute the approved plan", () =>
+      verifyPlanExecution(page, model, project),
     );
   });
 } finally {

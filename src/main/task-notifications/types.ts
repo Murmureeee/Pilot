@@ -3,7 +3,7 @@ import type { BrowserWindow, Notification } from "electron";
 
 import type { Locale, SessionMeta } from "../../shared/contract";
 
-export type NoticeKind = "approval" | "success" | "failed";
+export type NoticeKind = "approval" | "plan" | "success" | "failed";
 
 export interface PendingApproval {
   sessionId: string;

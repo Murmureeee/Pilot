@@ -50,6 +50,10 @@ export function registerAgentRoutes({
   handle(IPC.sessionUpdateSettings, (_event, composerId, input) =>
     host.updateSessionSettings(composerId, input),
   );
+  handle(IPC.sessionReviewPlan, (_event, composerId, proposalId, decision) => {
+    if (decision.type === "execute") exit.checkWorkAllowed();
+    void host.reviewPlan(composerId, proposalId, decision);
+  });
   handle(IPC.sessionSelectProject, async (event, locale, sessionId) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     const title = NATIVE_DIALOG_TITLES[locale][sessionId ? "bindProject" : "openProject"];

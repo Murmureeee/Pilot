@@ -1,6 +1,11 @@
 // @env all
 // 双进程共用契约：通道名与数据类型。此文件只允许类型与常量，不得引入运行时依赖。
-import type { LOG_LEVELS, SUPPORTED_LOCALES, THINKING_LEVELS } from "./constants";
+import type {
+  EXECUTION_APPROVAL_MODES,
+  LOG_LEVELS,
+  SUPPORTED_LOCALES,
+  THINKING_LEVELS,
+} from "./constants";
 
 export const IPC = {
   ping: "app:ping",
@@ -26,6 +31,7 @@ export const IPC = {
   sessionNew: "session:new",
   sessionSaveDraft: "session:save-draft",
   sessionUpdateSettings: "session:update-settings",
+  sessionReviewPlan: "session:review-plan",
   sessionSelectProject: "session:select-project",
   sessionUseRecentProject: "session:use-recent-project",
   sessionOpenProjectFolder: "session:open-project-folder",
@@ -273,6 +279,7 @@ export interface RunRef {
 }
 
 export interface ActiveRun extends RunRef {
+  planning?: true;
   status: Exclude<AgentStatus, "idle">;
   workingDirectory: string | null;
   retry?: ModelRetryProgress;
@@ -444,13 +451,27 @@ export interface SessionModelSelection {
 
 export interface SessionSettings {
   model?: SessionModelSelection;
-  approvalMode?: ApprovalMode;
+  approvalMode?: ExecutionApprovalMode;
+  planMode?: PlanMode;
 }
 
 export interface SessionSettingsInput {
   model?: SessionModelSelection | null;
   approvalMode?: ApprovalMode | null;
 }
+
+export interface PlanMode {
+  executionMode: ExecutionApprovalMode;
+  proposal?: PlanProposal;
+}
+
+export interface PlanProposal {
+  id: string;
+  markdown: string;
+  workingDirectory: string | null;
+}
+
+export type PlanDecision = { type: "save"; markdown: string } | { type: "execute" | "discard" };
 
 export type ProjectInstructionSource =
   | { status: "unlinked" }
@@ -641,7 +662,8 @@ export interface StartVerification {
 export type ProviderKind = "anthropic" | "openai-compatible" | "openai-responses" | "faux";
 
 /** 确认模式使用授权规则，完全访问放行常规操作，只读模式阻止写入与命令。危险命令始终需要单次确认。 */
-export type ApprovalMode = "standard" | "full-access" | "read-only";
+export type ExecutionApprovalMode = (typeof EXECUTION_APPROVAL_MODES)[number];
+export type ApprovalMode = ExecutionApprovalMode | "plan";
 
 /** 模型思考强度（pi 的 7 档离散值，composer 滑块选择） */
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
@@ -714,7 +736,7 @@ export interface PublicSettings {
   providers: PublicProvider[];
   activeProviderId: string;
   toolRules?: ToolRule[];
-  approvalMode: ApprovalMode;
+  approvalMode: ExecutionApprovalMode;
   thinkingLevel: ThinkingLevel;
   thinkingLevels: ThinkingLevel[];
   workingDirectory: string | null;
@@ -735,7 +757,7 @@ export interface ProviderInput extends ProviderFields {
 export interface SettingsInput {
   providers: ProviderInput[];
   activeProviderId: string;
-  approvalMode?: ApprovalMode;
+  approvalMode?: ExecutionApprovalMode;
   thinkingLevel?: ThinkingLevel;
   thinkingLevels?: ThinkingLevel[];
   /** null 恢复主目录；缺省保留原设置 */

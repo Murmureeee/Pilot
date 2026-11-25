@@ -47,8 +47,15 @@ export class TaskNotifications {
       return;
     }
     if (event.type === "sessions") {
-      for (const id of this.notices.keys()) {
-        if (!this.options.getSession(id)) this.closeNotice(id);
+      for (const [id, notice] of this.notices) {
+        const session = this.options.getSession(id);
+        if (
+          !session ||
+          (notice.kind === "plan" && (!session.planMode?.proposal || session.archived))
+        ) {
+          this.closeNotice(id);
+          if (notice.kind === "plan" && this.flashing?.sessionId === id) this.stopFlash();
+        }
       }
       return;
     }
@@ -74,8 +81,10 @@ export class TaskNotifications {
       this.clearApproval(runId, sessionId);
       if (sessionId === this.options.getVisibleSessionId()) return;
       if (event.result === "success") this.markUnread(sessionId, true);
-      if (this.enabled && (event.result === "success" || event.result === "failed"))
-        this.show(sessionId, event.result);
+      if (this.enabled && (event.result === "success" || event.result === "failed")) {
+        const proposal = this.options.getSession(sessionId)?.planMode?.proposal;
+        this.show(sessionId, event.result === "success" && proposal ? "plan" : event.result);
+      }
     }
   }
 
