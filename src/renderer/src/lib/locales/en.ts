@@ -60,6 +60,7 @@ export const EN_MESSAGES: Record<string, string> = {
   "版本 {0} 已下载。请用系统包管理器安装，再重新打开 Pilot。":
     "Version {0} downloaded. Install it with your system package manager, then reopen Pilot.",
   打开下载位置: "Open download location",
+  "无法打开下载位置，请重试。": "Could not open the download location. Try again.",
   查看已下载的安装包: "View downloaded package",
   "没有已下载的更新。": "There is no downloaded update.",
   "无法使用环境变量中的代理地址。请检查 HTTP_PROXY 或 HTTPS_PROXY 后重启 Pilot。":

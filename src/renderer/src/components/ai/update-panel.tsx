@@ -54,7 +54,10 @@ export function UpdatePanel({ locale }: { locale: Locale }): JSX.Element {
       </p>
       {actionFailed && status && state !== "error" && (
         <p role="alert" className="text-xs text-destructive">
-          {t("更新失败，请重试。", locale)}
+          {t(
+            state === "package-ready" ? "无法打开下载位置，请重试。" : "更新失败，请重试。",
+            locale,
+          )}
         </p>
       )}
       {canCheck && (

@@ -124,14 +124,15 @@ export class DesktopUpdater {
     return this.status;
   }
 
-  showPackage(): void {
+  async showPackage(): Promise<void> {
     if (this.status.state !== "package-ready" || !this.downloadedFile)
       throw new Error(UPDATE_NOT_READY_MESSAGE);
     if (!existsSync(this.downloadedFile)) {
       this.setStatus({ state: "error", reason: "package-missing" });
       return;
     }
-    shell.showItemInFolder(this.downloadedFile);
+    const failure = await shell.openPath(dirname(this.downloadedFile));
+    if (failure) throw new Error(failure);
   }
 
   async install(allowQuit: () => void): Promise<boolean> {

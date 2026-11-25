@@ -4,10 +4,10 @@ import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { createReadStream } from "node:fs";
-import { mkdtemp, readFile, rm, stat, unlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { chromium } from "playwright-core";
@@ -20,6 +20,8 @@ const manifest = "latest-linux.yml";
 const release = resolve("dist");
 const scratch = await mkdtemp(join(tmpdir(), "pilot-linux-update-"));
 const baseline = join(scratch, "baseline");
+const tools = join(scratch, "tools");
+const openedLocation = join(scratch, "opened-location.txt");
 let feedDirectory = baseline;
 const children = [];
 
@@ -111,6 +113,8 @@ async function launch(executable, profile, cache) {
       env: {
         ...process.env,
         APPIMAGE_EXTRACT_AND_RUN: "1",
+        PATH: tools + ":" + process.env.PATH,
+        PILOT_TEST_OPENED_LOCATION: openedLocation,
         TMPDIR: scratch,
         XDG_CACHE_HOME: cache,
         XDG_CONFIG_HOME: join(scratch, "config"),
@@ -222,6 +226,11 @@ async function verifyDeb() {
     assert.equal(await hash(received), await hash(join(release, debName(version))));
     await dialog.getByText(/请用系统包管理器安装/).waitFor();
     await dialog.getByRole("button", { name: "打开下载位置", exact: true }).press("Enter");
+    const opened = await waitFor("the file manager to receive the update location", () =>
+      readFile(openedLocation, "utf8").catch(() => ""),
+    );
+    const [cwd, path] = opened.trimEnd().split("\n");
+    assert.equal(resolve(cwd, path), dirname(received));
     await expectState(page, "package-ready");
     await closeApp(page);
     await waitFor("the Debian application to exit", () => !browser.isConnected());
@@ -249,6 +258,12 @@ async function closeFixture() {
 }
 
 try {
+  await mkdir(tools);
+  await writeFile(
+    join(tools, "xdg-open"),
+    '#!/bin/sh\nprintf "%s\\n%s\\n" "$(pwd -P)" "$1" > "$PILOT_TEST_OPENED_LOCATION"\n',
+    { mode: 0o700 },
+  );
   feed.listen(0, "127.0.0.1");
   await once(feed, "listening");
   execFileSync(
