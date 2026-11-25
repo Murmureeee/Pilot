@@ -193,6 +193,8 @@ const inputs = {
   ]),
   [IPC.sessionSelectProject]: z.tuple([z.enum(SUPPORTED_LOCALES), z.uuid().optional()]),
   [IPC.sessionUseRecentProject]: z.tuple([nonBlank, z.uuid().optional()]),
+  [IPC.sessionOpenProjectFolder]: z.tuple([nonBlank]),
+  [IPC.sessionRemoveRecentProject]: z.tuple([nonBlank]),
   [IPC.sessionGitHead]: z.tuple([nonBlank]),
   [IPC.sessionGitChanges]: z.tuple([z.uuid(), z.boolean().optional()]),
   [IPC.sessionGitDiff]: z.tuple([z.uuid(), gitDiffRequest]),

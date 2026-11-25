@@ -92,6 +92,8 @@ export interface PiApi {
   sessionUpdateSettings(composerId: string, input: SessionSettingsInput): Promise<void>;
   sessionSelectProject(locale: Locale, sessionId?: string): Promise<Snapshot | null>;
   sessionUseRecentProject(directory: string, sessionId?: string): Promise<Snapshot>;
+  sessionOpenProjectFolder(directory: string): Promise<void>;
+  sessionRemoveRecentProject(directory: string): Promise<void>;
   sessionGitHead(directory: string): Promise<ProjectGitHead | null>;
   sessionGitChanges(composerId: string, live?: boolean): Promise<GitChangesView | null>;
   sessionGitDiff(composerId: string, request: GitDiffRequest): Promise<GitFileDiff>;

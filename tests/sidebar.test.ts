@@ -29,6 +29,22 @@ describe("sessionRowStatus", () => {
     );
     expect(sessionRowStatus({ id: "b" }, run("streaming"), interrupted)).toBeNull();
   });
+
+  it("ranks a saved failure above interruption and unread until a later result replaces it", () => {
+    const failed = { id: "a", unread: true, lastRunResult: "failed" } as const;
+    expect(sessionRowStatus(failed, null, interrupted)).toBe("failed");
+    expect(sessionRowStatus(failed, run("waiting_approval"), null)).toBe("approval");
+    expect(sessionRowStatus(failed, run("streaming"), null)).toBe("running");
+    expect(sessionRowStatus(failed, run("stopping"), null)).toBe("stopping");
+    expect(sessionRowStatus(failed, run("streaming", "b"), null)).toBe("failed");
+    expect(sessionRowStatus({ ...failed, lastRunResult: "interrupted" }, null, null)).toBe(
+      "interrupted",
+    );
+    expect(sessionRowStatus({ ...failed, lastRunResult: "success" }, null, null)).toBe("unread");
+    expect(
+      sessionRowStatus({ ...failed, lastRunResult: "stopped", unread: false }, null, null),
+    ).toBeNull();
+  });
 });
 
 describe("projectParents", () => {

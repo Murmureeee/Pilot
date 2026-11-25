@@ -329,6 +329,7 @@ describe("agent-events adapter", () => {
         titleCustom: true,
         model: { providerId: "local", modelId: "chat" },
         approvalMode: "read-only",
+        lastRunResult: "failed",
       },
     ] satisfies SessionMeta[];
     state.recentProjects = ["E:/projects/previous"];
@@ -341,6 +342,31 @@ describe("agent-events adapter", () => {
     expect(state.sessions).toEqual(sessions);
     expect(state.recentProjects).toEqual(["E:/projects/Pilot"]);
     expect(state.sessionId).toBe("a");
+  });
+
+  it("removes a recent project without dropping its sessions or changing selection", () => {
+    const project = "E:/projects/Pilot";
+    const session = {
+      id: "a",
+      title: "Existing project chat",
+      createdAt: 1,
+      updatedAt: 2,
+      workingDirectory: project,
+    };
+    const previous = {
+      ...initialAgentUiState(),
+      sessionId: session.id,
+      sessions: [session],
+      recentProjects: [project],
+    };
+    const next = applyAgentEvent(previous, {
+      type: "sessions",
+      sessions: [session],
+      recentProjects: [],
+    });
+    expect(next.recentProjects).toEqual([]);
+    expect(next.sessions).toEqual([session]);
+    expect(next.sessionId).toBe(session.id);
   });
 
   it("queues permission requests in arrival order and clears them when approval ends", () => {

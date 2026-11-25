@@ -39,7 +39,8 @@ import { activateReview, useReviewStore } from "@renderer/stores/review";
 import { useWorkspaceReferenceStore } from "@renderer/stores/workspace-reference";
 import { ChatView } from "@renderer/views/ChatView";
 import { SettingsView } from "@renderer/views/SettingsView";
-import { AppRail, SidebarPanel } from "@renderer/views/Sidebar";
+import { SidebarPanel } from "@renderer/views/Sidebar";
+import { AppRail } from "@renderer/views/sidebar/AppRail";
 import { LOCALE_DETAILS } from "@shared/constants";
 
 export default function App(): JSX.Element {

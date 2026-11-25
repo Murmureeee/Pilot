@@ -1,5 +1,5 @@
 // @env node
-import { app, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, shell } from "electron";
 
 import { IPC } from "../../shared/contract";
 import { runAgentSmoke } from "../agent-host/smoke";
@@ -67,6 +67,13 @@ export function registerAgentRoutes({
   });
   handle(IPC.sessionUseRecentProject, (_event, directory, sessionId) =>
     host.useRecentProject(directory, sessionId),
+  );
+  handle(IPC.sessionOpenProjectFolder, async (_event, directory) => {
+    const error = await shell.openPath(host.projectFolder(directory));
+    if (error) throw new Error("无法在文件管理器中打开该项目。", { cause: error });
+  });
+  handle(IPC.sessionRemoveRecentProject, (_event, directory) =>
+    host.removeRecentProject(directory),
   );
   handle(IPC.sessionGitHead, (_event, directory) =>
     directory === host.getProjectDirectory() ? readProjectGitHead(directory) : null,

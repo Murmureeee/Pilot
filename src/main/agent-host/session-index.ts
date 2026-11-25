@@ -1,8 +1,7 @@
 // @env node
 import { z } from "zod";
 
-import type { SessionMeta } from "@shared/contract";
-
+import { SESSION_RUN_RESULTS, type SessionMeta } from "../../shared/contract";
 import { SESSION_FILE_ID } from "../constants";
 import type { SessionIndex } from "./types";
 
@@ -18,6 +17,7 @@ const sessionMeta = z.looseObject({
   lastTask: z
     .object({ taskId: z.string(), agentRunId: optionalText, title: optionalText })
     .optional(),
+  lastRunResult: z.enum(SESSION_RUN_RESULTS).optional().catch(undefined),
   titleCustom: z.boolean().optional(),
   pinned: z.boolean().optional(),
   archived: z.boolean().optional(),

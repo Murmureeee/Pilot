@@ -132,6 +132,50 @@ describe("SessionStore", () => {
     expect(list[1].id).toBe(first.id);
   });
 
+  it("keeps a removed legacy project out of recents across restart while retaining its chat", () => {
+    const { dir } = makeStore();
+    const project = join(dir, "project");
+    const linked = {
+      id: "linked",
+      title: "Linked",
+      createdAt: 1,
+      updatedAt: 2,
+      workingDirectory: project,
+    };
+    writeFileSync(join(dir, "index.json"), JSON.stringify({ sessions: [linked] }));
+    const store = new SessionStore(dir);
+    expect(store.listRecentProjects()).toEqual([project]);
+    store.removeRecentProject(project);
+    store.removeRecentProject(project);
+    const restarted = new SessionStore(dir);
+    expect(restarted.listRecentProjects()).toEqual([]);
+    expect(restarted.hasProject(project)).toBe(true);
+    expect(restarted.getMeta(linked.id)).toEqual(linked);
+    expect(store.list()).toEqual([linked]);
+    restarted.rememberProject(project);
+    expect(new SessionStore(dir).listRecentProjects()).toEqual([project]);
+  });
+
+  it("restores legacy failures and reconciles an unfinished result against its checkpoint", () => {
+    const { store, dir } = makeStore();
+    const legacy = store.create();
+    const active = store.create();
+    const messages: AgentMessage[] = [{ role: "user", content: "Run", timestamp: 1 }];
+    store.save(
+      legacy.id,
+      messages,
+      runningCheckpoint(dir, { failure: { kind: "credentials", detail: "Unauthorized" } }),
+    );
+    store.startCheckpoint(active.id, messages, runningCheckpoint(dir));
+    const restarted = new SessionStore(dir);
+    expect(restarted.getMeta(legacy.id)?.lastRunResult).toBe("failed");
+    expect(restarted.getMeta(active.id)?.lastRunResult).toBe("interrupted");
+
+    // If the transcript settled but the index update was lost, the saved checkpoint determines recovery.
+    store.writeTranscript(active.id, messages);
+    expect(new SessionStore(dir).getMeta(active.id)?.lastRunResult).toBeUndefined();
+  });
+
   it("round-trips an agent transcript through JSONL", () => {
     const { store } = makeStore();
     const session = store.create();

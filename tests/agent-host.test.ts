@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
@@ -39,6 +39,73 @@ import { MENTION_CONTEXT_HEADING } from "../src/shared/constants";
 import type { ComposerDraft, UiAgentEvent } from "../src/shared/contract";
 
 vi.mock("electron", () => ({ safeStorage: {} }));
+
+it("publishes the result for a background failure and clears it after a successful retry", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-sidebar-results-"));
+  const root = realpathSync(profile.path);
+  const sessionPath = join(root, "sessions");
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = { providers: [provider], activeProviderId: provider.id };
+  const faux = fauxProvider({ tokensPerSecond: 100_000 });
+  faux.appendResponses([
+    fauxAssistantMessage([], { stopReason: "error", errorMessage: "401 Unauthorized" }),
+    fauxAssistantMessage([fauxText("Retried successfully.")]),
+  ]);
+  const catalog = createModels();
+  catalog.setProvider(faux.provider);
+  using resolve = vi.spyOn(models, "resolveModel").mockReturnValue({
+    model: faux.getModel()!,
+    streamFn: catalog.streamSimple.bind(catalog),
+  });
+  const broadcast = vi.fn<(event: UiAgentEvent) => void>();
+  const createHost = (): AgentHost =>
+    new AgentHost({
+      getSettings: () => settings,
+      saveSettings: () => {},
+      broadcast,
+      store: new SessionStore(sessionPath),
+      skillsDir: join(root, "skills"),
+      mcp: new McpManager(() => settings, "0.0.0"),
+    });
+
+  const host = createHost();
+  host.openProject(root);
+  const running = host.prompt("Run that fails");
+  const ref = host.getSnapshot().activeRun!;
+  host.newSession();
+  await running;
+
+  const background = host.getSnapshot();
+  expect(background.sessionId).toBeNull();
+  expect(background.failedRun).toBeNull();
+  expect(background.sessions).toMatchObject([{ id: ref.sessionId, lastRunResult: "failed" }]);
+  expect(
+    broadcast.mock.calls.some(
+      ([event]) =>
+        event.type === "sessions" &&
+        event.sessions.some(
+          (session) => session.id === ref.sessionId && session.lastRunResult === "failed",
+        ),
+    ),
+  ).toBe(true);
+
+  const restarted = createHost();
+  expect(restarted.getSnapshot().sessions).toMatchObject([
+    { id: ref.sessionId, lastRunResult: "failed" },
+  ]);
+  expect(restarted.loadSession(ref.sessionId).failedRun).toMatchObject({ runId: ref.runId });
+  restarted.removeRecentProject(root);
+  expect(restarted.getSnapshot()).toMatchObject({ sessionId: ref.sessionId, recentProjects: [] });
+  expect(restarted.projectFolder(root)).toBe(root);
+  expect(() => restarted.projectFolder(dirname(root))).toThrow("找不到该项目");
+  await restarted.resume(ref);
+  expect(restarted.getSnapshot()).toMatchObject({
+    failedRun: null,
+    sessions: [{ id: ref.sessionId, lastRunResult: "success" }],
+  });
+  expect(createHost().getSnapshot().sessions).toMatchObject([{ lastRunResult: "success" }]);
+  expect(resolve).toHaveBeenCalled();
+});
 
 it("restores separate session settings and structured drafts in the same project", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-session-settings-"));

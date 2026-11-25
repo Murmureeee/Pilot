@@ -26,6 +26,8 @@ export const IPC = {
   sessionUpdateSettings: "session:update-settings",
   sessionSelectProject: "session:select-project",
   sessionUseRecentProject: "session:use-recent-project",
+  sessionOpenProjectFolder: "session:open-project-folder",
+  sessionRemoveRecentProject: "session:remove-recent-project",
   sessionGitHead: "session:git-head",
   sessionGitChanges: "session:git-changes",
   sessionGitDiff: "session:git-diff",
@@ -419,6 +421,9 @@ export interface SessionInstructionSources {
   running: boolean;
 }
 
+export const SESSION_RUN_RESULTS = ["success", "failed", "stopped", "interrupted"] as const;
+export type SessionRunResult = (typeof SESSION_RUN_RESULTS)[number];
+
 export interface SessionMeta extends SessionSettings {
   id: string;
   title: string;
@@ -426,6 +431,7 @@ export interface SessionMeta extends SessionSettings {
   updatedAt: number;
   workingDirectory?: string;
   lastTask?: VerificationTask;
+  lastRunResult?: SessionRunResult;
   /** 用户手动重命名后为 true：自动标题（首条用户消息）不再覆盖 */
   titleCustom?: boolean;
   /** 置顶：侧栏「置顶」分区（时间倒序在其内），悬浮按钮/右键菜单可切换 */

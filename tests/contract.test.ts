@@ -43,6 +43,8 @@ describe("IPC contract", () => {
     expect(IPC.sessionSaveDraft).toBe("session:save-draft");
     expect(IPC.sessionUpdateSettings).toBe("session:update-settings");
     expect(IPC.sessionUseRecentProject).toBe("session:use-recent-project");
+    expect(IPC.sessionOpenProjectFolder).toBe("session:open-project-folder");
+    expect(IPC.sessionRemoveRecentProject).toBe("session:remove-recent-project");
     expect(IPC.sessionGitHead).toBe("session:git-head");
     expect(IPC.sessionGitChanges).toBe("session:git-changes");
     expect(IPC.sessionGitDiff).toBe("session:git-diff");

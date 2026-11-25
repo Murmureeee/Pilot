@@ -1,19 +1,22 @@
 // @env browser
-import type { ActiveRun, InterruptedRun, SessionMeta } from "@shared/contract";
+import type { ActiveRun, FailedRun, InterruptedRun, SessionMeta } from "@shared/contract";
 
 import type { SessionRowStatus } from "./types";
 
 /** 侧栏状态位每行只显示优先级最高的一种，顺序与 DESIGN 的状态模型一致。 */
 export function sessionRowStatus(
-  session: Pick<SessionMeta, "id" | "unread">,
+  session: Pick<SessionMeta, "id" | "unread" | "lastRunResult">,
   activeRun: ActiveRun | null,
   interruptedRun: InterruptedRun | null,
+  failedRun: FailedRun | null = null,
 ): SessionRowStatus | null {
   if (activeRun?.sessionId === session.id) {
     if (activeRun.status === "waiting_approval") return "approval";
     return activeRun.status === "stopping" ? "stopping" : "running";
   }
-  if (interruptedRun?.sessionId === session.id) return "interrupted";
+  if (failedRun?.sessionId === session.id || session.lastRunResult === "failed") return "failed";
+  if (interruptedRun?.sessionId === session.id || session.lastRunResult === "interrupted")
+    return "interrupted";
   return session.unread ? "unread" : null;
 }
 

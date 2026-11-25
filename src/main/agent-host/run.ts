@@ -363,16 +363,38 @@ export class AgentRun {
       const messages = agent.state.messages;
       const last = messages.at(-1);
       const failure =
-        last?.role === "assistant" && last.stopReason === "error" ? this.modelFailure : undefined;
+        last?.role === "assistant" && last.stopReason === "error" && !signal.aborted
+          ? (this.modelFailure ?? {
+              kind: "other" as const,
+              detail: last.errorMessage ?? "模型返回错误",
+            })
+          : undefined;
       // Continue from the last user message or tool result when the user retries.
       agent.state.messages = completeToolResults(failure ? messages.slice(0, -1) : messages);
       await this.settle(agent.state.messages, failure);
     } catch (error) {
       if (started || !signal.aborted) {
-        this.send({
-          type: "error",
-          message: error instanceof Error ? error.message : String(error),
-        });
+        const message = error instanceof Error ? error.message : String(error);
+        const checkpoint = this.ownsCheckpoint && store.checkpoint(sessionId);
+        if (
+          checkpoint &&
+          checkpoint.runId === runId &&
+          !checkpoint.failure &&
+          !signal.aborted &&
+          !this.persistError
+        ) {
+          try {
+            this.saveCheckpoint({
+              ...this.checkpoint,
+              failure: { kind: "other", detail: message },
+            });
+            store.setRunResult(sessionId, "failed");
+          } catch {
+            this.send({ type: "error", message });
+          }
+        } else {
+          this.send({ type: "error", message });
+        }
       }
     } finally {
       if (this.interruptedForExit && this.ownsCheckpoint) {
@@ -391,6 +413,7 @@ export class AgentRun {
       agent.streamFunction = streamFunction;
       agent.state.tools = tools;
       this.queuedMessages = 0;
+      this.deps.onSessionUpdated();
       this.deps.onFinished();
       const checkpoint = store.checkpoint(sessionId);
       this.deps.broadcast({
@@ -468,6 +491,7 @@ export class AgentRun {
           this.checkpoint,
         );
         this.ownsCheckpoint = true;
+        store.setRunResult(this.state.sessionId, "interrupted");
       } else {
         store.addCompaction(this.state.sessionId, messages, compaction);
       }
@@ -838,7 +862,11 @@ export class AgentRun {
     const changes = await reviewed;
     if (this.interruptedForExit) return;
     const checkpoint = failure ? { ...this.checkpoint, failure } : undefined;
-    this.deps.store.save(sessionId, messages, checkpoint, changes, this.checkpoint.task);
+    const result = failure ? "failed" : this.preparation.signal.aborted ? "stopped" : "success";
+    this.deps.store.save(sessionId, messages, checkpoint, changes, {
+      task: this.checkpoint.task,
+      result,
+    });
     this.deps.view.messages = toUiMessages(
       messages,
       "s",
@@ -851,7 +879,6 @@ export class AgentRun {
     if (last?.role === "assistant" && last.stopReason === "error") {
       this.send({ type: "error", message: last.errorMessage ?? "模型返回错误" });
     }
-    this.deps.onSessionUpdated();
   }
 
   private toolLabel(name: string): string {

@@ -122,7 +122,14 @@ export type SettingsSection =
 
 export type SendKey = "enter" | "mod-enter";
 
-export type SessionRowStatus = "approval" | "running" | "stopping" | "interrupted" | "unread";
+export type SessionRowStatus =
+  | "approval"
+  | "running"
+  | "stopping"
+  | "failed"
+  | "interrupted"
+  | "unread";
+export type ProjectRowAction = "open" | "remove";
 
 export interface ShortcutGroup {
   label: string;

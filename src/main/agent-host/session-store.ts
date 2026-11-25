@@ -3,10 +3,13 @@
 import { randomUUID } from "node:crypto";
 import {
   appendFileSync,
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readSync,
   renameSync,
   rmSync,
   statSync,
@@ -20,10 +23,10 @@ import type { ToolResultMessage } from "@earendil-works/pi-ai";
 import type {
   ComposerDraft,
   SessionMeta,
+  SessionRunResult,
   SessionSettings,
   UiMessage,
   UiPart,
-  VerificationTask,
 } from "@shared/contract";
 
 import { visibleMessageText } from "../../shared/mentions";
@@ -51,6 +54,7 @@ import type {
   SavedGitChanges,
   SessionIndex,
   SessionRecord,
+  SessionRunSettlement,
   TimedAssistantMessage,
   TranscriptWriteState,
 } from "./types";
@@ -202,6 +206,18 @@ export class SessionStore {
     }
     const { index, damaged } =
       text === undefined ? { index: { sessions: [] }, damaged: false } : parseSessionIndex(text);
+    for (const meta of index.sessions) {
+      if (
+        meta.lastRunResult === "interrupted" ||
+        (meta.lastRunResult === undefined && this.hasCheckpointHeader(meta.id))
+      ) {
+        try {
+          meta.lastRunResult = checkpointResult(this.checkpoint(meta.id));
+        } catch {
+          // Keep the index available when one transcript cannot be read.
+        }
+      }
+    }
     if (text !== undefined && !damaged) return index;
     this.indexBackupPending ||= damaged;
     const rebuilt = this.rebuildIndex(index);
@@ -244,6 +260,7 @@ export class SessionStore {
         ),
         updatedAt: Math.round(file.mtimeMs),
         workingDirectory: typeof workingDirectory === "string" ? workingDirectory : undefined,
+        lastRunResult: checkpointResult(checkpoint),
       });
     }
     return { ...index, sessions: [...sessions.values()] };
@@ -276,6 +293,23 @@ export class SessionStore {
     return join(this.dir, `${id}${SESSION_TRANSCRIPT_EXTENSION}`);
   }
 
+  private hasCheckpointHeader(id: string): boolean {
+    // Older settled failures start with a checkpoint. Read the header before opening the transcript.
+    let fd: number | undefined;
+    try {
+      fd = openSync(this.filePath(id), "r");
+      const prefix = Buffer.alloc(40);
+      const size = readSync(fd, prefix, 0, prefix.length, 0);
+      return /^\{"type":"pilot_(run_checkpoint|checkpoint_append)"/.test(
+        prefix.toString("utf8", 0, size),
+      );
+    } catch {
+      return false;
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+    }
+  }
+
   private draftPath(id: string): string {
     return join(this.dir, `${id}${SESSION_DRAFT_EXTENSION}`);
   }
@@ -296,16 +330,43 @@ export class SessionStore {
   }
 
   list(): SessionMeta[] {
-    return [...this.index.sessions].sort((a, b) => b.updatedAt - a.updatedAt);
+    return this.index.sessions
+      .map((meta) => {
+        if (meta.lastRunResult !== "interrupted" || !this.checkpoints.has(meta.id)) return meta;
+        const result = checkpointResult(this.checkpoints.get(meta.id) ?? undefined);
+        return result === meta.lastRunResult ? meta : { ...meta, lastRunResult: result };
+      })
+      .sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   listRecentProjects(sessions = this.list()): string[] {
-    const projects = new Set(this.index.recentProjects);
-    // Older indexes contain only the directories stored on the sessions.
-    for (const { workingDirectory } of sessions) {
-      if (workingDirectory) projects.add(workingDirectory);
+    // The saved list is authoritative once the user can remove entries.
+    return this.index.recentProjects === undefined
+      ? [
+          ...new Set(
+            sessions.flatMap(({ workingDirectory }) =>
+              workingDirectory ? [workingDirectory] : [],
+            ),
+          ),
+        ]
+      : [...new Set(this.index.recentProjects)];
+  }
+
+  hasProject(workingDirectory: string): boolean {
+    return (
+      this.index.recentProjects?.includes(workingDirectory) === true ||
+      this.index.sessions.some((session) => session.workingDirectory === workingDirectory)
+    );
+  }
+
+  removeRecentProject(workingDirectory: string): void {
+    const projects = this.listRecentProjects();
+    if (projects.includes(workingDirectory)) {
+      this.writeIndex({
+        ...this.index,
+        recentProjects: projects.filter((directory) => directory !== workingDirectory),
+      });
     }
-    return [...projects];
   }
 
   private projectOpened(workingDirectory: string): string[] {
@@ -323,6 +384,17 @@ export class SessionStore {
   /** 单个会话元数据（host 组装 systemPrompt 时读会话级人设覆盖） */
   getMeta(id: string): SessionMeta | null {
     return this.index.sessions.find((s) => s.id === id) ?? null;
+  }
+
+  setRunResult(id: string, lastRunResult: SessionRunResult): void {
+    const meta = this.getMeta(id);
+    if (!meta || meta.lastRunResult === lastRunResult) return;
+    this.writeIndex({
+      ...this.index,
+      sessions: this.index.sessions.map((session) =>
+        session.id === id ? { ...session, lastRunResult } : session,
+      ),
+    });
   }
 
   /** 会话级人设/指令覆盖（null 或空白 = 清除，回落全局 persona） */
@@ -557,7 +629,7 @@ export class SessionStore {
     } else {
       this.appendCheckpoint(id, state.messageCount === 0 ? messages : [], checkpoint);
     }
-    this.saveSessionMeta(id, messages, checkpoint);
+    this.saveSessionMeta(id, messages, checkpoint, "interrupted");
   }
 
   appendCheckpoint(
@@ -603,37 +675,39 @@ export class SessionStore {
     messages: AgentMessage[],
     checkpoint?: RunCheckpoint,
     gitChanges?: SavedGitChanges | null,
-    lastTask?: VerificationTask,
+    settlement?: SessionRunSettlement,
     compactions?: SavedCompaction[],
   ): SessionMeta {
     this.writeTranscript(id, messages, checkpoint, gitChanges, compactions);
-    return this.saveSessionMeta(id, messages, checkpoint, lastTask);
+    return this.saveSessionMeta(id, messages, checkpoint, settlement?.result, settlement);
   }
 
   private saveSessionMeta(
     id: string,
     messages: AgentMessage[],
     checkpoint?: RunCheckpoint,
-    lastTask?: VerificationTask,
+    lastRunResult?: SessionRunResult,
+    settlement?: SessionRunSettlement,
   ): SessionMeta {
     const title = sessionTitle(messages, checkpoint);
-    const meta = this.index.sessions.find((s) => s.id === id);
-    if (meta) {
-      // 手动重命名过的会话：自动标题不覆盖（titleCustom 由 rename 置位）
-      if (!meta.titleCustom) meta.title = title;
-      meta.updatedAt = Date.now();
-      if (lastTask) meta.lastTask = lastTask;
-    } else {
-      this.index.sessions.push({
-        id,
-        title,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        lastTask,
-      });
-    }
-    this.writeIndex();
-    return meta ?? { id, title, createdAt: Date.now(), updatedAt: Date.now() };
+    const previous = this.getMeta(id);
+    const now = Date.now();
+    const meta: SessionMeta = {
+      ...previous,
+      id,
+      title: previous?.titleCustom ? previous.title : title,
+      createdAt: previous?.createdAt ?? now,
+      updatedAt: now,
+      lastTask: settlement?.task ?? previous?.lastTask,
+      lastRunResult: lastRunResult ?? previous?.lastRunResult,
+    };
+    this.writeIndex({
+      ...this.index,
+      sessions: previous
+        ? this.index.sessions.map((session) => (session.id === id ? meta : session))
+        : [...this.index.sessions, meta],
+    });
+    return meta;
   }
 
   writeTranscript(
@@ -660,6 +734,10 @@ export class SessionStore {
     this.contextCompactions.set(id, compactions);
     this.transcriptWrites.set(id, { messageCount: messages.length, appendable: true });
   }
+}
+
+function checkpointResult(checkpoint: RunCheckpoint | undefined): SessionRunResult | undefined {
+  if (checkpoint) return checkpoint.failure ? "failed" : "interrupted";
 }
 
 function hasMessageRole(value: unknown): value is AgentMessage {

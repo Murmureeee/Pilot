@@ -12,6 +12,7 @@ import type {
   SessionInstructionSources,
   SkillMeta,
   SessionMeta,
+  SessionRunResult,
   Snapshot,
   ToolRule,
   UiAgentEvent,
@@ -67,6 +68,11 @@ export interface AgentRunOptions extends Pick<
 }
 
 export type CompactionRequest = { mode: "manual"; focus: string } | { mode: "retry" };
+
+export interface SessionRunSettlement {
+  task?: VerificationTask;
+  result: Exclude<SessionRunResult, "interrupted">;
+}
 
 export interface SavedCompaction extends ContextCompaction {
   type: "pilot_context_compaction";

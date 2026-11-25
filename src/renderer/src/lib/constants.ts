@@ -93,6 +93,7 @@ export const SESSION_STATUS_LABELS: Record<SessionRowStatus, string> = {
   approval: "等待审批",
   running: "运行中",
   stopping: "正在停止",
+  failed: "失败",
   interrupted: "已中断",
   unread: "未读",
 };
@@ -334,6 +335,7 @@ export const COMPOSER_SURFACE_CLASS =
 export const SIDEBAR_MIN_WIDTH = 220;
 export const SIDEBAR_MAX_WIDTH = 520;
 export const SIDEBAR_DEFAULT_WIDTH = 262;
+export const RAIL_EXPAND_THRESHOLD = 80;
 
 export const REVIEW_TWO_COLUMN_WIDTH = 900;
 export const REVIEW_THREE_COLUMN_WIDTH = 1100;

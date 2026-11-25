@@ -598,10 +598,18 @@ export class AgentHost {
   }
 
   useRecentProject(directory: string, sessionId?: string): Snapshot | Promise<Snapshot> {
-    if (!this.deps.store.listRecentProjects().includes(directory)) {
-      throw new Error("找不到该最近项目。");
-    }
+    if (!this.deps.store.hasProject(directory)) throw new Error("找不到该最近项目。");
     return sessionId ? this.bindProject(sessionId, directory) : this.openProject(directory);
+  }
+
+  projectFolder(directory: string): string {
+    if (!this.deps.store.hasProject(directory)) throw new Error("找不到该项目。");
+    return normalizeWorkingDirectory(directory);
+  }
+
+  removeRecentProject(directory: string): void {
+    this.deps.store.removeRecentProject(directory);
+    this.sendSessions();
   }
 
   async bindProject(id: string, directory: string): Promise<Snapshot> {

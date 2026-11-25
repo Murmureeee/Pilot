@@ -55,6 +55,10 @@ const api: PiApi = {
     ipcRenderer.invoke(IPC.sessionSelectProject, locale, sessionId),
   sessionUseRecentProject: (directory, sessionId) =>
     ipcRenderer.invoke(IPC.sessionUseRecentProject, directory, sessionId),
+  sessionOpenProjectFolder: (directory) =>
+    ipcRenderer.invoke(IPC.sessionOpenProjectFolder, directory),
+  sessionRemoveRecentProject: (directory) =>
+    ipcRenderer.invoke(IPC.sessionRemoveRecentProject, directory),
   sessionGitHead: (directory) => ipcRenderer.invoke(IPC.sessionGitHead, directory),
   sessionGitChanges: (composerId, live) =>
     ipcRenderer.invoke(IPC.sessionGitChanges, composerId, live),
