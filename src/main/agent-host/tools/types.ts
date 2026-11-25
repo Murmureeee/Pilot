@@ -7,3 +7,9 @@ export interface ToolEnvironment {
   workingDirectory?: string;
   commandShell: CommandShell;
 }
+
+export interface FileEdit {
+  oldText: string;
+  newText: string;
+  replaceAll?: boolean;
+}

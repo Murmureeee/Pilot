@@ -16,6 +16,8 @@ import type {
   GitChangesView,
   GitRollbackConflict,
   LogLevel,
+  PermissionDecision,
+  PermissionFilePreview,
   ProviderKind,
   ThemeSetting,
   VerificationKind,
@@ -274,6 +276,20 @@ export const COMMAND_SHELL_LABELS: Record<CommandShell, string> = {
 };
 
 export const PERMISSION_ATTENTION_TEXT = "text-amber-700 dark:text-amber-400";
+
+export const PERMISSION_FILE_OPERATIONS: Record<PermissionFilePreview["operation"], string> = {
+  create: "新建文件",
+  overwrite: "覆盖文件",
+  edit: "编辑文件",
+  write: "写入文件",
+};
+
+export const PERMISSION_DECISIONS: Record<PermissionDecision, string> = {
+  once: "本次已允许",
+  session: "已为本会话允许",
+  global: "已保存为总是允许",
+  deny: "已拒绝",
+};
 
 export const THEME_LABELS: Record<ThemeSetting, string> = {
   light: "亮色",

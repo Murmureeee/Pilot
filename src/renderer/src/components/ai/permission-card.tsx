@@ -9,10 +9,9 @@ import {
   SquareIcon,
   TerminalIcon,
 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState, type JSX, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type JSX, type KeyboardEvent } from "react";
 
 import { Button } from "@renderer/components/ui/button";
-import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,14 +21,17 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import {
   COMMAND_DANGER_DESCRIPTIONS,
+  COMMAND_SHELL_LABELS,
   COMPOSER_SURFACE_CLASS,
   PERMISSION_ATTENTION_TEXT,
+  PERMISSION_FILE_OPERATIONS,
 } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { describeToolScope } from "@renderer/lib/tool-rules";
-import { toolInput } from "@renderer/lib/tool-trace";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { PermissionDecision, PermissionRequest, RunRef } from "@shared/contract";
+
+import { PermissionPreview } from "./permission-preview";
 
 export function PermissionCard({
   request,
@@ -41,15 +43,11 @@ export function PermissionCard({
   const locale = useLocale();
   const respondPermission = useAgentStore((s) => s.respondPermission);
   const abort = useAgentStore((s) => s.abort);
-  const remaining = useAgentStore((s) => s.pendingPermissions.length - 1);
+  const pendingCount = useAgentStore((s) => s.pendingPermissions.length);
   const card = useRef<HTMLElement>(null);
-  const code = useRef<HTMLPreElement>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [clipped, setClipped] = useState(false);
   const [responding, setResponding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const titleId = useId();
-  const detailsId = useId();
   const shell = request.toolName === "bash";
   const file = request.toolName === "write_file" || request.toolName === "edit_file";
   const Icon = request.danger
@@ -59,11 +57,8 @@ export function PermissionCard({
       : file
         ? FilePenLineIcon
         : PlugIcon;
-  const input = useMemo(() => toolInput(request.inputSummary), [request.inputSummary]);
-  const preview =
-    request.command ?? (input.preview === request.inputSummary ? input.details : input.preview);
-  const hasMore = !shell && preview !== input.details;
-  const text = expanded ? input.details : preview;
+  const index = request.position?.index ?? 1;
+  const total = Math.max(request.position?.total ?? 1, index + pendingCount - 1);
   const scope = request.rule && describeToolScope(request.rule, locale);
   const dangerReason = request.commandDanger
     ? COMMAND_DANGER_DESCRIPTIONS[request.commandDanger]
@@ -76,16 +71,6 @@ export function PermissionCard({
     if (!active || active === document.body || active.getClientRects().length === 0)
       card.current?.focus({ preventScroll: true });
   }, []);
-
-  useEffect(() => {
-    const content = code.current?.firstElementChild;
-    if (!content || expanded || shell) return;
-    const measure = (): void => setClipped(content.scrollHeight > content.clientHeight + 1);
-    const observer = new ResizeObserver(measure);
-    observer.observe(content);
-    measure();
-    return () => observer.disconnect();
-  }, [expanded, shell]);
 
   const respond = async (decision: PermissionDecision): Promise<void> => {
     if (responding) return;
@@ -131,91 +116,94 @@ export function PermissionCard({
       data-permission-card
       className={cn(
         COMPOSER_SURFACE_CLASS,
-        "flex min-w-0 flex-col gap-3 border px-4 py-3.5 outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "flex max-h-[calc(100dvh-6.5rem)] min-w-0 flex-col gap-3 overflow-hidden border px-4 py-3.5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
       )}
     >
-      <div className="flex min-w-0 items-start gap-2.5">
-        <span
-          aria-hidden="true"
-          className={cn(
-            "grid size-8 shrink-0 place-items-center rounded-lg",
-            request.danger
-              ? "bg-destructive/10 text-destructive"
-              : "bg-amber-500/10 " + PERMISSION_ATTENTION_TEXT,
-          )}
-        >
-          <Icon className="size-4" />
-        </span>
-        <div role="alert" className="min-w-0 self-center">
-          <h2
-            id={titleId}
+      <div className="flex min-h-0 min-w-0 flex-col gap-3 overflow-y-auto overscroll-contain">
+        <div className="flex min-w-0 shrink-0 items-start gap-2.5">
+          <span
+            aria-hidden="true"
             className={cn(
-              "text-sm font-medium wrap-anywhere",
-              request.danger ? "text-destructive" : PERMISSION_ATTENTION_TEXT,
+              "grid size-8 shrink-0 place-items-center rounded-lg",
+              request.danger
+                ? "bg-destructive/10 text-destructive"
+                : "bg-amber-500/10 " + PERMISSION_ATTENTION_TEXT,
             )}
           >
-            {shell
-              ? t(request.commandDanger ? "允许运行危险命令？" : "允许运行此命令？", locale)
-              : t("允许「{0}」？", locale, [t(request.label, locale)])}
-          </h2>
-          {request.workingDirectory && (
-            <p className="text-xs wrap-anywhere text-muted-foreground">
-              {t("工作目录", locale)} <bdi className="font-mono">{request.workingDirectory}</bdi>
-            </p>
-          )}
-          {request.danger && (
-            <p className="text-xs text-muted-foreground">{t(dangerReason, locale)}</p>
-          )}
-        </div>
-      </div>
-
-      {preview && (
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <CodeBlock size="sm" variant={request.danger ? "destructive" : "default"}>
-            <CodeBlockContent
-              ref={code}
-              id={detailsId}
-              wrap
-              tabIndex={shell || expanded ? 0 : -1}
+            <Icon className="size-4" />
+          </span>
+          <div role="alert" className="min-w-0 flex-1 self-center">
+            <h2
+              id={titleId}
               className={cn(
-                "overscroll-contain focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                shell
-                  ? "max-h-[min(23vh,11rem)]"
-                  : expanded
-                    ? "max-h-[min(36vh,14rem)]"
-                    : "overflow-hidden [&>code]:line-clamp-3",
+                "text-sm font-medium wrap-anywhere",
+                request.danger ? "text-destructive" : PERMISSION_ATTENTION_TEXT,
               )}
             >
-              {text}
-            </CodeBlockContent>
-          </CodeBlock>
-          {(hasMore || clipped || expanded) && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              className="self-end text-muted-foreground"
-              aria-expanded={expanded}
-              aria-controls={detailsId}
-              onClick={() => setExpanded(!expanded)}
+              {shell
+                ? t(request.commandDanger ? "允许运行危险命令？" : "允许运行此命令？", locale)
+                : t("允许「{0}」？", locale, [
+                    request.file
+                      ? t(PERMISSION_FILE_OPERATIONS[request.file.operation], locale)
+                      : (request.mcp?.tool ?? t(request.label, locale)),
+                  ])}
+            </h2>
+            {request.workingDirectory && (
+              <p className="text-xs wrap-anywhere text-muted-foreground">
+                {t("工作目录", locale)} <bdi className="font-mono">{request.workingDirectory}</bdi>
+              </p>
+            )}
+            {request.file && (
+              <p className="text-xs wrap-anywhere text-muted-foreground">
+                {t("目标文件", locale)} <bdi className="font-mono">{request.file.path}</bdi>
+              </p>
+            )}
+            {request.mcp && (
+              <p className="text-xs wrap-anywhere text-muted-foreground" data-permission-mcp-server>
+                {t("MCP 服务 {0}", locale, [request.mcp.server])}
+              </p>
+            )}
+            {request.commandShell && (
+              <p className="text-xs text-muted-foreground">
+                {t("命令环境", locale)}{" "}
+                {request.commandShell === "bash" && !navigator.userAgent.includes("Windows")
+                  ? "Bash"
+                  : COMMAND_SHELL_LABELS[request.commandShell]}
+              </p>
+            )}
+            {request.danger && (
+              <p className="text-xs text-muted-foreground">{t(dangerReason, locale)}</p>
+            )}
+          </div>
+          {total > 1 && (
+            <span
+              className="shrink-0 text-xs text-muted-foreground tabular-nums"
+              data-permission-position
             >
-              {t(expanded ? "收起详情" : "展开详情", locale)}
-            </Button>
+              <span aria-hidden="true">
+                {index} / {total}
+              </span>
+              <span className="sr-only">
+                {t("第 {0} 项审批，共 {1} 项", locale, [index, total])}
+              </span>
+            </span>
           )}
         </div>
-      )}
 
-      {shell && !scope && !request.danger && (
-        <p className="text-xs text-muted-foreground">{t("此命令需要逐次审批。", locale)}</p>
-      )}
+        <PermissionPreview request={request} />
 
-      {error && (
-        <p role="alert" className="text-xs wrap-anywhere text-destructive">
-          {t("审批提交失败，请重试。", locale)} {error}
-        </p>
-      )}
+        {shell && !scope && !request.danger && (
+          <p className="text-xs text-muted-foreground">{t("此命令需要逐次审批。", locale)}</p>
+        )}
 
-      <div className="flex flex-wrap items-center gap-2">
+        {error && (
+          <p role="alert" className="text-xs wrap-anywhere text-destructive">
+            {t("审批提交失败，请重试。", locale)} {error}
+          </p>
+        )}
+      </div>
+
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <div className="me-auto flex min-w-0 items-center gap-2">
           <Button type="button" variant="ghost" size="sm" onClick={() => abort(run)}>
             <SquareIcon data-icon="inline-start" />
@@ -258,11 +246,6 @@ export function PermissionCard({
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
-          )}
-          {remaining > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {t("另有 {0} 项待审批", locale, [remaining])}
-            </span>
           )}
         </div>
         <div className="ms-auto flex items-center gap-2">

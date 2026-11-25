@@ -219,6 +219,7 @@ describe("SessionStore", () => {
       workingDirectory: dir,
       startIndex: 0,
       actions: ["recorded-action"],
+      approvals: [{ callId: "unknown", approval: { decision: "once" } }],
       pending: [queued],
     });
     const restarted = new SessionStore(dir);
@@ -229,6 +230,7 @@ describe("SessionStore", () => {
       role: "toolResult",
       toolCallId: "unknown",
       isError: true,
+      pilotApproval: { decision: "once" },
     });
     expect(recovered.at(-1)).toEqual(queued);
     restarted.save(session.id, recovered);

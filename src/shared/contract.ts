@@ -241,6 +241,7 @@ export type UiPart =
       error?: string;
       durationMs?: number;
       fileChange?: FileChangeSummary;
+      approval?: ToolApproval;
     });
 
 export interface AssistantTiming {
@@ -319,9 +320,17 @@ export type CommandDanger =
   | "forced-delete"
   | "system-operation";
 
+export interface PermissionFilePreview {
+  path: string;
+  operation: "create" | "overwrite" | "edit" | "write";
+  diff?: FileDiff;
+  error?: string;
+}
+
 export interface PermissionRequest {
   type: "permission_request";
   requestId: string;
+  callId: string;
   toolName: string;
   label: string;
   inputSummary: string;
@@ -329,6 +338,10 @@ export interface PermissionRequest {
   commandDanger?: CommandDanger;
   workingDirectory?: string;
   command?: string;
+  commandShell?: CommandShell;
+  position?: { index: number; total: number };
+  file?: PermissionFilePreview;
+  mcp?: { server: string; tool: string };
   rule?: ToolRule;
 }
 
@@ -380,7 +393,7 @@ export type AgentRunEvent =
     }
   | { type: "queue"; steerCount: number }
   | PermissionRequest
-  | { type: "permission_resolved"; requestId: string }
+  | { type: "permission_resolved"; requestId: string; callId: string; approval: ToolApproval }
   | { type: "error"; message: string };
 
 export type SessionNavigation = "record" | "reset" | "reveal";
@@ -399,6 +412,11 @@ export type UiAgentEvent =
   | (Extract<AgentRunEvent, { type: "file_change" }> & { sessionId: string });
 
 export type PermissionDecision = "once" | "session" | "global" | "deny";
+
+export interface ToolApproval {
+  decision: PermissionDecision;
+  rule?: ToolRule;
+}
 
 export interface CommandPrefix {
   shell: CommandShell;

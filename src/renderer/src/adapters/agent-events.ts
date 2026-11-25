@@ -129,6 +129,7 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
     case "permission_resolved":
       return {
         ...state,
+        messages: applyMessageEvent(state.messages, event),
         pendingPermissions: state.pendingPermissions.filter(
           ({ requestId }) => requestId !== event.requestId,
         ),

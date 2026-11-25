@@ -20,8 +20,10 @@ import {
   TraceLine,
   TraceTitle,
 } from "@renderer/components/ui/trace";
+import { PERMISSION_DECISIONS } from "@renderer/lib/constants";
 import { formatDuration } from "@renderer/lib/duration";
 import { t, useLocale } from "@renderer/lib/i18n";
+import { describeToolScope } from "@renderer/lib/tool-rules";
 import { parseToolFailure, stackDisplayPath, toolInput } from "@renderer/lib/tool-trace";
 import type { ToolFailure } from "@renderer/lib/types";
 import { selectWorkingDirectory, useAgentStore } from "@renderer/stores/agent";
@@ -170,7 +172,8 @@ export function ToolTrace({ part }: { part: Extract<UiPart, { type: "tool" }> })
     </TraceLine>
   );
 
-  if (!output && !failure && !input.details) return line;
+  const { approval } = part;
+  if (!output && !failure && !input.details && !approval) return line;
 
   const showArguments =
     input.details && (failure || input.details !== input.preview || input.details.includes("\n"));
@@ -181,10 +184,23 @@ export function ToolTrace({ part }: { part: Extract<UiPart, { type: "tool" }> })
       <TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
       <TraceCollapsibleContent className="mt-1.5">
         <div className="flex min-w-0 flex-col gap-2">
+          {approval && (
+            <div
+              className="grid gap-0.5 text-xs wrap-anywhere"
+              data-tool-approval={approval.decision}
+            >
+              <p>
+                {t("审批结果 {0}", locale, [t(PERMISSION_DECISIONS[approval.decision], locale)])}
+              </p>
+              {approval.rule && (
+                <p className="text-muted-foreground">{describeToolScope(approval.rule, locale)}</p>
+              )}
+            </div>
+          )}
           {failure ? (
             <FailureDetails failure={failure} output={failureText} />
           ) : (
-            <ToolOutput text={output ?? input.details} />
+            (output || input.details) && <ToolOutput text={output ?? input.details} />
           )}
           {(failure || output) && showArguments && (
             <ToolDetails title={t(shell ? "命令" : "参数", locale)} text={input.details} />

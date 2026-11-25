@@ -40,6 +40,96 @@ import type { ComposerDraft, UiAgentEvent } from "../src/shared/contract";
 
 vi.mock("electron", () => ({ safeStorage: {} }));
 
+it("previews a batch of file approvals, preserves decisions, and rejects a stale preview", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-approval-details-"));
+  const root = realpathSync(profile.path);
+  const sessions = join(root, "sessions");
+  const existing = join(root, "existing.txt");
+  writeFileSync(existing, "original\r\n");
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = { providers: [provider], activeProviderId: provider.id };
+  const faux = fauxProvider({ tokensPerSecond: 100_000 });
+  faux.appendResponses([
+    fauxAssistantMessage([
+      fauxToolCall("write_file", { path: "created.txt", content: "new content\n" }),
+      fauxToolCall("edit_file", { path: "existing.txt", oldText: "original", newText: "changed" }),
+      fauxToolCall("write_file", { path: "denied.txt", content: "denied\n" }),
+    ]),
+    fauxAssistantMessage([fauxText("Finished the approval fixture.")]),
+  ]);
+  const catalog = createModels();
+  catalog.setProvider(faux.provider);
+  const resolve = vi.spyOn(models, "resolveModel").mockReturnValue({
+    model: faux.getModel()!,
+    streamFn: catalog.streamSimple.bind(catalog),
+  });
+  const requests: Extract<UiAgentEvent, { type: "permission_request" }>[] = [];
+  const createHost = (): AgentHost =>
+    new AgentHost({
+      getSettings: () => settings,
+      saveSettings: () => {},
+      broadcast: (event) => {
+        if (event.type !== "permission_request") return;
+        requests.push(event);
+        setTimeout(() => {
+          if (event.file?.operation === "edit") writeFileSync(existing, "external change\r\n");
+          const decision = event.position?.index === 3 ? "deny" : "once";
+          host.respondPermission(event.run, event.requestId, decision);
+        }, 0);
+      },
+      store: new SessionStore(sessions),
+      skillsDir: join(root, "skills"),
+      mcp: new McpManager(() => settings, "0.0.0"),
+    });
+  const host = createHost();
+  try {
+    host.openProject(root);
+    await host.prompt("Inspect three file changes");
+    expect(requests.map(({ position }) => position)).toEqual([
+      { index: 1, total: 3 },
+      { index: 2, total: 3 },
+      { index: 3, total: 3 },
+    ]);
+    expect(requests[0].file).toMatchObject({
+      path: join(root, "created.txt"),
+      operation: "create",
+      diff: { hunks: [[{ kind: "added", text: "new content" }]] },
+    });
+    expect(requests[1].file).toMatchObject({
+      path: existing,
+      operation: "edit",
+      diff: {
+        hunks: [
+          [
+            { kind: "removed", text: "original" },
+            { kind: "added", text: "changed" },
+          ],
+        ],
+      },
+    });
+    expect(readFileSync(join(root, "created.txt"), "utf8")).toBe("new content\n");
+    expect(readFileSync(existing, "utf8")).toBe("external change\r\n");
+    expect(existsSync(join(root, "denied.txt"))).toBe(false);
+    const sessionId = host.getSnapshot().sessionId!;
+    const restored = createHost().loadSession(sessionId);
+    const tools = restored.messages
+      .flatMap(({ parts }) => parts)
+      .filter((part) => part.type === "tool");
+    expect(tools).toMatchObject([
+      { callId: requests[0].callId, state: "success", approval: { decision: "once" } },
+      {
+        callId: requests[1].callId,
+        state: "error",
+        error: expect.stringContaining("文件在生成预览后发生变化"),
+        approval: { decision: "once" },
+      },
+      { callId: requests[2].callId, state: "error", approval: { decision: "deny" } },
+    ]);
+  } finally {
+    resolve.mockRestore();
+  }
+});
+
 it("publishes the result for a background failure and clears it after a successful retry", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-sidebar-results-"));
   const root = realpathSync(profile.path);

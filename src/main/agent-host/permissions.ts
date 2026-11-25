@@ -19,7 +19,7 @@ import { commandPrefixMatches, parseCommandScope } from "./command-scope";
 import type { McpToolPolicy } from "./mcp/types";
 import { isReadOnly, labelOf, pathOfArgs } from "./tools";
 import type { ToolEnvironment } from "./tools/types";
-import type { PendingPermission } from "./types";
+import type { PendingPermission, PermissionDetails, ToolAccess } from "./types";
 
 type Broadcast = (request: PermissionRequest) => void;
 
@@ -30,9 +30,9 @@ function isProtectedFile(toolName: string, args: unknown): boolean {
   );
 }
 
-function summarizeArgs(args: unknown): string {
+function summarizeArgs(args: unknown, pretty: boolean): string {
   try {
-    return JSON.stringify(args) ?? "{}";
+    return JSON.stringify(args, null, pretty ? 2 : undefined) ?? "{}";
   } catch {
     return String(args);
   }
@@ -63,22 +63,26 @@ export class PermissionManager {
     private readonly sessionRules: ToolRule[] = [],
   ) {}
 
-  async gate(
+  needsConfirmation(
+    toolName: string,
+    args: unknown,
+    policy?: McpToolPolicy,
+    environment?: ToolEnvironment,
+  ): boolean {
+    return this.accessFor(toolName, args, policy, environment).kind === "ask";
+  }
+
+  private accessFor(
     toolName: string,
     args: unknown,
     policy?: McpToolPolicy,
     environment: ToolEnvironment = { commandShell: getCommandShell() },
-  ): Promise<BeforeToolCallResult | undefined> {
-    if (isReadOnly(toolName)) return undefined;
+  ): ToolAccess {
+    if (isReadOnly(toolName)) return { kind: "allow" };
 
     // 权限模式三档（composer 徽章切换）
     const mode = this.getApprovalMode();
-    if (mode === "read-only") {
-      return {
-        block: true,
-        reason: "当前为只读模式，已拒绝该写操作（可在输入框左下角切换权限模式）",
-      };
-    }
+    if (mode === "read-only") return { kind: "block" };
 
     const command =
       toolName === "bash" &&
@@ -90,7 +94,8 @@ export class PermissionManager {
         : undefined;
     const commandDanger =
       command === undefined ? undefined : findCommandDanger(command, environment);
-    if (!commandDanger && mode === "full-access" && !policy?.requireConfirmation) return undefined;
+    if (!commandDanger && mode === "full-access" && !policy?.requireConfirmation)
+      return { kind: "allow" };
 
     let rule: ToolRule | undefined;
     if (!commandDanger) {
@@ -108,29 +113,54 @@ export class PermissionManager {
             ),
           )
         )
-          return undefined;
+          return { kind: "allow" };
 
         // A single approval creates one prefix. Combined commands can use existing rules for every part.
         if (commands?.length === 1 && commands[0].every((word) => word !== null)) {
           rule = { toolName, commandPrefix: { shell, args: commands[0] } };
         }
       } else {
-        if (rules.some((candidate) => ruleMatches(candidate, args))) return undefined;
+        if (rules.some((candidate) => ruleMatches(candidate, args))) return { kind: "allow" };
         rule = ruleFor(toolName, args);
       }
     }
 
+    return { kind: "ask", command, commandDanger, rule };
+  }
+
+  async gate(
+    call: { id: string; name: string },
+    args: unknown,
+    policy?: McpToolPolicy,
+    environment: ToolEnvironment = { commandShell: getCommandShell() },
+    describe?: () => PermissionDetails,
+  ): Promise<BeforeToolCallResult | undefined> {
+    const { name: toolName, id: callId } = call;
+    const access = this.accessFor(toolName, args, policy, environment);
+    if (access.kind === "allow") return undefined;
+    if (access.kind === "block") {
+      return {
+        block: true,
+        reason: "当前为只读模式，已拒绝该写操作（可在输入框左下角切换权限模式）",
+      };
+    }
+    const { command, commandDanger, rule } = access;
+    const details = describe?.();
     const decision = await this.ask({
       type: "permission_request",
       requestId: randomUUID(),
+      callId,
       toolName,
       label: policy?.label ?? labelOf(toolName),
-      inputSummary: summarizeArgs(args),
+      inputSummary: details?.file?.diff ? "" : summarizeArgs(args, Boolean(policy)),
       danger: Boolean(commandDanger) || isProtectedFile(toolName, args),
       commandDanger,
       workingDirectory: createToolPathResolver(environment.workingDirectory)("."),
       command,
+      commandShell: command === undefined ? undefined : environment.commandShell,
+      mcp: policy && { server: policy.serverName, tool: policy.toolName },
       rule,
+      ...details,
     });
     if (decision === "deny") return { block: true, reason: "用户拒绝了本次工具调用" };
     return undefined;
@@ -143,9 +173,9 @@ export class PermissionManager {
     });
   }
 
-  respond(requestId: string, decision: PermissionDecision): boolean {
+  respond(requestId: string, decision: PermissionDecision): PermissionRequest | undefined {
     const pending = this.pending.get(requestId);
-    if (!pending) return false;
+    if (!pending) return undefined;
     if (decision === "session" || decision === "global") {
       const { rule } = pending.request;
       if (!rule) throw new Error("此操作需要逐次审批。");
@@ -154,7 +184,7 @@ export class PermissionManager {
     }
     this.pending.delete(requestId);
     pending.resolve(decision);
-    return true;
+    return pending.request;
   }
 
   /** abort 时全部按拒绝处理，避免工具预检卡死 */

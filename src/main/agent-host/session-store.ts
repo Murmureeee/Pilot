@@ -39,6 +39,7 @@ import {
   SESSION_TRANSCRIPT_EXTENSION,
 } from "../constants";
 import { backupCorruptFile } from "../corrupt-file";
+import { toolRuleSchema } from "../settings/schema";
 import { readFileChange } from "../workspace/file-changes";
 import { legacyMentionParts } from "./mentions";
 import { completeToolResults } from "./recovery";
@@ -47,6 +48,7 @@ import { labelOf } from "./tools";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
 import type {
+  ApprovedToolResult,
   CheckpointAppend,
   ReferencedUserMessage,
   RunCheckpoint,
@@ -188,6 +190,14 @@ export function toUiMessages(
       part.state = message.isError ? "error" : "success";
       part.error = message.isError ? output || "工具执行失败" : undefined;
       if (typeof message.durationMs === "number") part.durationMs = message.durationMs;
+      const { pilotApproval } = message as ApprovedToolResult;
+      if (pilotApproval && ["once", "deny", "session", "global"].includes(pilotApproval.decision)) {
+        const rule = toolRuleSchema.safeParse(pilotApproval.rule);
+        part.approval = {
+          decision: pilotApproval.decision,
+          ...(rule.success && { rule: rule.data }),
+        };
+      }
       const change = readFileChange(message.toolName, details);
       if (change) part.fileChange = change.summary;
     }
@@ -515,7 +525,7 @@ export class SessionStore {
     if (!origin) return null;
     const { messages, checkpoint, gitChanges, compactions } = this.read(id);
     const transcript = checkpoint
-      ? [...completeToolResults(messages), ...checkpoint.pending]
+      ? [...completeToolResults(messages, checkpoint.approvals), ...checkpoint.pending]
       : messages;
     const meta = this.create(origin.workingDirectory);
     if (transcript.length > 0)
@@ -554,7 +564,9 @@ export class SessionStore {
 
   load(id: string): AgentMessage[] {
     const { messages, checkpoint } = this.read(id);
-    return checkpoint ? [...completeToolResults(messages), ...checkpoint.pending] : messages;
+    return checkpoint
+      ? [...completeToolResults(messages, checkpoint.approvals), ...checkpoint.pending]
+      : messages;
   }
 
   checkpoint(id: string): RunCheckpoint | undefined {

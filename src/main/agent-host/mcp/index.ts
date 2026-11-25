@@ -24,7 +24,7 @@ import { MissingMcpEnvironment, resolveImportedMcp } from "../../external-import
 import type { ImportedMcpConnection } from "../../external-import/types";
 import { decryptSecret } from "../../settings/secrets";
 import type { McpServerConfig, Settings } from "../../settings/types";
-import type { McpConnection, McpToolPolicy } from "./types";
+import type { McpConnection, McpTool, McpToolPolicy } from "./types";
 
 function readEncrypted<T>(stored?: string): T | undefined {
   if (!stored) return undefined;
@@ -70,11 +70,12 @@ function createTransport(
   });
 }
 
-function buildTool(client: McpClient, entry: Tool, name: string, serverName: string): AgentTool {
+function buildTool(client: McpClient, entry: Tool, name: string, serverName: string): McpTool {
   const label = `${serverName} / ${entry.title ?? entry.name}`;
   return {
     name,
     label,
+    remoteName: entry.name,
     description: entry.description ?? entry.name,
     parameters: normalizeMcpInputSchema(entry.inputSchema),
     executionMode: "sequential",
@@ -250,7 +251,12 @@ export class McpManager {
     for (const config of this.configs) {
       const tool = this.connections.get(config.id)?.tools.find((entry) => entry.name === name);
       if (tool) {
-        return { label: tool.label, requireConfirmation: config.policy === "confirm" };
+        return {
+          label: tool.label,
+          serverName: config.name,
+          toolName: tool.remoteName,
+          requireConfirmation: config.policy === "confirm",
+        };
       }
     }
     return undefined;

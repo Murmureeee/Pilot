@@ -9,7 +9,7 @@ import { int, bool, obj, opt, str } from "@earendil-works/pi-schema";
 import { readFileSnapshot, recordFileChange, textSnapshot } from "../../workspace/file-changes";
 import { TOOL_LABELS } from "./constants";
 import { truncate } from "./output";
-import type { ResolveToolPath } from "./types";
+import type { FileEdit, ResolveToolPath } from "./types";
 
 const MAX_READ_BYTES = 2 * 1024 * 1024;
 
@@ -78,6 +78,19 @@ const editFileParams = obj({
   replaceAll: opt(bool({ description: "替换全部匹配（默认仅替换第一处）" })),
 });
 
+export function applyFileEdit(raw: string, edit: FileEdit): { next: string; replaced: number } {
+  const { oldText, newText, replaceAll } = edit;
+  const count = raw.split(oldText).length - 1;
+  if (count === 0) throw new Error("oldText 未在文件中找到，请先 read_file 核对原文");
+  if (count > 1 && !replaceAll) {
+    throw new Error(`oldText 匹配了 ${count} 处，请扩大上下文使其唯一，或设 replaceAll=true`);
+  }
+  return {
+    next: replaceAll ? raw.replaceAll(oldText, newText) : raw.replace(oldText, newText),
+    replaced: replaceAll ? count : 1,
+  };
+}
+
 export function createEditFileTool(
   resolvePath: ResolveToolPath,
   workingDirectory?: string,
@@ -92,17 +105,8 @@ export function createEditFileTool(
       const original = readFileSync(abs);
       const stat = lstatSync(abs);
       const before = stat.isFile() && stat.nlink === 1 ? textSnapshot(original) : undefined;
-      const raw = original.toString("utf-8");
-      const count = raw.split(params.oldText).length - 1;
-      if (count === 0) throw new Error("oldText 未在文件中找到，请先 read_file 核对原文");
-      if (count > 1 && !params.replaceAll) {
-        throw new Error(`oldText 匹配了 ${count} 处，请扩大上下文使其唯一，或设 replaceAll=true`);
-      }
-      const next = params.replaceAll
-        ? raw.replaceAll(params.oldText, params.newText)
-        : raw.replace(params.oldText, params.newText);
+      const { next, replaced } = applyFileEdit(original.toString("utf-8"), params);
       writeFileSync(abs, next, "utf-8");
-      const replaced = params.replaceAll ? count : 1;
       return {
         content: [{ type: "text", text: `已在 ${abs} 中替换 ${replaced} 处` }],
         details: recordFileChange(abs, workingDirectory, before, next),

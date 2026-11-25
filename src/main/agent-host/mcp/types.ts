@@ -6,11 +6,17 @@ export interface McpConnection {
   client: McpClient;
   signature: string;
   ready: Promise<void>;
-  tools: AgentTool[];
+  tools: McpTool[];
   error?: string;
+}
+
+export interface McpTool extends AgentTool {
+  remoteName: string;
 }
 
 export interface McpToolPolicy {
   label: string;
+  serverName: string;
+  toolName: string;
   requireConfirmation: boolean;
 }

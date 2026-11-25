@@ -388,6 +388,7 @@ describe("agent-events adapter", () => {
     const first = {
       type: "permission_request" as const,
       requestId: "r1",
+      callId: "first",
       toolName: "bash",
       label: "执行命令",
       inputSummary: "{}",
@@ -397,6 +398,7 @@ describe("agent-events adapter", () => {
     const second: Extract<AgentRunEvent, { type: "permission_request" }> = {
       ...first,
       requestId: "r2",
+      callId: "second",
       danger: false,
       commandDanger: undefined,
       command: "pnpm test",
@@ -410,8 +412,25 @@ describe("agent-events adapter", () => {
     state = applyRunEvent(state, first);
     state = applyRunEvent(state, second);
     expect(state.pendingPermissions).toEqual([first, second]);
-    state = applyRunEvent(state, { type: "permission_resolved", requestId: first.requestId });
+    state = applyRunEvent(state, { type: "assistant_start", id: "s-1", timing });
+    state = applyRunEvent(state, {
+      type: "tool_call",
+      callId: first.callId,
+      toolName: first.toolName,
+      label: first.label,
+    });
+    state = applyRunEvent(state, {
+      type: "permission_resolved",
+      requestId: first.requestId,
+      callId: first.callId,
+      approval: { decision: "deny" },
+    });
     expect(state.pendingPermissions).toEqual([second]);
+    expect(state.messages[0].parts[0]).toMatchObject({
+      callId: first.callId,
+      state: "pending",
+      approval: { decision: "deny" },
+    });
     expect(state.status).toBe("waiting_approval");
     for (const status of ["streaming", "stopping", "idle"] as const) {
       expect(applyRunEvent(state, { type: "status", status }).pendingPermissions).toEqual([]);
@@ -437,6 +456,7 @@ describe("agent-events adapter", () => {
       {
         type: "permission_request",
         requestId: "a1",
+        callId: "a1",
         toolName: "bash",
         label: "Bash",
         inputSummary: "{}",

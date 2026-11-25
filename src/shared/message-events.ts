@@ -129,6 +129,8 @@ export function applyMessageEvent(messages: UiMessage[], event: AgentRunEvent): 
       }));
     case "file_change":
       return updateTool(messages, event.callId, (part) => ({ ...part, fileChange: event.change }));
+    case "permission_resolved":
+      return updateTool(messages, event.callId, (part) => ({ ...part, approval: event.approval }));
     case "plan":
       return applyPlanUpdate(messages, event.steps);
     default:

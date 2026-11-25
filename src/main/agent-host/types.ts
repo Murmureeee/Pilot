@@ -9,6 +9,7 @@ import type {
   ModelFailure,
   ModelRetryProgress,
   PermissionDecision,
+  PermissionFilePreview,
   PermissionRequest,
   SessionInstructionSources,
   SkillMeta,
@@ -16,6 +17,7 @@ import type {
   SessionRunResult,
   Snapshot,
   ToolRule,
+  ToolApproval,
   UiAgentEvent,
   UiMessage,
   UiUserPart,
@@ -91,9 +93,34 @@ export interface RunCheckpoint {
   startIndex: number;
   pending: ReferencedUserMessage[];
   actions: string[];
+  approvals?: RecordedApproval[];
   gitBaseline?: GitSnapshot;
   task?: VerificationTask;
   failure?: ModelFailure;
+}
+
+export interface RecordedApproval {
+  callId: string;
+  approval: ToolApproval;
+}
+
+export type ApprovedToolResult = ToolResultMessage & { pilotApproval?: ToolApproval };
+
+export type ToolAccess =
+  | { kind: "allow" }
+  | { kind: "block" }
+  | ({ kind: "ask" } & Pick<PermissionRequest, "command" | "commandDanger" | "rule">);
+
+export type PermissionDetails = Pick<PermissionRequest, "file" | "position">;
+
+export interface FileApprovalBaseline {
+  path: string;
+  before: string | null;
+}
+
+export interface FileApprovalReview {
+  file: PermissionFilePreview;
+  baseline?: FileApprovalBaseline;
 }
 
 export interface CheckpointAppend {

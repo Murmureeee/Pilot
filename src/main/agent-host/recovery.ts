@@ -6,9 +6,9 @@ import { resolve } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
 
-import type { FailedRun, InterruptedRun } from "@shared/contract";
+import type { FailedRun, InterruptedRun, ToolApproval } from "@shared/contract";
 
-import type { RunCheckpoint } from "./types";
+import type { ApprovedToolResult, RecordedApproval, RunCheckpoint } from "./types";
 
 export function interruptedRunOf(
   sessionId: string,
@@ -33,7 +33,19 @@ export function failedRunOf(
   }
 }
 
-export function completeToolResults(messages: AgentMessage[]): AgentMessage[] {
+export function approvalForCall(
+  approvals: RecordedApproval[] | undefined,
+  callId: string,
+): ToolApproval | undefined {
+  return Array.isArray(approvals)
+    ? approvals.findLast((entry) => entry?.callId === callId)?.approval
+    : undefined;
+}
+
+export function completeToolResults(
+  messages: AgentMessage[],
+  approvals?: RecordedApproval[],
+): AgentMessage[] {
   const assistantIndex = messages.findLastIndex((message) => message.role === "assistant");
   const assistant = messages[assistantIndex];
   if (assistant?.role !== "assistant" || !Array.isArray(assistant.content)) return messages;
@@ -45,7 +57,7 @@ export function completeToolResults(messages: AgentMessage[]): AgentMessage[] {
     if (message.role !== "toolResult") break;
     results.set(message.toolCallId, message);
   }
-  const missing: ToolResultMessage[] = [];
+  const missing: ApprovedToolResult[] = [];
   for (const call of assistant.content) {
     if (call.type !== "toolCall" || results.has(call.id)) continue;
     missing.push({
@@ -60,6 +72,7 @@ export function completeToolResults(messages: AgentMessage[]): AgentMessage[] {
       ],
       isError: true,
       timestamp: assistant.timestamp,
+      pilotApproval: approvalForCall(approvals, call.id),
     });
   }
   return missing.length

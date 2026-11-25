@@ -9,7 +9,7 @@ import type {
   BeforeToolCallResult,
   StreamFn,
 } from "@earendil-works/pi-agent-core";
-import type { AssistantMessageEvent, ToolResultMessage } from "@earendil-works/pi-ai";
+import { validateToolArguments, type AssistantMessageEvent } from "@earendil-works/pi-ai";
 
 import type {
   ActiveRun,
@@ -22,6 +22,7 @@ import type {
   SkillMeta,
   ToolRule,
   Snapshot,
+  ToolApproval,
   UiUserPart,
   VerificationTask,
 } from "@shared/contract";
@@ -48,10 +49,17 @@ import {
   compactionMarker,
   contextSize,
 } from "./context-compaction";
+import { previewFileApproval, verifyApprovedFile } from "./file-approval";
 import { capabilitiesFromModel } from "./model-capabilities";
 import { withModelRetry } from "./model-retry";
 import { PermissionManager } from "./permissions";
-import { actionFingerprint, completeToolResults, failedRunOf, interruptedRunOf } from "./recovery";
+import {
+  actionFingerprint,
+  approvalForCall,
+  completeToolResults,
+  failedRunOf,
+  interruptedRunOf,
+} from "./recovery";
 import { messageParts, messageText, toUiMessages } from "./session-store";
 import { skillCatalog } from "./skills";
 import { labelOf } from "./tools";
@@ -60,6 +68,9 @@ import { readPlanSteps } from "./tools/plan";
 import { createReadSkillTool } from "./tools/read-skill";
 import type {
   AgentRunOptions,
+  ApprovedToolResult,
+  FileApprovalBaseline,
+  PermissionDetails,
   ReferencedUserMessage,
   RunCheckpoint,
   SessionRunSettlement,
@@ -76,13 +87,15 @@ export class AgentRun {
   private readonly completion = Promise.withResolvers<void>();
   private readonly permissions: PermissionManager;
   private readonly previousActions: ReadonlySet<string>;
-  private readonly finishedTools = new Map<string, ToolResultMessage>();
+  private readonly finishedTools = new Map<string, ApprovedToolResult>();
+  private readonly previewedFiles = new Map<string, FileApprovalBaseline>();
   private readonly commandObservations: GitCommandObservation[] = [];
   private readonly listedSkills: ReadonlyMap<string, SkillMeta>;
   private readonly selectedSkillIds = new Set<string>();
   private readonly thinkingStarts = new Map<number, number>();
   private thinkingDurations: Record<number, number> = {};
   private turnStartedAt = Date.now();
+  private approvalIndex = 0;
   private gitFilesBefore?: GitCheckpointBase;
   private finishedGitChanges?: Promise<GitChangesView | null>;
   private persistError?: unknown;
@@ -203,8 +216,19 @@ export class AgentRun {
   }
 
   respondPermission(requestId: string, decision: PermissionDecision): void {
-    if (!this.permissions.respond(requestId, decision)) return;
-    this.send({ type: "permission_resolved", requestId });
+    const request = this.permissions.respond(requestId, decision);
+    if (!request) return;
+    const { callId } = request;
+    const approval: ToolApproval = {
+      decision,
+      rule: decision === "session" || decision === "global" ? request.rule : undefined,
+    };
+    if (decision === "deny") this.previewedFiles.delete(callId);
+    this.saveCheckpoint({
+      ...this.checkpoint,
+      approvals: [...(this.checkpoint.approvals ?? []), { callId, approval }],
+    });
+    this.send({ type: "permission_resolved", requestId, callId, approval });
     if (!this.permissions.hasPending()) this.sendStatus("streaming");
   }
 
@@ -257,10 +281,11 @@ export class AgentRun {
   }
 
   private async beforeToolCall(
-    { toolCall, args }: BeforeToolCallContext,
+    context: BeforeToolCallContext,
     signal?: AbortSignal,
   ): Promise<BeforeToolCallResult | undefined> {
     signal?.throwIfAborted();
+    const { toolCall, args } = context;
     const { environment, mcp } = this.deps;
     const action = actionFingerprint(toolCall.name, args, environment.workingDirectory);
     if (action && this.previousActions.has(action)) {
@@ -272,10 +297,11 @@ export class AgentRun {
     }
     if (this.persistError) throw this.persistError;
     const result = await this.permissions.gate(
-      toolCall.name,
+      toolCall,
       args,
       mcp.policyOf(toolCall.name),
       environment,
+      () => this.describePermission(context),
     );
     if (!result?.block && !signal?.aborted) {
       if (action && !this.checkpoint.actions.includes(action)) {
@@ -284,6 +310,61 @@ export class AgentRun {
       this.reportTool("tool_start", toolCall.id, toolCall.name, toolCall.arguments);
     }
     return result;
+  }
+
+  private describePermission({
+    assistantMessage,
+    toolCall,
+    args,
+  }: BeforeToolCallContext): PermissionDetails {
+    const { agent, environment, mcp } = this.deps;
+    const { workingDirectory } = environment;
+    const index = ++this.approvalIndex;
+    const start = assistantMessage.content.findIndex(
+      (part) => part.type === "toolCall" && part.id === toolCall.id,
+    );
+    let total = index;
+    if (start >= 0) {
+      for (const candidate of assistantMessage.content.slice(start + 1)) {
+        if (candidate.type !== "toolCall") continue;
+        const tool = agent.state.tools.find(({ name }) => name === candidate.name);
+        if (!tool) continue;
+        try {
+          const prepared = tool.prepareArguments?.(candidate.arguments) ?? candidate.arguments;
+          const input: unknown = validateToolArguments(tool, { ...candidate, arguments: prepared });
+          const action = actionFingerprint(candidate.name, input, workingDirectory);
+          if (action && this.previousActions.has(action)) continue;
+          if (
+            this.permissions.needsConfirmation(
+              candidate.name,
+              input,
+              mcp.policyOf(candidate.name),
+              environment,
+            )
+          )
+            total++;
+        } catch {
+          // Invalid calls are handled by pi before they reach the permission gate.
+        }
+      }
+    }
+    const review = previewFileApproval(toolCall.name, args, workingDirectory);
+    if (review?.baseline) this.previewedFiles.set(toolCall.id, review.baseline);
+    return { position: { index, total }, file: review?.file };
+  }
+
+  private guardApprovedFile(tool: AgentTool): AgentTool {
+    return {
+      ...tool,
+      execute: (id, args, signal, onUpdate) => {
+        const baseline = this.previewedFiles.get(id);
+        if (baseline) {
+          this.previewedFiles.delete(id);
+          verifyApprovedFile(baseline, args, this.deps.environment.workingDirectory);
+        }
+        return tool.execute(id, args, signal, onUpdate);
+      },
+    };
   }
 
   private async execute(): Promise<void> {
@@ -346,9 +427,12 @@ export class AgentRun {
         return;
       }
       // pi takes a snapshot of these tool declarations when starting the prompt.
-      const localTools = tools.map((tool) =>
-        tool.name === "bash" ? this.observeGitCommand(tool) : tool,
-      );
+      const localTools = tools.map((tool) => {
+        if (tool.name === "bash") return this.observeGitCommand(tool);
+        if (tool.name === "write_file" || tool.name === "edit_file")
+          return this.guardApprovedFile(tool);
+        return tool;
+      });
       if (this.listedSkills.size) {
         localTools.push(
           createReadSkillTool((id) => {
@@ -373,7 +457,10 @@ export class AgentRun {
             })
           : undefined;
       // Continue from the last user message or tool result when the user retries.
-      agent.state.messages = completeToolResults(failure ? messages.slice(0, -1) : messages);
+      agent.state.messages = completeToolResults(
+        failure ? messages.slice(0, -1) : messages,
+        this.checkpoint.approvals,
+      );
       await this.settle(agent.state.messages, failure);
     } catch (error) {
       if (started || !signal.aborted) {
@@ -673,6 +760,7 @@ export class AgentRun {
       } else if (message.role === "assistant") {
         this.thinkingStarts.clear();
         this.thinkingDurations = {};
+        this.approvalIndex = 0;
         this.send({
           type: "assistant_start",
           id: "s-" + this.deps.view.nextId++,
@@ -731,7 +819,9 @@ export class AgentRun {
 
     if (event.type === "tool_execution_end") {
       // Parallel tools publish completion before pi adds their result messages to the transcript.
-      const completedTool: ToolResultMessage = {
+      const { approvals } = this.checkpoint;
+      const approval = approvalForCall(approvals, event.toolCallId);
+      const completedTool: ApprovedToolResult = {
         role: "toolResult",
         toolCallId: event.toolCallId,
         toolName: event.toolName,
@@ -741,9 +831,16 @@ export class AgentRun {
         durationMs: event.durationMs,
         isError: event.isError,
         timestamp: Date.now(),
+        pilotApproval: approval,
       };
       this.finishedTools.set(event.toolCallId, completedTool);
-      this.saveCheckpoint(this.checkpoint, completedTool);
+      const checkpoint = approval
+        ? {
+            ...this.checkpoint,
+            approvals: approvals?.filter(({ callId }) => callId !== event.toolCallId),
+          }
+        : this.checkpoint;
+      this.saveCheckpoint(checkpoint, completedTool);
       if (event.toolName === PLAN_TOOL_NAME) {
         const steps = event.isError ? undefined : readPlanSteps(event.result.details);
         if (steps) this.send({ type: "plan", steps });
@@ -762,6 +859,9 @@ export class AgentRun {
     }
 
     if (event.type === "message_end" && event.message.role === "toolResult") {
+      const result: ApprovedToolResult = event.message;
+      const approval = this.finishedTools.get(result.toolCallId)?.pilotApproval;
+      if (approval) result.pilotApproval = approval;
       this.finishedTools.delete(event.message.toolCallId);
       const change = readFileChange(event.message.toolName, event.message.details);
       if (change)
@@ -780,7 +880,7 @@ export class AgentRun {
     }
   }
 
-  private saveCheckpoint(checkpoint = this.checkpoint, completedTool?: ToolResultMessage): void {
+  private saveCheckpoint(checkpoint = this.checkpoint, completedTool?: ApprovedToolResult): void {
     const { agent, store } = this.deps;
     const { sessionId } = this.state;
     const messages = agent.state.messages;

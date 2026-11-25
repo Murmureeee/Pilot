@@ -46,10 +46,19 @@ const request = (requestId: string): UiAgentEvent => ({
   type: "permission_request",
   run,
   requestId,
+  callId: requestId,
   toolName: "write_file",
   label: "Write file",
   inputSummary: "Do not include input details in the notice",
   danger: false,
+});
+
+const respond = (requestId: string): UiAgentEvent => ({
+  type: "permission_resolved",
+  run,
+  requestId,
+  callId: requestId,
+  approval: { decision: "once" },
 });
 
 function idle(result?: Exclude<NoticeKind, "approval"> | "stopped"): UiAgentEvent {
@@ -97,14 +106,14 @@ it("alerts once for a pending approval when the user leaves its chat", () => {
   expect(native.items).toHaveLength(1);
   const notice = native.items[0];
   expect(notice.options).toEqual({ title: "等待审批", body: "Working chat" });
-  controller.handleEvent({ type: "permission_resolved", run, requestId: "one" });
+  controller.handleEvent(respond("one"));
   expect(notice.close).not.toHaveBeenCalled();
   expect(window.flashFrame.mock.calls).toEqual(isWindows ? [[true]] : []);
   notice.emit("close", { reason: "timedOut" });
   notice.emit("click");
   expect(openSession).toHaveBeenCalledExactlyOnceWith("a");
   expect(window.flashFrame.mock.calls).toEqual(isWindows ? [[true], [false]] : []);
-  controller.handleEvent({ type: "permission_resolved", run, requestId: "two" });
+  controller.handleEvent(respond("two"));
   expect(native.items).toHaveLength(1);
 });
 
@@ -149,7 +158,7 @@ it("still asks the Windows taskbar for attention when native notifications are u
   native.supported = false;
   view.visible = null;
   controller.handleEvent(request("one"));
-  controller.handleEvent({ type: "permission_resolved", run, requestId: "one" });
+  controller.handleEvent(respond("one"));
   expect(native.items).toHaveLength(0);
   expect(window.flashFrame.mock.calls).toEqual(isWindows ? [[true], [false]] : []);
 });
