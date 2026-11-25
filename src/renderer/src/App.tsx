@@ -1,6 +1,6 @@
 // @env browser
 import { cn } from "cn";
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 
 import { ChatHeader } from "@renderer/components/ai/chat-header";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
@@ -15,7 +15,11 @@ import { useGitReview } from "@renderer/hooks/use-git-review";
 import { useStopShortcut } from "@renderer/hooks/use-stop-shortcut";
 import { useVerificationStatus } from "@renderer/hooks/use-verification-status";
 import { useWorkbenchCommands } from "@renderer/hooks/use-workbench-commands";
-import { REVIEW_THREE_COLUMN_WIDTH, REVIEW_TWO_COLUMN_WIDTH } from "@renderer/lib/constants";
+import {
+  REVIEW_PANEL_ID,
+  REVIEW_THREE_COLUMN_WIDTH,
+  REVIEW_TWO_COLUMN_WIDTH,
+} from "@renderer/lib/constants";
 import {
   changesForReply,
   latestFileChangesReply,
@@ -41,7 +45,7 @@ import type {
   PromptTemplateRequest,
   ReviewTab,
 } from "@renderer/lib/types";
-import { windowShortcutAction } from "@renderer/lib/window-shortcuts";
+import { isTerminalShortcut, windowShortcutAction } from "@renderer/lib/window-shortcuts";
 import {
   selectPlanReview,
   selectProjectDirectory,
@@ -57,6 +61,8 @@ import { SidebarPanel } from "@renderer/views/Sidebar";
 import { AppRail } from "@renderer/views/sidebar/AppRail";
 import { LOCALE_DETAILS } from "@shared/constants";
 import type { TranscriptLocation } from "@shared/contract";
+
+const TerminalPanel = lazy(() => import("@renderer/components/ai/terminal-panel"));
 
 export default function App(): JSX.Element {
   const view = useAgentStore((s) => s.view);
@@ -390,6 +396,17 @@ export default function App(): JSX.Element {
       } else if (key === "s" && event.shiftKey) {
         event.preventDefault();
         togglePanel();
+      } else if (isTerminalShortcut(event) && store.view === "chat" && canReview) {
+        if (event.repeat || store.paletteOpen || popupOwnsShortcut(event)) return;
+        event.preventDefault();
+        const trigger = document.activeElement;
+        activateReview(
+          "terminal",
+          trigger instanceof HTMLElement &&
+            !document.getElementById(REVIEW_PANEL_ID)?.contains(trigger)
+            ? trigger
+            : undefined,
+        );
       } else if (
         event.shiftKey &&
         (key === "d" || key === "t") &&
@@ -536,6 +553,17 @@ export default function App(): JSX.Element {
                     composerId={composerId}
                     visible={reviewOpen && tab === "verification"}
                   />
+                }
+                terminal={
+                  <Suspense
+                    fallback={
+                      <p className="px-3 py-4 text-xs text-muted-foreground">
+                        {t("正在加载终端…", locale)}
+                      </p>
+                    }
+                  >
+                    <TerminalPanel composerId={composerId} workingDirectory={workingDirectory} />
+                  </Suspense>
                 }
               />
             )}

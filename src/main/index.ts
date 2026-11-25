@@ -5,7 +5,11 @@ import { join } from "node:path";
 import { BrowserWindow, Menu, app, nativeTheme, session, shell } from "electron";
 
 import { APP_NAME, DEFAULT_LOCALE } from "../shared/constants";
-import { AGENT_EVENT_CHANNEL, UPDATE_STATUS_CHANNEL } from "../shared/contract";
+import {
+  AGENT_EVENT_CHANNEL,
+  TERMINAL_EVENT_CHANNEL,
+  UPDATE_STATUS_CHANNEL,
+} from "../shared/contract";
 import { AgentHost } from "./agent-host/host";
 import { McpManager } from "./agent-host/mcp";
 import { SessionStore } from "./agent-host/session-store";
@@ -34,6 +38,7 @@ import { getLogLevel, loadSettings, saveSettings } from "./settings";
 import type { Settings } from "./settings/types";
 import { createSleepBlocker } from "./sleep-blocker";
 import { TaskNotifications } from "./task-notifications";
+import { TerminalManager } from "./terminal";
 import { DesktopUpdater } from "./updater";
 import { VerificationManager } from "./verification";
 import { revealWindow } from "./window";
@@ -161,7 +166,13 @@ function startDesktop(): void {
   };
   const store = new SessionStore(sessionsDir);
   const syncSleepBlocker = (): void =>
-    setSleepBlocked(host.hasActiveRun() || verification.hasActiveRuns());
+    setSleepBlocked(
+      host.hasActiveRun() || verification.hasActiveRuns() || terminal.hasActiveProcesses(),
+    );
+  const terminal = new TerminalManager(
+    (event) => sendToRenderers(TERMINAL_EVENT_CHANNEL, event),
+    syncSleepBlocker,
+  );
   const verification = new VerificationManager(
     join(sessionsDir, "verification"),
     (result) => sendToRenderers(AGENT_EVENT_CHANNEL, { type: "verification_updated", result }),
@@ -181,6 +192,7 @@ function startDesktop(): void {
     onActivityChanged: syncSleepBlocker,
     skillsDir,
     mcp,
+    terminal,
     request: network.fetch,
   });
 
@@ -202,6 +214,7 @@ function startDesktop(): void {
     getWindow: () => mainWindow,
     host,
     verification,
+    terminal,
     mcp,
     updater,
     log,
@@ -245,6 +258,7 @@ function startDesktop(): void {
     mcp,
     updater,
     verification,
+    terminal,
     exit,
     isDev,
   });

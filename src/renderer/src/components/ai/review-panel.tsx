@@ -95,6 +95,7 @@ export function ReviewPanel({
   changes,
   files,
   verification,
+  terminal,
 }: {
   open: boolean;
   overlay: boolean;
@@ -109,6 +110,7 @@ export function ReviewPanel({
   changes: ReactNode;
   files: ReactNode;
   verification: ReactNode;
+  terminal: ReactNode;
 }): JSX.Element {
   const locale = useLocale();
   const tab = useReviewStore((state) => state.tab);
@@ -124,7 +126,7 @@ export function ReviewPanel({
     verificationStatus !== "success" &&
     verificationStatus !== "stopped" &&
     verificationStatus !== "interrupted";
-  const contents = { changes, files, verification };
+  const contents = { changes, files, verification, terminal };
 
   useLayoutEffect(() => {
     if (open) setVisited((tabs) => (tabs.includes(tab) ? tabs : [...tabs, tab]));
@@ -191,7 +193,7 @@ export function ReviewPanel({
           <Tabs.List
             activateOnFocus
             aria-label={t("审查面板", locale)}
-            className="flex min-w-0 flex-1 items-center gap-1"
+            className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
           >
             {REVIEW_TABS.map(({ value, label }) => (
               <Tabs.Tab

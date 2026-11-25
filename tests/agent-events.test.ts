@@ -1,11 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   applyAgentEvent,
   initialAgentUiState,
   type AgentUiState,
 } from "../src/renderer/src/adapters/agent-events";
-import type { AgentRunEvent, SessionMeta, UiMessage } from "../src/shared/contract";
+import type {
+  AgentRunEvent,
+  SessionMeta,
+  TerminalEvent,
+  UiAgentEvent,
+  UiMessage,
+} from "../src/shared/contract";
 
 const run = { runId: "running-1", sessionId: "a" };
 const timing = { runId: run.runId, startedAt: 1000 };
@@ -22,6 +28,9 @@ function applyRunEvent(state: AgentUiState, event: AgentRunEvent): AgentUiState 
 }
 
 describe("agent-events adapter", () => {
+  it("keeps terminal output and lifecycle outside the transcript and usage event stream", () => {
+    expectTypeOf<Extract<TerminalEvent, UiAgentEvent>>().toBeNever();
+  });
   it("retains image-only user messages in the visible transcript", () => {
     const message: UiMessage = {
       id: "image",

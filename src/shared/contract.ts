@@ -72,6 +72,12 @@ export const IPC = {
   sessionStartVerification: "session:start-verification",
   sessionStopVerification: "session:stop-verification",
   sessionRerunVerification: "session:rerun-verification",
+  sessionTerminals: "session:terminals",
+  sessionOpenTerminal: "session:open-terminal",
+  sessionTerminalOutput: "session:terminal-output",
+  sessionWriteTerminal: "session:write-terminal",
+  sessionResizeTerminal: "session:resize-terminal",
+  sessionStopTerminal: "session:stop-terminal",
   settingsModelCatalog: "settings:model-catalog",
   settingsTestProvider: "settings:test-provider",
   settingsPickWorkingDirectory: "settings:pick-working-directory",
@@ -176,6 +182,7 @@ export interface AppInfo {
 /** 主进程 → 渲染层的事件推送通道（webContents.send） */
 export const AGENT_EVENT_CHANNEL = "agent:event";
 export const UPDATE_STATUS_CHANNEL = "app:update-status";
+export const TERMINAL_EVENT_CHANNEL = "session:terminal-event";
 
 export type UpdateStatus =
   | { state: "unavailable" | "idle" | "checking" | "current" }
@@ -651,6 +658,35 @@ export interface MessageRollbackPreview {
 export type ThemeSetting = "light" | "dark" | "system";
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
 export type CommandShell = "powershell" | "bash";
+
+type TerminalStatus = "running" | "stopping" | "success" | "failed" | "stopped";
+
+export interface TerminalSize {
+  columns: number;
+  rows: number;
+}
+
+export interface TerminalRecord {
+  id: string;
+  composerId: string;
+  workingDirectory: string;
+  shell: CommandShell;
+  source: "user" | "agent";
+  command?: string;
+  status: TerminalStatus;
+  exitCode?: number;
+  error?: string;
+}
+
+export interface TerminalOutput {
+  offset: number;
+  data: string;
+}
+
+export type TerminalEvent =
+  | { type: "updated"; record: TerminalRecord }
+  | { type: "removed"; composerId: string; id: string }
+  | { type: "output"; composerId: string; id: string; output: TerminalOutput };
 
 export const VERIFICATION_KINDS = ["test", "typecheck", "build"] as const;
 export type VerificationKind = (typeof VERIFICATION_KINDS)[number];

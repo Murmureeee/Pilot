@@ -25,7 +25,7 @@ vi.mock("electron", () => ({
   ipcMain: {},
 }));
 
-function setupExit(agentActive = true, verificationActive = true) {
+function setupExit(agentActive = true, verificationActive = true, terminalActive = false) {
   const win = Object.assign(new EventEmitter(), { isDestroyed: () => false, webContents: {} });
   const host = {
     hasActiveRun: () => agentActive,
@@ -33,6 +33,10 @@ function setupExit(agentActive = true, verificationActive = true) {
   };
   const verification = {
     hasActiveRuns: () => verificationActive,
+    stopAll: vi.fn<() => Promise<void>>(async () => {}),
+  };
+  const terminal = {
+    hasActiveProcesses: () => terminalActive,
     stopAll: vi.fn<() => Promise<void>>(async () => {}),
   };
   const mcp = { close: vi.fn<() => Promise<void>>(async () => {}) };
@@ -45,14 +49,22 @@ function setupExit(agentActive = true, verificationActive = true) {
   };
   const log = { write: vi.fn<DiagnosticLog["write"]>() };
   const window = win as unknown as BrowserWindow;
-  const exit = new DesktopExit({ getWindow: () => window, host, verification, mcp, updater, log });
+  const exit = new DesktopExit({
+    getWindow: () => window,
+    host,
+    verification,
+    terminal,
+    mcp,
+    updater,
+    log,
+  });
   exit.watchWindow(window);
   const requestQuit = (): ReturnType<typeof vi.fn<() => void>> => {
     const preventDefault = vi.fn<() => void>();
     appOn.mock.calls[0][1]({ preventDefault });
     return preventDefault;
   };
-  return { exit, win, host, verification, mcp, updater, log, requestQuit };
+  return { exit, win, host, verification, terminal, mcp, updater, log, requestQuit };
 }
 
 beforeEach(() => {
@@ -88,7 +100,7 @@ it("keeps tasks running when a single quit confirmation is cancelled", async () 
   expect(() => exit.checkWorkAllowed()).not.toThrow();
 });
 
-it("waits for both cleanup operations before quitting and blocks new work during cleanup", async () => {
+it("waits for all cleanup operations before quitting and blocks new work during cleanup", async () => {
   const { exit, host, verification, mcp, requestQuit } = setupExit();
   const agentStopped = Promise.withResolvers<void>();
   const verificationStopped = Promise.withResolvers<void>();
@@ -107,6 +119,23 @@ it("waits for both cleanup operations before quitting and blocks new work during
   await vi.waitFor(() => expect(appQuit).toHaveBeenCalledOnce());
   expect(mcp.close).toHaveBeenCalledBefore(appQuit);
   expect(requestQuit()).not.toHaveBeenCalled();
+});
+
+it("confirms exit with only a terminal open and waits for it to finish stopping", async () => {
+  const { terminal, requestQuit } = setupExit(false, false, true);
+  const stopped = Promise.withResolvers<void>();
+  terminal.stopAll.mockReturnValue(stopped.promise);
+  showMessageBox.mockResolvedValueOnce({ response: 0, checkboxChecked: false });
+  requestQuit();
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(showMessageBox.mock.calls[0][1]?.detail).toContain("有终端或后台命令在运行。");
+  expect(terminal.stopAll).not.toHaveBeenCalled();
+  showMessageBox.mockResolvedValueOnce({ response: 1, checkboxChecked: false });
+  requestQuit();
+  await vi.waitFor(() => expect(terminal.stopAll).toHaveBeenCalledOnce());
+  expect(appQuit).not.toHaveBeenCalled();
+  stopped.resolve();
+  await vi.waitFor(() => expect(appQuit).toHaveBeenCalledOnce());
 });
 
 it("installs an update only after consent and cleanup, leaving a cancelled update ready", async () => {

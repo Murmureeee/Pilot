@@ -1,5 +1,6 @@
 // @env node
 import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
 
 import type {
   AgentEvent,
@@ -64,6 +65,8 @@ import {
 import { messageParts, messageText, toUiMessages } from "./session-store";
 import { skillCatalog } from "./skills";
 import { isReadOnly, labelOf } from "./tools";
+import { createBackgroundTools } from "./tools/background";
+import { createBashTool } from "./tools/bash";
 import { PLAN_TOOL_NAME, PROPOSE_PLAN_TOOL_NAME } from "./tools/constants";
 import { proposePlanTool, readPlanProposal, readPlanSteps } from "./tools/plan";
 import { createReadSkillTool } from "./tools/read-skill";
@@ -379,8 +382,9 @@ export class AgentRun {
   }
 
   private async execute(): Promise<void> {
-    const { agent, initialMessage, store, tools } = this.deps;
+    const { agent, initialMessage, store, tools, terminal, environment } = this.deps;
     const { runId, sessionId } = this.state;
+    const run = { runId, sessionId };
     const { signal } = this.preparation;
     const unsubscribe = agent.subscribe((event) => this.onAgentEvent(event));
     agent.beforeToolCall = (context, toolSignal) => this.beforeToolCall(context, toolSignal);
@@ -442,12 +446,27 @@ export class AgentRun {
       // pi takes a snapshot of these tool declarations when starting the prompt.
       const available = this.planning ? tools.filter(({ name }) => isReadOnly(name)) : tools;
       const localTools = available.map((tool) => {
-        if (tool.name === "bash") return this.observeGitCommand(tool);
+        if (tool.name === "bash") {
+          const bash = terminal
+            ? createBashTool(environment, (command, toolSignal) => {
+                signal.throwIfAborted();
+                return terminal.startBackground(
+                  run,
+                  environment.workingDirectory ?? homedir(),
+                  environment.commandShell,
+                  command,
+                  toolSignal,
+                );
+              })
+            : tool;
+          return this.observeGitCommand(bash);
+        }
         if (tool.name === "write_file" || tool.name === "edit_file")
           return this.guardApprovedFile(tool);
         return tool;
       });
       if (this.planning) localTools.push(proposePlanTool);
+      else if (terminal) localTools.push(...createBackgroundTools(terminal, run));
       if (this.listedSkills.size) {
         localTools.push(
           createReadSkillTool((id) => {
@@ -503,6 +522,9 @@ export class AgentRun {
         }
       }
     } finally {
+      await terminal?.stopRun(run).catch(() => {
+        this.send({ type: "error", message: "未能停止后台命令。请在终端页签重试。" });
+      });
       if (this.interruptedForExit && this.ownsCheckpoint) {
         try {
           this.saveCheckpoint();
@@ -945,13 +967,19 @@ export class AgentRun {
       ...tool,
       execute: async (...args) => {
         const directory = this.state.workingDirectory;
-        if (!this.gitFilesBefore || !directory) return tool.execute(...args);
+        const { terminal } = this.deps;
+        if (!this.gitFilesBefore || !directory || terminal?.hasActiveProcesses())
+          return tool.execute(...args);
+        const activity = terminal?.startedProcesses;
         const before = await captureGitSnapshot(directory);
         args[2]?.throwIfAborted();
         try {
           return await tool.execute(...args);
         } finally {
-          this.commandObservations.push({ before, after: await captureGitSnapshot(directory) });
+          const after = await captureGitSnapshot(directory);
+          // Concurrent terminal writes cannot be attributed to this command.
+          if (terminal?.startedProcesses === activity)
+            this.commandObservations.push({ before, after });
         }
       },
     };
@@ -977,40 +1005,46 @@ export class AgentRun {
 
   private async settle(messages: AgentMessage[], failure?: ModelFailure): Promise<void> {
     const { runId, sessionId, workingDirectory } = this.state;
-    const reviewed = captureGitSnapshot(workingDirectory ?? undefined).then(async (current) => {
-      const view = compareGitSnapshots(
-        this.checkpoint.gitBaseline,
-        current,
-        "finished",
-        this.resumed,
-      );
-      if (!view) return null;
-      const checkpoint =
-        workingDirectory && current && "root" in current
-          ? await createGitTaskCheckpoint(
-              runId,
-              workingDirectory,
-              this.checkpoint.gitBaseline,
-              current,
-              this.gitFilesBefore,
-              view,
-              this.recordedGitChanges(
+    const stopped = this.deps.terminal?.stopRun(this.state) ?? Promise.resolve();
+    const reviewed = stopped
+      .then(() => captureGitSnapshot(workingDirectory ?? undefined))
+      .then(async (current) => {
+        const view = compareGitSnapshots(
+          this.checkpoint.gitBaseline,
+          current,
+          "finished",
+          this.resumed,
+        );
+        if (!view) return null;
+        const checkpoint =
+          workingDirectory && current && "root" in current
+            ? await createGitTaskCheckpoint(
+                runId,
                 workingDirectory,
-                current.root,
-                messages.slice(this.checkpoint.startIndex),
-              ),
-              this.commandObservations,
-            )
-          : undefined;
-      return {
-        type: "pilot_git_changes" as const,
-        workingDirectory,
-        view,
-        checkpoint,
-        snapshot: checkpoint ? undefined : current,
-      };
-    });
-    this.finishedGitChanges = reviewed.then((saved) => (saved ? finishedGitView(saved) : null));
+                this.checkpoint.gitBaseline,
+                current,
+                this.gitFilesBefore,
+                view,
+                this.recordedGitChanges(
+                  workingDirectory,
+                  current.root,
+                  messages.slice(this.checkpoint.startIndex),
+                ),
+                this.commandObservations,
+              )
+            : undefined;
+        return {
+          type: "pilot_git_changes" as const,
+          workingDirectory,
+          view,
+          checkpoint,
+          snapshot: checkpoint ? undefined : current,
+        };
+      });
+    this.finishedGitChanges = reviewed.then(
+      (saved) => (saved ? finishedGitView(saved) : null),
+      () => null,
+    );
     const changes = await reviewed;
     if (this.interruptedForExit) return;
     const checkpoint = failure ? { ...this.checkpoint, failure } : undefined;

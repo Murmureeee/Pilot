@@ -29,6 +29,7 @@ import type {
 } from "@shared/contract";
 
 import type { Settings } from "../settings/types";
+import type { TerminalManager } from "../terminal";
 import type {
   GitCheckpointFile,
   GitCommitPlan,
@@ -56,6 +57,7 @@ export interface HostDeps {
   onActivityChanged?: () => void;
   skillsDir: string;
   mcp: McpManager;
+  terminal?: TerminalManager;
   request?: typeof globalThis.fetch;
 }
 
@@ -70,7 +72,7 @@ export interface AgentSessionView {
 
 export interface AgentRunOptions extends Pick<
   HostDeps,
-  "store" | "mcp" | "broadcast" | "getSettings" | "saveSettings" | "request"
+  "store" | "mcp" | "terminal" | "broadcast" | "getSettings" | "saveSettings" | "request"
 > {
   agent: Agent;
   sessionId: string;

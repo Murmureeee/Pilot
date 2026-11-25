@@ -13,11 +13,17 @@ import type {
   SessionMeta,
   SettingsInput,
   SkillMeta,
+  TerminalEvent,
   ThemeSetting,
   UiAgentEvent,
   UpdateStatus,
 } from "@shared/contract";
-import { AGENT_EVENT_CHANNEL, IPC, UPDATE_STATUS_CHANNEL } from "@shared/contract";
+import {
+  AGENT_EVENT_CHANNEL,
+  IPC,
+  TERMINAL_EVENT_CHANNEL,
+  UPDATE_STATUS_CHANNEL,
+} from "@shared/contract";
 
 const api: PiApi = {
   ping: (request: PingRequest) => ipcRenderer.invoke(IPC.ping, request),
@@ -124,6 +130,22 @@ const api: PiApi = {
     ipcRenderer.invoke(IPC.sessionStopVerification, id, runId),
   sessionRerunVerification: (id, runId) =>
     ipcRenderer.invoke(IPC.sessionRerunVerification, id, runId),
+  sessionTerminals: (id) => ipcRenderer.invoke(IPC.sessionTerminals, id),
+  sessionOpenTerminal: (id, directory, size) =>
+    ipcRenderer.invoke(IPC.sessionOpenTerminal, id, directory, size),
+  sessionTerminalOutput: (id, terminalId) =>
+    ipcRenderer.invoke(IPC.sessionTerminalOutput, id, terminalId),
+  sessionWriteTerminal: (id, terminalId, data) =>
+    ipcRenderer.invoke(IPC.sessionWriteTerminal, id, terminalId, data),
+  sessionResizeTerminal: (id, terminalId, size) =>
+    ipcRenderer.invoke(IPC.sessionResizeTerminal, id, terminalId, size),
+  sessionStopTerminal: (id, terminalId) =>
+    ipcRenderer.invoke(IPC.sessionStopTerminal, id, terminalId),
+  onTerminalEvent: (callback) => {
+    const listener = (_event: unknown, event: TerminalEvent): void => callback(event);
+    ipcRenderer.on(TERMINAL_EVENT_CHANNEL, listener);
+    return () => ipcRenderer.removeListener(TERMINAL_EVENT_CHANNEL, listener);
+  },
   settingsGet: () => ipcRenderer.invoke(IPC.settingsGet),
   settingsSave: (input: SettingsInput) => ipcRenderer.invoke(IPC.settingsSave, input),
   settingsSetPromptTemplates: (templates) =>

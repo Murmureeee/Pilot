@@ -386,8 +386,17 @@ export class AgentHost {
     }
   }
 
-  private checkComposerId(id: string): void {
+  checkComposerId(id: string): void {
     if (id !== this.composerId) throw new Error("会话已切换，请重试。");
+  }
+
+  prepareTerminal(composerId: string, expectedDirectory: string): string {
+    this.checkComposerId(composerId);
+    if (this.getWorkingDirectory() !== expectedDirectory)
+      throw new Error("工作目录已变更，请重新打开终端。");
+    const cwd = createToolPathResolver(expectedDirectory)(".");
+    if (!this.sessionId) this.deps.store.saveNewChatDraft(this.newChatDraft);
+    return cwd;
   }
 
   verificationScope(
@@ -803,6 +812,7 @@ export class AgentHost {
   /** 删除会话；删除当前会话时回到草稿态（不新建会话文件） */
   async deleteSession(id: string): Promise<Snapshot> {
     if (this.run?.state.sessionId === id) await this.stopOwnedRun(id);
+    await this.deps.terminal?.removeComposer(id);
     const directory = this.deps.store.getMeta(id)?.workingDirectory;
     this.deps.store.remove(id);
     this.sessionRules.delete(id);
@@ -816,7 +826,10 @@ export class AgentHost {
   }
 
   newSession(): Snapshot {
-    this.switchSession(null, this.emptyDraft(this.getProjectDirectory()));
+    const directory = this.getProjectDirectory();
+    const previous = this.deps.store.newChatDraft(directory ?? null);
+    if (previous) this.deps.terminal?.removeComposer(previous.id).catch(() => {});
+    this.switchSession(null, this.emptyDraft(directory));
     return this.publishSnapshot();
   }
 

@@ -1,8 +1,11 @@
 // @env node
+import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
+import type { Readable } from "node:stream";
 
 import type { CommandShell } from "../../shared/contract";
+import { createToolPathResolver } from "./paths";
 
 export function getCommandShell(shell?: CommandShell): CommandShell {
   return process.platform === "win32" && shell !== "bash" ? "powershell" : "bash";
@@ -14,6 +17,29 @@ export function shellExecutable(shell: CommandShell): string {
   const bash = findGitBash();
   if (!bash) throw new Error("找不到 Git Bash。请安装 Git for Windows，或切换到 PowerShell。");
   return bash;
+}
+
+export function launchCommand(
+  commandShell: CommandShell,
+  workingDirectory: string | undefined,
+  command: string,
+): ChildProcessByStdio<null, Readable, Readable> {
+  const cwd = createToolPathResolver(workingDirectory)(".");
+  const args =
+    commandShell === "powershell"
+      ? [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; " + command,
+        ]
+      : ["--noprofile", "--norc", "-c", command];
+  return spawn(shellExecutable(commandShell), args, {
+    cwd,
+    detached: process.platform !== "win32",
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
 }
 
 export function findGitBash(): string | undefined {

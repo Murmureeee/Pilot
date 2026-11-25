@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { stripVTControlCharacters } from "node:util";
 
 const wide = { width: 1100, height: 750 };
 const narrow = { width: 720, height: 480 };
@@ -32,7 +34,7 @@ const locales = [
     theme: "主题",
     light: "亮色",
     dark: "暗色",
-    tabs: ["变更", "文件", "验证"],
+    tabs: ["变更", "文件", "验证", "终端"],
     back: "返回对话",
     plan: "等待确认计划",
     editPlan: "编辑计划",
@@ -47,7 +49,7 @@ const locales = [
     theme: "Theme",
     light: "Light",
     dark: "Dark",
-    tabs: ["Changes", "Files", "Verify"],
+    tabs: ["Changes", "Files", "Verify", "Terminal"],
     back: "Back to chat",
     plan: "Plan awaiting confirmation",
     editPlan: "Edit plan",
@@ -302,10 +304,11 @@ async function verifyReviewLayout(page, locale, overlay) {
   await review.waitFor();
   assert.equal(await review.getAttribute("data-review-layout"), overlay ? "overlay" : "split");
   assert.equal(await page.locator("main").evaluate((node) => node.inert), overlay);
-  const [changes, files, validation] = locale.tabs;
+  const [changes, files, validation, terminal] = locale.tabs;
   await assertFits(review.getByRole("tab", { name: new RegExp("^" + changes) }));
   await assertFits(review.getByRole("tab", { name: files, exact: true }));
   await assertFits(review.getByRole("tab", { name: validation, exact: true }));
+  await assertFits(review.getByRole("tab", { name: terminal, exact: true }));
   if (overlay) await assertFits(button(review, locale.back));
   await page.waitForFunction(() =>
     document.activeElement?.matches('[role="tab"][aria-selected="true"]'),
@@ -386,6 +389,239 @@ function sendTool(completion, id, name, args) {
     ],
   });
   completion.finish("tool_calls");
+}
+
+function terminalRecords(page, composerId) {
+  return page.evaluate((id) => window.pi.sessionTerminals(id), composerId);
+}
+
+function terminalOutput(page, record) {
+  return page.evaluate(
+    ({ composerId, id }) => window.pi.sessionTerminalOutput(composerId, id),
+    { composerId: record.composerId, id: record.id },
+  );
+}
+
+function terminalStatus(page, status) {
+  return page.locator('[data-terminal-panel] [data-terminal-status="' + status + '"]');
+}
+
+async function assertTerminalFits(page) {
+  const screen = page.locator("[data-terminal-screen]");
+  await screen.waitFor();
+  await page.waitForFunction(() => {
+    const viewport = document.querySelector("[data-terminal-screen] .xterm-screen");
+    const wrapper = viewport?.closest("[data-terminal-screen]");
+    if (!viewport || !wrapper) return false;
+    const bounds = viewport.getBoundingClientRect();
+    const region = wrapper.getBoundingClientRect();
+    return bounds.width > 0 && bounds.right <= region.right && bounds.bottom <= region.bottom;
+  });
+  await assertFits(screen);
+}
+
+async function waitForTerminalOutput(page, record, pattern) {
+  const until = Date.now() + 12_000;
+  let text;
+  do {
+    text = stripVTControlCharacters((await terminalOutput(page, record)).data);
+    if (pattern.test(text)) return text;
+    await delay(100);
+  } while (Date.now() < until);
+  assert.match(text, pattern);
+}
+
+async function typeTerminal(page, command) {
+  const field = page.locator("[data-terminal-screen] .xterm-helper-textarea");
+  await field.focus();
+  await page.keyboard.type(command);
+  await field.press("Enter");
+}
+
+async function chooseCommandShell(page, shell) {
+  await openSettings(page, locales[1], "General");
+  const control = page.locator("#command-shell");
+  const selected = await control.innerText();
+  if (selected !== shell) {
+    await control.click();
+    await page.getByRole("option", { name: shell, exact: true }).click();
+    const save = button(page.getByRole("main"), "Save");
+    await save.click();
+    await page.getByRole("main").getByText("Saved", { exact: true }).waitFor();
+  }
+  await page.keyboard.press("Control+l");
+  await page.waitForFunction(() => document.activeElement?.matches("[data-composer-editor]"));
+}
+
+export async function verifyInteractiveTerminal(page, window, app, project) {
+  await resize(page, window, wide);
+  await chooseCommandShell(page, "PowerShell");
+  await page.evaluate((directory) => window.pi.sessionUseRecentProject(directory), project);
+  await waitForProjectDraft(page, project);
+  await button(page.getByRole("main"), basename(project)).waitFor();
+  const initial = await page.evaluate(() => window.pi.getSnapshot());
+  await editor(page).focus();
+  await page.keyboard.press("Control+Backquote");
+  const tab = page.getByRole("tab", { name: "Terminal", selected: true });
+  await tab.waitFor();
+  await page.waitForFunction(() => document.activeElement?.getAttribute("role") === "tab");
+  assert.deepEqual(await terminalRecords(page, initial.composerId), []);
+  const open = button(page.locator("[data-terminal-panel]"), "Open terminal");
+  await open.press("Enter");
+  await terminalStatus(page, "running").waitFor();
+  await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Terminal input");
+  const [powershell] = await terminalRecords(page, initial.composerId);
+  assert.equal(powershell.shell, "powershell");
+  assert.equal(powershell.workingDirectory, project);
+  const draft = await page.evaluate(() => window.pi.getSnapshot());
+  assert.equal(draft.sessionId, null);
+  assert.equal(draft.composerId, initial.composerId);
+  assert.equal(draft.sessions.length, initial.sessions.length);
+
+  await waitForTerminalOutput(page, powershell, /PS .*>/);
+  await typeTerminal(page, "('PS-' + 'DIR=') + (Split-Path -Leaf (Get-Location).Path)");
+  await waitForTerminalOutput(page, powershell, new RegExp("PS-DIR=" + basename(project)));
+  await typeTerminal(page, "('PILOT-' + 'INT'); Start-Sleep -Seconds 120");
+  await waitForTerminalOutput(page, powershell, /PILOT-INT/);
+  await page.keyboard.press("Control+c");
+  await waitForTerminalOutput(page, powershell, /PILOT-INT[\s\S]*PS .*>/);
+  await button(page.locator("[data-terminal-panel]"), "Copy output").press("Enter");
+  await page.getByText("Output copied", { exact: true }).waitFor();
+  const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
+  assert.match(copied, new RegExp("PS-DIR=" + basename(project)));
+
+  await page.locator("[data-terminal-screen] .xterm-helper-textarea").focus();
+  await page.keyboard.press("Control+Backquote");
+  await page.waitForFunction(() => document.activeElement?.getAttribute("role") === "tab");
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => document.activeElement?.matches("[data-composer-editor]"));
+
+  let current = locales[1];
+  for (const size of [wide, narrow]) {
+    await resize(page, window, size);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        await page.keyboard.press("Control+Backquote");
+        const panel = page.locator("[data-terminal-panel]");
+        await assertTerminalFits(page);
+        for (const control of await panel.getByRole("button").all()) await assertFits(control);
+        await assertFits(page.getByRole("tab", { name: locale.tabs[3], selected: true }));
+        await page.keyboard.press("Escape");
+        await panel.waitFor({ state: "hidden" });
+      }
+    }
+  }
+
+  await resize(page, window, narrow, 1.5);
+  await page.keyboard.press("Control+Backquote");
+  await assertTerminalFits(page);
+  await assertFits(button(page.locator("[data-terminal-panel]"), "Stop terminal"));
+  await page.keyboard.press("Escape");
+  await resize(page, window, wide);
+  await choosePalette(page, "review-terminal", /^Open the Terminal tab/);
+  await terminalStatus(page, "running").waitFor();
+  await button(page.locator("[data-terminal-panel]"), "Stop terminal").press("Enter");
+  await terminalStatus(page, "stopped").waitFor();
+  await page.getByRole("tab", { name: "Terminal", selected: true }).press("Escape");
+
+  await chooseCommandShell(page, "Git Bash");
+  await page.keyboard.press("Control+Backquote");
+  await button(page.locator("[data-terminal-panel]"), "Open terminal").press("Enter");
+  await terminalStatus(page, "running").waitFor();
+  await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Terminal input");
+  const bash = (await terminalRecords(page, initial.composerId)).at(-1);
+  assert.equal(bash.shell, "bash");
+  await waitForTerminalOutput(page, bash, /bash[^$]*\$/);
+  await typeTerminal(page, "printf 'BASH-%s\\n' \"$(basename \"$PWD\")\"");
+  await waitForTerminalOutput(page, bash, new RegExp("BASH-" + basename(project)));
+  await typeTerminal(page, "exit 7");
+  await terminalStatus(page, "failed").waitFor();
+  await page.getByRole("alert").getByText(/exited with code 7/).waitFor();
+  await page.getByRole("tab", { name: "Terminal", selected: true }).press("Escape");
+  await chooseCommandShell(page, "PowerShell");
+}
+
+export async function verifyBackgroundTerminal(page, model, project) {
+  const initial = await page.evaluate(() => window.pi.getSnapshot());
+  await send(page, "Start a background fixture command and report its result.");
+  const first = await model.nextCompletion();
+  for (const name of ["bash", "read_background_command", "stop_background_command"])
+    assert.ok(first.input.tools.some((tool) => tool.function.name === name));
+  const command = "Write-Output 'fixture-background-ready'; Start-Sleep -Seconds 120";
+  sendTool(first, "start-job", "bash", { command, background: true });
+  const approval = page.locator("[data-permission-card]");
+  await approval.getByText(command, { exact: true }).waitFor();
+  const records = await terminalRecords(page, initial.composerId);
+  assert.equal(records.filter(({ source }) => source === "agent").length, 0);
+  assert.ok(records.some(({ source, shell }) => source === "user" && shell === "powershell"));
+  const promoted = await page.evaluate(() => window.pi.getSnapshot());
+  assert.equal(promoted.sessionId, initial.composerId, "Sending promotes the existing terminal's draft");
+  await button(approval, "Allow once").click();
+  const started = await model.nextCompletion();
+  const [job] = (await terminalRecords(page, initial.composerId)).filter(({ source }) => source === "agent");
+  assert.match(started.input.messages.at(-1).content, new RegExp(job.id));
+  assert.equal(job.workingDirectory, project);
+
+  await page.keyboard.press("Control+Backquote");
+  const chooser = button(page.locator("[data-terminal-panel]"), "Choose a terminal or background command");
+  await chooser.press("Enter");
+  await page.getByRole("menuitem", { name: /fixture-background-ready/ }).press("Enter");
+  await terminalStatus(page, "running").waitFor();
+  await page.locator("[data-terminal-screen] [role=listitem]").filter({ hasText: /^fixture-background-ready$/ }).waitFor();
+  sendTool(started, "read-job", "read_background_command", { id: job.id });
+  const read = await model.nextCompletion();
+  assert.match(read.input.messages.at(-1).content, /running[\s\S]*fixture-background-ready/);
+  sendTool(read, "stop-job", "stop_background_command", { id: job.id });
+  const stopped = await model.nextCompletion();
+  assert.match(stopped.input.messages.at(-1).content, /has ended/);
+  await terminalStatus(page, "stopped").waitFor();
+  await page.getByRole("tab", { name: "Terminal", selected: true }).press("Escape");
+
+  const tree = "node -e 'console.log(process.pid); setInterval(()=>{}, 1000)'";
+  sendTool(stopped, "start-job-tree", "bash", { command: tree, background: true });
+  await approval.getByText(tree, { exact: true }).waitFor();
+  await button(approval, "Allow once").click();
+  const last = await model.nextCompletion();
+  const automatic = (await terminalRecords(page, initial.composerId)).at(-1);
+  const pid = Number((await waitForTerminalOutput(page, automatic, /\b\d+\r?\n/)).trim());
+  assert.ok(Number.isInteger(pid) && pid > 0);
+  process.kill(pid, 0);
+  last.write({ content: "The background command fixture is complete." });
+  last.finish();
+  await page.getByText("The background command fixture is complete.", { exact: true }).waitFor();
+  await button(page, "Send").waitFor();
+  const finished = await terminalRecords(page, initial.composerId);
+  assert.equal(finished.find(({ id }) => id === automatic.id).status, "stopped");
+  assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+}
+
+export async function prepareTerminalExit(page, app) {
+  await editor(page).focus();
+  await page.keyboard.press("Control+Backquote");
+  await button(page.locator("[data-terminal-panel]"), "Open terminal").press("Enter");
+  await terminalStatus(page, "running").waitFor();
+  await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Terminal input");
+  const { composerId } = await page.evaluate(() => window.pi.getSnapshot());
+  const shell = (await terminalRecords(page, composerId)).at(-1);
+  await waitForTerminalOutput(page, shell, /PS .*>/);
+  await typeTerminal(page, "('PILOT-' + 'SHELL-PID=') + $PID");
+  const text = await waitForTerminalOutput(page, shell, /PILOT-SHELL-PID=\d+/);
+  const pid = Number(/PILOT-SHELL-PID=(\d+)/.exec(text)[1]);
+  process.kill(pid, 0);
+  await app.evaluate(({ dialog }) => {
+    dialog.pilotTerminalExitRequests = 0;
+    dialog.showMessageBox = async (_window, options) => {
+      if (!options.detail?.includes("A terminal or background command is running."))
+        throw new Error("The exit confirmation did not mention the active terminal");
+      return { response: dialog.pilotTerminalExitRequests++, checkboxChecked: false };
+    };
+  });
+  await page.evaluate(() => window.pi.menuAction("quit"));
+  assert.equal(await app.evaluate(({ dialog }) => dialog.pilotTerminalExitRequests), 1);
+  assert.equal((await terminalRecords(page, composerId)).at(-1).status, "running");
+  return pid;
 }
 
 async function verifyPlanLayout(card, locale) {

@@ -18,7 +18,7 @@ import { findCommandDanger } from "./command-danger";
 import { commandPrefixMatches, parseCommandScope } from "./command-scope";
 import type { McpToolPolicy } from "./mcp/types";
 import { isReadOnly, labelOf, pathOfArgs } from "./tools";
-import { PROPOSE_PLAN_TOOL_NAME } from "./tools/constants";
+import { PROPOSE_PLAN_TOOL_NAME, STOP_BACKGROUND_TOOL_NAME } from "./tools/constants";
 import type { ToolEnvironment } from "./tools/types";
 import type { PendingPermission, PermissionDetails, ToolAccess } from "./types";
 
@@ -83,6 +83,8 @@ export class PermissionManager {
     if (isReadOnly(toolName)) return { kind: "allow" };
 
     if (this.planning) return { kind: toolName === PROPOSE_PLAN_TOOL_NAME ? "allow" : "block" };
+    // Stopping is limited to commands the same run already started.
+    if (toolName === STOP_BACKGROUND_TOOL_NAME) return { kind: "allow" };
     const mode = this.getApprovalMode();
     if (mode === "read-only") return { kind: "block" };
 

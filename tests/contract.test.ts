@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { AGENT_EVENT_CHANNEL, IPC, UPDATE_STATUS_CHANNEL } from "../src/shared/contract";
+import {
+  AGENT_EVENT_CHANNEL,
+  IPC,
+  TERMINAL_EVENT_CHANNEL,
+  UPDATE_STATUS_CHANNEL,
+} from "../src/shared/contract";
 
 describe("IPC contract", () => {
   it("uses unique channel names", () => {
@@ -14,9 +19,22 @@ describe("IPC contract", () => {
   });
 
   it("prefixes channels with a domain namespace", () => {
-    for (const name of [...Object.values(IPC), AGENT_EVENT_CHANNEL]) {
+    for (const name of [
+      ...Object.values(IPC),
+      AGENT_EVENT_CHANNEL,
+      TERMINAL_EVENT_CHANNEL,
+      UPDATE_STATUS_CHANNEL,
+    ]) {
       expect(name).toMatch(/^(app|agent|session|settings|skills|tool):/);
     }
+  });
+
+  it("keeps terminal updates separate from invoke routes and agent events", () => {
+    expect(TERMINAL_EVENT_CHANNEL).toBe("session:terminal-event");
+    expect([...Object.values(IPC), AGENT_EVENT_CHANNEL]).not.toContain(TERMINAL_EVENT_CHANNEL);
+    expect(IPC.sessionOpenTerminal).toBe("session:open-terminal");
+    expect(IPC.sessionWriteTerminal).toBe("session:write-terminal");
+    expect(IPC.sessionStopTerminal).toBe("session:stop-terminal");
   });
 
   it("keeps update status notifications separate from invoke channels", () => {

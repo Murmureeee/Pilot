@@ -1,14 +1,13 @@
 // @env node
-import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { int, obj, opt, str } from "@earendil-works/pi-schema";
+import { bool, int, obj, opt, str } from "@earendil-works/pi-schema";
 
-import { createToolPathResolver } from "../../workspace/paths";
+import type { TerminalRecord } from "../../../shared/contract";
 import { stopProcessTree } from "../../workspace/process";
-import { shellExecutable } from "../../workspace/shell";
+import { launchCommand } from "../../workspace/shell";
 import {
   COMMAND_CLOSE_TIMEOUT_MS,
   COMMAND_TIMEOUT_DEFAULT_SEC,
@@ -21,6 +20,12 @@ import type { ToolEnvironment } from "./types";
 
 const bashParams = obj({
   command: str({ description: "Command in the configured shell syntax." }),
+  background: opt(
+    bool({
+      description:
+        "Start a long-running command in the background for the current task. Use read_background_command or stop_background_command with the returned ID.",
+    }),
+  ),
   timeoutSec: opt(
     int({
       description: `Timeout in seconds, clamped to ${COMMAND_TIMEOUT_MIN_SEC}–${COMMAND_TIMEOUT_MAX_SEC}. Default ${COMMAND_TIMEOUT_DEFAULT_SEC}.`,
@@ -28,41 +33,44 @@ const bashParams = obj({
   ),
 });
 
-export function createBashTool({
-  workingDirectory,
-  commandShell,
-}: ToolEnvironment): AgentTool<typeof bashParams> {
+export function createBashTool(
+  { workingDirectory, commandShell }: ToolEnvironment,
+  startBackground?: (command: string, signal?: AbortSignal) => Promise<TerminalRecord>,
+): AgentTool<typeof bashParams> {
   const powershell = commandShell === "powershell";
   const shellName = powershell ? "PowerShell" : process.platform === "win32" ? "Git Bash" : "Bash";
   return {
     name: "bash",
     label: TOOL_LABELS.bash,
-    description: `Run a ${shellName} command from the configured working directory and return its output.`,
+    description: `Run a ${shellName} command from the configured working directory. Set background to true to keep the command running while this task continues.`,
     parameters: bashParams,
     executionMode: "sequential",
     execute: async (_id, params, signal, onUpdate): Promise<AgentToolResult> => {
       signal?.throwIfAborted();
-      const cwd = createToolPathResolver(workingDirectory)(".");
-      const executable = shellExecutable(commandShell);
-      const args = powershell
-        ? [
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; ${params.command}`,
-          ]
-        : ["--noprofile", "--norc", "-c", params.command];
+      if (params.background) {
+        if (!startBackground) throw new Error("Background commands are unavailable in this task.");
+        const record = await startBackground(params.command, signal);
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                "Background command " +
+                record.id +
+                " started in " +
+                record.workingDirectory +
+                ". Use read_background_command or stop_background_command with this ID. Active commands stop when the task ends.",
+            },
+          ],
+          details: {},
+        };
+      }
       const timeoutSec = Math.max(
         COMMAND_TIMEOUT_MIN_SEC,
         Math.min(params.timeoutSec ?? COMMAND_TIMEOUT_DEFAULT_SEC, COMMAND_TIMEOUT_MAX_SEC),
       );
       const started = performance.now();
-      const child = spawn(executable, args, {
-        cwd,
-        detached: process.platform !== "win32",
-        stdio: ["ignore", "pipe", "pipe"],
-        windowsHide: true,
-      });
+      const child = launchCommand(commandShell, workingDirectory, params.command);
       const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
       const output = new CommandOutput();
       const collect = (chunk: string): void => {

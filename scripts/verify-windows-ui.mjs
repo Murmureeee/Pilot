@@ -13,11 +13,14 @@ import { _electron as electron } from "playwright-core";
 import { stopProcessTree } from "./windows-process.mjs";
 import { startModelFixture } from "./windows-ui/model.mjs";
 import {
+  prepareTerminalExit,
   verifyApprovals,
+  verifyBackgroundTerminal,
   verifyCommandsAndTemplates,
   verifyFirstRun,
   verifyImageConversation,
   verifyImageDraft,
+  verifyInteractiveTerminal,
   verifyLayouts,
   verifyPlanDraft,
   verifyPlanExecution,
@@ -189,6 +192,19 @@ try {
       verifyImageConversation(page, model, commandProject),
     );
   });
+  let terminalPid;
+  await withApp(profile, async (page, window, app) => {
+    await runScene("Type in PowerShell and Git Bash and check terminal controls", () =>
+      verifyInteractiveTerminal(page, window, app, commandProject),
+    );
+    await runScene("Approve, read, and clean up Agent background commands", () =>
+      verifyBackgroundTerminal(page, model, commandProject),
+    );
+    terminalPid = await prepareTerminalExit(page, app);
+  });
+  await runScene("Cancel exit with a terminal open, then quit and stop its shell", () =>
+    assert.throws(() => process.kill(terminalPid, 0), { code: "ESRCH" }),
+  );
 } finally {
   try {
     await model?.close();

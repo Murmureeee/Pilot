@@ -5,6 +5,8 @@ import type {
   AGENT_EVENT_CHANNEL,
   IPC,
   Locale,
+  TERMINAL_EVENT_CHANNEL,
+  TerminalEvent,
   UiAgentEvent,
   UPDATE_STATUS_CHANNEL,
   UpdateStatus,
@@ -13,6 +15,7 @@ import type { AgentHost } from "../agent-host/host";
 import type { McpManager } from "../agent-host/mcp";
 import type { DesktopExit } from "../desktop-exit";
 import type { Settings } from "../settings/types";
+import type { TerminalManager } from "../terminal";
 import type { DesktopUpdater } from "../updater";
 import type { VerificationManager } from "../verification";
 import type { parseIpcArgs } from "./validation";
@@ -31,6 +34,7 @@ export type InvokeHandler<C extends IpcChannel> = (
 
 export type RendererEvents = {
   [AGENT_EVENT_CHANNEL]: UiAgentEvent;
+  [TERMINAL_EVENT_CHANNEL]: TerminalEvent;
   [UPDATE_STATUS_CHANNEL]: UpdateStatus;
 };
 
@@ -47,6 +51,7 @@ export interface IpcContext {
   mcp: McpManager;
   updater: DesktopUpdater;
   verification: VerificationManager;
+  terminal: TerminalManager;
   exit: DesktopExit;
   isDev: boolean;
 }

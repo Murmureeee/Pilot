@@ -21,6 +21,7 @@ import {
   SquareIcon,
   SquarePenIcon,
   SunMoonIcon,
+  TerminalIcon,
   ZapIcon,
 } from "lucide-react";
 
@@ -279,6 +280,14 @@ export function useWorkbenchCommands({
         shortcut: REVIEW_SHORTCUTS.verification.keys,
         icon: ListChecksIcon,
         run: () => openReview("verification"),
+      },
+      {
+        id: "review-terminal",
+        label: REVIEW_SHORTCUTS.terminal.label,
+        description: "打开交互式 Shell 或查看 Agent 后台命令。",
+        shortcut: REVIEW_SHORTCUTS.terminal.keys,
+        icon: TerminalIcon,
+        run: () => openReview("terminal"),
       },
     );
     for (const kind of VERIFICATION_KINDS)

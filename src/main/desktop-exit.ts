@@ -64,14 +64,20 @@ export class DesktopExit {
     const copy = NATIVE_EXIT_MESSAGES[locale];
     const agentActive = this.deps.host.hasActiveRun();
     const verificationActive = this.deps.verification.hasActiveRuns();
+    const terminalActive = this.deps.terminal.hasActiveProcesses();
 
     try {
-      if (agentActive || verificationActive) {
+      if (agentActive || verificationActive || terminalActive) {
         const { response } = await showMessage(window, {
           title: APP_NAME,
           type: "warning",
           message: copy[action].title,
-          detail: [agentActive && copy.agent, verificationActive && copy.verification, copy.detail]
+          detail: [
+            agentActive && copy.agent,
+            verificationActive && copy.verification,
+            terminalActive && copy.terminal,
+            copy.detail,
+          ]
             .filter(Boolean)
             .join("\n"),
           buttons: [copy.cancel, copy[action].accept],
@@ -87,6 +93,7 @@ export class DesktopExit {
       const stopped = await Promise.allSettled([
         this.deps.host.stopForExit(),
         this.deps.verification.stopAll(),
+        this.deps.terminal.stopAll(),
       ]);
       for (const result of stopped) {
         if (result.status === "rejected") throw result.reason;

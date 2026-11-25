@@ -3,6 +3,7 @@ import { registerAgentRoutes } from "./agent";
 import { registerAppRoutes } from "./app";
 import { registerIntegrationRoutes } from "./integrations";
 import { registerSettingsRoutes } from "./settings";
+import { registerTerminalRoutes } from "./terminal";
 import type { IpcContext } from "./types";
 
 export function registerIpc(ctx: IpcContext): void {
@@ -10,4 +11,5 @@ export function registerIpc(ctx: IpcContext): void {
   registerAgentRoutes(ctx);
   registerSettingsRoutes(ctx);
   registerIntegrationRoutes(ctx);
+  registerTerminalRoutes(ctx);
 }

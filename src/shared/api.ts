@@ -44,6 +44,10 @@ import type {
   SkillMeta,
   Snapshot,
   StartVerification,
+  TerminalEvent,
+  TerminalOutput,
+  TerminalRecord,
+  TerminalSize,
   ThemeSetting,
   ThinkingLevel,
   ToolRule,
@@ -170,6 +174,17 @@ export interface PiApi {
   ): Promise<VerificationResult>;
   sessionStopVerification(composerId: string, runId: string): Promise<VerificationResult>;
   sessionRerunVerification(composerId: string, runId: string): Promise<VerificationResult>;
+  sessionTerminals(composerId: string): Promise<TerminalRecord[]>;
+  sessionOpenTerminal(
+    composerId: string,
+    workingDirectory: string,
+    size: TerminalSize,
+  ): Promise<TerminalRecord>;
+  sessionTerminalOutput(composerId: string, id: string): Promise<TerminalOutput>;
+  sessionWriteTerminal(composerId: string, id: string, data: string): Promise<void>;
+  sessionResizeTerminal(composerId: string, id: string, size: TerminalSize): Promise<void>;
+  sessionStopTerminal(composerId: string, id: string): Promise<void>;
+  onTerminalEvent(callback: (event: TerminalEvent) => void): () => void;
   settingsGet(): Promise<PublicSettings>;
   settingsSave(input: SettingsInput): Promise<PublicSettings>;
   settingsSetPromptTemplates(templates: PromptTemplate[]): Promise<PublicSettings>;

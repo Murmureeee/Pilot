@@ -240,7 +240,7 @@ export interface FileChangesStore {
   cancelUndo(id: string): void;
 }
 
-export type ReviewTab = "changes" | "files" | "verification";
+export type ReviewTab = "changes" | "files" | "verification" | "terminal";
 
 export interface ReviewStore {
   composerId: string | null;

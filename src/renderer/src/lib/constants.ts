@@ -140,6 +140,7 @@ export const SEND_KEY_LABELS: Record<SendKey, string> = {
 export const REVIEW_SHORTCUTS = {
   changes: { label: "打开或关闭变更页签", keys: "Ctrl+Shift+D" },
   verification: { label: "打开验证页签", keys: "Ctrl+Shift+T" },
+  terminal: { label: "打开终端页签", keys: "Ctrl+`" },
 } as const;
 
 export const COMPOSER_SHORTCUTS = {
@@ -166,6 +167,7 @@ export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = [
       { label: "显示或隐藏侧边栏", keys: "Ctrl+Shift+S" },
       REVIEW_SHORTCUTS.changes,
       REVIEW_SHORTCUTS.verification,
+      REVIEW_SHORTCUTS.terminal,
       COMPOSER_SHORTCUTS["focus-composer"],
       COMPOSER_SHORTCUTS["stop-run"],
     ],
@@ -345,7 +347,17 @@ export const REVIEW_TABS = [
   { value: "changes", label: "变更" },
   { value: "files", label: "文件" },
   { value: "verification", label: "验证" },
+  { value: "terminal", label: "终端" },
 ] as const;
+export const DEFAULT_TERMINAL_SIZE = { columns: 80, rows: 24 } as const;
+export const TERMINAL_SCROLLBACK = 5000;
+export const TERMINAL_STATUS_LABELS = {
+  running: "运行中…",
+  stopping: "正在停止…",
+  success: "已退出",
+  failed: "失败",
+  stopped: "已停止",
+} as const;
 export const FILE_CHANGES_TREE_MIN_WIDTH = 500;
 export const VERIFICATION_LABELS: Record<VerificationKind, string> = {
   test: "测试",

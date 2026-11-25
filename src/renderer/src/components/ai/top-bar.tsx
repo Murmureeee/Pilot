@@ -182,6 +182,12 @@ export function TopBar({
                       disabled={!canReview}
                       onRun={() => activateReview("verification", menuTrigger.current ?? undefined)}
                     />
+                    <Item
+                      label={t(REVIEW_SHORTCUTS.terminal.label, locale)}
+                      shortcut={REVIEW_SHORTCUTS.terminal.keys}
+                      disabled={!canReview}
+                      onRun={() => activateReview("terminal", menuTrigger.current ?? undefined)}
+                    />
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>

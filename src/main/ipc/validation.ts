@@ -52,6 +52,10 @@ const session = z.tuple([z.uuid()]);
 const runRef = z.strictObject({ sessionId: z.uuid(), runId: z.uuid() });
 const sessionFlag = z.tuple([z.uuid(), z.boolean()]);
 const sessionChange = z.tuple([z.uuid(), z.uuid()]);
+const terminalSize = z.strictObject({
+  columns: z.number().int().min(2).max(1000),
+  rows: z.number().int().min(1).max(500),
+});
 const gitDiffRequest = z.strictObject({
   path: mentionId,
   area: z.enum(["staged", "unstaged", "untracked"]),
@@ -273,6 +277,12 @@ const inputs = {
   ]),
   [IPC.sessionStopVerification]: sessionChange,
   [IPC.sessionRerunVerification]: sessionChange,
+  [IPC.sessionTerminals]: session,
+  [IPC.sessionOpenTerminal]: z.tuple([z.uuid(), nonBlank, terminalSize]),
+  [IPC.sessionTerminalOutput]: sessionChange,
+  [IPC.sessionWriteTerminal]: z.tuple([z.uuid(), z.uuid(), z.string().min(1).max(1_048_576)]),
+  [IPC.sessionResizeTerminal]: z.tuple([z.uuid(), z.uuid(), terminalSize]),
+  [IPC.sessionStopTerminal]: sessionChange,
   [IPC.settingsModelCatalog]: providerRef,
   [IPC.settingsTestProvider]: providerRef,
   [IPC.settingsPickWorkingDirectory]: locale,

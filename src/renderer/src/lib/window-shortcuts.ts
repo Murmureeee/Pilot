@@ -2,6 +2,22 @@
 // 应用菜单已移除（Menu.setApplicationMenu(null)），Electron 不再提供窗口级快捷键，由渲染层识别后走菜单动作白名单。
 import type { MenuAction } from "@shared/contract";
 
+export function isTerminalShortcut(event: {
+  key: string;
+  code: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+}): boolean {
+  return (
+    (event.ctrlKey || event.metaKey) &&
+    !event.shiftKey &&
+    !event.altKey &&
+    (event.code === "Backquote" || event.key === "`")
+  );
+}
+
 export function windowShortcutAction(event: {
   key: string;
   ctrlKey: boolean;
