@@ -2,6 +2,8 @@
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 
+import { updateFeedArgs } from "./package-update-feed.mjs";
+
 if (process.platform !== "linux" || process.arch !== "x64") {
   throw new Error("Linux packages must be built on a Linux x64 host.");
 }
@@ -16,6 +18,8 @@ const result = spawnSync(
     "--publish",
     "never",
     "-c.electronDist=node_modules/electron/dist",
+    ...updateFeedArgs(process.env.PILOT_UPDATE_URL),
+    ...process.argv.slice(2),
   ],
   { stdio: "inherit" },
 );

@@ -99,11 +99,13 @@ export class DesktopExit {
       }
 
       await this.deps.mcp.close();
-      this.stage = "exiting";
       if (action === "update") {
-        // The updater launches the installer before it requests Electron to quit.
-        if (!this.deps.updater.install()) this.stage = "idle";
+        const installing = await this.deps.updater.install(() => {
+          this.stage = "exiting";
+        });
+        if (!installing) this.stage = "idle";
       } else {
+        this.stage = "exiting";
         app.quit();
       }
     } catch (error) {

@@ -58,4 +58,14 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
       set({ actionFailed: true, dialog: get().dialog ?? "update" });
     }
   },
+
+  showPackage: async () => {
+    if (get().status?.state !== "package-ready") return;
+    set({ actionFailed: false });
+    try {
+      await window.pi.showUpdatePackage();
+    } catch {
+      set({ actionFailed: true });
+    }
+  },
 }));

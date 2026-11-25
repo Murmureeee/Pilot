@@ -35,6 +35,7 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.appGetUpdateStatus]: [],
   [IPC.appCheckForUpdates]: [],
   [IPC.appInstallUpdate]: [],
+  [IPC.appShowUpdatePackage]: [],
   [IPC.agentPrompt]: ["  preserve prompt whitespace  "],
   [IPC.agentSearchWorkspace]: ["src/报告"],
   [IPC.agentPreviewWorkspaceReference]: [

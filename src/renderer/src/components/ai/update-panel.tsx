@@ -19,11 +19,19 @@ function describeStatus(status: UpdateStatus, locale: Locale): string {
     case "current":
       return t("已是最新版本。", locale);
     case "error":
+      if (status.reason === "appimage-install")
+        return t("AppImage 更新失败。请确认所在目录可写，再重试。", locale);
+      if (status.reason === "package-missing")
+        return t("已下载的安装包不可用，请重新检查更新。", locale);
       return t("更新失败，请重试。", locale);
     case "downloading":
       return t("正在下载 {0}（{1}%）", locale, [status.version, status.percent]);
     case "ready":
       return t("版本 {0} 已下载。", locale, [status.version]);
+    case "package-ready":
+      return t("版本 {0} 已下载。请用系统包管理器安装，再重新打开 Pilot。", locale, [
+        status.version,
+      ]);
     case "installing":
       return t("正在退出并安装 {0}…", locale, [status.version]);
   }
@@ -59,6 +67,11 @@ export function UpdatePanel({ locale }: { locale: Locale }): JSX.Element {
           {t("更新并重启", locale)}
         </Button>
       )}
+      {state === "package-ready" && (
+        <Button size="sm" onClick={() => void useUpdateStore.getState().showPackage()}>
+          {t("打开下载位置", locale)}
+        </Button>
+      )}
     </div>
   );
 }
@@ -68,12 +81,18 @@ export function UpdateRailButton({ locale }: { locale: Locale }): JSX.Element | 
   if (
     status?.state !== "downloading" &&
     status?.state !== "ready" &&
+    status?.state !== "package-ready" &&
     status?.state !== "installing"
   )
     return null;
 
   const canInstall = status.state === "ready";
-  const label = canInstall ? t("更新并重启", locale) : describeStatus(status, locale);
+  const label =
+    status.state === "package-ready"
+      ? t("查看已下载的安装包", locale)
+      : canInstall
+        ? t("更新并重启", locale)
+        : describeStatus(status, locale);
   const handleClick = (): void => {
     const update = useUpdateStore.getState();
     if (canInstall) void update.install();

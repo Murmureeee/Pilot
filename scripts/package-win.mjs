@@ -2,6 +2,8 @@
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 
+import { updateFeedArgs } from "./package-update-feed.mjs";
+
 const require = createRequire(import.meta.url);
 const args = [
   require.resolve("electron-builder/cli.js"),
@@ -11,16 +13,8 @@ const args = [
   "never",
   "-c.electronDist=node_modules/electron/dist",
 ];
-const source = (process.env.PILOT_UPDATE_URL ?? process.env.PI_UPDATE_URL)?.trim();
-if (source) {
-  const url = new URL(source);
-  if (url.username || url.password) throw new Error("PILOT_UPDATE_URL cannot contain credentials");
-  const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-  if (url.protocol !== "https:" && !(local && url.protocol === "http:")) {
-    throw new Error("PILOT_UPDATE_URL must use HTTPS or a local HTTP test server");
-  }
-  args.push("-c.publish.provider=generic", `-c.publish.url=${url.href}`, "-c.directories.output=dist/release");
-}
+const feed = updateFeedArgs(process.env.PILOT_UPDATE_URL ?? process.env.PI_UPDATE_URL);
+if (feed.length) args.push(...feed, "-c.directories.output=dist/release");
 const result = spawnSync(process.execPath, args, { stdio: "inherit" });
 if (result.error) throw result.error;
 process.exitCode = result.status ?? 1;

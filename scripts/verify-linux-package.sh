@@ -24,8 +24,9 @@ smoke() {
   shift
   xvfb-run -a timeout --kill-after=10s 90s "$@" --no-sandbox --smoke \
     "--user-data-dir=$scratch/$platform" | tee "$scratch/$platform.log"
+  # The AppImage extractor and Electron can interleave writes to stdout.
   node -e '
-    const report = require("node:fs").readFileSync(0, "utf8").match(/^SMOKE_RESULT (.+)$/m);
+    const report = require("node:fs").readFileSync(0, "utf8").match(/SMOKE_RESULT (\{[^\r\n]*\})/);
     if (!report || JSON.parse(report[1]).ok !== true) throw new Error("Packaged Electron smoke failed");
   ' < "$scratch/$platform.log"
   echo "Verified $platform $version"

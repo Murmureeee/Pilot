@@ -14,6 +14,7 @@ export const IPC = {
   appGetUpdateStatus: "app:get-update-status",
   appCheckForUpdates: "app:check-for-updates",
   appInstallUpdate: "app:install-update",
+  appShowUpdatePackage: "app:show-update-package",
   agentPrompt: "agent:prompt",
   agentResume: "agent:resume",
   agentCompact: "agent:compact",
@@ -154,9 +155,10 @@ export const AGENT_EVENT_CHANNEL = "agent:event";
 export const UPDATE_STATUS_CHANNEL = "app:update-status";
 
 export type UpdateStatus =
-  | { state: "unavailable" | "idle" | "checking" | "current" | "error" }
+  | { state: "unavailable" | "idle" | "checking" | "current" }
+  | { state: "error"; reason?: "appimage-install" | "package-missing" }
   | { state: "downloading"; version: string; percent: number }
-  | { state: "ready" | "installing"; version: string };
+  | { state: "ready" | "installing" | "package-ready"; version: string };
 
 export interface PingRequest {
   payload: string;

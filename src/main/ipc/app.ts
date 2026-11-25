@@ -98,4 +98,5 @@ export function registerAppRoutes(
   handle(IPC.appGetUpdateStatus, () => ctx.updater.getStatus());
   handle(IPC.appCheckForUpdates, () => ctx.updater.check());
   handle(IPC.appInstallUpdate, () => ctx.exit.installUpdate());
+  handle(IPC.appShowUpdatePackage, () => ctx.updater.showPackage());
 }

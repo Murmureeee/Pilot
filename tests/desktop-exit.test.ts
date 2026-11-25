@@ -38,7 +38,10 @@ function setupExit(agentActive = true, verificationActive = true) {
   const mcp = { close: vi.fn<() => Promise<void>>(async () => {}) };
   const updater = {
     getStatus: vi.fn<() => UpdateStatus>(() => ({ state: "ready", version: "0.3.1" })),
-    install: vi.fn<() => boolean>(() => true),
+    install: vi.fn<(allowQuit: () => void) => Promise<boolean>>(async (allowQuit) => {
+      allowQuit();
+      return true;
+    }),
   };
   const log = { write: vi.fn<DiagnosticLog["write"]>() };
   const window = win as unknown as BrowserWindow;

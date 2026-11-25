@@ -74,6 +74,7 @@ export interface PiApi {
   getUpdateStatus(): Promise<UpdateStatus>;
   checkForUpdates(): Promise<UpdateStatus>;
   installUpdate(): Promise<void>;
+  showUpdatePackage(): Promise<void>;
   onUpdateStatus(callback: (status: UpdateStatus) => void): () => void;
   getSnapshot(): Promise<Snapshot>;
   agentPrompt(

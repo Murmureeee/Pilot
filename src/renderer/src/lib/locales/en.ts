@@ -46,6 +46,10 @@ export const EN_MESSAGES: Record<string, string> = {
   "正在检查更新…": "Checking for updates…",
   "已是最新版本。": "You're up to date.",
   "更新失败，请重试。": "Update failed. Try again.",
+  "AppImage 更新失败。请确认所在目录可写，再重试。":
+    "The AppImage update failed. Make sure its folder is writable and try again.",
+  "已下载的安装包不可用，请重新检查更新。":
+    "The downloaded package is unavailable. Check for updates again.",
   "正在下载 {0}（{1}%）": "Downloading {0} ({1}%)",
   "版本 {0} 已下载。": "Version {0} is ready to install.",
   "正在退出并安装 {0}…": "Closing to install {0}…",
@@ -53,6 +57,10 @@ export const EN_MESSAGES: Record<string, string> = {
   检查更新: "Check for updates",
   "检查更新…": "Check for updates…",
   更新并重启: "Update and restart",
+  "版本 {0} 已下载。请用系统包管理器安装，再重新打开 Pilot。":
+    "Version {0} downloaded. Install it with your system package manager, then reopen Pilot.",
+  打开下载位置: "Open download location",
+  查看已下载的安装包: "View downloaded package",
   "没有已下载的更新。": "There is no downloaded update.",
   "无法使用环境变量中的代理地址。请检查 HTTP_PROXY 或 HTTPS_PROXY 后重启 Pilot。":
     "Pilot could not use the proxy address in the environment. Check HTTP_PROXY or HTTPS_PROXY and restart Pilot.",

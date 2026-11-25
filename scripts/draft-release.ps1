@@ -16,6 +16,7 @@ $files = @(
   $installer
   "$installer.blockmap"
   'latest.yml'
+  'latest-linux.yml'
   "pilot-${version}-linux-x86_64.AppImage"
   "pilot-${version}-linux-amd64.deb"
 )
@@ -37,6 +38,16 @@ if ($manifest -notmatch ('(?m)^version: ' + [regex]::Escape($version) + '\s*$') 
     $manifest -notmatch ('(?m)^path: ' + [regex]::Escape($installer) + '\s*$') -or
     $manifest -notmatch ('(?m)^sha512: ' + [regex]::Escape($base64) + '\s*$')) {
   throw 'The update manifest does not match the version and checksum of the installer.'
+}
+$linuxManifest = Get-Content -Raw -LiteralPath $expected['latest-linux.yml'].Path
+if ($linuxManifest -notmatch ('(?m)^version: ' + [regex]::Escape($version) + '\s*$')) {
+  throw 'The Linux update manifest does not match the release version.'
+}
+foreach ($file in @("pilot-${version}-linux-x86_64.AppImage", "pilot-${version}-linux-amd64.deb")) {
+  $sha512 = (Get-FileHash -Algorithm SHA512 -LiteralPath $expected[$file].Path).Hash
+  $digest = [Convert]::ToBase64String([Convert]::FromHexString($sha512))
+  $entry = '(?m)^\s*- url: ' + [regex]::Escape($file) + '\r?\n[ \t]+sha512: ' + [regex]::Escape($digest) + '\s*$'
+  if ($linuxManifest -notmatch $entry) { throw "The Linux update manifest is missing the checksum for $file." }
 }
 
 function Find-PilotRelease {

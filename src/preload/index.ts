@@ -31,6 +31,7 @@ const api: PiApi = {
   getUpdateStatus: () => ipcRenderer.invoke(IPC.appGetUpdateStatus),
   checkForUpdates: () => ipcRenderer.invoke(IPC.appCheckForUpdates),
   installUpdate: () => ipcRenderer.invoke(IPC.appInstallUpdate),
+  showUpdatePackage: () => ipcRenderer.invoke(IPC.appShowUpdatePackage),
   onUpdateStatus: (callback) => {
     const listener = (_event: unknown, status: UpdateStatus): void => callback(status);
     ipcRenderer.on(UPDATE_STATUS_CHANNEL, listener);

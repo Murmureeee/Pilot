@@ -22,6 +22,7 @@ export interface UpdateStore {
   subscribe(): () => void;
   check(): Promise<void>;
   install(): Promise<void>;
+  showPackage(): Promise<void>;
 }
 
 export interface ComposerTrigger {
