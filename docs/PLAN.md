@@ -11,10 +11,10 @@ Pilot 是基于 pi SDK 的本地 AI 编程桌面客户端。面向开发者的�
 | 对话与上下文 | 流式 Markdown、思考与工具轨迹、回合耗时摘要、会话累计 token 与费用、停止和插话、任务计划、最近项目、按项目分组的会话、Git 分支显示、会话模型与权限模式、草稿与 JSONL 会话恢复、在途检查点追加写入、切换会话时保留原运行、异常退出后的任务续跑、模型请求失败重试、长会话压缩、项目指令与来源查看、会话标题搜索、`@` 文件引用和 `/` 快捷命令。消息可复制、编辑重发、分叉、重试或预览回退。键盘可聚焦输入框、切换权限模式、取回消息和停止任务。 | 计划模式、搜索与导出。 |
 | 权限与文件 | 三种权限模式、按 Shell 和参数前缀保存的命令授权、危险命令逐次确认、可撤销的授权规则、按运行绑定的输入区审批卡。审批支持文件差异、MCP 参数、批次序号及工具步骤中的决定回看，处理后恢复草稿。命令停止和超时会清理受控进程树，成功与失败统一保留长输出的首尾。统一审查面板包含变更、文件和验证。可按文件或区块暂存和提交，也可从任务检查点预览并撤销可确认的改动。普通文件夹支持内置工具差异与逐文件撤销。会话可运行测试、类型检查和构建并保存每次结果。 | 回合后自动验证，接入交互式终端。 |
 | 模型与集成 | Anthropic、OpenAI Responses、OpenAI 兼容端点和内置演示模型。已有模型目录、逐模型能力设置、连通性测试、Ollama / LM Studio 预设、本机和项目技能按需读取、stdio 和 Streamable HTTP MCP，以及 Codex / Claude Code 技能和 MCP 导入。 | 验收真实本地模型的流式回复和工具调用。从 Git 来源安装技能与插件。增加联网读取工具。 |
-| 桌面与发行 | 简体中文和 English、亮色与暗色、本地诊断日志。后台待审批、完成和失败支持桌面通知与 Windows 任务栏提醒，点击通知可回到对应会话。同一数据目录重复启动时唤醒已有窗口。设置损坏时先备份原文件，再恢复默认设置。界面崩溃后可以重新加载并接回当前会话。有任务或验证命令运行时，关窗、退出和更新重启会先确认。重启后恢复窗口位置、大小、最大化状态、侧栏布局和会话失败标记。Agent 任务或验证命令运行时阻止系统自动睡眠。`v0.4.0` 已发布 Windows x64 安装包、Linux x64 AppImage 和 `.deb`。Windows 安装版可从帮助菜单检查更新，下载完成后可从侧栏安装并重启。默认安装目录为 `%LOCALAPPDATA%\Programs\pilot`，程序文件名为 `pilot.exe`。 | 复验 Linux 桌面安装与升级，交付 macOS 安装包和平台签名。 |
+| 桌面与发行 | 简体中文和 English、亮色与暗色、本地诊断日志。后台待审批、完成和失败支持桌面通知与 Windows 任务栏提醒，点击通知可回到对应会话。同一数据目录重复启动时唤醒已有窗口。设置损坏时先备份原文件，再恢复默认设置。界面崩溃后可以重新加载并接回当前会话。有任务或验证命令运行时，关窗、退出和更新重启会先确认。重启后恢复窗口位置、大小、最大化状态、侧栏布局和会话失败标记。Agent 任务或验证命令运行时阻止系统自动睡眠。`v0.5.0` 已发布 Windows x64 安装包、Linux x64 AppImage 和 `.deb`。Windows 安装版可从帮助菜单检查更新，下载完成后可从侧栏安装并重启。默认安装目录为 `%LOCALAPPDATA%\Programs\pilot`，程序文件名为 `pilot.exe`。 | 复验 Linux 桌面安装与升级，交付 macOS 安装包和平台签名。 |
 
 - 已在 Windows 隔离实例中验收 PowerShell 和 Git Bash 的命令授权、旧规则停用、重启和撤销。审批卡与权限设置覆盖中英文、亮暗主题、1100 × 750 和 720 × 480。[开发完成记录](./DEVELOPMENT_HISTORY.md)
-- Pilot `v0.4.0` 的安装包和升级验收。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.4.0) · [打包与安装验收](https://github.com/Murmureeee/Pilot/actions/runs/45429790005) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/45433991131)
+- Pilot `v0.5.0` 的安装包和升级验收。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.5.0) · [打包与安装验收](https://github.com/Murmureeee/Pilot/actions/runs/45562057076) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/45564355087)
 - Linux `.deb` 的现有启动验收从解包后的程序执行。Ollama 与 LM Studio 的现有验证使用本地协议桩。[Linux 打包验证](https://github.com/Murmureeee/Pilot/actions/runs/44669912414)
 
 ## 开发顺序
