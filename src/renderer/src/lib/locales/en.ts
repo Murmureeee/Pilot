@@ -488,6 +488,25 @@ export const EN_MESSAGES: Record<string, string> = {
   把聊天移到已归档列表: "Move this chat to the archive",
   提及资源: "Mention a resource",
   引用文件和文件夹: "Reference files and folders",
+  "选择图片…": "Choose images…",
+  图片附件: "Image attachments",
+  "查看图片 {0}": "View image {0}",
+  "移除图片 {0}": "Remove image {0}",
+  "正在读取图片…": "Reading images…",
+  "当前模型仅支持文本。请选择支持图像的模型或移除图片。":
+    "This model accepts text only. Choose a model with image input or remove the images.",
+  "当前任务使用文本模型。可在任务结束后发送图片，或移除图片。":
+    "This task uses a text model. Send images after it finishes or remove the images.",
+  "请选用支持图像的模型后重试此消息。":
+    "Choose a model with image input before retrying this message.",
+  "每张图片最多 5 MB，请选择较小的图片。": "Each image can be up to 5 MB. Choose a smaller image.",
+  "请选择 PNG、JPEG、WebP 或 GIF 图片。": "Choose a PNG, JPEG, WebP, or GIF image.",
+  "无法读取这张图片，请重新选择。": "Could not read this image. Choose another image.",
+  "每条消息最多可添加 {0} 张图片。": "You can attach up to {0} images per message.",
+  "请先打开工作目录，再拖入要引用的文件。":
+    "Open a working directory before dropping files to reference.",
+  "有些文件无法引用。请确认文件仍在当前工作目录内。":
+    "Some files could not be referenced. Check that they are still in the current working directory.",
   "搜索文件和文件夹…": "Find files and folders…",
   "打开项目…": "Open project…",
   "关联项目…": "Link project…",

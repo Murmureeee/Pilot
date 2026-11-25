@@ -281,6 +281,7 @@ interface PromptReference {
 
 export type ReferencedUserMessage = UserMessage & {
   pilotReference?: PromptReference;
+  pilotImageNames?: string[];
   pilotPlanning?: true;
 };
 

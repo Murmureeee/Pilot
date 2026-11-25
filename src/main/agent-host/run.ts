@@ -150,7 +150,7 @@ export class AgentRun {
     if (this.ownsCheckpoint)
       store.startCheckpoint(sessionId, agent.state.messages, this.checkpoint, deps.settingsOnStart);
     this.savedMessageCount = agent.state.messages.length;
-    if (clearDraftFor !== undefined) store.saveDraft(clearDraftFor, []);
+    if (clearDraftFor !== undefined) store.clearDraft(clearDraftFor);
     const approvalMode =
       deps.approvedPlanMode ??
       store.getMeta(sessionId)?.approvalMode ??
@@ -246,7 +246,7 @@ export class AgentRun {
   enqueue(message: ReferencedUserMessage, clearDraftFor?: string): void {
     this.saveCheckpoint({ ...this.checkpoint, pending: [...this.checkpoint.pending, message] });
     this.deps.agent.steer(message);
-    if (clearDraftFor !== undefined) this.deps.store.saveDraft(clearDraftFor, []);
+    if (clearDraftFor !== undefined) this.deps.store.clearDraft(clearDraftFor);
     this.sendQueue();
   }
 
@@ -645,6 +645,7 @@ export class AgentRun {
 
   private prepareRequestMessages(messages: AgentMessage[], systemPrompt: string): AgentMessage[] {
     this.selectedSkillIds.clear();
+    const supportsImages = this.deps.agent.state.model.input.includes("image");
     return messages.map((message, index) => {
       if (index === 0 && message.role === "system") {
         return { ...message, content: systemPrompt };
@@ -653,18 +654,31 @@ export class AgentRun {
         return { ...message, details: undefined };
       }
       if (message.role !== "user") return message;
-      const { pilotReference, ...providerMessage } = message as ReferencedUserMessage;
-      if (!pilotReference) return message;
-      const content = [messageText(message)];
+      const {
+        pilotReference,
+        pilotImageNames: _names,
+        ...providerMessage
+      } = message as ReferencedUserMessage;
+      const images = Array.isArray(message.content)
+        ? message.content.filter((block) => block.type === "image")
+        : [];
+      if (!pilotReference && !images.length) return message;
+      const content = [messageText(message)].filter(Boolean);
       if (typeof pilotReference?.context === "string") content.push(pilotReference.context);
-      if (index >= this.checkpoint.startIndex) {
+      if (pilotReference && index >= this.checkpoint.startIndex) {
         const selected = this.collectSelectedSkills(pilotReference.parts ?? []);
         if (selected.length)
           content.push("## Skills selected for this request", skillCatalog(selected));
       }
+      if (images.length && !supportsImages)
+        content.push("[Image attachment omitted for this text model.]");
+      const text = content.join("\n\n");
       return {
         ...providerMessage,
-        content: content.join("\n\n"),
+        content:
+          images.length && supportsImages
+            ? [...(text ? [{ type: "text" as const, text }] : []), ...images]
+            : text,
       };
     });
   }

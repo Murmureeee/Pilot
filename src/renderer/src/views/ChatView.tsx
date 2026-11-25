@@ -8,6 +8,7 @@ import { ChatFindBar } from "@renderer/components/ai/chat-find-bar";
 import { CompactionMarker } from "@renderer/components/ai/compaction-marker";
 import { Composer } from "@renderer/components/ai/composer";
 import { HomeStart } from "@renderer/components/ai/home-start";
+import { ImageAttachments } from "@renderer/components/ai/image-attachments";
 import { MessageActions } from "@renderer/components/ai/message-actions";
 import { MessageJump } from "@renderer/components/ai/message-jump";
 import { ModelFailureCard } from "@renderer/components/ai/model-feedback";
@@ -224,6 +225,17 @@ export function ChatView({
                       !row.messages.some((message) => message.parts.length > 0)
                     )
                       return null;
+                    const imageParts = isUser
+                      ? row.message.parts.flatMap((part, index) =>
+                          part.type === "image" ? [{ part, index }] : [],
+                        )
+                      : [];
+                    const hasUserText =
+                      isUser &&
+                      row.message.parts.some(
+                        (part) =>
+                          part.type === "mention" || (part.type === "text" && part.text.length > 0),
+                      );
                     return (
                       <MessageScrollerItem
                         key={row.id}
@@ -235,36 +247,45 @@ export function ChatView({
                           <MessageContent className="gap-3">
                             {isUser ? (
                               <>
-                                <Bubble align="end" variant="secondary" className="max-w-[88%]">
-                                  <BubbleContent className="rounded-[18px] rounded-br-md px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap">
-                                    {row.message.parts.map((part, partIndex) => {
-                                      if (part.type !== "text" && part.type !== "mention")
-                                        return null;
-                                      return (
-                                        <span
-                                          key={partIndex}
-                                          data-transcript-part={transcriptPartKey(
-                                            row.id,
-                                            partIndex,
-                                          )}
-                                        >
-                                          {part.type === "text" ? (
-                                            part.text
-                                          ) : (
-                                            <InlineWorkspaceReference
-                                              chip
-                                              kind={part.kind}
-                                              path={part.id}
-                                              workingDirectory={part.workingDirectory}
-                                            >
-                                              {part.label}
-                                            </InlineWorkspaceReference>
-                                          )}
-                                        </span>
-                                      );
-                                    })}
-                                  </BubbleContent>
-                                </Bubble>
+                                <ImageAttachments
+                                  images={imageParts.map(({ part }) => part)}
+                                  locations={imageParts.map(({ index }) =>
+                                    transcriptPartKey(row.id, index),
+                                  )}
+                                  className="ms-auto max-w-[88%]"
+                                />
+                                {hasUserText && (
+                                  <Bubble align="end" variant="secondary" className="max-w-[88%]">
+                                    <BubbleContent className="rounded-[18px] rounded-br-md px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap">
+                                      {row.message.parts.map((part, partIndex) => {
+                                        if (part.type !== "text" && part.type !== "mention")
+                                          return null;
+                                        return (
+                                          <span
+                                            key={partIndex}
+                                            data-transcript-part={transcriptPartKey(
+                                              row.id,
+                                              partIndex,
+                                            )}
+                                          >
+                                            {part.type === "text" ? (
+                                              part.text
+                                            ) : (
+                                              <InlineWorkspaceReference
+                                                chip
+                                                kind={part.kind}
+                                                path={part.id}
+                                                workingDirectory={part.workingDirectory}
+                                              >
+                                                {part.label}
+                                              </InlineWorkspaceReference>
+                                            )}
+                                          </span>
+                                        );
+                                      })}
+                                    </BubbleContent>
+                                  </Bubble>
+                                )}
                                 {composerId && (
                                   <MessageActions
                                     composerId={composerId}

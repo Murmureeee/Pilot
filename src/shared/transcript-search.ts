@@ -14,6 +14,8 @@ function partFields(part: UiPart): PartFields {
       return { text: part.text };
     case "mention":
       return { text: part.id.includes(part.label) ? part.id : part.label + " " + part.id };
+    case "image":
+      return { text: part.name };
     case "plan":
       return { text: part.steps.map(({ title }) => title).join("\n") };
     case "compaction":

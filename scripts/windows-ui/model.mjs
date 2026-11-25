@@ -4,6 +4,7 @@ import { EventEmitter, once } from "node:events";
 import { createServer } from "node:http";
 
 const modelId = "pilot-desktop-fixture";
+const visionModelId = "pilot-vision-fixture";
 
 function completion(response, id, input) {
   response.writeHead(200, { "content-type": "text/event-stream" });
@@ -12,7 +13,7 @@ function completion(response, id, input) {
       id,
       object: "chat.completion.chunk",
       created: 1,
-      model: modelId,
+      model: input.model,
       choices: [{ index: 0, delta, finish_reason: finishReason }],
     };
     response.write("data: " + JSON.stringify(chunk) + "\n\n");
@@ -46,7 +47,7 @@ export async function startModelFixture() {
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
       const input = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-      assert.equal(input.model, modelId);
+      assert.ok(input.model === modelId || input.model === visionModelId);
       assert.equal(input.stream, true);
       pending.push(completion(response, "fixture-" + ++completionCount, input));
       received.emit("completion");
@@ -61,6 +62,7 @@ export async function startModelFixture() {
   return {
     baseUrl: "http://127.0.0.1:" + server.address().port + "/v1",
     modelId,
+    visionModelId,
     async nextCompletion() {
       if (!pending.length)
         await once(received, "completion", { signal: AbortSignal.timeout(15_000) });

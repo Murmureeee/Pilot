@@ -2,6 +2,15 @@
 export { name as APP_PACKAGE_NAME, productName as APP_NAME } from "../../package.json";
 export const WORKSPACE_QUERY_LENGTH = 512;
 export const CONVERSATION_QUERY_LENGTH = 512;
+export const IMAGE_ATTACHMENT_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+] as const;
+export const IMAGE_ATTACHMENT_LIMIT = 4;
+export const IMAGE_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+export const IMAGE_ATTACHMENT_NAME_LIMIT = 255;
 export const EXECUTION_APPROVAL_MODES = ["standard", "read-only", "full-access"] as const;
 export const PLAN_PROPOSAL_MAX_LENGTH = 12_000;
 export const PROMPT_TEMPLATE_PREFIX = "prompt-";

@@ -49,6 +49,12 @@ export function registerAgentRoutes({
   handle(IPC.sessionSaveDraft, (_event, composerId, draft) =>
     host.saveSessionDraft(composerId, draft),
   );
+  handle(IPC.sessionSaveDraftImages, (_event, composerId, images) =>
+    host.saveSessionDraftImages(composerId, images),
+  );
+  handle(IPC.agentResolveDroppedPaths, (_event, composerId, workingDirectory, paths) =>
+    host.resolveDroppedPaths(composerId, workingDirectory, paths),
+  );
   handle(IPC.sessionUpdateSettings, (_event, composerId, input) =>
     host.updateSessionSettings(composerId, input),
   );

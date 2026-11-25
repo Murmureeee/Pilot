@@ -206,9 +206,22 @@ export function ComposerModelControls({
                         {t("跟随全局默认", locale)}
                       </span>
                       {defaultModel && (
-                        <span className="truncate text-xs leading-4 text-muted-foreground">
-                          {defaultModel.name}
-                        </span>
+                        <>
+                          <span className="truncate text-xs leading-4 text-muted-foreground">
+                            {defaultModel.name}
+                          </span>
+                          <span className="text-xs leading-4 text-muted-foreground">
+                            {t(
+                              effectiveModelCapabilities(
+                                defaultModel.automatic,
+                                defaultModel.overrides,
+                              ).supportsImages
+                                ? "支持图像输入"
+                                : "仅支持文本输入",
+                              locale,
+                            )}
+                          </span>
+                        </>
                       )}
                     </span>
                     {usingDefault && (

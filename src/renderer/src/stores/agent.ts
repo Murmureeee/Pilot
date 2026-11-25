@@ -5,6 +5,7 @@ import type {
   ActiveRun,
   ApprovalMode,
   ComposerDraft,
+  ImageAttachment,
   LogLevel,
   MenuAction,
   PermissionDecision,
@@ -36,6 +37,7 @@ interface AgentStore extends AgentUiState {
   settings: PublicSettings | null;
   composerId: string | null;
   composerDraft: ComposerDraft;
+  draftImages: ImageAttachment[];
   draftSettings: SessionSettings;
   draftWorkingDirectory: string | null;
   choosingProject: boolean;
@@ -65,6 +67,7 @@ interface AgentStore extends AgentUiState {
   resumeRun(run: RunRef, compact?: boolean): Promise<void>;
   compactContext(composerId: string): Promise<void>;
   saveDraft(composerId: string, draft: ComposerDraft): Promise<void>;
+  saveDraftImages(composerId: string, images: ImageAttachment[]): Promise<void>;
   updateSessionSettings(input: SessionSettingsInput): Promise<void>;
   abort(run: RunRef): void;
   newSession(): Promise<void>;
@@ -159,7 +162,10 @@ export function selectProjectDirectory(
 
 export function selectProjectBinding(state: AgentStore): string | undefined {
   if (selectProjectDirectory(state)) return undefined;
-  const hasDraft = state.composerDraft.length || Object.values(state.draftSettings).some(Boolean);
+  const hasDraft =
+    state.composerDraft.length ||
+    state.draftImages.length ||
+    Object.values(state.draftSettings).some(Boolean);
   return state.sessionId || (hasDraft ? (state.composerId ?? undefined) : undefined);
 }
 
@@ -184,17 +190,24 @@ export function selectWorkingDirectory(
 
 function sessionSnapshot(
   snapshot: Snapshot,
-  current: Pick<AgentStore, "composerId" | "composerDraft">,
+  current: Pick<AgentStore, "composerId" | "composerDraft" | "draftImages">,
 ): AgentUiState &
   Pick<
     AgentStore,
-    "draftWorkingDirectory" | "draftSettings" | "composerId" | "composerDraft" | "settings"
+    | "draftWorkingDirectory"
+    | "draftSettings"
+    | "composerId"
+    | "composerDraft"
+    | "draftImages"
+    | "settings"
   > {
   return {
     sessionId: snapshot.sessionId,
     composerId: snapshot.composerId,
     composerDraft:
       snapshot.composerId === current.composerId ? current.composerDraft : snapshot.composerDraft,
+    draftImages:
+      snapshot.composerId === current.composerId ? current.draftImages : snapshot.draftImages,
     draftSettings: snapshot.draftSettings,
     draftWorkingDirectory: snapshot.draftWorkingDirectory,
     sessions: snapshot.sessions,
@@ -219,6 +232,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   settings: null,
   composerId: null,
   composerDraft: [],
+  draftImages: [],
   draftSettings: {},
   draftWorkingDirectory: null,
   choosingProject: false,
@@ -286,12 +300,17 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   setView: (view) => set({ view }),
 
   prompt: async (input, workingDirectory, composerId) => {
-    const { composerDraft } = get();
+    const { composerDraft, draftImages } = get();
     const blockedBy = await window.pi.agentPrompt(input, workingDirectory, composerId);
     if (blockedBy) return blockedBy;
-    if (get().composerId !== composerId || get().composerDraft !== composerDraft) return false;
-    set({ composerDraft: [] });
-    return true;
+    const current = get();
+    if (current.composerId !== composerId) return false;
+    const clearText = current.composerDraft === composerDraft;
+    set({
+      composerDraft: clearText ? [] : current.composerDraft,
+      draftImages: current.draftImages === draftImages ? [] : current.draftImages,
+    });
+    return clearText;
   },
 
   resumeRun: async ({ sessionId, runId }, compact) => {
@@ -318,6 +337,19 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     if (get().composerId !== composerId) return;
     set({ composerDraft: draft });
     await window.pi.sessionSaveDraft(composerId, draft);
+  },
+
+  saveDraftImages: async (composerId, draftImages) => {
+    if (get().composerId !== composerId) return;
+    const previous = get().draftImages;
+    set({ draftImages });
+    try {
+      await window.pi.sessionSaveDraftImages(composerId, draftImages);
+    } catch (error) {
+      if (get().composerId === composerId && get().draftImages === draftImages)
+        set({ draftImages: previous });
+      throw error;
+    }
   },
 
   updateSessionSettings: async (input) => {

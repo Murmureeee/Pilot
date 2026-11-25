@@ -83,7 +83,9 @@ export default function App(): JSX.Element {
   );
   const canRecall = useAgentStore(
     (state) =>
-      state.composerDraft.length === 0 && state.messages.some(({ role }) => role === "user"),
+      state.composerDraft.length === 0 &&
+      state.draftImages.length === 0 &&
+      state.messages.some(({ role }) => role === "user"),
   );
   const stoppableRunId = useAgentStore((state) =>
     state.status === "streaming" &&

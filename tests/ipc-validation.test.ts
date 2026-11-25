@@ -6,6 +6,7 @@ import { IPC, type ProviderInput, type SettingsInput } from "../src/shared/contr
 
 const sessionId = "48687a06-2cb0-43a1-a627-9752f1621f1b";
 const run = { sessionId, runId: "7a6c4360-bb48-4cbd-ae92-b515fdd9ce8b" };
+const image = { type: "image", name: "fixture.png", mimeType: "image/png", data: "iVBORw0KGgo=" };
 const gitSelection = { path: "file.ts", revision: "a".repeat(64), hunks: [1] };
 const draft: ProviderInput = {
   id: "local",
@@ -38,6 +39,7 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.appShowUpdatePackage]: [],
   [IPC.agentPrompt]: ["  preserve prompt whitespace  "],
   [IPC.agentSearchWorkspace]: ["src/报告"],
+  [IPC.agentResolveDroppedPaths]: [sessionId, "E:/project", ["E:/project/report.txt"]],
   [IPC.agentPreviewWorkspaceReference]: [
     { path: "src/报告.md", workingDirectory: "E:/projects/Pilot" },
   ],
@@ -54,6 +56,7 @@ const valid: Record<IpcChannel, unknown[]> = {
       { type: "file", id: "note.md", label: "note.md", meta: { workingDirectory: "E:/project" } },
     ],
   ],
+  [IPC.sessionSaveDraftImages]: [sessionId, [image]],
   [IPC.sessionUpdateSettings]: [
     sessionId,
     { model: { providerId: "local", modelId: "example" }, approvalMode: null },
@@ -146,6 +149,29 @@ const valid: Record<IpcChannel, unknown[]> = {
 };
 
 describe("IPC argument validation", () => {
+  it("requires at least one image for a blank prompt and checks attachment formats", () => {
+    const input = { text: "", mentions: [], images: [image] };
+    expect(parseIpcArgs(IPC.agentPrompt, [input])).toEqual([input]);
+    expect(() => parseIpcArgs(IPC.agentPrompt, [{ ...input, images: [] }])).toThrow(
+      /Invalid IPC arguments/,
+    );
+    expect(() =>
+      parseIpcArgs(IPC.sessionSaveDraftImages, [
+        sessionId,
+        [{ ...image, mimeType: "image/svg+xml" }],
+      ]),
+    ).toThrow(/Invalid IPC arguments/);
+    expect(() =>
+      parseIpcArgs(IPC.sessionSaveDraftImages, [sessionId, [{ ...image, mimeType: "image/jpeg" }]]),
+    ).toThrow(/Invalid IPC arguments/);
+    expect(() =>
+      parseIpcArgs(IPC.sessionSaveDraftImages, [
+        sessionId,
+        Array.from({ length: 5 }, () => ({ ...image })),
+      ]),
+    ).toThrow(/Invalid IPC arguments/);
+  });
+
   it("accepts all-project, unlinked, and project-scoped transcript searches", () => {
     for (const project of [null, "E:/projects/Pilot"]) {
       const args = ["readme.md", project];

@@ -22,6 +22,7 @@ import type { ToolResultMessage } from "@earendil-works/pi-ai";
 
 import type {
   ComposerDraft,
+  ImageAttachment,
   Locale,
   SessionMeta,
   SessionRunResult,
@@ -38,6 +39,7 @@ import { findTranscript, transcriptSegments } from "../../shared/transcript-sear
 import {
   NEW_CHAT_DRAFTS_FILE,
   SESSION_DRAFT_EXTENSION,
+  SESSION_DRAFT_IMAGES_EXTENSION,
   SESSION_FILE_ID,
   SESSION_INDEX_SAVE_BLOCKED,
   SESSION_TRANSCRIPT_EXTENSION,
@@ -46,6 +48,7 @@ import { backupCorruptFile } from "../corrupt-file";
 import { toolRuleSchema } from "../settings/schema";
 import { readFileChange } from "../workspace/file-changes";
 import { CONVERSATION_INDEX_CACHE_SIZE, CONVERSATION_SEARCH_LIMIT } from "./constants";
+import { imageAttachmentsSchema, messageImages } from "./image-attachments";
 import { legacyMentionParts } from "./mentions";
 import { completeToolResults } from "./recovery";
 import { parseNewChatDrafts, parseSessionIndex } from "./session-index";
@@ -88,7 +91,9 @@ export function messageText(message: AgentMessage): string {
 
 export function messageParts(message: AgentMessage, getToolLabel = labelOf): UiPart[] {
   if (message.role === "user") {
-    const parts = (message as ReferencedUserMessage).pilotReference?.parts;
+    const user = message as ReferencedUserMessage;
+    const parts = user.pilotReference?.parts;
+    const images = messageImages(user);
     if (
       Array.isArray(parts) &&
       parts.length &&
@@ -102,10 +107,10 @@ export function messageParts(message: AgentMessage, getToolLabel = labelOf): UiP
             (part.workingDirectory === undefined || typeof part.workingDirectory === "string"),
       )
     ) {
-      return parts;
+      return images.length ? [...parts, ...images] : parts;
     }
     const text = messageText(message);
-    return legacyMentionParts(text) ?? [{ type: "text", text }];
+    return [...(legacyMentionParts(text) ?? [{ type: "text" as const, text }]), ...images];
   }
   const content = (message as { content?: unknown }).content;
   if (typeof content === "string") return [{ type: "text", text: content }];
@@ -353,6 +358,10 @@ export class SessionStore {
     return join(this.dir, `${id}${SESSION_DRAFT_EXTENSION}`);
   }
 
+  private draftImagesPath(id: string): string {
+    return join(this.dir, id + SESSION_DRAFT_IMAGES_EXTENSION);
+  }
+
   private readNewChatDrafts(): NewChatDraft[] {
     try {
       return parseNewChatDrafts(readFileSync(join(this.dir, NEW_CHAT_DRAFTS_FILE), "utf-8"));
@@ -397,6 +406,26 @@ export class SessionStore {
     if (draft.length) writeJsonAtomic(path, draft);
     else rmSync(path, { force: true });
     this.removeNewChatDraft(id);
+  }
+
+  loadDraftImages(id: string): ImageAttachment[] {
+    try {
+      const stored: unknown = JSON.parse(readFileSync(this.draftImagesPath(id), "utf-8"));
+      return imageAttachmentsSchema.safeParse(stored).data ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  saveDraftImages(id: string, images: ImageAttachment[]): void {
+    const path = this.draftImagesPath(id);
+    if (images.length) writeJsonAtomic(path, images);
+    else rmSync(path, { force: true });
+  }
+
+  clearDraft(id: string): void {
+    this.saveDraft(id, []);
+    this.saveDraftImages(id, []);
   }
 
   list(): SessionMeta[] {
@@ -583,6 +612,7 @@ export class SessionStore {
     messages: AgentMessage[],
     draft: ComposerDraft,
     planMode?: SessionSettings["planMode"],
+    images?: ImageAttachment[],
   ): string {
     const settings = { model: origin.model, approvalMode: origin.approvalMode, planMode };
     const { id } = this.create(origin.workingDirectory, undefined, settings);
@@ -598,6 +628,7 @@ export class SessionStore {
       if (origin.personaOverride) this.setPersonaOverride(id, origin.personaOverride);
       this.rename(id, "分叉：" + origin.title.slice(0, 21));
       this.saveDraft(id, draft);
+      if (images?.length) this.saveDraftImages(id, images);
       return id;
     } catch (error) {
       this.remove(id);
@@ -662,8 +693,7 @@ export class SessionStore {
     this.backUpIndexIfNeeded();
     const path = this.filePath(id);
     if (existsSync(path)) rmSync(path, { force: true });
-    rmSync(this.draftPath(id), { force: true });
-    this.removeNewChatDraft(id);
+    this.clearDraft(id);
     this.checkpoints.delete(id);
     this.gitChanges.delete(id);
     this.contextCompactions.delete(id);

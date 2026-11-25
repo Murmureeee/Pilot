@@ -2,6 +2,7 @@
 // 双进程共用契约：通道名与数据类型。此文件只允许类型与常量，不得引入运行时依赖。
 import type {
   EXECUTION_APPROVAL_MODES,
+  IMAGE_ATTACHMENT_MIME_TYPES,
   LOG_LEVELS,
   SUPPORTED_LOCALES,
   THINKING_LEVELS,
@@ -24,12 +25,14 @@ export const IPC = {
   agentResume: "agent:resume",
   agentCompact: "agent:compact",
   agentSearchWorkspace: "agent:search-workspace",
+  agentResolveDroppedPaths: "agent:resolve-dropped-paths",
   agentPreviewWorkspaceReference: "agent:preview-workspace-reference",
   agentAbort: "agent:abort",
   agentClearQueue: "agent:clear-queue",
   agentGetSnapshot: "agent:get-snapshot",
   sessionNew: "session:new",
   sessionSaveDraft: "session:save-draft",
+  sessionSaveDraftImages: "session:save-draft-images",
   sessionUpdateSettings: "session:update-settings",
   sessionSetPlanMode: "session:set-plan-mode",
   sessionReviewPlan: "session:review-plan",
@@ -123,11 +126,21 @@ export type PromptMention =
 
 export type ComposerDraft = (string | PromptMention)[];
 
+export type ImageAttachmentMimeType = (typeof IMAGE_ATTACHMENT_MIME_TYPES)[number];
+
+export interface ImageAttachment {
+  type: "image";
+  name: string;
+  mimeType: ImageAttachmentMimeType;
+  data: string;
+}
+
 export type MessageBranchAction = "fork" | "edit" | "retry";
 
 export interface PromptInput {
   text: string;
   mentions: (PromptMention & { offset?: number })[];
+  images?: ImageAttachment[];
 }
 
 /** 数据目录（shell.openPath 的白名单目标，防止渲染层打开任意路径） */
@@ -232,6 +245,7 @@ interface ToolInvocation {
 
 export type UiUserPart =
   | { type: "text"; text: string }
+  | ImageAttachment
   | {
       type: "mention";
       kind: PromptMention["type"];
@@ -806,6 +820,7 @@ export interface Snapshot {
   sessionId: string | null;
   composerId: string;
   composerDraft: ComposerDraft;
+  draftImages: ImageAttachment[];
   draftSettings: SessionSettings;
   draftWorkingDirectory: string | null;
   sessions: SessionMeta[];

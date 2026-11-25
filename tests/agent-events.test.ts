@@ -22,6 +22,17 @@ function applyRunEvent(state: AgentUiState, event: AgentRunEvent): AgentUiState 
 }
 
 describe("agent-events adapter", () => {
+  it("retains image-only user messages in the visible transcript", () => {
+    const message: UiMessage = {
+      id: "image",
+      role: "user",
+      parts: [{ type: "image", name: "fixture.png", mimeType: "image/png", data: "iVBORw0KGgo=" }],
+    };
+    expect(applyRunEvent(initialRunUiState(), { type: "user_message", message }).messages).toEqual([
+      message,
+    ]);
+  });
+
   it("resets only the streaming reply on retry and clears the state when the task fails", () => {
     const started = applyRunEvent(initialRunUiState(), {
       type: "assistant_start",

@@ -865,3 +865,196 @@ export async function verifyRestoredPromptTemplates(page) {
   await remove.waitFor({ state: "hidden" });
   await page.getByText(templateCommand, { exact: true }).waitFor({ state: "hidden" });
 }
+
+async function pasteImage(page, name, data) {
+  await editor(page).evaluate((field, image) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([Uint8Array.fromBase64(image.data)], image.name, { type: "image/png" }));
+    field.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer }));
+  }, { name, data });
+}
+
+async function dropLocalFiles(page, files) {
+  const inspector = await page.context().newCDPSession(page);
+  try {
+    const rect = await editor(page).boundingBox();
+    assert.ok(rect);
+    const point = { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
+    const data = { items: [], files, dragOperationsMask: 1 };
+    for (const type of ["dragEnter", "dragOver", "drop"])
+      await inspector.send("Input.dispatchDragEvent", { type, ...point, data });
+  } finally {
+    await inspector.detach();
+  }
+}
+
+export async function verifyImageDraft(page, window, model, project, files) {
+  await page.keyboard.press("Control+l");
+  await editor(page).waitFor();
+  await page.evaluate(async ({ project, modelId, visionModelId }) => {
+    const snapshot = await window.pi.getSnapshot();
+    const providers = snapshot.settings.providers.map(({ id, kind, name, baseUrl, modelId: selected, models }) => ({
+      id, kind, name, baseUrl, modelId: selected,
+      models: models.map(({ automatic: _automatic, ...entry }) => entry),
+    }));
+    const provider = providers.find(({ id }) => id === snapshot.settings.activeProviderId);
+    provider.models = [
+      { id: modelId, name: "Pilot text fixture", overrides: { supportsImages: false, supportsThinking: false } },
+      { id: visionModelId, name: "Pilot vision fixture", overrides: { supportsImages: true, supportsThinking: false } },
+    ];
+    await window.pi.settingsSave({ providers, activeProviderId: provider.id });
+    await window.pi.sessionUseRecentProject(project);
+  }, { project, modelId: model.modelId, visionModelId: model.visionModelId });
+  await waitForProjectDraft(page, project);
+  const before = (await page.evaluate(() => window.pi.getSnapshot())).sessions.length;
+
+  await button(page, "Reference files and folders").press("Enter");
+  const picker = page.getByRole("dialog", { name: "Reference files and folders" });
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    button(picker, "Choose images…").press("Enter"),
+  ]);
+  await chooser.setFiles(files.chosen);
+  await button(page, "View image chosen.png").waitFor();
+  const data = readFileSync(files.chosen, "base64");
+  await pasteImage(page, "pasted.png", data);
+  await button(page, "View image pasted.png").waitFor();
+  await dropLocalFiles(page, [files.dropped, files.reference, files.outside]);
+  await button(page, "View image dropped.png").waitFor();
+  await editor(page).locator("[data-mention]").getByText("image-context.txt", { exact: true }).waitFor();
+  await page.getByRole("alert").filter({ hasText: "Some files could not be referenced" }).waitFor();
+  assert.equal(await editor(page).locator("[data-mention]").count(), 1);
+
+  const sendButton = button(page, "Send");
+  await page.getByText(/This model accepts text only/).waitFor();
+  assert.equal(await sendButton.isDisabled(), true);
+  await button(page, "Remove image pasted.png").press("Enter");
+  await button(page, "View image pasted.png").waitFor({ state: "hidden" });
+  await page.waitForFunction(() => document.activeElement?.matches("[data-composer-editor]"));
+
+  let current = locales[1];
+  for (const size of [wide, narrow]) {
+    await resize(page, window, size);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        await assertFits(page.locator('[data-slot="attachment-group"]'));
+        await assertFits(editor(page));
+        console.log("Checked attachment layout at " + size.width + " × " + size.height + " " + locale.lang + " " + theme);
+      }
+    }
+  }
+  await resize(page, window, narrow, 1.5);
+  const previewButton = button(page, "View image chosen.png");
+  await previewButton.press("Enter");
+  const preview = page.getByRole("dialog", { name: "chosen.png", exact: true });
+  await assertFits(preview);
+  await assertFits(preview.locator("[data-image-preview]"));
+  await page.keyboard.press("Escape");
+  await preview.waitFor({ state: "hidden" });
+  assert.equal(await previewButton.evaluate((element) => element === document.activeElement), true);
+  await resize(page, window, wide);
+
+  const snapshot = await page.evaluate(() => window.pi.getSnapshot());
+  assert.equal(snapshot.sessionId, null);
+  assert.equal(snapshot.sessions.length, before);
+  assert.deepEqual(snapshot.draftImages.map(({ name }) => name), ["chosen.png", "dropped.png"]);
+}
+
+export async function verifyImageConversation(page, model, project) {
+  await page.waitForFunction(() => document.documentElement.lang === "en");
+  await editor(page).focus();
+  await waitForProjectDraft(page, project);
+  await button(page, "View image chosen.png").waitFor();
+  await button(page, "View image dropped.png").waitFor();
+  await editor(page).locator("[data-mention]").getByText("image-context.txt", { exact: true }).waitFor();
+  const selected = await page.evaluate(() => window.pi.getSnapshot());
+  await assert.rejects(
+    page.evaluate(({ snapshot, project }) =>
+      window.pi.agentPrompt({ text: "", mentions: [], images: snapshot.draftImages }, project, snapshot.composerId),
+    { snapshot: selected, project }),
+    /当前模型仅支持文本/,
+  );
+  await waitForProjectDraft(page, project);
+  const warning = page.getByRole("status").filter({ hasText: "This model accepts text only" });
+  await button(warning, "Choose a model").press("Enter");
+  const models = page.getByRole("toolbar", { name: "Choose a model" });
+  const vision = button(models, /^Pilot vision fixture/);
+  await vision.getByText("Supports image input", { exact: true }).waitFor();
+  await vision.press("Enter");
+  await warning.waitFor({ state: "hidden" });
+  await models.waitFor({ state: "hidden" });
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector('[data-popup-open][aria-label="Choose a model"]'));
+  await editor(page).click();
+  await editor(page).press("Control+End");
+  await page.keyboard.insertText(" Compare the images.");
+  await page.waitForFunction(() => document.querySelector("[data-composer-editor]")?.innerText.includes("Compare the images."));
+  await button(page, "Send").press("Enter");
+  const multimodal = await model.nextCompletion();
+  assert.equal(multimodal.input.model, model.visionModelId);
+  const content = multimodal.input.messages.at(-1).content;
+  assert.ok(Array.isArray(content));
+  const text = content.filter(({ type }) => type === "text").map(({ text }) => text).join("\n");
+  assert.match(text, /Compare the images/);
+  assert.match(text, /Selected mentions[\s\S]*image-context\.txt/);
+  const images = content.filter(({ type }) => type === "image_url");
+  assert.deepEqual(images.map(({ image_url }) => image_url.url), selected.draftImages.map(({ data }) => "data:image/png;base64," + data));
+  multimodal.write({ content: "The fixture received two images and the project reference." });
+  multimodal.finish();
+  await page.getByText("The fixture received two images and the project reference.", { exact: true }).waitFor();
+  await button(page, "Send").waitFor();
+
+  await pasteImage(page, "image-only.png", selected.draftImages[0].data);
+  await button(page, "View image image-only.png").waitFor();
+  assert.equal(await editor(page).innerText(), "");
+  await button(page, "Send").press("Enter");
+  const imageOnly = await model.nextCompletion();
+  assert.equal(imageOnly.input.messages.at(-1).content.filter(({ type }) => type === "image_url").length, 1);
+  imageOnly.write({ content: "The fixture received an image-only message." });
+  imageOnly.finish();
+  await page.getByText("The fixture received an image-only message.", { exact: true }).waitFor();
+  await button(page, "Send").waitFor();
+  const saved = await page.evaluate(() => window.pi.getSnapshot());
+  assert.ok(saved.sessionId);
+  assert.deepEqual(saved.draftImages, []);
+  await page.keyboard.press("Control+n");
+  await waitForProjectDraft(page, project);
+  await page.evaluate((id) => window.pi.sessionLoad(id), saved.sessionId);
+  await button(page, "View image image-only.png").press("Enter");
+  const reopened = page.getByRole("dialog", { name: "image-only.png", exact: true });
+  await reopened.locator("[data-image-preview]").waitFor();
+  assert.equal(await reopened.locator("[data-image-preview]").evaluate((img) => img.complete && img.naturalWidth > 0), true);
+  await page.keyboard.press("Escape");
+  await reopened.waitFor({ state: "hidden" });
+
+  await pasteImage(page, "keep-in-draft.png", selected.draftImages[0].data);
+  await button(page, "View image keep-in-draft.png").waitFor();
+  await chooseSlash(page, "/model");
+  const textModel = button(models, /^Use global default/);
+  await textModel.getByText("Text input only", { exact: true }).waitFor();
+  await textModel.press("Enter");
+  await page.waitForFunction(async () => {
+    const snapshot = await window.pi.getSnapshot();
+    return !snapshot.sessions.find(({ id }) => id === snapshot.sessionId)?.model;
+  });
+  await warning.waitFor();
+  await models.waitFor({ state: "hidden" });
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector('[data-popup-open][aria-label="Choose a model"]'));
+  await button(page, "View image keep-in-draft.png").waitFor();
+  assert.equal(await button(page, "Send").isDisabled(), true);
+  await button(page, "Remove image keep-in-draft.png").press("Enter");
+  await warning.waitFor({ state: "hidden" });
+  await send(page, "Continue in text.");
+  const continuation = await model.nextCompletion();
+  assert.equal(continuation.input.model, model.modelId);
+  assert.doesNotMatch(JSON.stringify(continuation.input.messages), /data:image\//);
+  continuation.write({ content: "The fixture continued in text." });
+  continuation.finish();
+  await page.getByText("The fixture continued in text.", { exact: true }).waitFor();
+  await button(page, "View image image-only.png").waitFor();
+  await button(page, "Send").waitFor();
+  await page.waitForFunction(async () => (await window.pi.getSnapshot()).activeRun === null);
+}

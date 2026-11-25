@@ -20,12 +20,14 @@ import type {
   GitRollbackPreview,
   GitRollbackSelection,
   GitStageSelection,
+  ImageAttachment,
   Locale,
   MessageBranchAction,
   MessageRollbackPreview,
   PermissionDecision,
   PlanDecision,
   PromptInput,
+  PromptMention,
   RunRef,
   SessionMeta,
   SessionNavigation,
@@ -41,6 +43,7 @@ import type {
 
 import { compactFocus } from "../../shared/compact-command";
 import { APP_NAME, DEFAULT_THINKING_LEVEL, PLAN_PROPOSAL_MAX_LENGTH } from "../../shared/constants";
+import { imagesFromMessageParts } from "../../shared/image-attachments";
 import { draftFromMessageParts, promptFromDraft } from "../../shared/mentions";
 import { applyMessageEvent } from "../../shared/message-events";
 import { effectiveModelCapabilities } from "../../shared/model-capabilities";
@@ -79,7 +82,7 @@ import type {
 } from "../workspace/types";
 import { APPROVED_PLAN_INSTRUCTIONS, SKILL_CATALOG_INSTRUCTIONS } from "./constants";
 import { compactedContext, contextSize, transcriptUsage } from "./context-compaction";
-import { prepareMentionPrompt } from "./mentions";
+import { droppedWorkspaceReferences, prepareMentionPrompt } from "./mentions";
 import { messageIndex } from "./message-operations";
 import {
   applyMessageRollbackFiles,
@@ -418,6 +421,25 @@ export class AgentHost {
     else this.saveNewChatDraft({ ...this.newChatDraft, draft });
   }
 
+  saveSessionDraftImages(id: string, images: ImageAttachment[]): void {
+    this.checkComposerId(id);
+    if (!this.sessionId && images.length) this.deps.store.saveNewChatDraft(this.newChatDraft);
+    this.deps.store.saveDraftImages(id, images);
+  }
+
+  resolveDroppedPaths(id: string, workingDirectory: string, paths: string[]): PromptMention[] {
+    this.checkComposerId(id);
+    this.checkWorkingDirectory(workingDirectory);
+    return droppedWorkspaceReferences(workingDirectory, paths);
+  }
+
+  private supportsImages(selection = this.currentSettings.model): boolean {
+    const model = selectedCatalogModel(toPublicSettings(this.deps.getSettings()), selection);
+    return Boolean(
+      model && effectiveModelCapabilities(model.automatic, model.overrides).supportsImages,
+    );
+  }
+
   updateSessionSettings(id: string, input: SessionSettingsInput): void {
     this.checkComposerId(id);
     if (input.model && !hasSavedModel(this.deps.getSettings().providers, input.model)) {
@@ -503,8 +525,9 @@ export class AgentHost {
     if (this.applyingGitRollback) throw new Error("正在撤销 Git 变更，请稍后重试。");
     if (this.applyingGitSelection) throw new Error("正在更新 Git，请稍后重试。");
     if (composerId !== undefined) this.checkComposerId(composerId);
+    const images = typeof input === "string" ? [] : (input.images ?? []);
     const focus =
-      !replay && (typeof input === "string" || input.mentions.length === 0)
+      !replay && !images.length && (typeof input === "string" || input.mentions.length === 0)
         ? compactFocus(typeof input === "string" ? input : input.text)
         : undefined;
     if (focus !== undefined) {
@@ -524,6 +547,12 @@ export class AgentHost {
     const planMode = this.currentSettings.planMode;
     if (!run && planMode?.proposal) throw new Error("请先确认或放弃此计划。");
     if (expectedDirectory !== undefined) this.checkWorkingDirectory(expectedDirectory);
+    if (
+      images.length &&
+      !(run ? this.agent?.state.model.input.includes("image") : this.supportsImages())
+    ) {
+      throw new Error("当前模型仅支持文本。请选择支持图像的模型或移除图片。");
+    }
     const workingDirectory = this.getWorkingDirectory();
     const skills = run
       ? this.agentInstructions!.skills
@@ -540,9 +569,15 @@ export class AgentHost {
     const agent = run && this.agent ? this.agent : this.ensureAgent(workingDirectory, skills);
     const message: ReferencedUserMessage = {
       role: "user",
-      content: prepared.text,
+      content: images.length
+        ? [
+            ...(prepared.text ? [{ type: "text" as const, text: prepared.text }] : []),
+            ...images.map(({ type, mimeType, data }) => ({ type, mimeType, data })),
+          ]
+        : prepared.text,
       timestamp: Date.now(),
       pilotReference: "reference" in prepared ? prepared.reference : undefined,
+      pilotImageNames: images.length ? images.map(({ name }) => name) : undefined,
       pilotPlanning: (run ? run.planning : Boolean(planMode)) ? true : undefined,
     };
     if (run) {
@@ -722,8 +757,11 @@ export class AgentHost {
         : index;
     if (userIndex < 0) throw new Error("找不到这条回复的原始消息。");
     const directory = this.getWorkingDirectory();
-    const draft =
-      action === "fork" ? [] : draftFromMessageParts(messageParts(messages[userIndex]), directory);
+    const parts = action === "fork" ? [] : messageParts(messages[userIndex]);
+    const draft = draftFromMessageParts(parts, directory);
+    const images = imagesFromMessageParts(parts);
+    if (action === "retry" && images.length && !this.supportsImages(origin.model))
+      throw new Error("请选用支持图像的模型后重试此消息。");
     const end = action === "fork" ? index + 1 : userIndex;
     const planning = (messages[userIndex] as ReferencedUserMessage).pilotPlanning;
     const planMode =
@@ -735,10 +773,12 @@ export class AgentHost {
       messages.slice(0, end),
       action === "edit" ? draft : [],
       planMode,
+      action === "edit" ? images : undefined,
     );
     this.switchSession(id);
     const snapshot = this.publishSnapshot("reveal");
-    if (action === "retry") void this.prompt(promptFromDraft(draft), id, directory ?? null, true);
+    if (action === "retry")
+      void this.prompt(promptFromDraft(draft, images), id, directory ?? null, true);
     return snapshot;
   }
 
@@ -1398,6 +1438,7 @@ export class AgentHost {
       composerDraft: this.sessionId
         ? this.deps.store.loadDraft(this.sessionId)
         : this.newChatDraft.draft,
+      draftImages: this.deps.store.loadDraftImages(this.composerId),
       draftSettings: this.sessionId ? {} : this.newChatDraft.settings,
       draftWorkingDirectory: this.sessionId ? null : (this.newChatDraft.workingDirectory ?? null),
       sessions,

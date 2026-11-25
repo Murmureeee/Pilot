@@ -10,6 +10,7 @@ const labels = {
     thinking: "思考",
     plan: "任务计划",
     summary: "上下文摘要",
+    image: "图片附件",
   },
   en: {
     user: "User",
@@ -17,6 +18,7 @@ const labels = {
     thinking: "Reasoning",
     plan: "Plan",
     summary: "Context summary",
+    image: "Image attachment",
   },
 } as const;
 
@@ -38,10 +40,11 @@ function heading(text: string): string {
     .replace(/[\\\x60*_<>#[\]]/g, "\\$&");
 }
 
-function userText(parts: readonly UiPart[]): string {
+function userText(parts: readonly UiPart[], locale: Locale): string {
   return parts
     .map((part) => {
       if (part.type === "text") return part.text;
+      if (part.type === "image") return "\n\n" + labels[locale].image + " · " + heading(part.name);
       if (part.type !== "mention") return "";
       const reference = "@" + (part.kind === "skill" ? part.label : part.id);
       const fence = backticks(reference, 1);
@@ -89,7 +92,7 @@ export function transcriptMarkdown(
   const sections = ["# " + heading(title)];
   for (const message of messages) {
     if (message.role === "user") {
-      const text = userText(message.parts);
+      const text = userText(message.parts, locale).trimStart();
       if (text.trim()) sections.push("## " + words.user, text);
     } else if (message.role === "assistant") {
       const blocks = assistantParts(message.parts, locale);

@@ -1,5 +1,11 @@
 // @env all
-import type { ComposerDraft, PromptInput, PromptMention, UiPart } from "./contract";
+import type {
+  ComposerDraft,
+  ImageAttachment,
+  PromptInput,
+  PromptMention,
+  UiPart,
+} from "./contract";
 
 export function mentionToken({ type, id }: Pick<PromptMention, "type" | "id">): string {
   const escaped = id.replace(/[%[\]\r\n]/g, (character) => encodeURIComponent(character));
@@ -7,13 +13,15 @@ export function mentionToken({ type, id }: Pick<PromptMention, "type" | "id">): 
 }
 
 export function visibleMessageText(parts: readonly UiPart[]): string {
-  return parts
+  const text = parts
     .map((part) => {
       if (part.type === "text") return part.text;
       if (part.type === "mention") return "@" + part.label;
       return "";
     })
     .join("");
+  const names = parts.flatMap((part) => (part.type === "image" ? [part.name] : []));
+  return [text, ...names].filter(Boolean).join("\n");
 }
 
 export function draftFromMessageParts(
@@ -41,7 +49,7 @@ export function draftFromMessageParts(
   return draft;
 }
 
-export function promptFromDraft(draft: ComposerDraft): PromptInput {
+export function promptFromDraft(draft: ComposerDraft, images: ImageAttachment[] = []): PromptInput {
   const mentions: PromptInput["mentions"] = [];
   let text = "";
   for (const part of draft) {
@@ -51,5 +59,5 @@ export function promptFromDraft(draft: ComposerDraft): PromptInput {
       text += mentionToken(part);
     }
   }
-  return { text, mentions };
+  return images.length ? { text, mentions, images } : { text, mentions };
 }

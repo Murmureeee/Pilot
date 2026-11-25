@@ -5,6 +5,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type {
   FileChangeSummary,
   GitChangesView,
+  ImageAttachment,
   PromptTemplate,
   TranscriptLocation,
   UiMessage,
@@ -15,6 +16,15 @@ import type {
   WorkspaceReferencePreview,
   WorkspaceReferenceRequest,
 } from "@shared/contract";
+
+export interface ComposerImages {
+  images: ImageAttachment[];
+  pending: boolean;
+  error: string | null;
+  add(files: File[]): Promise<void>;
+  remove(index: number): Promise<void>;
+  replace(images: ImageAttachment[]): Promise<void>;
+}
 
 export interface UpdateStore {
   status: UpdateStatus | null;

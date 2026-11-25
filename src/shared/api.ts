@@ -16,6 +16,7 @@ import type {
   GitRollbackPreview,
   GitRollbackSelection,
   GitStageSelection,
+  ImageAttachment,
   Locale,
   LogLevel,
   MenuAction,
@@ -29,6 +30,7 @@ import type {
   PlanDecision,
   ProjectGitHead,
   PromptInput,
+  PromptMention,
   PromptTemplate,
   ProviderInput,
   ProviderTestResult,
@@ -96,6 +98,13 @@ export interface PiApi {
   clearQueue(run: RunRef): Promise<void>;
   sessionNew(): Promise<Snapshot>;
   sessionSaveDraft(composerId: string, draft: ComposerDraft): Promise<void>;
+  sessionSaveDraftImages(composerId: string, images: ImageAttachment[]): Promise<void>;
+  getPathForFile(file: File): string;
+  resolveDroppedPaths(
+    composerId: string,
+    workingDirectory: string,
+    paths: string[],
+  ): Promise<PromptMention[]>;
   sessionUpdateSettings(composerId: string, input: SessionSettingsInput): Promise<void>;
   sessionSetPlanMode(composerId: string, enabled: boolean): Promise<void>;
   sessionReviewPlan(composerId: string, proposalId: string, decision: PlanDecision): Promise<void>;

@@ -46,6 +46,7 @@ export function trimPrompt(input: PromptInput): PromptInput {
   const text = input.text.trimStart();
   const removed = input.text.length - text.length;
   return {
+    ...input,
     text: text.trimEnd(),
     mentions: input.mentions.map((mention) =>
       mention.offset === undefined ? mention : { ...mention, offset: mention.offset - removed },

@@ -11,6 +11,7 @@ import {
   WORKSPACE_QUERY_LENGTH,
 } from "../../shared/constants";
 import { IPC, VERIFICATION_KINDS } from "../../shared/contract";
+import { imageAttachmentsSchema } from "../agent-host/image-attachments";
 import { promptTemplatesSchema, toolRuleSchema } from "../settings/schema";
 import type { IpcChannel } from "./types";
 
@@ -34,15 +35,18 @@ const skillMention = z.strictObject({
 const composerDraft = z.array(
   z.union([z.string(), z.discriminatedUnion("type", [fileMention, skillMention])]),
 );
-const promptInput = z.strictObject({
-  text: nonBlank,
-  mentions: z.array(
-    z.discriminatedUnion("type", [
-      fileMention.extend({ offset: mentionOffset }),
-      skillMention.extend({ offset: mentionOffset }),
-    ]),
-  ),
-});
+const promptInput = z
+  .strictObject({
+    text: z.string(),
+    mentions: z.array(
+      z.discriminatedUnion("type", [
+        fileMention.extend({ offset: mentionOffset }),
+        skillMention.extend({ offset: mentionOffset }),
+      ]),
+    ),
+    images: imageAttachmentsSchema.optional(),
+  })
+  .refine(({ text, images }) => text.trim().length > 0 || Boolean(images?.length));
 const locale = z.tuple([z.enum(SUPPORTED_LOCALES)]);
 const session = z.tuple([z.uuid()]);
 const runRef = z.strictObject({ sessionId: z.uuid(), runId: z.uuid() });
@@ -189,6 +193,8 @@ const inputs = {
   [IPC.agentClearQueue]: z.tuple([runRef]),
   [IPC.sessionNew]: none,
   [IPC.sessionSaveDraft]: z.tuple([z.uuid(), composerDraft]),
+  [IPC.sessionSaveDraftImages]: z.tuple([z.uuid(), imageAttachmentsSchema]),
+  [IPC.agentResolveDroppedPaths]: z.tuple([z.uuid(), nonBlank, z.array(mentionId).max(100)]),
   [IPC.sessionUpdateSettings]: z.tuple([
     z.uuid(),
     z.strictObject({

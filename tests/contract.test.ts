@@ -8,6 +8,11 @@ describe("IPC contract", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
+  it("declares separate routes for resolving drops and saving draft images", () => {
+    expect(IPC.agentResolveDroppedPaths).toBe("agent:resolve-dropped-paths");
+    expect(IPC.sessionSaveDraftImages).toBe("session:save-draft-images");
+  });
+
   it("prefixes channels with a domain namespace", () => {
     for (const name of [...Object.values(IPC), AGENT_EVENT_CHANNEL]) {
       expect(name).toMatch(/^(app|agent|session|settings|skills|tool):/);

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -16,6 +16,8 @@ import {
   verifyApprovals,
   verifyCommandsAndTemplates,
   verifyFirstRun,
+  verifyImageConversation,
+  verifyImageDraft,
   verifyLayouts,
   verifyPlanDraft,
   verifyPlanExecution,
@@ -121,6 +123,12 @@ const scratch = realpathSync.native(mkdtempSync(join(temp, "pilot-windows-ui-"))
 const profile = join(scratch, "profile");
 const project = join(scratch, "fixture-project");
 const commandProject = join(scratch, "commands-project");
+const imageFixture = {
+  chosen: join(scratch, "chosen.png"),
+  dropped: join(scratch, "dropped.png"),
+  reference: join(commandProject, "image-context.txt"),
+  outside: join(scratch, "outside.txt"),
+};
 let model;
 try {
   mkdirSync(profile);
@@ -164,9 +172,21 @@ try {
       verifyCommandsAndTemplates(page, app, model, project, commandProject),
     );
   });
-  await withApp(profile, async (page) => {
+  await withApp(profile, async (page, window) => {
     await runScene("Restore, edit, and remove a prompt template", () =>
       verifyRestoredPromptTemplates(page),
+    );
+    for (const path of [imageFixture.chosen, imageFixture.dropped])
+      copyFileSync(join(repository, "resources", "icon.png"), path);
+    writeFileSync(imageFixture.reference, "Project context for the image test.");
+    writeFileSync(imageFixture.outside, "Outside the project.");
+    await runScene("Choose, paste and drop images and reference project files", () =>
+      verifyImageDraft(page, window, model, commandProject, imageFixture),
+    );
+  });
+  await withApp(profile, async (page) => {
+    await runScene("Restore an image draft and reopen the multimodal chat", () =>
+      verifyImageConversation(page, model, commandProject),
     );
   });
 } finally {

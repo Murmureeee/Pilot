@@ -1,12 +1,12 @@
 // @env node
 import { statSync } from "node:fs";
-import { parse } from "node:path";
+import { basename, isAbsolute, parse, relative, sep } from "node:path";
 
 import type { PromptInput, PromptMention, SkillMeta, UiUserPart } from "@shared/contract";
 
 import { MENTION_CONTEXT_HEADING } from "../../shared/constants";
 import { mentionToken } from "../../shared/mentions";
-import { createToolPathResolver } from "../workspace/paths";
+import { createToolPathResolver, isWithinDirectory } from "../workspace/paths";
 import { SKILL_UNAVAILABLE } from "./constants";
 import type { DisplayMention, PreparedPrompt } from "./types";
 
@@ -87,6 +87,33 @@ function workspaceReference(mention: Exclude<PromptMention, { type: "skill" }>):
     throw new Error("所选文件或文件夹已不可用，请重新选择。", { cause: error });
   }
   return `${type === "file" ? "File" : "Folder"} ${JSON.stringify(id)}`;
+}
+
+export function droppedWorkspaceReferences(
+  directory: string,
+  paths: readonly string[],
+): PromptMention[] {
+  const resolve = createToolPathResolver(directory);
+  const references: PromptMention[] = [];
+  for (const path of new Set(paths)) {
+    if (!isAbsolute(path) || !isWithinDirectory(directory, path)) continue;
+    const id = relative(directory, path).split(sep).join("/");
+    if (!id) continue;
+    try {
+      const stat = statSync(resolve(id));
+      if (stat.isDirectory() || stat.isFile()) {
+        references.push({
+          type: stat.isDirectory() ? "directory" : "file",
+          id,
+          label: basename(path),
+          meta: { workingDirectory: directory },
+        });
+      }
+    } catch {
+      // A dragged path may disappear or resolve outside the project.
+    }
+  }
+  return references;
 }
 
 export function prepareMentionPrompt(

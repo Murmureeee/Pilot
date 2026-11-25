@@ -1,5 +1,5 @@
 // @env node
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 import type { PiApi } from "@shared/api";
 import type {
@@ -51,6 +51,11 @@ const api: PiApi = {
   sessionNew: () => ipcRenderer.invoke(IPC.sessionNew),
   sessionSaveDraft: (composerId, draft) =>
     ipcRenderer.invoke(IPC.sessionSaveDraft, composerId, draft),
+  sessionSaveDraftImages: (composerId, images) =>
+    ipcRenderer.invoke(IPC.sessionSaveDraftImages, composerId, images),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
+  resolveDroppedPaths: (composerId, workingDirectory, paths) =>
+    ipcRenderer.invoke(IPC.agentResolveDroppedPaths, composerId, workingDirectory, paths),
   sessionUpdateSettings: (composerId, input) =>
     ipcRenderer.invoke(IPC.sessionUpdateSettings, composerId, input),
   sessionSetPlanMode: (composerId, enabled) =>

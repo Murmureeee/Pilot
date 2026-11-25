@@ -8,6 +8,8 @@ import {
   EyeIcon,
   FileIcon,
   FolderIcon,
+  ImageOffIcon,
+  ImagePlusIcon,
   PlusIcon,
   ShieldCheckIcon,
   SquareIcon,
@@ -20,6 +22,7 @@ import {
   useImperativeHandle,
   useRef,
   useState,
+  type DragEvent,
   type JSX,
   type KeyboardEvent,
   type Ref,
@@ -45,6 +48,7 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { Input } from "@renderer/components/ui/input";
 import { InputGroup, InputGroupAddon } from "@renderer/components/ui/input-group";
+import { isDroppedImage, useComposerImages } from "@renderer/hooks/use-composer-images";
 import { useWorkspaceSearch } from "@renderer/hooks/use-workspace-search";
 import {
   composerRange,
@@ -83,13 +87,17 @@ import {
   useAgentStore,
 } from "@renderer/stores/agent";
 import { compactFocus } from "@shared/compact-command";
-import { APP_NAME, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
+import { APP_NAME, IMAGE_ATTACHMENT_MIME_TYPES, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
 import type { ActiveRun, ApprovalMode, PromptMention, SkillMeta } from "@shared/contract";
+import { imagesFromMessageParts } from "@shared/image-attachments";
 import { draftFromMessageParts, promptFromDraft } from "@shared/mentions";
+import { effectiveModelCapabilities } from "@shared/model-capabilities";
+import { selectedCatalogModel } from "@shared/providers";
 
 import { ComposerModelControls } from "./composer-model-controls";
 import { ComposerCaretMenu, ComposerSuggestions } from "./composer-suggestions";
 import { ContextUsage } from "./context-usage";
+import { ImageAttachments } from "./image-attachments";
 
 // 语义色分级（AGENTS.md）：红 = 破坏性动作；amber 橙 = 风险提示（警觉但不吓退）；灰 = 常态
 type ModeTone = "neutral" | "amber";
@@ -161,7 +169,11 @@ export function Composer({
   const [sendError, setSendError] = useState<string | null>(null);
   const [blockedSend, setBlockedSend] = useState<ActiveRun | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [fileDragging, setFileDragging] = useState(false);
+  const [dropPending, setDropPending] = useState(false);
+  const [dropError, setDropError] = useState<string | null>(null);
   const editor = useRef<HTMLDivElement>(null);
+  const imagePicker = useRef<HTMLInputElement>(null);
   const lastRange = useRef<Range | null>(null);
   const resources = useRef(new Map<string, PromptMention>());
   const pendingMention = useRef<PromptMention | null>(null);
@@ -169,6 +181,7 @@ export function Composer({
   const modeUpdating = useRef(false);
   const inlineId = useId();
   const pickerId = useId();
+  const imageNoticeId = useId();
   const prompt = useAgentStore((s) => s.prompt);
   const saveDraft = useAgentStore((s) => s.saveDraft);
   const abort = useAgentStore((s) => s.abort);
@@ -176,12 +189,20 @@ export function Composer({
   const loadSession = useAgentStore((s) => s.loadSession);
   const updateSessionSettings = useAgentStore((s) => s.updateSessionSettings);
   const savedMode = useAgentStore((s) => selectComposerSettings(s).approvalMode);
+  const savedModel = useAgentStore((s) => selectComposerSettings(s).model);
   const planning = useAgentStore((s) => Boolean(selectComposerSettings(s).planMode));
   const selectProject = useAgentStore((s) => s.selectProject);
   const choosingProject = useAgentStore((s) => s.choosingProject);
   const projectError = useAgentStore((s) => s.projectError);
 
   const ownRun = activeRun?.sessionId === sessionId ? activeRun : null;
+  const attachments = useComposerImages(composerId);
+  const model = settings && selectedCatalogModel(settings, savedModel);
+  const supportsImages = Boolean(
+    model && effectiveModelCapabilities(model.automatic, model.overrides).supportsImages,
+  );
+  const textRun = ownRun?.modelCapabilities?.supportsImages === false;
+  const imagesBlocked = attachments.images.length > 0 && (!supportsImages || textRun);
   const otherRun = activeRun && !ownRun ? activeRun : null;
   const noticeRun = otherRun ?? blockedSend;
   const runTitle = useAgentStore(
@@ -276,6 +297,53 @@ export function Composer({
     if (!editor.current) return;
     insertComposerMention(editor.current, range, mention, resources.current);
     readEditor();
+  };
+
+  const dropFiles = async (event: DragEvent<HTMLDivElement>): Promise<void> => {
+    const files = Array.from(event.dataTransfer.files);
+    if (!files.length) return;
+    event.preventDefault();
+    setFileDragging(false);
+    if (submitting || dropPending) return;
+    setDropError(null);
+    const pictures = files.filter(isDroppedImage);
+    void attachments.add(pictures);
+    if (pictures.length === files.length) return;
+    if (!workingDirectory) {
+      setDropError("请先打开工作目录，再拖入要引用的文件。");
+      return;
+    }
+    const field = editor.current;
+    const caret = document.caretRangeFromPoint(event.clientX, event.clientY);
+    setDropPending(true);
+    try {
+      const paths = [
+        ...new Set(
+          files
+            .filter((file) => !isDroppedImage(file))
+            .map((file) => window.pi.getPathForFile(file)),
+        ),
+      ];
+      const references = await window.pi.resolveDroppedPaths(
+        composerId,
+        workingDirectory,
+        paths.filter(Boolean),
+      );
+      if (!field || field !== editor.current || useAgentStore.getState().composerId !== composerId)
+        return;
+      let range = caret && field.contains(caret.commonAncestorContainer) ? caret : null;
+      for (const reference of references) {
+        insertComposerMention(field, range, reference, resources.current);
+        range = composerRange(field);
+      }
+      if (references.length) readEditor();
+      if (references.length !== paths.length)
+        setDropError("有些文件无法引用。请确认文件仍在当前工作目录内。");
+    } catch (cause) {
+      setDropError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setDropPending(false);
+    }
   };
 
   const chooseMention = (mention: PromptMention): void => {
@@ -423,7 +491,9 @@ export function Composer({
     rawTrigger?.kind === "command" &&
     (!isDismissed || matchedCommands.length > 0 || matchedSkills.length > 0);
   const commandText =
-    draft.mentions.length === 0 ? draft.text.trim().normalize("NFKC").toLowerCase() : "";
+    draft.mentions.length === 0 && !attachments.images.length
+      ? draft.text.trim().normalize("NFKC").toLowerCase()
+      : "";
   const focus = compactFocus(commandText ? draft.text : "");
   const standalone = commandText.startsWith("/")
     ? commands.find(({ id, slash, slashAliases }) =>
@@ -436,7 +506,10 @@ export function Composer({
   const canSend =
     status !== "stopping" &&
     !composing &&
-    draft.text.trim().length > 0 &&
+    !imagesBlocked &&
+    !attachments.pending &&
+    !dropPending &&
+    (draft.text.trim().length > 0 || attachments.images.length > 0) &&
     (shouldRunCommand ? Boolean(standalone) : !commandPending);
   const placeholder = busy
     ? t("输入插话消息…", locale)
@@ -456,7 +529,8 @@ export function Composer({
     setSendError(null);
     setBlockedSend(null);
     try {
-      const result = await prompt(trimPrompt(draft), workingDirectory, composerId);
+      const input = attachments.images.length ? { ...draft, images: attachments.images } : draft;
+      const result = await prompt(trimPrompt(input), workingDirectory, composerId);
       if (result === true) {
         editor.current?.replaceChildren();
         resources.current.clear();
@@ -493,7 +567,7 @@ export function Composer({
   const recallMessage = (): void => {
     const state = useAgentStore.getState();
     const field = editor.current;
-    if (!field || state.composerDraft.length !== 0) return;
+    if (!field || state.composerDraft.length !== 0 || state.draftImages.length) return;
     const previous = state.messages.findLast(({ role }) => role === "user");
     if (!previous) return;
     restoreComposerDraft(
@@ -503,6 +577,8 @@ export function Composer({
     );
     selectComposerRange(field, null);
     readEditor();
+    const images = imagesFromMessageParts(previous.parts);
+    if (images.length) void attachments.replace(images);
   };
 
   const appendPrompt = (text: string): void => {
@@ -561,7 +637,10 @@ export function Composer({
       return;
     }
     if (onSuggestionKey(event)) return;
-    const shortcut = composerEditingShortcut(event, draft.text.length === 0);
+    const shortcut = composerEditingShortcut(
+      event,
+      draft.text.length === 0 && !attachments.images.length,
+    );
     if (shortcut === "cycle-approval-mode") {
       event.preventDefault();
       if (!event.repeat) cycleMode();
@@ -676,7 +755,25 @@ export function Composer({
           {localizeError(sendError, locale)}
         </p>
       )}
-      <InputGroup className={COMPOSER_SURFACE_CLASS}>
+      <InputGroup
+        className={cn(COMPOSER_SURFACE_CLASS, fileDragging && "ring-2 ring-ring")}
+        onDragOver={(event) => {
+          if (!event.dataTransfer.types.includes("Files")) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          setFileDragging(true);
+        }}
+        onDragLeave={(event) => {
+          if (
+            !(
+              event.relatedTarget instanceof Node &&
+              event.currentTarget.contains(event.relatedTarget)
+            )
+          )
+            setFileDragging(false);
+        }}
+        onDrop={(event) => void dropFiles(event)}
+      >
         {planning && (
           <p
             role="status"
@@ -686,6 +783,55 @@ export function Composer({
             <ClipboardListIcon className="size-3.5" aria-hidden="true" />
             {t("计划模式", locale)}
           </p>
+        )}
+        <ImageAttachments
+          images={attachments.images}
+          className="w-full px-3 pt-2"
+          remove={(index) => {
+            if (submitting) return;
+            void attachments.remove(index);
+            editor.current?.focus({ preventScroll: true });
+          }}
+        />
+        {attachments.pending && (
+          <p role="status" className="px-3 pt-1 text-xs text-muted-foreground">
+            {t("正在读取图片…", locale)}
+          </p>
+        )}
+        {(attachments.error || dropError) && (
+          <p role="alert" className="px-3 pt-1 text-xs wrap-anywhere text-destructive">
+            {attachments.error ?? localizeError(dropError ?? "", locale)}
+          </p>
+        )}
+        {imagesBlocked && (
+          <div
+            id={imageNoticeId}
+            className={cn(
+              "flex w-full flex-wrap items-center gap-x-2 gap-y-1 px-3 pt-1 text-xs",
+              PERMISSION_ATTENTION_TEXT,
+            )}
+            role="status"
+          >
+            <ImageOffIcon aria-hidden="true" className="size-3.5 shrink-0" />
+            <span className="min-w-0 flex-1 basis-44">
+              {t(
+                textRun && supportsImages
+                  ? "当前任务使用文本模型。可在任务结束后发送图片，或移除图片。"
+                  : "当前模型仅支持文本。请选择支持图像的模型或移除图片。",
+                locale,
+              )}
+            </span>
+            {!supportsImages && (
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={() => setToolbarMenu("model")}
+              >
+                {t("选择模型", locale)}
+              </Button>
+            )}
+          </div>
         )}
         <div
           ref={attachEditor}
@@ -700,6 +846,7 @@ export function Composer({
           aria-placeholder={placeholder}
           aria-autocomplete="list"
           aria-controls={trigger ? inlineId : undefined}
+          aria-describedby={imagesBlocked ? imageNoticeId : undefined}
           aria-activedescendant={
             trigger && activeIndex >= 0 ? inlineId + "-" + activeIndex : undefined
           }
@@ -721,11 +868,16 @@ export function Composer({
           }}
           onPaste={(event) => {
             event.preventDefault();
+            const images = Array.from(event.clipboardData.files).filter(
+              (file) => file.type.startsWith("image/") || isDroppedImage(file),
+            );
+            if (!submitting) void attachments.add(images);
             const text = event.clipboardData.getData("text/plain");
             if (text) document.execCommand("insertText", false, text);
           }}
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => {
+            if (event.dataTransfer.files.length) return;
             event.preventDefault();
             const text = event.dataTransfer.getData("text/plain");
             const range = document.caretRangeFromPoint(event.clientX, event.clientY);
@@ -741,6 +893,21 @@ export function Composer({
           className="cursor-default items-center justify-between gap-2 p-2 pt-0"
         >
           <div className="flex shrink-0 items-center gap-1">
+            <input
+              ref={imagePicker}
+              data-image-picker
+              type="file"
+              accept={IMAGE_ATTACHMENT_MIME_TYPES.join(",")}
+              multiple
+              hidden
+              onChange={(event) => {
+                const files = Array.from(event.currentTarget.files ?? []);
+                event.currentTarget.value = "";
+                if (!files.length) return;
+                closePicker();
+                void attachments.add(files);
+              }}
+            />
             <Dialog
               open={pickerOpen}
               onOpenChange={(open) => {
@@ -776,6 +943,17 @@ export function Composer({
                 <DialogHeader>
                   <DialogTitle>{t("引用文件和文件夹", locale)}</DialogTitle>
                 </DialogHeader>
+                <div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => imagePicker.current?.click()}
+                  >
+                    <ImagePlusIcon data-icon="inline-start" />
+                    {t("选择图片…", locale)}
+                  </Button>
+                </div>
                 <Input
                   ref={pickerInput}
                   autoFocus
