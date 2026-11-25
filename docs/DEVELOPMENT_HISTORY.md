@@ -6,6 +6,8 @@
 
 ### 2026-11-25
 
+- **计划模式入口调整。** 在输入框的 `/` 菜单用 `/plan` 启用或退出规划。输入框单独显示规划状态，`Shift+Tab` 循环切换确认模式、只读和完全访问。明确更改会话权限后，审阅卡显示计划将使用的权限。Windows 隔离验收覆盖键盘与鼠标选择、草稿保留、规划期间切换权限、重启恢复计划，以及确认后的文件审批与写入。八步验证和八个桌面场景通过，Vitest 474 项通过。测试进程和临时数据已清理。[输入坞](./DESIGN.md#28-输入坞) · [提交 1a6a768](https://github.com/Murmureeee/Pilot/commit/1a6a768c4d9ba64632d9e3f03cd3ec67d1d9ad16)
+
 - **计划模式。** 在会话权限菜单、命令面板或用 `Shift+Tab` 进入。Agent 在规划期间可读取和搜索，并提交 Markdown 计划。输入坞支持编辑、保存、放弃和确认执行，待确认计划随会话恢复。确认后用进入计划模式时的权限执行已审阅的版本。Windows 隔离桌面使用本地 OpenAI 兼容接口夹具，实测读取、编辑、重启恢复和确认后的文件审批及写入。审阅卡在 1100 × 750、720 × 480 下通过中英文、亮暗主题八种组合，状态标题最低对比度为 5.03:1。窄窗 150% 缩放时复验编辑、取消及焦点返回。八步验证和八个桌面场景通过，Vitest 46 个文件共 473 项通过。Electron 冒烟返回 `ok: true`，开发版挂载且无未捕获异常。测试进程和临时数据已清理。[输入坞](./DESIGN.md#28-输入坞) · [场景脚本](../scripts/verify-windows-ui.mjs) · [提交 7c62fdd](https://github.com/Murmureeee/Pilot/commit/7c62fdd4320ff505ec146452d2e2c2fea552392f)
 
 - **Linux 更新入口。** 从应用菜单或设置「关于」检查更新。AppImage 与 Debian 安装包用 Linux 更新清单选择并校验各自的下载文件。AppImage 确认后保留原路径替换并重启，Debian 包提供下载位置，由系统包管理器安装。Linux 隔离验收从 `0.0.1` 测试包更新到 `0.5.0` 候选包，确认 AppImage 替换失败时保留原文件，重试后保留原数据目录和草稿。Debian 包通过版本检查和下载校验，文件管理器收到安装包所在目录，候选包也在隔离容器中通过 apt 安装、启动和卸载。软件更新对话框在 1100 × 750 和 720 × 480 下通过中英文、亮暗主题八种组合，并核对了键盘打开、操作和焦点返回。Windows 八步验证与六个桌面场景通过，Vitest 465 项通过。[提交 124915d](https://github.com/Murmureeee/Pilot/commit/124915da55ecb85480f58ab753469b16cff82414) · [提交 022d04a](https://github.com/Murmureeee/Pilot/commit/022d04a45cb28ca9ff99e626de646189755f7791) · [Windows 安装回归](https://github.com/Murmureeee/Pilot/actions/runs/45576659838) · [Linux 更新回归](https://github.com/Murmureeee/Pilot/actions/runs/45577825926)
