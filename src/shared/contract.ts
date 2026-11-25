@@ -243,11 +243,18 @@ export type UiPart =
       fileChange?: FileChangeSummary;
     });
 
+export interface AssistantTiming {
+  runId: string;
+  startedAt: number;
+  endedAt?: number;
+}
+
 export interface UiMessage {
   id: string;
   role: "user" | "assistant" | "system" | "toolResult";
   parts: UiPart[];
   streaming?: boolean;
+  timing?: AssistantTiming;
 }
 
 export type AgentStatus = "idle" | "streaming" | "waiting_approval" | "stopping";
@@ -345,9 +352,9 @@ export type AgentRunEvent =
   | { type: "context_compacted"; compaction: ContextCompaction; contextTokens: number }
   | { type: "messages"; messages: UiMessage[] }
   | { type: "user_message"; message: UiMessage }
-  | { type: "assistant_start"; id: string }
+  | { type: "assistant_start"; id: string; timing: Omit<AssistantTiming, "endedAt"> }
   | { type: "assistant_delta"; id: string; delta: string }
-  | { type: "assistant_end"; id: string }
+  | { type: "assistant_end"; id: string; timing: Required<AssistantTiming> }
   | { type: "thinking_start"; id: string; blockIndex: number }
   | { type: "thinking_delta"; id: string; blockIndex: number; delta: string }
   | { type: "thinking_end"; id: string; blockIndex: number; text: string; durationMs?: number }

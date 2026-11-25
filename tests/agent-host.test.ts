@@ -29,7 +29,7 @@ import { AgentHost } from "../src/main/agent-host/host";
 import { McpManager } from "../src/main/agent-host/mcp";
 import * as models from "../src/main/agent-host/models";
 import { actionFingerprint } from "../src/main/agent-host/recovery";
-import { SessionStore } from "../src/main/agent-host/session-store";
+import { SessionStore, toUiMessages } from "../src/main/agent-host/session-store";
 import type { Settings } from "../src/main/settings/types";
 import * as gitChanges from "../src/main/workspace/git-changes";
 import { previewWorkspaceReference } from "../src/main/workspace/reference";
@@ -1096,6 +1096,21 @@ it("streams and restores a timed trace and reverts a recorded workspace edit", a
   const sessionId = snapshot.sessionId;
   const changeEvent = events.find((event) => event.type === "file_change");
   if (!sessionId || !changeEvent) throw new Error("Missing file change");
+  const starts = events.filter((event) => event.type === "assistant_start");
+  const ends = events.filter((event) => event.type === "assistant_end");
+  expect(ends.length).toBeGreaterThan(1);
+  expect(starts).toHaveLength(ends.length);
+  for (const [index, end] of ends.entries()) {
+    expect(end.id).toBe(starts[index].id);
+    expect(end.timing).toMatchObject(starts[index].timing);
+    expect(end.timing.runId).toBe(end.run.runId);
+    expect(end.timing.endedAt).toBeGreaterThanOrEqual(end.timing.startedAt);
+  }
+  const saved = new SessionStore(join(root, "sessions")).load(sessionId);
+  const savedTiming = toUiMessages(saved, "s")
+    .filter((message) => message.role === "assistant")
+    .map((message) => message.timing);
+  expect(savedTiming).toEqual(ends.map((end) => end.timing));
   const { change } = changeEvent;
   expect(change.path).toBe("pilot-demo.txt");
   expect(host.getFileDiff(sessionId, change.id).hunks[0]).toEqual(

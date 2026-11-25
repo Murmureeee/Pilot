@@ -45,7 +45,10 @@ export function applyMessageEvent(messages: UiMessage[], event: AgentRunEvent): 
     case "user_message":
       return [...messages, event.message];
     case "assistant_start":
-      return [...messages, { id: event.id, role: "assistant", parts: [], streaming: true }];
+      return [
+        ...messages,
+        { id: event.id, role: "assistant", parts: [], streaming: true, timing: event.timing },
+      ];
     case "model_retry":
       return event.resetReplyId === undefined
         ? messages
@@ -66,6 +69,7 @@ export function applyMessageEvent(messages: UiMessage[], event: AgentRunEvent): 
       return updateAssistant(messages, event.id, (message) => ({
         ...message,
         streaming: false,
+        timing: event.timing,
         parts: message.parts.map((part) =>
           part.type === "thinking" && part.streaming ? { ...part, streaming: false } : part,
         ),

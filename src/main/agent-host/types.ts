@@ -3,6 +3,7 @@ import type { Agent, AgentMessage, AgentTool } from "@earendil-works/pi-agent-co
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 
 import type {
+  AssistantTiming,
   GitChangesView,
   ContextCompaction,
   ModelFailure,
@@ -164,6 +165,7 @@ export interface SessionIndex {
 
 export type TimedAssistantMessage = AssistantMessage & {
   pilotThinkingDurations?: Record<number, number>;
+  pilotTiming?: Required<AssistantTiming>;
 };
 
 export interface PreparedPrompt {

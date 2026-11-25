@@ -12,6 +12,7 @@ import {
   TraceLine,
   TraceTitle,
 } from "@renderer/components/ui/trace";
+import { formatDuration } from "@renderer/lib/duration";
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { ReplyEntry } from "@renderer/lib/types";
 import type { UiMessage } from "@shared/contract";
@@ -52,7 +53,23 @@ export function AssistantReply({
   const tools = activity.flatMap(({ part }) => (part.type === "tool" ? [part] : []));
   const failed = tools.filter((tool) => tool.state === "error").length;
   // 给出回答的回合把过程收成一行；没有回答（中断或失败）时过程就是结果，保持展开。
-  const summarized = !live && tools.length > 0 && answer.some(({ part }) => part.type === "text");
+  const summarized =
+    !live &&
+    tools.length > 0 &&
+    answer.some(({ part }) => part.type === "text" && part.text.trim());
+  let summary = "";
+  if (summarized) {
+    const end = messages.at(-1)?.timing;
+    // A resumed run can finish the same reply after the user has been away.
+    const start = end && messages.find(({ timing }) => timing?.runId === end.runId)?.timing;
+    summary =
+      start && end?.endedAt !== undefined
+        ? t(tools.length === 1 ? "已处理 {0} · 1 步" : "已处理 {0} · {1} 步", locale, [
+            formatDuration(Math.max(0, end.endedAt - start.startedAt), locale),
+            tools.length,
+          ])
+        : t("已处理 {0} 步", locale, [tools.length]);
+  }
   // 运行期间计划钉在输入坞上方，回合结束后才回到轨迹里。
   const planCard = !live && plan?.type === "plan" && <PlanCard steps={plan.steps} />;
   const steps = activity.map(({ key, part }) => {
@@ -76,7 +93,7 @@ export function AssistantReply({
                 <TraceIcon>
                   <ListTreeIcon />
                 </TraceIcon>
-                <TraceTitle>{t("已处理 {0} 步", locale, [tools.length])}</TraceTitle>
+                <TraceTitle title={summary}>{summary}</TraceTitle>
                 {failed > 0 && (
                   <TraceDescription className="text-destructive">
                     {t("{0} 步失败", locale, [failed])}

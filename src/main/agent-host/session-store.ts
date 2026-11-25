@@ -146,7 +146,22 @@ export function toUiMessages(
   for (const message of messages) {
     if (message.role === "user" || message.role === "assistant") {
       const parts = messageParts(message, getToolLabel);
-      uiMessages.push({ id: prefix + "-" + uiMessages.length, role: message.role, parts });
+      const timing =
+        message.role === "assistant" ? (message as TimedAssistantMessage).pilotTiming : undefined;
+      const validTiming =
+        timing &&
+        typeof timing.runId === "string" &&
+        Number.isFinite(timing.startedAt) &&
+        Number.isFinite(timing.endedAt) &&
+        timing.endedAt >= timing.startedAt;
+      uiMessages.push({
+        id: prefix + "-" + uiMessages.length,
+        role: message.role,
+        parts,
+        ...(validTiming && {
+          timing: { runId: timing.runId, startedAt: timing.startedAt, endedAt: timing.endedAt },
+        }),
+      });
       for (const part of parts) {
         if (part.type === "tool") calls.set(part.callId, part);
       }

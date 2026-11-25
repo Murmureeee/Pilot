@@ -82,6 +82,7 @@ export class AgentRun {
   private readonly selectedSkillIds = new Set<string>();
   private readonly thinkingStarts = new Map<number, number>();
   private thinkingDurations: Record<number, number> = {};
+  private turnStartedAt = Date.now();
   private gitFilesBefore?: GitCheckpointBase;
   private finishedGitChanges?: Promise<GitChangesView | null>;
   private persistError?: unknown;
@@ -647,6 +648,11 @@ export class AgentRun {
   }
 
   private onAgentEvent(event: AgentEvent): void {
+    if (event.type === "turn_start") {
+      this.turnStartedAt = Date.now();
+      return;
+    }
+
     if (event.type === "message_end" && event.message.role === "user") {
       const pending = this.checkpoint.pending.filter((message) => message !== event.message);
       this.saveCheckpoint({ ...this.checkpoint, pending });
@@ -667,7 +673,11 @@ export class AgentRun {
       } else if (message.role === "assistant") {
         this.thinkingStarts.clear();
         this.thinkingDurations = {};
-        this.send({ type: "assistant_start", id: "s-" + this.deps.view.nextId++ });
+        this.send({
+          type: "assistant_start",
+          id: "s-" + this.deps.view.nextId++,
+          timing: { runId: this.state.runId, startedAt: this.turnStartedAt },
+        });
       }
       return;
     }
@@ -679,6 +689,12 @@ export class AgentRun {
 
     if (event.type === "message_end" && event.message.role === "assistant") {
       const assistant: TimedAssistantMessage = event.message;
+      const timing = {
+        runId: this.state.runId,
+        startedAt: this.turnStartedAt,
+        endedAt: Math.max(this.turnStartedAt, Date.now()),
+      };
+      assistant.pilotTiming = timing;
       if (assistant.usage && assistant.stopReason !== "error") {
         // 上下文占用 = 最近一轮（不是累计）：请求携带的 input/cache + 本轮输出
         const u = assistant.usage;
@@ -695,7 +711,7 @@ export class AgentRun {
           assistant.pilotThinkingDurations = this.thinkingDurations;
         // Save the tool calls before pi asks for approval or starts any of them.
         this.saveCheckpoint();
-        this.send({ type: "assistant_end", id: last.id });
+        this.send({ type: "assistant_end", id: last.id, timing });
       }
       return;
     }

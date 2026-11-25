@@ -8,6 +8,7 @@ import {
 import type { AgentRunEvent, SessionMeta, UiMessage } from "../src/shared/contract";
 
 const run = { runId: "running-1", sessionId: "a" };
+const timing = { runId: run.runId, startedAt: 1000 };
 
 function initialRunUiState(): AgentUiState {
   return applyAgentEvent(
@@ -22,7 +23,11 @@ function applyRunEvent(state: AgentUiState, event: AgentRunEvent): AgentUiState 
 
 describe("agent-events adapter", () => {
   it("resets only the streaming reply on retry and clears the state when the task fails", () => {
-    const started = applyRunEvent(initialRunUiState(), { type: "assistant_start", id: "reply" });
+    const started = applyRunEvent(initialRunUiState(), {
+      type: "assistant_start",
+      id: "reply",
+      timing,
+    });
     const partial = applyRunEvent(started, {
       type: "assistant_delta",
       id: "reply",
@@ -38,7 +43,7 @@ describe("agent-events adapter", () => {
     const waiting = applyRunEvent(partial, event);
     expect(waiting.activeRun?.retry).toEqual(retry);
     expect(waiting.messages).toEqual([
-      { id: "reply", role: "assistant", parts: [], streaming: true },
+      { id: "reply", role: "assistant", parts: [], streaming: true, timing },
     ]);
     expect(applyAgentEvent(waiting, { ...event, run: { ...run, runId: "stale" } })).toBe(waiting);
     const failedRun = {
@@ -124,20 +129,24 @@ describe("agent-events adapter", () => {
       type: "user_message",
       message: { id: "s-0", role: "user", parts: [{ type: "text", text: "hi" }] },
     });
-    state = applyRunEvent(state, { type: "assistant_start", id });
+    state = applyRunEvent(state, { type: "assistant_start", id, timing });
     state = applyRunEvent(state, { type: "assistant_delta", id, delta: "pon" });
     state = applyRunEvent(state, { type: "assistant_delta", id, delta: "g" });
-    state = applyRunEvent(state, { type: "assistant_end", id });
+    const streaming = state;
+    const finishedTiming = { ...timing, endedAt: 2200 };
+    state = applyRunEvent(state, { type: "assistant_end", id, timing: finishedTiming });
 
     expect(state.messages).toHaveLength(2);
     const assistant = state.messages[1] as UiMessage;
     expect(assistant.parts).toEqual([{ type: "text", text: "pong" }]);
+    expect(streaming.messages[1]).toMatchObject({ streaming: true, timing });
+    expect(assistant).toMatchObject({ streaming: false, timing: finishedTiming });
   });
 
   it("completes thinking on its own event while the assistant is still streaming", () => {
     let state = initialRunUiState();
     const id = "s-1";
-    state = applyRunEvent(state, { type: "assistant_start", id });
+    state = applyRunEvent(state, { type: "assistant_start", id, timing });
     state = applyRunEvent(state, { type: "thinking_start", id, blockIndex: 0 });
     state = applyRunEvent(state, { type: "thinking_delta", id, blockIndex: 0, delta: "let me " });
     const active = state;
@@ -162,7 +171,7 @@ describe("agent-events adapter", () => {
 
   it("creates and updates tool parts through the tool lifecycle", () => {
     let state = initialRunUiState();
-    state = applyRunEvent(state, { type: "assistant_start", id: "a" });
+    state = applyRunEvent(state, { type: "assistant_start", id: "a", timing });
     state = applyRunEvent(state, {
       type: "tool_start",
       callId: "c1",
@@ -189,7 +198,7 @@ describe("agent-events adapter", () => {
 
   it("marks tool parts as error with error output", () => {
     let state = initialRunUiState();
-    state = applyRunEvent(state, { type: "assistant_start", id: "a" });
+    state = applyRunEvent(state, { type: "assistant_start", id: "a", timing });
     state = applyRunEvent(state, {
       type: "tool_start",
       callId: "c2",
@@ -209,7 +218,7 @@ describe("agent-events adapter", () => {
   });
 
   it("keeps dispatch order and immutable snapshots when tools finish out of order", () => {
-    let state = applyRunEvent(initialRunUiState(), { type: "assistant_start", id: "a" });
+    let state = applyRunEvent(initialRunUiState(), { type: "assistant_start", id: "a", timing });
     const first = {
       id: "a",
       callId: "first",
@@ -253,20 +262,20 @@ describe("agent-events adapter", () => {
   });
 
   it("replaces the plan for the current turn without touching earlier turns", () => {
-    let state = applyRunEvent(initialRunUiState(), { type: "assistant_start", id: "a" });
+    let state = applyRunEvent(initialRunUiState(), { type: "assistant_start", id: "a", timing });
     const firstPlan = [{ title: "First task", status: "completed" as const }];
     state = applyRunEvent(state, { type: "plan", steps: firstPlan });
     state = applyRunEvent(state, {
       type: "user_message",
       message: { id: "u", role: "user", parts: [{ type: "text", text: "second task" }] },
     });
-    state = applyRunEvent(state, { type: "assistant_start", id: "b" });
+    state = applyRunEvent(state, { type: "assistant_start", id: "b", timing });
     state = applyRunEvent(state, {
       type: "plan",
       steps: [{ title: "Second task", status: "in_progress" }],
     });
     const previous = state;
-    state = applyRunEvent(state, { type: "assistant_start", id: "c" });
+    state = applyRunEvent(state, { type: "assistant_start", id: "c", timing });
     const completed = [{ title: "Second task", status: "completed" as const }];
     state = applyRunEvent(state, { type: "plan", steps: completed });
 
