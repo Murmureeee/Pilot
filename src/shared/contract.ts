@@ -57,6 +57,7 @@ export const IPC = {
   sessionPreviewGitRollback: "session:preview-git-rollback",
   sessionApplyGitRollback: "session:apply-git-rollback",
   sessionOpenGitLine: "session:open-git-line",
+  sessionOpenWorkspaceFile: "session:open-workspace-file",
   sessionLoad: "session:load",
   sessionRename: "session:rename",
   sessionDelete: "session:delete",
@@ -108,6 +109,7 @@ export const IPC = {
   settingsSetPromptTemplates: "settings:set-prompt-templates",
   settingsSetLogLevel: "settings:set-log-level",
   settingsSetNotificationsEnabled: "settings:set-notifications-enabled",
+  settingsSetExternalEditor: "settings:set-external-editor",
   settingsSelectModel: "settings:select-model",
   settingsSetThinkingLevel: "settings:set-thinking-level",
   settingsRevokeToolRule: "settings:revoke-tool-rule",
@@ -926,6 +928,11 @@ export interface PromptTemplate {
   text: string;
 }
 
+export type ExternalEditor =
+  | { kind: "vscode" | "cursor" }
+  | { kind: "jetbrains"; command: string }
+  | { kind: "custom"; command: string; args: string[] };
+
 export interface PublicSettings {
   providers: PublicProvider[];
   activeProviderId: string;
@@ -935,6 +942,7 @@ export interface PublicSettings {
   thinkingLevels: ThinkingLevel[];
   workingDirectory: string | null;
   commandShell: CommandShell;
+  externalEditor: ExternalEditor;
   logLevel: LogLevel;
   notificationsEnabled: boolean;
   /** 全局人设/自定义指令（设置页「个性化」编辑） */

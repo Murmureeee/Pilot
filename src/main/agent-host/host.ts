@@ -58,6 +58,7 @@ import { hasSavedModel, resolveSessionModel, selectedCatalogModel } from "../../
 import { toPublicSettings } from "../settings";
 import { decryptSecret } from "../settings/secrets";
 import type { ProviderConfig, Settings } from "../settings/types";
+import { EDITOR_LINE_UNAVAILABLE } from "../workspace/constants";
 import { readFileChange, restoreFileChange } from "../workspace/file-changes";
 import { relativeGitPath } from "../workspace/git";
 import {
@@ -1376,11 +1377,10 @@ export class AgentHost {
   ): Promise<string> {
     const { snapshot } = await this.gitDiffContext(composerId, request);
     const directory = this.getWorkingDirectory();
-    if (!directory || !snapshot || !("root" in snapshot))
-      throw new Error("无法在编辑器中打开该行。");
+    if (!directory || !snapshot || !("root" in snapshot)) throw new Error(EDITOR_LINE_UNAVAILABLE);
     const current = readGitWorktreeFile(directory, snapshot.root, request.path);
     if (!current || line > Math.max(1, textLines(current.text).length))
-      throw new Error("无法在编辑器中打开该行。");
+      throw new Error(EDITOR_LINE_UNAVAILABLE);
     return gitFilePath(directory, snapshot.root, request.path);
   }
 

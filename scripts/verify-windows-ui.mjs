@@ -19,6 +19,7 @@ import {
   verifyApprovals,
   verifyBackgroundTerminal,
   verifyCommandsAndTemplates,
+  verifyExternalEditor,
   verifyFirstRun,
   verifyGitAnnotations,
   verifyGitPublishing,
@@ -36,6 +37,7 @@ import {
   verifyRestoredAfterTurnVerification,
   verifyRestoredPromptTemplates,
   verifyRestoredSettings,
+  verifyRestoredExternalEditor,
   verifySearchAndExport,
   verifySettings,
   verifyStreamingReply,
@@ -144,6 +146,12 @@ const verificationProject = join(scratch, "verification-project");
 const gitProject = join(scratch, "publishing-project");
 const gitRemote = join(scratch, "publishing-remote.git");
 const annotationRepository = join(scratch, "annotation-repository");
+const externalEditorFixture = {
+  launcher: process.execPath,
+  script: join(scratch, "external editor capture.cjs"),
+  output: join(scratch, "external editor arguments.json"),
+  missing: join(scratch, "missing editor.exe"),
+};
 const entryProject = join(scratch, "启动 项目");
 const secondEntryProject = join(scratch, "Next project & notes");
 const imageFixture = {
@@ -269,11 +277,18 @@ try {
     await runScene("Create and switch branches, preview commits, and push to a bare Git remote", () =>
       verifyGitPublishing(page, window, app, gitProject, gitRemote),
     );
-    await runScene("Send selected Git diff comments in one message with line references", () =>
-      verifyGitAnnotations(page, window, app, model, annotationRepository),
+    let annotations;
+    await runScene("Send selected Git diff comments in one message with line references", async () => {
+      annotations = await verifyGitAnnotations(page, window, app, model, annotationRepository);
+    });
+    await runScene("Save an external editor and open both a file preview and a Git line", () =>
+      verifyExternalEditor(page, window, externalEditorFixture, annotations),
     );
   });
   await withApp(profile, async (page, window, app) => {
+    await runScene("Restore the external editor preference after restarting", () =>
+      verifyRestoredExternalEditor(page, externalEditorFixture),
+    );
     await runScene("Open a cold and running window from the command line and drop a project", () =>
       verifyProjectEntry(page, window, app, {
         electron: require("electron"),

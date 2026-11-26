@@ -10,7 +10,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { previewWorkspaceReference } from "../src/main/workspace/reference";
+import { previewWorkspaceReference, workspaceFileForEditor } from "../src/main/workspace/reference";
 import { searchWorkspace } from "../src/main/workspace/search";
 
 describe("workspace reference search", () => {
@@ -63,6 +63,9 @@ it("previews local references and refuses paths outside their configured workspa
     path: "src/说明 文档.txt",
     text: "第一行\n第二行\n",
   });
+  expect(workspaceFileForEditor(root, { path: "src/说明 文档.txt", workingDirectory: root })).toBe(
+    file,
+  );
   expect(previewWorkspaceReference(root, { path: "src/" })).toMatchObject({
     kind: "directory",
     entries: expect.arrayContaining([
@@ -76,7 +79,12 @@ it("previews local references and refuses paths outside their configured workspa
   });
   for (const path of ["../other/sample.txt", "external/sample.txt", join(outside, "sample.txt")]) {
     expect(() => previewWorkspaceReference(root, { path })).toThrow("无法预览");
+    expect(() => workspaceFileForEditor(root, { path })).toThrow("文件不可用");
   }
+  expect(() => workspaceFileForEditor(root, { path: "src/" })).toThrow("文件不可用");
+  expect(() => workspaceFileForEditor(root, { path: file, workingDirectory: outside })).toThrow(
+    "工作目录已变更",
+  );
   expect(() => previewWorkspaceReference(root, { path: "src", workingDirectory: outside })).toThrow(
     "工作目录已变更",
   );

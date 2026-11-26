@@ -552,6 +552,7 @@ export default function App(): JSX.Element {
                 files={
                   reference ? (
                     <WorkspaceReferencePanel
+                      composerId={composerId}
                       reference={reference}
                       active={reviewOpen && tab === "files"}
                     />

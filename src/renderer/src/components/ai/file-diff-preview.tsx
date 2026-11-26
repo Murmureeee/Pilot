@@ -126,8 +126,8 @@ export function DiffLines({
                     {target !== undefined && onOpenLine ? (
                       <button
                         type="button"
-                        title={t("在 VS Code 中打开第 {0} 行", locale, [target])}
-                        aria-label={t("在 VS Code 中打开第 {0} 行", locale, [target])}
+                        title={t("在编辑器中打开第 {0} 行", locale, [target])}
+                        aria-label={t("在编辑器中打开第 {0} 行", locale, [target])}
                         className="rounded-sm underline underline-offset-2 outline-none hover:text-brand focus-visible:ring-2 focus-visible:ring-ring/50"
                         onClick={() => onOpenLine(target)}
                       >

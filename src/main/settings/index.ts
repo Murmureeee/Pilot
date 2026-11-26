@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { LogLevel, PublicSettings, SettingsInput } from "@shared/contract";
 
 import {
+  DEFAULT_EXTERNAL_EDITOR,
   DEFAULT_LOG_LEVEL,
   DEFAULT_THINKING_LEVEL,
   LOG_LEVELS,
@@ -138,6 +139,7 @@ export function mergeSettingsInput(current: Settings, input: SettingsInput): Set
     ),
     workingDirectory,
     commandShell: input.commandShell ?? current.commandShell,
+    externalEditor: current.externalEditor,
     logLevel: current.logLevel,
     notificationsEnabled: current.notificationsEnabled,
     // 人设传 "" 即清空（空串不是 nullish，不会被 ?? 吞掉）；技能启停整表提交
@@ -175,6 +177,7 @@ export function toPublicSettings(settings: Settings): PublicSettings {
     thinkingLevel: selectThinkingLevel(thinkingLevels, settings.thinkingLevel),
     workingDirectory: settings.workingDirectory ?? null,
     commandShell: getCommandShell(settings.commandShell),
+    externalEditor: settings.externalEditor ?? DEFAULT_EXTERNAL_EDITOR,
     logLevel: getLogLevel(settings),
     notificationsEnabled: settings.notificationsEnabled !== false,
     persona: settings.persona ?? "",

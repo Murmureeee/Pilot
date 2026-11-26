@@ -25,6 +25,10 @@ export function registerSettingsRoutes(
   handle(IPC.settingsSetNotificationsEnabled, (_event, notificationsEnabled) => {
     ctx.saveSettings({ ...ctx.getSettings(), notificationsEnabled });
   });
+  handle(IPC.settingsSetExternalEditor, (_event, externalEditor) => {
+    ctx.saveSettings({ ...ctx.getSettings(), externalEditor });
+    return externalEditor;
+  });
   handle(IPC.settingsSetLogLevel, (_event, logLevel) => {
     ctx.saveSettings({ ...ctx.getSettings(), logLevel });
   });

@@ -50,6 +50,7 @@ describe("IPC contract", () => {
   it("keeps notification preferences and renderer visibility on separate invoke channels", () => {
     expect(IPC.appSetConversationVisible).toBe("app:set-conversation-visible");
     expect(IPC.settingsSetNotificationsEnabled).toBe("settings:set-notifications-enabled");
+    expect(IPC.settingsSetExternalEditor).toBe("settings:set-external-editor");
   });
 
   it("uses the settings namespace for acknowledging a settings recovery", () => {
@@ -97,6 +98,7 @@ describe("IPC contract", () => {
     expect(IPC.sessionPreviewGitRollback).toBe("session:preview-git-rollback");
     expect(IPC.sessionApplyGitRollback).toBe("session:apply-git-rollback");
     expect(IPC.sessionOpenGitLine).toBe("session:open-git-line");
+    expect(IPC.sessionOpenWorkspaceFile).toBe("session:open-workspace-file");
     expect(IPC.agentClearQueue).toBe("agent:clear-queue");
     expect(IPC.agentResume).toBe("agent:resume");
     expect(IPC.agentCompact).toBe("agent:compact");

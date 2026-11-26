@@ -61,7 +61,7 @@ export function SettingsView(): JSX.Element {
         {settings?.recovery && <SettingsRecoveryNotice recovery={settings.recovery} />}
 
         {/* Keep in-progress edits when the settings page changes. */}
-        <div hidden={section !== "general"}>
+        <div hidden={section !== "general"} className="min-w-0">
           {settings && (
             <GeneralSettings settings={settings} isWindows={appInfo?.isWindows ?? false} />
           )}

@@ -3,6 +3,7 @@ import type {
   ApprovalMode,
   CommandDanger,
   CommandShell,
+  ExternalEditor,
   GitChange,
   GitChangesView,
   GitRollbackConflict,
@@ -78,6 +79,13 @@ export const SETTINGS_SECTION_DESCRIPTIONS: Record<SettingsSection, string> = {
   imports: "从 Codex 或 Claude Code 一次导入技能、MCP 服务和插件组件，并管理已导入的插件。",
 };
 
+export const EXTERNAL_EDITOR_LABELS: Record<ExternalEditor["kind"], string> = {
+  vscode: "VS Code",
+  cursor: "Cursor",
+  jetbrains: "JetBrains",
+  custom: "自定义命令",
+};
+
 // 分区内设置项的名称，供导航搜索匹配；新增设置项时同步补上。
 export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[]> = {
   general: [
@@ -90,6 +98,8 @@ export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[
     "命令环境",
     "PowerShell",
     "Git Bash",
+    "外部编辑器",
+    ...Object.values(EXTERNAL_EDITOR_LABELS),
   ],
   appearance: ["主题", "亮色", "暗色", "跟随系统", "语言"],
   permissions: [

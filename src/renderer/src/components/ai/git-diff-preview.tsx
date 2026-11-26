@@ -132,10 +132,12 @@ export function GitDiffPreview({
               lineTargets={data.lineTargets}
               onOpenLine={
                 data.canOpen
-                  ? (line) =>
+                  ? (line) => {
+                      setError("");
                       void window.pi
                         .sessionOpenGitLine(composerId, { area, path, live }, line)
-                        .catch((reason: unknown) => setError(String(reason)))
+                        .catch((reason: unknown) => setError(String(reason)));
+                    }
                   : undefined
               }
               hunkAction={(index) => (
@@ -306,10 +308,12 @@ export function GitCheckpointFilePreview({
             path={path}
             onOpenLine={
               data.canOpen
-                ? (line) =>
+                ? (line) => {
+                    setError("");
                     void window.pi
                       .sessionOpenGitLine(composerId, request, line)
-                      .catch((reason: unknown) => setError(String(reason)))
+                      .catch((reason: unknown) => setError(String(reason)));
+                  }
                 : undefined
             }
             hunkAction={(index) =>

@@ -18,6 +18,7 @@ import type { SendKey } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { CommandShell, PublicSettings } from "@shared/contract";
 
+import { ExternalEditorSettings } from "./ExternalEditorSettings";
 import { SettingsGroup, SettingsItem } from "./SettingsGroup";
 
 function ToolEnvironmentForm({
@@ -237,9 +238,9 @@ export function GeneralSettings({
   const [sendKey, setSendKey] = useState<SendKey>(loadSendKey);
 
   return (
-    <div className="grid gap-9">
+    <div className="grid grid-cols-1 gap-9">
       <SettingsGroup id="settings-conversation" title={t("对话", locale)}>
-        <div className="settings-list">
+        <div className="settings-list min-w-0">
           <SettingsItem
             label={t("发送方式", locale)}
             htmlFor="settings-send-key"
@@ -253,7 +254,11 @@ export function GeneralSettings({
                 saveSendKey(value);
               }}
             >
-              <SelectTrigger id="settings-send-key">
+              <SelectTrigger
+                id="settings-send-key"
+                className="max-w-full"
+                title={t(SEND_KEY_LABELS[sendKey], locale)}
+              >
                 <SelectValue>{t(SEND_KEY_LABELS[sendKey], locale)}</SelectValue>
               </SelectTrigger>
               <SelectContent align="end" alignItemWithTrigger={false}>
@@ -270,6 +275,7 @@ export function GeneralSettings({
         </div>
       </SettingsGroup>
       <ToolEnvironmentForm settings={settings} isWindows={isWindows} />
+      <ExternalEditorSettings editor={settings.externalEditor} isWindows={isWindows} />
       <NotificationPreferences enabled={settings.notificationsEnabled} />
     </div>
   );

@@ -1004,14 +1004,15 @@ async function typeTerminal(page, command) {
 
 async function chooseCommandShell(page, shell) {
   await openSettings(page, locales[1], "General");
-  const control = page.locator("#command-shell");
+  const environment = page.locator('[aria-labelledby="settings-workspace"]');
+  const control = environment.locator("#command-shell");
   const selected = await control.innerText();
   if (selected !== shell) {
     await control.click();
     await page.getByRole("option", { name: shell, exact: true }).click();
-    const save = button(page.getByRole("main"), "Save");
+    const save = button(environment, "Save");
     await save.click();
-    await page.getByRole("main").getByText("Saved", { exact: true }).waitFor();
+    await environment.getByText("Saved", { exact: true }).waitFor();
   }
   await page.keyboard.press("Control+l");
   await page.waitForFunction(() => document.activeElement?.matches("[data-composer-editor]"));
@@ -1777,6 +1778,139 @@ export async function verifyGitAnnotations(page, window, app, model, repository)
   assert.equal(git("status", "--porcelain=v1"), before);
   const result = await page.evaluate(() => window.pi.getSnapshot());
   assert.ok(result.sessionId && result.messages.filter(message => message.role === "user").length === 1);
+  return { project, amended };
+}
+
+function externalEditorSection(page) {
+  return page.locator('[aria-labelledby="settings-external-editor"]');
+}
+
+export async function verifyExternalEditor(page, window, fixture, { project, amended }) {
+  const args = [fixture.script, fixture.output, "{file}", "line {line}"];
+  writeFileSync(fixture.script, [
+    'const { renameSync, writeFileSync } = require("node:fs");',
+    'const [, , output, ...args] = process.argv;',
+    'writeFileSync(output + ".tmp", JSON.stringify(args));',
+    'renameSync(output + ".tmp", output);',
+  ].join("\n"));
+
+  const section = externalEditorSection(page);
+  const picker = section.getByRole("combobox");
+  const launcher = section.locator("#external-editor-command");
+  const parameters = section.locator("#external-editor-args");
+  const en = locales[1];
+  const reference = button(page, amended + ":2–3");
+  const preview = page.locator("[data-workspace-reference-panel]");
+  const openPreview = async locale => {
+    if (!(await preview.isVisible())) await reference.press("Enter");
+    const action = button(preview, locale === en ? "Open in editor" : "在编辑器中打开");
+    await action.waitFor();
+    return action;
+  };
+  const openGeneral = async locale => {
+    await openSettings(page, locale, locale === en ? "General" : "常规");
+    await section.waitFor();
+  };
+  const save = async () => {
+    await button(section, "Save").press("Enter");
+    await section.getByText("Saved", { exact: true }).waitFor();
+    await button(section, "Save").and(page.getByRole("button", { disabled: true })).waitFor();
+  };
+  const checkLaunch = async (action, line) => {
+    if (existsSync(fixture.output)) unlinkSync(fixture.output);
+    await action.press("Enter");
+    const deadline = performance.now() + 10_000;
+    while (!existsSync(fixture.output) && performance.now() < deadline) await delay(60);
+    assert.ok(existsSync(fixture.output), "The configured launcher must record its arguments");
+    assert.deepEqual(JSON.parse(readFileSync(fixture.output, "utf8")), [
+      join(project, amended), "line " + line,
+    ]);
+  };
+
+  await openGeneral(en);
+  const search = page.getByRole("searchbox", { name: "Search settings" });
+  await search.fill("External editor");
+  await search.press("Enter");
+  assert.match(await picker.innerText(), /VS Code/);
+  await picker.press("Space");
+  for (const name of ["VS Code", "Cursor", "JetBrains", "Custom command"])
+    await assertFits(page.getByRole("option", { name, exact: true }));
+  await page.getByRole("option", { name: "JetBrains", exact: true }).press("Enter");
+  await launcher.waitFor();
+  await parameters.waitFor({ state: "hidden" });
+  await picker.press("Space");
+  await page.getByRole("option", { name: "Custom command", exact: true }).press("Enter");
+  await launcher.fill(fixture.launcher);
+  await parameters.fill("{line}");
+  await button(section, "Save").press("Enter");
+  await section.getByRole("alert").getByText("Add {file} to the arguments.", { exact: true }).waitFor();
+  await parameters.and(page.locator(":focus")).waitFor();
+  await parameters.fill(args.join("\n"));
+  await save();
+  await page.keyboard.press("Control+l");
+  await checkLaunch(await openPreview(en), 2);
+  const changes = page.getByRole("tab", { name: /^Changes/ });
+  await changes.press("Enter");
+  const file = page.locator('[data-git-file="module/' + amended + '"]');
+  const toggle = file.locator("[data-git-diff-toggle]");
+  if (await toggle.getAttribute("aria-expanded") === "false") await toggle.press("Enter");
+  await checkLaunch(button(file, "Open line 3 in editor"), 3);
+
+  let locale = en;
+  for (const [size, zoom] of [[wide, 1], [narrow, 1], [narrow, 1.5]]) {
+    await resize(page, window, size, zoom);
+    for (const nextLocale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, locale, nextLocale, theme);
+        locale = nextLocale;
+        await openGeneral(locale);
+        await picker.scrollIntoViewIfNeeded();
+        await assertFits(picker);
+        await page.waitForFunction(() => {
+          const view = document.querySelector(".settings-scroll");
+          return view && view.scrollWidth <= view.clientWidth + 1;
+        });
+        await picker.press("Space");
+        const selected = page.getByRole("option", { selected: true });
+        await assertFits(selected);
+        assert.match(await selected.innerText(), locale === en ? /Custom command/ : /自定义命令/);
+        await page.keyboard.press("Escape");
+        await picker.and(page.locator(":focus")).waitFor();
+        await parameters.scrollIntoViewIfNeeded();
+        await assertFits(parameters);
+        await page.keyboard.press("Control+l");
+        await assertFits(await openPreview(locale));
+        console.log("Checked external editor at " + size.width + " × " + size.height + " " +
+          zoom * 100 + "% " + locale.lang + " " + theme);
+      }
+    }
+  }
+
+  await openGeneral(en);
+  await launcher.fill(fixture.missing);
+  await save();
+  await page.keyboard.press("Control+l");
+  await (await openPreview(en)).press("Enter");
+  await page.locator("[data-feedback-bar]").getByText(
+    "Editor not found. Check the installation or launcher under Settings → General.",
+    { exact: true },
+  ).waitFor();
+  await openGeneral(en);
+  await launcher.fill(fixture.launcher);
+  await save();
+}
+
+export async function verifyRestoredExternalEditor(page, fixture) {
+  const current = await page.evaluate(() => window.pi.settingsGet());
+  assert.deepEqual(current.externalEditor, {
+    kind: "custom",
+    command: fixture.launcher,
+    args: [fixture.script, fixture.output, "{file}", "line {line}"],
+  });
+  await openSettings(page, locales[1], "General");
+  const section = externalEditorSection(page);
+  assert.equal(await section.locator("#external-editor-command").inputValue(), fixture.launcher);
+  await page.keyboard.press("Control+l");
 }
 
 export async function verifyCommandsAndTemplates(page, app, model, originalProject, project) {

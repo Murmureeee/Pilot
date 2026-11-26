@@ -18,6 +18,7 @@ import { IPC, VERIFICATION_KINDS } from "../../shared/contract";
 import { imageAttachmentsSchema } from "../agent-host/image-attachments";
 import {
   afterTurnVerificationSchema,
+  externalEditorSchema,
   promptTemplatesSchema,
   toolRuleSchema,
   verificationCommandSchema,
@@ -34,6 +35,10 @@ const gitBranchName = z
   .max(GIT_BRANCH_NAME_LIMIT)
   .refine((value) => !/^-|[\0\r\n]/.test(value));
 const mentionId = id.refine((value) => !value.includes("\0"));
+const workspaceReference = z.strictObject({
+  path: mentionId,
+  workingDirectory: nonBlank.optional(),
+});
 const mentionOffset = z.number().int().nonnegative().optional();
 const fileMention = z.strictObject({
   type: z.literal("file"),
@@ -213,9 +218,7 @@ const inputs = {
     z.string().max(WORKSPACE_QUERY_LENGTH),
     nonBlank.optional(),
   ]),
-  [IPC.agentPreviewWorkspaceReference]: z.tuple([
-    z.strictObject({ path: mentionId, workingDirectory: nonBlank.optional() }),
-  ]),
+  [IPC.agentPreviewWorkspaceReference]: z.tuple([workspaceReference]),
   [IPC.agentAbort]: z.tuple([runRef]),
   [IPC.agentResume]: z.tuple([runRef, z.boolean().optional()]),
   [IPC.agentCompact]: z.tuple([id, z.string().optional()]),
@@ -288,6 +291,11 @@ const inputs = {
   [IPC.sessionPreviewGitRollback]: z.tuple([z.uuid(), gitRollbackSelection]),
   [IPC.sessionApplyGitRollback]: sessionChange,
   [IPC.sessionOpenGitLine]: z.tuple([z.uuid(), gitDiffRequest, z.number().int().positive()]),
+  [IPC.sessionOpenWorkspaceFile]: z.tuple([
+    z.uuid(),
+    workspaceReference,
+    z.number().int().positive().optional(),
+  ]),
   [IPC.sessionLoad]: z.tuple([z.uuid(), z.boolean().optional()]),
   [IPC.sessionRename]: z.tuple([z.uuid(), nonBlank]),
   [IPC.sessionDelete]: session,
@@ -369,6 +377,7 @@ const inputs = {
   [IPC.settingsSetPromptTemplates]: z.tuple([promptTemplatesSchema]),
   [IPC.settingsSetLogLevel]: z.tuple([z.enum(LOG_LEVELS)]),
   [IPC.settingsSetNotificationsEnabled]: z.tuple([z.boolean()]),
+  [IPC.settingsSetExternalEditor]: z.tuple([externalEditorSchema]),
   [IPC.settingsSelectModel]: z.tuple([id, nonBlank]),
   [IPC.settingsSetThinkingLevel]: z.tuple([z.enum(THINKING_LEVELS)]),
   [IPC.settingsRevokeToolRule]: z.tuple([toolRuleSchema.extend({ toolName: id }).strict()]),

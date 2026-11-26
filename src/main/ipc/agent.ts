@@ -8,9 +8,9 @@ import { MemoryChanges } from "../agent-host/memory";
 import { runAgentSmoke } from "../agent-host/smoke";
 import { NATIVE_DIALOG_TITLES } from "../constants";
 import { verificationRepairPrompt } from "../verification/commands";
-import { openVsCodeAtLine } from "../workspace/editor";
+import { openExternalEditor } from "../workspace/editor";
 import { readProjectGitHead } from "../workspace/git";
-import { previewWorkspaceReference } from "../workspace/reference";
+import { previewWorkspaceReference, workspaceFileForEditor } from "../workspace/reference";
 import { searchWorkspace } from "../workspace/search";
 import { getCommandShell } from "../workspace/shell";
 import { handle } from "./transport";
@@ -142,7 +142,12 @@ export function registerAgentRoutes({
   );
   handle(IPC.sessionOpenGitLine, async (_event, composerId, request, line) => {
     const path = await host.getGitEditorPath(composerId, request, line);
-    await openVsCodeAtLine(path, line);
+    await openExternalEditor(path, line, getSettings().externalEditor);
+  });
+  handle(IPC.sessionOpenWorkspaceFile, (_event, composerId, reference, line) => {
+    host.checkComposerId(composerId);
+    const path = workspaceFileForEditor(host.getWorkingDirectory(), reference);
+    return openExternalEditor(path, line, getSettings().externalEditor);
   });
   handle(IPC.sessionLoad, (_event, id, record) => host.loadSession(id, record));
   handle(IPC.sessionRename, (_event, id, title) =>

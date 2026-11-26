@@ -951,10 +951,17 @@ export const EN_MESSAGES: Record<string, string> = {
   "将修改 {0}": "Modify {0}",
   "将恢复 {0}": "Restore {0}",
   "将删除 {0}": "Delete {0}",
-  "在 VS Code 中打开第 {0} 行": "Open line {0} in VS Code",
-  "无法在编辑器中打开该行。": "Could not open this line in the editor.",
-  "无法打开 VS Code。请检查编辑器是否已安装。":
-    "Could not open VS Code. Check that the editor is installed.",
+  "在编辑器中打开第 {0} 行": "Open line {0} in editor",
+  在编辑器中打开: "Open in editor",
+  "无法在编辑器中打开文件。": "Could not open the file in the editor.",
+  "找不到外部编辑器。请在「设置 → 常规」检查安装或启动程序。":
+    "Editor not found. Check the installation or launcher under Settings → General.",
+  "外部编辑器启动失败。请在「设置 → 常规」检查启动程序后重试。":
+    "The editor failed to start. Check the launcher under Settings → General and try again.",
+  "文件不可用。请重新打开文件预览后重试。":
+    "The file is unavailable. Reopen its preview and try again.",
+  "该行在工作树中不可用。请刷新差异后重试。":
+    "This line is unavailable in the working tree. Refresh the diff and try again.",
   "改动归属不明，冲突内容已保留。":
     "Change ownership is unclear. The conflicting content was kept.",
   "暂存内容有变化，文件已保留。": "Staged content changed. The file was kept.",
@@ -1138,6 +1145,22 @@ export const EN_MESSAGES: Record<string, string> = {
   个性化: "Personalization",
   技能: "Skills",
   工作环境: "Working environment",
+  外部编辑器: "External editor",
+  编辑器: "Editor",
+  自定义命令: "Custom command",
+  "用于打开文件预览中的文件和定位 Git 差异行。":
+    "Open files from the preview and jump to lines in Git diffs.",
+  启动程序: "Launcher",
+  启动参数: "Arguments",
+  "填写 .exe 文件的绝对路径，或 PATH 中的程序名。":
+    "Enter the full path to an .exe or a program name on PATH.",
+  "填写可执行文件的绝对路径，或 PATH 中的程序名。":
+    "Enter the full path to an executable or a program name on PATH.",
+  "例如 idea64.exe 或 webstorm64.exe。": "For example, idea64.exe or webstorm64.exe.",
+  "例如 idea 或 webstorm。": "For example, idea or webstorm.",
+  "每行填写一个参数。用 {file} 传入文件路径，用 {line} 传入行号。":
+    "Enter one argument per line. Use {file} for the file path and {line} for the line number.",
+  "请在启动参数中加入 {file}。": "Add {file} to the arguments.",
   数据管理: "Data management",
   已归档的聊天: "Archived chats",
   存储: "Storage",

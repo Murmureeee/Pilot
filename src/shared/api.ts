@@ -23,6 +23,7 @@ import type {
   GitRollbackPreview,
   GitRollbackSelection,
   GitStageSelection,
+  ExternalEditor,
   ImageAttachment,
   Locale,
   LogLevel,
@@ -160,6 +161,11 @@ export interface PiApi {
   ): Promise<GitRollbackPreview>;
   sessionApplyGitRollback(composerId: string, token: string): Promise<void>;
   sessionOpenGitLine(composerId: string, request: GitDiffRequest, line: number): Promise<void>;
+  sessionOpenWorkspaceFile(
+    composerId: string,
+    reference: WorkspaceReferenceRequest,
+    line?: number,
+  ): Promise<void>;
   sessionLoad(id: string, record?: boolean): Promise<Snapshot>;
   sessionRename(id: string, title: string): Promise<SessionMeta[]>;
   sessionDelete(id: string): Promise<Snapshot>;
@@ -228,6 +234,7 @@ export interface PiApi {
   settingsSetPromptTemplates(templates: PromptTemplate[]): Promise<PublicSettings>;
   settingsSetLogLevel(level: LogLevel): Promise<void>;
   settingsSetNotificationsEnabled(enabled: boolean): Promise<void>;
+  settingsSetExternalEditor(editor: ExternalEditor): Promise<ExternalEditor>;
   settingsSelectModel(providerId: string, modelId: string): Promise<PublicSettings>;
   settingsSetThinkingLevel(level: ThinkingLevel): Promise<PublicSettings>;
   settingsRevokeToolRule(rule: ToolRule): Promise<PublicSettings>;

@@ -14,11 +14,35 @@ import {
 } from "../src/main/settings";
 import { updateActiveModel } from "../src/main/settings/models";
 import type { Settings } from "../src/main/settings/types";
+import type { ExternalEditor } from "../src/shared/contract";
 import { effectiveModelCapabilities } from "../src/shared/model-capabilities";
 import { modelCatalogInput } from "../src/shared/providers";
 
 vi.mock("electron", () => ({ safeStorage: { isEncryptionAvailable: () => false } }));
 vi.mock("node:fs", { spy: true });
+
+it("defaults older settings to VS Code and preserves a saved editor on other settings saves", () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-editor-settings-"));
+  const settings = loadSettings(profile.path);
+  saveSettings(profile.path, settings);
+  expect(toPublicSettings(loadSettings(profile.path)).externalEditor).toEqual({ kind: "vscode" });
+
+  const externalEditor: ExternalEditor = {
+    kind: "custom",
+    command: "editor",
+    args: ["--go", "{file}:{line}"],
+  };
+  saveSettings(profile.path, { ...settings, externalEditor });
+  const reopened = loadSettings(profile.path);
+  expect(toPublicSettings(reopened).externalEditor).toEqual(externalEditor);
+  const updated = mergeSettingsInput(reopened, {
+    providers: reopened.providers,
+    activeProviderId: reopened.activeProviderId,
+    persona: "Keep the editor preference.",
+  });
+  saveSettings(profile.path, updated);
+  expect(loadSettings(profile.path).externalEditor).toEqual(externalEditor);
+});
 
 it("keeps a project's after-turn command and shell through ordinary settings saves", () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-after-turn-settings-"));

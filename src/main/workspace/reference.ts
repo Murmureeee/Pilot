@@ -11,7 +11,7 @@ import type {
   WorkspaceReferenceRequest,
 } from "@shared/contract";
 
-import { MAX_DIRECTORY_PREVIEW_ENTRIES } from "./constants";
+import { EDITOR_FILE_UNAVAILABLE, MAX_DIRECTORY_PREVIEW_ENTRIES } from "./constants";
 import { readFileSnapshot } from "./file-changes";
 import { createToolPathResolver } from "./paths";
 
@@ -40,17 +40,39 @@ export const gitDiffReferenceSchema = z
       (area !== "untracked" || !before),
   ) satisfies z.ZodType<GitDiffReference>;
 
-export function previewWorkspaceReference(
+function requireReferenceDirectory(
   workingDirectory: string | undefined,
   reference: WorkspaceReferenceRequest,
-): WorkspaceReferencePreview {
+): string {
   if (!workingDirectory) throw new Error("请先选择工作目录。");
   if (reference.workingDirectory && reference.workingDirectory !== workingDirectory) {
     throw new Error("工作目录已变更，请重新选择文件引用。");
   }
+  return workingDirectory;
+}
+
+export function workspaceFileForEditor(
+  workingDirectory: string | undefined,
+  reference: WorkspaceReferenceRequest,
+): string {
+  const workspace = requireReferenceDirectory(workingDirectory, reference);
   try {
-    const target = createToolPathResolver(workingDirectory)(reference.path);
-    const path = relative(workingDirectory, target).split(sep).join("/") || ".";
+    const target = createToolPathResolver(workspace)(reference.path);
+    if (statSync(target).isFile()) return target;
+  } catch (cause) {
+    throw new Error(EDITOR_FILE_UNAVAILABLE, { cause });
+  }
+  throw new Error(EDITOR_FILE_UNAVAILABLE);
+}
+
+export function previewWorkspaceReference(
+  workingDirectory: string | undefined,
+  reference: WorkspaceReferenceRequest,
+): WorkspaceReferencePreview {
+  const workspace = requireReferenceDirectory(workingDirectory, reference);
+  try {
+    const target = createToolPathResolver(workspace)(reference.path);
+    const path = relative(workspace, target).split(sep).join("/") || ".";
     const file = statSync(target);
     if (file.isFile()) return { kind: "file", path, text: readFileSnapshot(target) ?? null };
     if (!file.isDirectory()) throw new Error("Unsupported workspace entry");

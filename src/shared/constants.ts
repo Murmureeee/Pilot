@@ -26,6 +26,7 @@ export const OPENAI_RESPONSES_MIN_TOKENS = 16;
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export const LOG_LEVELS = ["off", "error", "warn", "info", "debug"] as const;
 export const DEFAULT_LOG_LEVEL = "info";
+export const DEFAULT_EXTERNAL_EDITOR = { kind: "vscode" } as const;
 export const LOG_FILE_COUNT = 3;
 export const LOG_FILE_MAX_BYTES = 1024 * 1024;
 

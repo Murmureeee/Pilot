@@ -106,6 +106,8 @@ const api: PiApi = {
     ipcRenderer.invoke(IPC.sessionApplyGitRollback, composerId, token),
   sessionOpenGitLine: (composerId, request, line) =>
     ipcRenderer.invoke(IPC.sessionOpenGitLine, composerId, request, line),
+  sessionOpenWorkspaceFile: (composerId, reference, line) =>
+    ipcRenderer.invoke(IPC.sessionOpenWorkspaceFile, composerId, reference, line),
   sessionLoad: (id, record) => ipcRenderer.invoke(IPC.sessionLoad, id, record),
   sessionRename: (id: string, title: string) =>
     ipcRenderer.invoke(IPC.sessionRename, id, title) as Promise<SessionMeta[]>,
@@ -174,6 +176,7 @@ const api: PiApi = {
   settingsSetLogLevel: (level) => ipcRenderer.invoke(IPC.settingsSetLogLevel, level),
   settingsSetNotificationsEnabled: (enabled) =>
     ipcRenderer.invoke(IPC.settingsSetNotificationsEnabled, enabled),
+  settingsSetExternalEditor: (editor) => ipcRenderer.invoke(IPC.settingsSetExternalEditor, editor),
   settingsSelectModel: (providerId, modelId) =>
     ipcRenderer.invoke(IPC.settingsSelectModel, providerId, modelId),
   settingsSetThinkingLevel: (level) => ipcRenderer.invoke(IPC.settingsSetThinkingLevel, level),

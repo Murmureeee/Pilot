@@ -5,6 +5,7 @@ import type {
   ActiveRun,
   ApprovalMode,
   ComposerDraft,
+  ExternalEditor,
   ImageAttachment,
   LogLevel,
   MenuAction,
@@ -95,6 +96,7 @@ interface AgentStore extends AgentUiState {
   savePromptTemplates(templates: PromptTemplate[]): Promise<void>;
   setLogLevel(level: LogLevel): Promise<void>;
   setNotificationsEnabled(enabled: boolean): Promise<void>;
+  saveExternalEditor(editor: ExternalEditor): Promise<ExternalEditor>;
   dismissSettingsRecovery(): Promise<void>;
   retrySettingsRecovery(): Promise<void>;
   saveToolEnvironment(
@@ -471,6 +473,11 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   setNotificationsEnabled: async (notificationsEnabled) => {
     await window.pi.settingsSetNotificationsEnabled(notificationsEnabled);
     set(({ settings }) => (settings ? { settings: { ...settings, notificationsEnabled } } : {}));
+  },
+  saveExternalEditor: async (editor) => {
+    const externalEditor = await window.pi.settingsSetExternalEditor(editor);
+    set(({ settings }) => (settings ? { settings: { ...settings, externalEditor } } : {}));
+    return externalEditor;
   },
 
   dismissSettingsRecovery: async () => {

@@ -1,8 +1,9 @@
 // @env browser
-import { ChevronRightIcon, FileTextIcon, FolderIcon } from "lucide-react";
+import { ArrowUpRightIcon, ChevronRightIcon, FileTextIcon, FolderIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react";
 
 import { Button } from "@renderer/components/ui/button";
+import { showFeedbackError } from "@renderer/lib/feedback";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { WorkspaceReferenceLoad, WorkspaceReferenceTab } from "@renderer/lib/types";
 import { referenceName } from "@renderer/lib/workspace-links";
@@ -43,9 +44,11 @@ function FileText({ text, line }: { text: string; line?: number }): JSX.Element 
 }
 
 export function WorkspaceReferencePanel({
+  composerId,
   reference,
   active,
 }: {
+  composerId: string;
   reference: WorkspaceReferenceTab;
   active: boolean;
 }): JSX.Element {
@@ -93,10 +96,29 @@ export function WorkspaceReferencePanel({
   return (
     <div data-workspace-reference-panel className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="flex shrink-0 items-center gap-2 border-b border-border/65 bg-muted/40 px-3 py-2">
-        <h2 title={path} className="flex min-w-0 items-center gap-2 text-[13px] font-medium">
+        <h2 title={path} className="flex min-w-0 flex-1 items-center gap-2 text-[13px] font-medium">
           <Icon aria-hidden="true" className="size-3.5 shrink-0" />
           <span className="truncate">{title}</span>
         </h2>
+        {preview?.kind === "file" && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0"
+            onClick={() =>
+              void window.pi
+                .sessionOpenWorkspaceFile(
+                  composerId,
+                  { path: preview.path, workingDirectory },
+                  line,
+                )
+                .catch((error: unknown) => showFeedbackError("无法在编辑器中打开文件。", error))
+            }
+          >
+            <ArrowUpRightIcon data-icon="inline-start" aria-hidden="true" />
+            {t("在编辑器中打开", locale)}
+          </Button>
+        )}
       </header>
       <div
         ref={body}

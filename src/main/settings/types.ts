@@ -3,6 +3,7 @@ import type {
   AfterTurnVerification,
   ApprovalMode,
   CommandShell,
+  ExternalEditor,
   LogLevel,
   PromptTemplate,
   ProviderFields,
@@ -38,6 +39,7 @@ export interface Settings {
   thinkingLevels?: ThinkingLevel[];
   workingDirectory?: string;
   commandShell?: CommandShell;
+  externalEditor?: ExternalEditor;
   logLevel?: LogLevel;
   notificationsEnabled?: boolean;
   persona?: string;

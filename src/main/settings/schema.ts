@@ -10,12 +10,29 @@ import {
   THINKING_LEVELS,
   VERIFICATION_COMMAND_LIMIT,
 } from "../../shared/constants";
-import { VERIFICATION_KINDS } from "../../shared/contract";
+import { VERIFICATION_KINDS, type ExternalEditor } from "../../shared/contract";
 import { WEB_DOMAIN_PATTERN } from "../../shared/web";
 import { normalizeModelCatalog } from "./models";
 import type { Settings } from "./types";
 
 const optionalText = z.string().optional();
+const editorCommand = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((value) => !/[\0\r\n]/.test(value));
+export const externalEditorSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.enum(["vscode", "cursor"]) }),
+  z.strictObject({ kind: z.literal("jetbrains"), command: editorCommand }),
+  z.strictObject({
+    kind: z.literal("custom"),
+    command: editorCommand,
+    args: z
+      .array(z.string().refine((argument) => !/[\0\r\n]/.test(argument)))
+      .refine((args) => args.some((argument) => argument.includes("{file}"))),
+  }),
+]) satisfies z.ZodType<ExternalEditor>;
+
 export const verificationCommandSchema = z
   .string()
   .trim()
@@ -111,6 +128,7 @@ const storedSettings = z.looseObject({
     .nullish()
     .transform((value) => value ?? undefined),
   commandShell: z.enum(["powershell", "bash"]).optional().catch(undefined),
+  externalEditor: externalEditorSchema.optional().catch(undefined),
   logLevel: z.enum(LOG_LEVELS).optional().catch(undefined),
   notificationsEnabled: z.boolean().optional().catch(undefined),
   persona: optionalText,
