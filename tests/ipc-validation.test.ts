@@ -73,6 +73,16 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.sessionStageGit]: [sessionId, { ...gitSelection, area: "unstaged" }],
   [IPC.sessionPreviewGitCommit]: [sessionId, [gitSelection]],
   [IPC.sessionCommitGit]: [sessionId, sessionId, "feat: review changes\n\nDetails"],
+  [IPC.sessionGitBranches]: [sessionId],
+  [IPC.sessionSwitchGitBranch]: [sessionId, sessionId, { kind: "create", branch: "feature/stage" }],
+  [IPC.sessionPreviewGitPush]: [sessionId],
+  [IPC.sessionPushGit]: [sessionId, sessionId],
+  [IPC.sessionPreviewGitPullRequest]: [sessionId],
+  [IPC.sessionCreateGitPullRequest]: [
+    sessionId,
+    sessionId,
+    { base: "main", title: "Changes", body: "First line\n\nSecond line" },
+  ],
   [IPC.sessionGitCheckpointDiff]: [sessionId, sessionId, "file.ts"],
   [IPC.sessionPreviewGitRollback]: [
     sessionId,
@@ -323,6 +333,17 @@ describe("IPC argument validation", () => {
     [IPC.sessionStageGit, [sessionId, { ...gitSelection, area: "staged" }]],
     [IPC.sessionPreviewGitCommit, [sessionId, []]],
     [IPC.sessionCommitGit, [sessionId, sessionId, "  "]],
+    [IPC.sessionSwitchGitBranch, [sessionId, sessionId, { kind: "switch", branch: "--detach" }]],
+    [IPC.sessionSwitchGitBranch, [sessionId, sessionId, { kind: "reset", branch: "main" }]],
+    [IPC.sessionPushGit, [sessionId, sessionId, { force: true }]],
+    [
+      IPC.sessionCreateGitPullRequest,
+      [sessionId, sessionId, { base: "main", title: "a\nb", body: "" }],
+    ],
+    [
+      IPC.sessionCreateGitPullRequest,
+      [sessionId, sessionId, { base: "main", title: "PR", body: "a\0b" }],
+    ],
     [
       IPC.sessionPreviewGitRollback,
       [sessionId, { checkpointId: sessionId, revision: sessionId, path: "file.ts", hunks: [-1] }],

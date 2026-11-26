@@ -4,7 +4,11 @@ import type { Dispatch, SetStateAction } from "react";
 
 import type {
   FileChangeSummary,
+  GitBranchOptions,
   GitChangesView,
+  GitPullRequestPreview,
+  GitPushPreview,
+  GitPushResult,
   ImageAttachment,
   PromptTemplate,
   TranscriptLocation,
@@ -264,6 +268,18 @@ export interface GitReview {
   error: string | null;
   refresh(): void;
 }
+
+export type GitBranchDialogMode = "branch" | "push" | "pull-request";
+
+export type GitBranchDialogPreview =
+  | { kind: "branch"; data: GitBranchOptions }
+  | { kind: "push"; data: GitPushPreview }
+  | { kind: "pull-request"; data: GitPullRequestPreview };
+
+export type GitBranchFeedback =
+  | { kind: "branch"; branch: string }
+  | { kind: "push"; destination: string; trackingFailed: GitPushResult["trackingFailed"] }
+  | { kind: "pull-request"; url: string };
 
 export interface ProjectSelection {
   sessionId?: string;

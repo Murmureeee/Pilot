@@ -23,6 +23,7 @@ import type {
   GitStageSelection,
 } from "@shared/contract";
 
+import { GitBranchActions } from "./git-branch-actions";
 import { GitCommitDialog } from "./git-commit-dialog";
 import { GitCheckpointFilePreview, GitDiffPreview } from "./git-diff-preview";
 
@@ -225,6 +226,21 @@ export function GitChangesPanel({
               </Button>
             )}
           </div>
+        </div>
+      )}
+      {live && (
+        <div className="flex shrink-0 flex-col gap-2 border-b border-border/65 px-3 py-2">
+          <GitBranchActions
+            key={composerId + ":" + workingDirectory}
+            composerId={composerId}
+            disabled={busy || staging}
+            onBranchChanged={() => {
+              setExpanded(undefined);
+              setStageError("");
+              setCommit(undefined);
+              refreshSelection();
+            }}
+          />
         </div>
       )}
       {(review.error || changes === null) && (

@@ -38,3 +38,6 @@ export const LOCALE_DETAILS = {
   (typeof SUPPORTED_LOCALES)[number],
   { label: string; htmlLang: string }
 >;
+export const GIT_BRANCH_NAME_LIMIT = 1024;
+export const GIT_PR_TITLE_LIMIT = 180;
+export const GIT_PR_BODY_LIMIT = 65_536;

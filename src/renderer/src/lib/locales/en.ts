@@ -820,6 +820,85 @@ export const EN_MESSAGES: Record<string, string> = {
   "正在提交…": "Committing…",
   "已提交到 {0}": "Committed to {0}",
   "已提交到游离 HEAD": "Committed to detached HEAD",
+  "管理分支…": "Branches…",
+  "推送…": "Push…",
+  "创建 PR…": "Create PR…",
+  新建或切换分支: "Create or switch branches",
+  "选择本地分支切换，或从当前提交新建分支。":
+    "Switch to a local branch or create a branch from the current checkout.",
+  新建分支: "Create branch",
+  "正在更新分支…": "Updating branch…",
+  "当前分支 {0}": "Current branch {0}",
+  "游离 HEAD {0}": "Detached HEAD {0}",
+  本地分支: "Local branches",
+  "切换到 {0}": "Switch to {0}",
+  新分支名称: "New branch name",
+  "当前分支已切换到 {0}": "Switched to {0}",
+  预览推送: "Preview push",
+  "确认远端、目标分支和提交范围。": "Review the remote, destination branch, and commits.",
+  确认推送: "Confirm push",
+  "正在推送…": "Pushing…",
+  推送目标: "Push destination",
+  "确认后将创建远端分支。": "Confirm to create the remote branch.",
+  本次推送的提交: "Commits to push",
+  "本次推送的提交（{0}）": "Commits to push ({0})",
+  无提交说明: "No commit subject",
+  "远端分支已是最新。": "The remote branch is up to date.",
+  "远端已包含这些提交。": "The remote already contains these commits.",
+  "已推送到 {0}": "Pushed to {0}",
+  "可在终端为这个分支设置上游。": "You can set the upstream for this branch in the terminal.",
+  创建拉取请求: "Create pull request",
+  "核对来源、基准分支以及准备发送到 GitHub 的内容。":
+    "Review the source, base branch, and text that will be sent to GitHub.",
+  "创建 PR": "Create PR",
+  "正在创建 PR…": "Creating PR…",
+  目标仓库: "Target repository",
+  来源分支: "Source branch",
+  基准分支: "Base branch",
+  "PR 标题": "PR title",
+  "PR 说明": "PR description",
+  "查看已创建的 PR": "View created pull request",
+  "分支名称无效。请检查名称后重试。": "Invalid branch name. Check the name and try again.",
+  "当前分支已变更，请重新加载分支列表。": "The current branch changed. Reload the branch list.",
+  "当前处于游离 HEAD。请先创建或切换到本地分支。":
+    "HEAD is detached. Create or switch to a local branch first.",
+  "当前分支还没有提交。请先提交改动。": "This branch has no commits. Commit your changes first.",
+  "找不到推送远端。请在终端添加远端或配置当前分支的推送远端。":
+    "No push remote was found. Add a remote or set the branch's push remote in the terminal.",
+  "此远端配置了多个推送地址。请在终端核对地址，再执行推送。":
+    "This remote has several push URLs. Check the destinations and push from the terminal.",
+  "远端地址重写与推送地址不一致。请在终端检查 Git 地址配置。":
+    "Git rewrites the remote address to a different push destination. Check the URL settings in the terminal.",
+  "无法读取远端分支。请检查连接和 Git 凭据后重试。":
+    "Could not read the remote branches. Check the connection and Git credentials, then try again.",
+  "远端分支含有当前分支没有的历史。请先提取并整合远端改动。":
+    "The remote branch contains commits missing here. Fetch and integrate the remote changes first.",
+  "本地分支或远端已变更，请重新预览推送。":
+    "The local branch or remote changed. Preview the push again.",
+  "推送未确认成功。请检查远端状态后重新预览。":
+    "The push could not be confirmed. Check the remote and preview the push again.",
+  "Git 操作预览已失效，请重新加载。": "The Git preview expired. Reload it to continue.",
+  "找不到 GitHub CLI。请安装 gh 后重试。": "GitHub CLI was not found. Install gh and try again.",
+  "当前推送地址无法对应到 GitHub.com 仓库。请检查 Git 远端配置。":
+    "The push URL does not identify a GitHub.com repository. Check the Git remote settings.",
+  "无法读取 GitHub 仓库。请检查 gh 登录状态和仓库权限。":
+    "Could not read the GitHub repository. Check your gh sign-in and repository permissions.",
+  "无法识别 GitHub 仓库或默认分支。请核对远端地址。":
+    "Could not identify the GitHub repository or default branch. Verify the remote URL.",
+  "无法读取 GitHub 分支。请确认分支已推送，并检查 gh 登录状态。":
+    "Could not read the GitHub branch. Check that the branch is published and that gh is signed in.",
+  "无法确认 GitHub 分支的提交。请重新加载。":
+    "Could not verify the GitHub branch commit. Reload to try again.",
+  "GitHub 分支与本地提交不同。请先推送当前分支。":
+    "The GitHub branch points to a different commit. Push the current branch first.",
+  "本地分支或 PR 来源已变更，请重新加载确认范围。":
+    "The local branch or PR source changed. Reload to review the scope.",
+  "PR 的基准分支必须不同于来源分支。请选择其他分支。":
+    "Choose a base branch different from the source branch.",
+  "PR 创建未确认成功。请检查 GitHub 上的 PR 和 gh 登录状态。":
+    "PR creation could not be confirmed. Check the pull requests on GitHub and your gh sign-in.",
+  "未收到 PR 链接。请在 GitHub 上核对创建结果。":
+    "No PR link was returned. Check GitHub for the new pull request.",
   "Git 变更已更新，请重新查看差异。": "Git changes have changed. Review the diff again.",
   "无法选中这些 Git 区块。": "These Git hunks cannot be selected.",
   "Git 暂存区正被其他操作使用，请稍后重试。":

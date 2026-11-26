@@ -20,6 +20,7 @@ import {
   verifyBackgroundTerminal,
   verifyCommandsAndTemplates,
   verifyFirstRun,
+  verifyGitPublishing,
   verifyImageConversation,
   verifyImageDraft,
   verifyInstructionSourceLayouts,
@@ -137,6 +138,8 @@ const commandProject = join(scratch, "commands-project");
 const instructionProject = join(scratch, "instructions-project");
 const memoryProject = join(scratch, "memory-project");
 const verificationProject = join(scratch, "verification-project");
+const gitProject = join(scratch, "publishing-project");
+const gitRemote = join(scratch, "publishing-remote.git");
 const imageFixture = {
   chosen: join(scratch, "chosen.png"),
   dropped: join(scratch, "dropped.png"),
@@ -154,6 +157,7 @@ try {
   mkdirSync(instructionProject);
   mkdirSync(memoryProject);
   mkdirSync(verificationProject);
+  mkdirSync(gitProject);
   execFileSync("git", ["init", "-q", commandProject]);
   writeFileSync(join(commandProject, "package.json"), JSON.stringify({
     scripts: { test: 'node -e "console.log(123456789)"' },
@@ -249,9 +253,12 @@ try {
       verificationSession = await verifyAfterTurnVerification(page, window, app, model, verificationProject, memoryProject);
     });
   });
-  await withApp(profile, async (page) => {
+  await withApp(profile, async (page, window, app) => {
     await runScene("Restore automatic verification history and turn off the project command", () =>
       verifyRestoredAfterTurnVerification(page, model, verificationSession),
+    );
+    await runScene("Create and switch branches, preview commits, and push to a bare Git remote", () =>
+      verifyGitPublishing(page, window, app, gitProject, gitRemote),
     );
   });
 } finally {

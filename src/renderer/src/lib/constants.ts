@@ -19,6 +19,7 @@ import type { ExternalImportKind } from "@shared/imports";
 import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL } from "../../../shared/web";
 import type {
   ComposerShortcut,
+  GitBranchDialogMode,
   SendKey,
   SessionRowStatus,
   SettingsSection,
@@ -376,6 +377,34 @@ export const VERIFICATION_STATUS_LABELS: Record<VerificationStatus, string> = {
   interrupted: "已中断",
 };
 export const GIT_CHANGE_AREAS = ["staged", "unstaged", "untracked"] as const;
+export const GIT_BRANCH_DIALOG: Record<
+  GitBranchDialogMode,
+  {
+    title: string;
+    description: string;
+    submit: string;
+    pending: string;
+  }
+> = {
+  branch: {
+    title: "新建或切换分支",
+    description: "选择本地分支切换，或从当前提交新建分支。",
+    submit: "新建分支",
+    pending: "正在更新分支…",
+  },
+  push: {
+    title: "预览推送",
+    description: "确认远端、目标分支和提交范围。",
+    submit: "确认推送",
+    pending: "正在推送…",
+  },
+  "pull-request": {
+    title: "创建拉取请求",
+    description: "核对来源、基准分支以及准备发送到 GitHub 的内容。",
+    submit: "创建 PR",
+    pending: "正在创建 PR…",
+  },
+};
 export const GIT_CHANGE_AREA_LABELS: Record<GitChange["area"], string> = {
   staged: "暂存区",
   unstaged: "未暂存",

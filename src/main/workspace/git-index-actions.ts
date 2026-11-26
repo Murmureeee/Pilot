@@ -12,20 +12,11 @@ import type {
 } from "@shared/contract";
 
 import { GIT_COMMIT_TIMEOUT_MS } from "./constants";
-import { readGit, readGitBuffer } from "./git";
+import { readGit, readGitBuffer, readOptionalGit } from "./git";
 import { captureGitSnapshot, compareGitSnapshots } from "./git-changes";
 import { displayGitPatch, readGitPatch, readGitSelection, selectedGitPatch } from "./git-patch";
 import { readGitIndex } from "./git-review-files";
 import type { GitCommandOptions, GitCommitPlan, GitCommitTarget, GitWorktree } from "./types";
-
-async function readOptionalGit(root: string, args: string[]): Promise<string | null> {
-  try {
-    return (await readGit(root, args)).trimEnd();
-  } catch (error) {
-    if ((error as ExecFileException).code !== 1) throw error;
-    return null;
-  }
-}
 
 async function resolveIndex(root: string): Promise<string> {
   return (

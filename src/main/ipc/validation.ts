@@ -4,6 +4,9 @@ import { z } from "zod";
 import {
   CONVERSATION_QUERY_LENGTH,
   EXECUTION_APPROVAL_MODES,
+  GIT_BRANCH_NAME_LIMIT,
+  GIT_PR_BODY_LIMIT,
+  GIT_PR_TITLE_LIMIT,
   LOG_LEVELS,
   MEMORY_TEXT_LIMIT,
   PLAN_PROPOSAL_MAX_LENGTH,
@@ -24,6 +27,11 @@ import type { IpcChannel } from "./types";
 const none = z.tuple([]);
 const id = z.string().min(1);
 const nonBlank = z.string().refine((value) => value.trim().length > 0);
+const gitBranchName = z
+  .string()
+  .min(1)
+  .max(GIT_BRANCH_NAME_LIMIT)
+  .refine((value) => !/^-|[\0\r\n]/.test(value));
 const mentionId = id.refine((value) => !value.includes("\0"));
 const mentionOffset = z.number().int().nonnegative().optional();
 const fileMention = z.strictObject({
@@ -237,6 +245,32 @@ const inputs = {
     z.uuid(),
     z.uuid(),
     nonBlank.refine((value) => !value.includes("\0")),
+  ]),
+  [IPC.sessionGitBranches]: session,
+  [IPC.sessionSwitchGitBranch]: z.tuple([
+    z.uuid(),
+    z.uuid(),
+    z.strictObject({ kind: z.enum(["create", "switch"]), branch: gitBranchName }),
+  ]),
+  [IPC.sessionPreviewGitPush]: session,
+  [IPC.sessionPushGit]: sessionChange,
+  [IPC.sessionPreviewGitPullRequest]: session,
+  [IPC.sessionCreateGitPullRequest]: z.tuple([
+    z.uuid(),
+    z.uuid(),
+    z.strictObject({
+      base: gitBranchName,
+      title: z
+        .string()
+        .trim()
+        .min(1)
+        .max(GIT_PR_TITLE_LIMIT)
+        .refine((value) => !/[\0\r\n]/.test(value)),
+      body: z
+        .string()
+        .max(GIT_PR_BODY_LIMIT)
+        .refine((value) => !value.includes("\0")),
+    }),
   ]),
   [IPC.sessionGitCheckpointDiff]: z.tuple([z.uuid(), z.uuid(), mentionId]),
   [IPC.sessionPreviewGitRollback]: z.tuple([z.uuid(), gitRollbackSelection]),

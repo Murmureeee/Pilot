@@ -7,6 +7,8 @@ import type {
   AppInfo,
   ComposerDraft,
   FileDiff,
+  GitBranchOptions,
+  GitBranchRequest,
   GitCheckpointDiff,
   GitChangesView,
   GitCommitPreview,
@@ -14,6 +16,10 @@ import type {
   GitDiffRequest,
   GitFileDiff,
   GitPatchSelection,
+  GitPullRequestDraft,
+  GitPullRequestPreview,
+  GitPushPreview,
+  GitPushResult,
   GitRollbackPreview,
   GitRollbackSelection,
   GitStageSelection,
@@ -128,6 +134,20 @@ export interface PiApi {
     selections: GitPatchSelection[],
   ): Promise<GitCommitPreview>;
   sessionCommitGit(composerId: string, token: string, message: string): Promise<GitCommitResult>;
+  sessionGitBranches(composerId: string): Promise<GitBranchOptions>;
+  sessionSwitchGitBranch(
+    composerId: string,
+    token: string,
+    request: GitBranchRequest,
+  ): Promise<void>;
+  sessionPreviewGitPush(composerId: string): Promise<GitPushPreview>;
+  sessionPushGit(composerId: string, token: string): Promise<GitPushResult>;
+  sessionPreviewGitPullRequest(composerId: string): Promise<GitPullRequestPreview>;
+  sessionCreateGitPullRequest(
+    composerId: string,
+    token: string,
+    draft: GitPullRequestDraft,
+  ): Promise<string>;
   sessionGitCheckpointDiff(
     composerId: string,
     checkpointId: string,

@@ -46,6 +46,12 @@ export const IPC = {
   sessionStageGit: "session:stage-git",
   sessionPreviewGitCommit: "session:preview-git-commit",
   sessionCommitGit: "session:commit-git",
+  sessionGitBranches: "session:git-branches",
+  sessionSwitchGitBranch: "session:switch-git-branch",
+  sessionPreviewGitPush: "session:preview-git-push",
+  sessionPushGit: "session:push-git",
+  sessionPreviewGitPullRequest: "session:preview-git-pull-request",
+  sessionCreateGitPullRequest: "session:create-git-pull-request",
   sessionGitCheckpointDiff: "session:git-checkpoint-diff",
   sessionPreviewGitRollback: "session:preview-git-rollback",
   sessionApplyGitRollback: "session:apply-git-rollback",
@@ -589,6 +595,40 @@ export interface SessionMeta extends SessionSettings {
 }
 
 export type ProjectGitHead = { branch: string } | { detachedAt: string };
+
+export interface GitBranchOptions {
+  token: string;
+  head: ProjectGitHead | null;
+  branches: string[];
+}
+
+export type GitBranchRequest = { kind: "create" | "switch"; branch: string };
+
+export interface GitPushPreview {
+  token: string;
+  branch: string;
+  remote: string;
+  destination: string;
+  targetBranch: string;
+  newBranch: boolean;
+  commits: { hash: string; subject: string }[];
+}
+
+export interface GitPushResult {
+  trackingFailed?: true;
+}
+
+export interface GitPullRequestDraft {
+  base: string;
+  title: string;
+  body: string;
+}
+
+export interface GitPullRequestPreview extends GitPullRequestDraft {
+  token: string;
+  repository: string;
+  head: string;
+}
 
 export interface GitChange {
   path: string;

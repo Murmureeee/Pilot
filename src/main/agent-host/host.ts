@@ -11,6 +11,8 @@ import type {
   ApprovalMode,
   ComposerDraft,
   FileDiff,
+  GitBranchOptions,
+  GitBranchRequest,
   GitCheckpointDiff,
   GitChangesView,
   GitCommitPreview,
@@ -18,6 +20,10 @@ import type {
   GitDiffRequest,
   GitFileDiff,
   GitPatchSelection,
+  GitPullRequestDraft,
+  GitPullRequestPreview,
+  GitPushPreview,
+  GitPushResult,
   GitRollbackPreview,
   GitRollbackSelection,
   GitStageSelection,
@@ -45,7 +51,7 @@ import type {
 import { compactFocus } from "../../shared/compact-command";
 import { APP_NAME, DEFAULT_THINKING_LEVEL, PLAN_PROPOSAL_MAX_LENGTH } from "../../shared/constants";
 import { imagesFromMessageParts } from "../../shared/image-attachments";
-import { draftFromMessageParts, promptFromDraft } from "../../shared/mentions";
+import { draftFromMessageParts, promptFromDraft, visibleMessageText } from "../../shared/mentions";
 import { applyMessageEvent } from "../../shared/message-events";
 import { effectiveModelCapabilities } from "../../shared/model-capabilities";
 import { hasSavedModel, resolveSessionModel, selectedCatalogModel } from "../../shared/providers";
@@ -54,6 +60,12 @@ import { decryptSecret } from "../settings/secrets";
 import type { ProviderConfig, Settings } from "../settings/types";
 import { readFileChange, restoreFileChange } from "../workspace/file-changes";
 import { relativeGitPath } from "../workspace/git";
+import {
+  previewGitPush,
+  pushGitBranch,
+  readGitBranches,
+  switchGitBranch,
+} from "../workspace/git-branch-actions";
 import { captureGitSnapshot, compareGitSnapshots } from "../workspace/git-changes";
 import { gitCheckpointDiff, rollbackTarget, verifyGitRollback } from "../workspace/git-checkpoint";
 import {
@@ -63,6 +75,7 @@ import {
   stageGitSelection,
 } from "../workspace/git-index-actions";
 import { displayGitPatch, readGitSelection } from "../workspace/git-patch";
+import { createGitPullRequest, previewGitPullRequest } from "../workspace/git-pull-request";
 import {
   gitFileDiff,
   gitFilePath,
@@ -107,6 +120,8 @@ import type {
   AgentRunOptions,
   AgentSessionView,
   HostDeps,
+  GitBranchAction,
+  GitBranchOperation,
   GitCommitOperation,
   MessageRollbackOperation,
   NewChatDraft,
@@ -140,6 +155,8 @@ export class AgentHost {
   private applyingGitRollback = false;
   private messageRollback?: MessageRollbackOperation;
   private gitCommit?: GitCommitOperation;
+  private gitBranchOperation?: GitBranchOperation;
+  private gitBranchPreviewRequest = 0;
   private applyingGitSelection = false;
   private readonly sessionRules = new Map<string, ToolRule[]>();
   private sessionId: string | null = null;
@@ -938,6 +955,8 @@ export class AgentHost {
 
   private switchSession(id: string | null, draft?: NewChatDraft): void {
     this.gitCommit = undefined;
+    this.gitBranchOperation = undefined;
+    this.gitBranchPreviewRequest++;
     this.messageRollback = undefined;
     this.sessionId = id;
     if (!id) this.newChatDraft = draft ?? this.emptyDraft();
@@ -1163,6 +1182,124 @@ export class AgentHost {
   private checkGitActionSession(composerId: string, directory: string): void {
     this.checkComposerId(composerId);
     this.checkWorkingDirectory(directory);
+  }
+
+  private async prepareGitBranchAction<Preview>(
+    composerId: string,
+    prepare: (directory: string) => Promise<{ action: GitBranchAction; preview: Preview }>,
+  ): Promise<Preview & { token: string }> {
+    const directory = this.gitActionDirectory(composerId);
+    const request = ++this.gitBranchPreviewRequest;
+    this.gitBranchOperation = undefined;
+    try {
+      const { action, preview } = await prepare(directory);
+      if (
+        this.gitActionDirectory(composerId) !== directory ||
+        request !== this.gitBranchPreviewRequest
+      )
+        throw new Error("Git 操作预览已失效，请重新加载。");
+      const token = randomUUID();
+      this.gitBranchOperation = { ...action, composerId, directory, token };
+      return { ...preview, token };
+    } catch (error) {
+      throw gitActionError(error);
+    }
+  }
+
+  private async applyGitBranchAction<Kind extends GitBranchAction["kind"], Result>(
+    composerId: string,
+    token: string,
+    kind: Kind,
+    apply: (
+      directory: string,
+      operation: Extract<GitBranchOperation, { kind: Kind }>,
+      assertCurrent: () => void,
+    ) => Promise<Result>,
+  ): Promise<Result> {
+    const directory = this.gitActionDirectory(composerId);
+    const operation = this.gitBranchOperation;
+    if (
+      !operation ||
+      operation.composerId !== composerId ||
+      operation.directory !== directory ||
+      operation.token !== token ||
+      operation.kind !== kind
+    )
+      throw new Error("Git 操作预览已失效，请重新加载。");
+    this.gitBranchOperation = undefined;
+    this.applyingGitSelection = true;
+    try {
+      return await apply(directory, operation as Extract<GitBranchOperation, { kind: Kind }>, () =>
+        this.checkGitActionSession(composerId, directory),
+      );
+    } catch (error) {
+      throw gitActionError(error);
+    } finally {
+      this.applyingGitSelection = false;
+    }
+  }
+
+  async gitBranches(composerId: string): Promise<GitBranchOptions> {
+    return this.prepareGitBranchAction(composerId, async (directory) => {
+      const { plan, options } = await readGitBranches(directory);
+      return { action: { kind: "branch", plan }, preview: options };
+    });
+  }
+
+  async switchGitBranch(
+    composerId: string,
+    token: string,
+    request: GitBranchRequest,
+  ): Promise<void> {
+    await this.applyGitBranchAction(
+      composerId,
+      token,
+      "branch",
+      (directory, { plan }, assertCurrent) =>
+        switchGitBranch(directory, plan, request, assertCurrent),
+    );
+    this.gitCommit = undefined;
+    this.publishSnapshot();
+  }
+
+  async previewGitPush(composerId: string): Promise<GitPushPreview> {
+    return this.prepareGitBranchAction(composerId, async (directory) => {
+      const { plan, preview } = await previewGitPush(directory);
+      return { action: { kind: "push", plan }, preview };
+    });
+  }
+
+  async pushGit(composerId: string, token: string): Promise<GitPushResult> {
+    return this.applyGitBranchAction(
+      composerId,
+      token,
+      "push",
+      (directory, { plan }, assertCurrent) => pushGitBranch(directory, plan, assertCurrent),
+    );
+  }
+
+  async previewGitPullRequest(composerId: string): Promise<GitPullRequestPreview> {
+    return this.prepareGitBranchAction(composerId, async (directory) => {
+      const latest = this.getSnapshot().messages.findLast((message) => message.role === "user");
+      const task =
+        (latest && visibleMessageText(latest.parts)) || this.getCurrentSession()?.lastTask?.title;
+      const { plan, preview } = await previewGitPullRequest(directory, task);
+      return { action: { kind: "pull-request", plan }, preview };
+    });
+  }
+
+  async createGitPullRequest(
+    composerId: string,
+    token: string,
+    draft: GitPullRequestDraft,
+  ): Promise<string> {
+    return this.applyGitBranchAction(
+      composerId,
+      token,
+      "pull-request",
+      (directory, { plan }, assertCurrent) =>
+        createGitPullRequest(directory, plan, draft, assertCurrent),
+    );
   }
 
   private async gitActionSnapshot(directory: string): Promise<GitWorktree> {

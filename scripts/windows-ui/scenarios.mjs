@@ -1,5 +1,6 @@
 // @env node
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -1523,6 +1524,105 @@ async function waitForProjectDraft(page, directory) {
     const snapshot = await window.pi.getSnapshot();
     return !snapshot.sessionId && snapshot.draftWorkingDirectory === project;
   }, directory);
+}
+
+export async function verifyGitPublishing(page, window, app, project, remote) {
+  const git = (...args) => execFileSync("git", args, {
+    cwd: project, windowsHide: true, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  git("init", "-q", "--initial-branch=main");
+  git("init", "-q", "--bare", "--initial-branch=main", remote);
+  git("config", "user.name", "Pilot Desktop Test");
+  git("config", "user.email", "pilot@example.invalid");
+  git("config", "commit.gpgsign", "false");
+  git("commit", "-q", "--allow-empty", "-m", "Initial branch");
+  git("remote", "add", "origin", remote);
+  git("push", "-qu", "origin", "main");
+
+  await app.evaluate(({ dialog }, folder) => {
+    const original = dialog.showOpenDialog;
+    dialog.showOpenDialog = async () => {
+      dialog.showOpenDialog = original;
+      return { canceled: false, filePaths: [folder] };
+    };
+  }, project);
+  await page.evaluate(() => window.pi.sessionSelectProject("en"));
+  await waitForProjectDraft(page, project);
+  await resize(page, window, wide);
+  const en = locales[1];
+  const zh = locales[0];
+  const actions = page.locator("[data-git-branch-actions]");
+  const openChanges = async (locale) => {
+    if (!(await actions.isVisible())) {
+      if (await page.locator("[data-review-layout]").isVisible())
+        await page.getByRole("tab", { name: new RegExp("^" + locale.tabs[0]) }).press("Enter");
+      else await page.keyboard.press("Control+Shift+d");
+    }
+    await actions.waitFor();
+  };
+  await openChanges(en);
+  const branches = button(actions, "Branches…");
+  const dialog = page.getByRole("dialog", { name: "Create or switch branches" });
+  await branches.press("Enter");
+  const input = dialog.getByRole("textbox", { name: "New branch name" });
+  await input.fill("feature/desktop");
+  assert.equal(await dialog.locator('[aria-current="true"]').innerText(), "main");
+  await input.press("Enter");
+  await dialog.waitFor({ state: "hidden" });
+  await branches.and(page.locator(":focus")).waitFor();
+  assert.equal(git("branch", "--show-current"), "feature/desktop");
+  await page.locator('header [title="Git branch feature/desktop"]').waitFor({ state: "attached" });
+
+  git("commit", "-q", "--allow-empty", "-m", "Review this desktop commit");
+  const latest = git("rev-parse", "HEAD");
+  const destination = "refs/heads/feature/desktop";
+  let minContrast = Infinity;
+  let current = en;
+  for (const [size, zoom] of [[wide, 1], [narrow, 1], [narrow, 1.5]]) {
+    await resize(page, window, size, zoom);
+    for (const locale of [en, zh]) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        await openChanges(locale);
+        const push = button(actions, locale === zh ? "推送…" : "Push…");
+        await push.press("Enter");
+        const preview = page.getByRole("dialog", { name: locale === zh ? "预览推送" : "Preview push" });
+        await preview.getByText("Review this desktop commit", { exact: true }).waitFor();
+        await preview.getByText("origin/feature/desktop", { exact: true }).waitFor();
+        await assertFits(preview);
+        await assertFits(button(preview, locale === zh ? "确认推送" : "Confirm push"));
+        minContrast = Math.min(minContrast, await minimumTextContrast(preview, "h2, h3, p, dt, dd"));
+        const cancel = button(preview, locale === zh ? "取消" : "Cancel");
+        await cancel.and(page.locator(":focus")).waitFor();
+        await cancel.press("Escape");
+        await preview.waitFor({ state: "hidden" });
+        await push.and(page.locator(":focus")).waitFor();
+        assert.equal(git("ls-remote", "--heads", "origin", destination), "");
+        await page.keyboard.press("Escape");
+        await actions.waitFor({ state: "hidden" });
+      }
+    }
+  }
+  assert.ok(minContrast >= 4.5, "Push review text must meet the contrast requirement");
+  console.log("Git push preview text minimum contrast " + minContrast.toFixed(2) + ":1");
+
+  await resize(page, window, wide);
+  await selectAppearance(page, current, en, "light");
+  await openChanges(en);
+  await button(actions, "Push…").press("Enter");
+  const preview = page.getByRole("dialog", { name: "Preview push" });
+  await preview.getByText(latest.slice(0, 12), { exact: true }).waitFor();
+  await button(preview, "Confirm push").press("Enter");
+  await preview.waitFor({ state: "hidden" });
+  await page.getByText("Pushed to origin/feature/desktop", { exact: true }).waitFor();
+  assert.equal(git("ls-remote", "--heads", "origin", destination), latest + "\t" + destination);
+  assert.equal(git("rev-parse", "--abbrev-ref", "@{upstream}"), "origin/feature/desktop");
+  await branches.press("Enter");
+  await button(dialog, "Switch to main").press("Enter");
+  await dialog.waitFor({ state: "hidden" });
+  assert.equal(git("branch", "--show-current"), "main");
+  await page.locator('header [title="Git branch main"]').waitFor({ state: "attached" });
 }
 
 export async function verifyCommandsAndTemplates(page, app, model, originalProject, project) {

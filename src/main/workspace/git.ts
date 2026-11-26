@@ -62,6 +62,8 @@ export async function readGitBuffer(
       GIT_OBJECT_DIRECTORY: undefined,
       GIT_ALTERNATE_OBJECT_DIRECTORIES: undefined,
       GIT_NO_LAZY_FETCH: "1",
+      GIT_TERMINAL_PROMPT: options?.noPrompt ? "0" : process.env.GIT_TERMINAL_PROMPT,
+      GCM_INTERACTIVE: options?.noPrompt ? "Never" : process.env.GCM_INTERACTIVE,
     },
   });
   // Git may exit before consuming the input. The command's own error is the useful one.
@@ -69,6 +71,15 @@ export async function readGitBuffer(
   command.child.stdin?.end(options?.input);
   const { stdout } = await command;
   return stdout;
+}
+
+export async function readOptionalGit(cwd: string, args: string[]): Promise<string | null> {
+  try {
+    return (await readGit(cwd, args)).trimEnd();
+  } catch (error) {
+    if ((error as ExecFileException).code !== 1) throw error;
+    return null;
+  }
 }
 
 export async function readProjectGitHead(directory: string): Promise<ProjectGitHead | null> {

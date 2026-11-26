@@ -34,9 +34,12 @@ import type { Settings } from "../settings/types";
 import type { TerminalManager } from "../terminal";
 import type { WebRequests } from "../web/types";
 import type {
+  GitBranchState,
   GitCheckpointFile,
   GitCommitPlan,
   GitFileState,
+  GitPullRequestPlan,
+  GitPushPlan,
   GitSnapshot,
   GitTaskCheckpoint,
   GitWorktree,
@@ -240,6 +243,14 @@ export interface GitCommitOperation {
   token: string;
   plan: GitCommitPlan;
 }
+
+export type GitBranchAction =
+  | { kind: "branch"; plan: GitBranchState }
+  | { kind: "push"; plan: GitPushPlan }
+  | { kind: "pull-request"; plan: GitPullRequestPlan };
+
+export type GitBranchOperation = Pick<GitCommitOperation, "composerId" | "directory" | "token"> &
+  GitBranchAction;
 
 export interface SessionRecord {
   messages: AgentMessage[];

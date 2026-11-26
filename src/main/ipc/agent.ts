@@ -110,6 +110,23 @@ export function registerAgentRoutes({
   handle(IPC.sessionCommitGit, (_event, composerId, token, message) =>
     host.commitGit(composerId, token, message),
   );
+  handle(IPC.sessionGitBranches, (_event, composerId) => host.gitBranches(composerId));
+  handle(IPC.sessionSwitchGitBranch, (_event, composerId, token, request) => {
+    exit.checkWorkAllowed();
+    return host.switchGitBranch(composerId, token, request);
+  });
+  handle(IPC.sessionPreviewGitPush, (_event, composerId) => host.previewGitPush(composerId));
+  handle(IPC.sessionPushGit, (_event, composerId, token) => {
+    exit.checkWorkAllowed();
+    return host.pushGit(composerId, token);
+  });
+  handle(IPC.sessionPreviewGitPullRequest, (_event, composerId) =>
+    host.previewGitPullRequest(composerId),
+  );
+  handle(IPC.sessionCreateGitPullRequest, (_event, composerId, token, draft) => {
+    exit.checkWorkAllowed();
+    return host.createGitPullRequest(composerId, token, draft);
+  });
   handle(IPC.sessionGitCheckpointDiff, (_event, composerId, id, path) =>
     host.getGitCheckpointDiff(composerId, id, path),
   );

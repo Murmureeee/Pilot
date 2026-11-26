@@ -5,6 +5,36 @@ export interface GitCommandOptions {
   index?: string;
   input?: Buffer;
   timeout?: number;
+  noPrompt?: true;
+}
+
+export interface GitBranchState {
+  root: string;
+  ref: string | null;
+  commit: string | null;
+}
+
+export interface GitPushTarget {
+  branch: string;
+  head: string;
+  remote: string;
+  url: string;
+  ref: string;
+  trackUpstream: boolean;
+}
+
+export interface GitPushPlan {
+  root: string;
+  target: GitPushTarget;
+  remoteRevision: string;
+}
+
+export interface GitPullRequestPlan {
+  root: string;
+  target: GitPushTarget;
+  sourceRepository: string;
+  repository: string;
+  head: string;
 }
 
 export interface GitPatchHunk {

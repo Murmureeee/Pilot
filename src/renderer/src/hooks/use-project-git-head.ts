@@ -27,10 +27,14 @@ export function useProjectGitHead(directory: string | null): ProjectGitHead | nu
     const unsubscribe = useAgentStore.subscribe((next, previous) => {
       if (next.status === "idle" && previous.status !== "idle") refresh();
     });
+    const unsubscribeEvents = window.pi.onAgentEvent((event) => {
+      if (event.type === "snapshot") refresh();
+    });
     return () => {
       request++;
       window.removeEventListener("focus", refresh);
       unsubscribe();
+      unsubscribeEvents();
     };
   }, [directory]);
 
