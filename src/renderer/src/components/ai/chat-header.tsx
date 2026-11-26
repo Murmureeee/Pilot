@@ -3,6 +3,7 @@ import { EllipsisIcon } from "lucide-react";
 import { useRef, useState, type JSX } from "react";
 
 import { InstructionSourcesDialog } from "@renderer/components/ai/instruction-sources";
+import { ProjectConfigDialog } from "@renderer/components/ai/project-config-details";
 import { ProjectBranch, ProjectChip, ReviewToggle } from "@renderer/components/ai/project-controls";
 import {
   SessionPersonaDialog,
@@ -19,7 +20,7 @@ import {
 } from "@renderer/components/ui/dropdown-menu";
 import { useProjectGitHead } from "@renderer/hooks/use-project-git-head";
 import { t, useLocale } from "@renderer/lib/i18n";
-import { selectActiveSession, useAgentStore } from "@renderer/stores/agent";
+import { selectActiveSession, selectProjectDirectory, useAgentStore } from "@renderer/stores/agent";
 import type { SessionMeta, VerificationStatus } from "@shared/contract";
 
 const TITLE_CLASS = "min-w-0 truncate text-[13px] font-medium";
@@ -76,6 +77,8 @@ function SessionMenu({
   const exportMarkdown = useAgentStore((s) => s.exportSessionMarkdown);
   const [exporting, setExporting] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const [projectConfigOpen, setProjectConfigOpen] = useState(false);
+  const projectDirectory = useAgentStore(selectProjectDirectory);
   const [renaming, setRenaming] = useState<SessionMeta | null>(null);
   const [persona, setPersona] = useState<SessionMeta | null>(null);
   // 对话框从菜单项打开，关闭后菜单项已不存在，焦点要明确交还给触发按钮。
@@ -96,6 +99,11 @@ function SessionMenu({
             <DropdownMenuItem onClick={() => setInstructionsOpen(true)}>
               {t("指令来源…", locale)}
             </DropdownMenuItem>
+            {projectDirectory && (
+              <DropdownMenuItem onClick={() => setProjectConfigOpen(true)}>
+                {t("项目配置…", locale)}
+              </DropdownMenuItem>
+            )}
           </DropdownMenuGroup>
           {session && (
             <>
@@ -130,6 +138,14 @@ function SessionMenu({
         onOpenChange={setInstructionsOpen}
         finalFocus={trigger}
       />
+      {projectDirectory && (
+        <ProjectConfigDialog
+          composerId={composerId}
+          open={projectConfigOpen}
+          onOpenChange={setProjectConfigOpen}
+          finalFocus={trigger}
+        />
+      )}
       <SessionRenameDialog
         target={renaming}
         onClose={() => setRenaming(null)}

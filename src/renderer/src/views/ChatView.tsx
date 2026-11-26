@@ -16,6 +16,7 @@ import { OnboardingDialog } from "@renderer/components/ai/onboarding-dialog";
 import { PermissionCard } from "@renderer/components/ai/permission-card";
 import { PlanBar } from "@renderer/components/ai/plan-card";
 import { PlanReviewCard } from "@renderer/components/ai/plan-review-card";
+import { ProjectTrustCard } from "@renderer/components/ai/project-trust-card";
 import { SettingsRecoveryNotice } from "@renderer/components/ai/settings-recovery-notice";
 import { InlineWorkspaceReference } from "@renderer/components/ai/workspace-reference";
 import { Bubble, BubbleContent } from "@renderer/components/ui/bubble";
@@ -80,8 +81,9 @@ export function ChatView({
   const composerId = useAgentStore((s) => s.composerId);
   const busy = useAgentStore((s) => s.status !== "idle");
   const permission = useAgentStore((s) => s.pendingPermissions[0]);
+  const projectTrust = useAgentStore((s) => s.pendingProjectTrust);
   const planReview = useAgentStore(selectPlanReview);
-  const dockBlocked = Boolean(permission || planReview);
+  const dockBlocked = Boolean(permission || projectTrust || planReview);
   const activeRun = useAgentStore((s) => s.activeRun);
   const interruptedRun = useAgentStore((s) => s.interruptedRun);
   const failedRun = useAgentStore((s) => s.failedRun);
@@ -110,7 +112,7 @@ export function ChatView({
     ),
   );
   const match = matches[matchIndex];
-  const isEmpty = rows.length === 0;
+  const isEmpty = rows.length === 0 && !projectTrust;
   // run_started 先于新的用户消息到达。这段间隙里上一回合仍是最后一行，但它已经结束，
   // 不能当作进行中，否则收起的轨迹会闪开、旧计划会跳到输入坞上。可继续的中断回合除外。
   const lastRow = rows.findLast(({ role }) => role !== "compaction");
@@ -427,6 +429,9 @@ export function ChatView({
         {livePlan && <PlanBar steps={livePlan.steps} />}
         {permission && activeRun && (
           <PermissionCard key={permission.requestId} request={permission} run={activeRun} />
+        )}
+        {projectTrust && activeRun && (
+          <ProjectTrustCard key={projectTrust.requestId} request={projectTrust} run={activeRun} />
         )}
         {composerId && planReview?.proposal && (
           <PlanReviewCard

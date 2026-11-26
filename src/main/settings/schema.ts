@@ -191,7 +191,14 @@ const storedSettings = z.looseObject({
   notificationsEnabled: z.boolean().optional().catch(undefined),
   persona: optionalText,
   promptTemplates: promptTemplatesSchema.optional(),
-  afterTurnVerification: z.record(z.string(), afterTurnVerificationSchema).optional(),
+  afterTurnVerification: z.record(z.string(), afterTurnVerificationSchema.nullable()).optional(),
+  projectTrust: z
+    .record(
+      z.string(),
+      z.strictObject({ fingerprint: z.string().regex(/^[0-9a-f]{64}$/), trustedAt: z.number() }),
+    )
+    .optional()
+    .catch(undefined),
   skillsEnabled: z.array(z.string()).optional(),
   mcpServers: z.array(mcpServer).optional(),
   importedPlugins: z.array(importedPlugin).optional(),

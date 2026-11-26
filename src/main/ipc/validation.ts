@@ -323,6 +323,8 @@ const inputs = {
   [IPC.sessionExportMarkdown]: z.tuple([z.uuid(), z.enum(SUPPORTED_LOCALES)]),
   [IPC.sessionPersona]: z.tuple([z.uuid(), z.string().nullable()]),
   [IPC.sessionInstructionSources]: session,
+  [IPC.sessionProjectConfig]: session,
+  [IPC.sessionSetProjectTrust]: z.tuple([z.uuid(), mentionId, z.hash("sha256").nullable()]),
   [IPC.sessionPreviewMemory]: z.tuple([
     z.uuid(),
     mentionId.nullable(),
@@ -340,7 +342,7 @@ const inputs = {
   [IPC.sessionSetAfterTurnVerification]: z.tuple([
     z.uuid(),
     mentionId,
-    afterTurnVerificationSchema.nullable(),
+    z.union([afterTurnVerificationSchema, z.literal("project"), z.null()]),
   ]),
   [IPC.sessionRepairVerification]: z.tuple([z.uuid(), z.uuid(), z.enum(SUPPORTED_LOCALES)]),
   [IPC.sessionVerificationRun]: sessionChange,
@@ -350,6 +352,7 @@ const inputs = {
       workingDirectory: mentionId,
       kind: z.enum(VERIFICATION_KINDS),
       command: verificationCommandSchema,
+      projectRevision: z.hash("sha256").optional(),
     }),
   ]),
   [IPC.sessionStopVerification]: sessionChange,
@@ -421,6 +424,7 @@ const inputs = {
     z.uuid(),
     z.enum(["once", "session", "global", "deny"]),
   ]),
+  [IPC.toolProjectTrustRespond]: z.tuple([runRef, z.uuid(), z.enum(["trust", "skip"])]),
 } satisfies Record<IpcChannel, z.ZodType<unknown[]>>;
 
 export function parseIpcArgs<C extends IpcChannel>(

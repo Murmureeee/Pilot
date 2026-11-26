@@ -86,7 +86,12 @@ export default function App(): JSX.Element {
   const [templateRequest, setTemplateRequest] = useState<PromptTemplateRequest | null>(null);
   const composerShortcuts = useRef<ComposerShortcuts>(null);
   const canEdit = useAgentStore((state) =>
-    Boolean(state.composerId && !state.pendingPermissions.length && !selectPlanReview(state)),
+    Boolean(
+      state.composerId &&
+      !state.pendingPermissions.length &&
+      !state.pendingProjectTrust &&
+      !selectPlanReview(state),
+    ),
   );
   const canRecall = useAgentStore(
     (state) =>
@@ -201,7 +206,7 @@ export default function App(): JSX.Element {
         return;
       document
         .querySelector<HTMLElement>(
-          "main :is([data-permission-card], [data-plan-review], [data-composer-editor])",
+          "main :is([data-permission-card], [data-project-trust-card], [data-plan-review], [data-composer-editor])",
         )
         ?.focus();
       const editor = composerShortcuts.current;
@@ -232,7 +237,9 @@ export default function App(): JSX.Element {
       focusFrame = requestAnimationFrame(() => {
         const main = document.querySelector("main");
         const target =
-          main?.querySelector<HTMLElement>("[data-permission-card], [data-plan-review]") ??
+          main?.querySelector<HTMLElement>(
+            "[data-permission-card], [data-project-trust-card], [data-plan-review]",
+          ) ??
           main?.querySelector<HTMLElement>("[data-model-failure] button") ??
           main?.querySelector<HTMLElement>('[contenteditable="true"]') ??
           main;
@@ -350,12 +357,12 @@ export default function App(): JSX.Element {
           event.preventDefault();
           clear();
           store.setChatFind(null);
-        } else if (store.pendingPermissions.length) {
+        } else if (store.pendingPermissions.length || store.pendingProjectTrust) {
           event.preventDefault();
           clear();
           document
             .querySelector<HTMLButtonElement>(
-              '[data-permission-card] button[aria-keyshortcuts="Escape"]',
+              '[data-permission-card] button[aria-keyshortcuts="Escape"], [data-project-trust-card] button[aria-keyshortcuts="Escape"]',
             )
             ?.click();
         } else if (store.activeRun && store.activeRun.runId === stoppableRunId) {

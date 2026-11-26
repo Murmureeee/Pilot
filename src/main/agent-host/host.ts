@@ -47,6 +47,7 @@ import type {
   ToolRule,
   VerificationTask,
 } from "@shared/contract";
+import type { ProjectTrustDecision } from "@shared/project-config";
 
 import { compactFocus } from "../../shared/compact-command";
 import { APP_NAME, DEFAULT_THINKING_LEVEL, PLAN_PROPOSAL_MAX_LENGTH } from "../../shared/constants";
@@ -188,6 +189,10 @@ export class AgentHost {
 
   respondPermission(ref: RunRef, requestId: string, decision: PermissionDecision): void {
     this.selectedRun(ref)?.respondPermission(requestId, decision);
+  }
+
+  respondProjectTrust(ref: RunRef, requestId: string, decision: ProjectTrustDecision): void {
+    this.selectedRun(ref)?.respondProjectTrust(requestId, decision);
   }
 
   private sendSessions(activeSessionId?: string): SessionMeta[] {
@@ -802,7 +807,7 @@ export class AgentHost {
           directory &&
           this.deps.store.getMeta(sessionId)?.workingDirectory === directory
         )
-          this.deps.onTurnCompleted?.(sessionId, directory, completedTask);
+          this.deps.onTurnCompleted?.(sessionId, directory, completedTask, run.projectFingerprint);
         if (completedTask && needsTitle)
           void this.generateTitle(sessionId, run.state.runId, agent, auxiliaryModel).catch(
             () => {},
@@ -955,8 +960,9 @@ export class AgentHost {
   openProject(directory: string, navigation?: "reveal"): Snapshot {
     const workingDirectory = normalizeWorkingDirectory(directory);
     this.deps.store.rememberProject(workingDirectory);
-    if (!navigation || this.getProjectDirectory() !== workingDirectory)
+    if (!navigation || this.getProjectDirectory() !== workingDirectory) {
       this.switchSession(null, this.projectDraft(workingDirectory));
+    }
     return this.publishSnapshot(navigation);
   }
 
@@ -1708,6 +1714,7 @@ export class AgentHost {
         : null,
       failedRun: this.sessionId ? (failedRunOf(this.sessionId, checkpoint) ?? null) : null,
       pendingPermissions: ownRun?.pendingPermissions ?? [],
+      pendingProjectTrust: ownRun?.pendingProjectTrust ?? null,
       error: hasLiveMessages ? this.view.error : null,
       settings,
       usage: hasLiveMessages

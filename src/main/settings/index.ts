@@ -150,6 +150,7 @@ export function mergeSettingsInput(current: Settings, input: SettingsInput): Set
     persona: input.persona ?? current.persona ?? "",
     promptTemplates: current.promptTemplates,
     afterTurnVerification: current.afterTurnVerification,
+    projectTrust: current.projectTrust,
     skillsEnabled: input.skillsEnabled ?? current.skillsEnabled ?? [],
     mcpServers: current.mcpServers,
     importedPlugins: current.importedPlugins,

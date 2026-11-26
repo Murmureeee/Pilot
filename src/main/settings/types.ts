@@ -14,6 +14,7 @@ import type {
 import type { PluginMarketplaceSource } from "../../shared/discovery";
 import type { ImportedPluginFields, InstalledPluginPackage } from "../../shared/imports";
 import type { McpServerFields, McpTransportConfig } from "../../shared/mcp";
+import type { ImportedMcpConnection } from "../external-import/types";
 
 export interface ProviderConfig extends ProviderFields {
   apiKey?: string;
@@ -25,6 +26,13 @@ export interface McpServerConfig extends McpServerFields {
   encryptedHeaders?: string;
   encryptedImport?: string;
   importKey?: string;
+  /** 项目声明的服务只保存在内存中。 */
+  project?: { directory: string; file: string; connection: ImportedMcpConnection };
+}
+
+interface ProjectTrustRecord {
+  fingerprint: string;
+  trustedAt: number;
 }
 
 export interface ImportedPlugin extends ImportedPluginFields {
@@ -48,7 +56,8 @@ export interface Settings {
   notificationsEnabled?: boolean;
   persona?: string;
   promptTemplates?: PromptTemplate[];
-  afterTurnVerification?: Record<string, AfterTurnVerification>;
+  afterTurnVerification?: Record<string, AfterTurnVerification | null>;
+  projectTrust?: Record<string, ProjectTrustRecord>;
   skillsEnabled?: string[];
   mcpServers?: McpServerConfig[];
   importedPlugins?: ImportedPlugin[];

@@ -62,7 +62,7 @@ export class TaskNotifications {
     if (!("run" in event)) return;
     const { runId, sessionId } = event.run;
     if (event.type === "run_started") this.closeNotice(sessionId);
-    if (event.type === "permission_request") {
+    if (event.type === "permission_request" || event.type === "project_trust_request") {
       const approval = this.approvals.get(runId) ?? {
         sessionId,
         requests: new Set(),
@@ -72,7 +72,7 @@ export class TaskNotifications {
       this.approvals.set(runId, approval);
       this.announceApproval(approval, this.options.getVisibleSessionId());
     }
-    if (event.type === "permission_resolved") {
+    if (event.type === "permission_resolved" || event.type === "project_trust_resolved") {
       const approval = this.approvals.get(runId);
       if (approval?.requests.delete(event.requestId) && approval.requests.size === 0)
         this.clearApproval(runId, sessionId);

@@ -24,6 +24,7 @@ import type {
   ToolRule,
   UiAgentEvent,
 } from "@shared/contract";
+import type { ProjectTrustDecision } from "@shared/project-config";
 import { modelCatalogInput } from "@shared/providers";
 
 import { applyAgentEvent, initialAgentUiState, type AgentUiState } from "../adapters/agent-events";
@@ -103,6 +104,11 @@ interface AgentStore extends AgentUiState {
     input: Pick<SettingsInput, "workingDirectory" | "commandShell">,
   ): Promise<void>;
   respondPermission(run: RunRef, requestId: string, decision: PermissionDecision): Promise<void>;
+  respondProjectTrust(
+    run: RunRef,
+    requestId: string,
+    decision: ProjectTrustDecision,
+  ): Promise<void>;
   menuAction(action: MenuAction): Promise<void>;
   /** 清空排队中的插话 */
   clearQueue(run: RunRef): void;
@@ -226,6 +232,7 @@ function sessionSnapshot(
     contextWindow: snapshot.contextWindow,
     steerCount: snapshot.steerCount,
     pendingPermissions: snapshot.pendingPermissions,
+    pendingProjectTrust: snapshot.pendingProjectTrust,
   };
 }
 
@@ -495,6 +502,11 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     if (!current) return;
     const settings = await window.pi.settingsSave({ ...providerSelection(current), ...input });
     set({ settings });
+  },
+
+  respondProjectTrust: async ({ runId, sessionId }, requestId, decision) => {
+    if (get().pendingProjectTrust?.requestId !== requestId) return;
+    await window.pi.projectTrustRespond({ runId, sessionId }, requestId, decision);
   },
 
   respondPermission: async ({ runId, sessionId }, requestId, decision) => {

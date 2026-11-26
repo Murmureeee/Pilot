@@ -1530,6 +1530,178 @@ async function waitForProjectDraft(page, directory) {
   }, directory);
 }
 
+async function openProjectConfiguration(page, locale) {
+  const trigger = button(page, locale.more);
+  const title = locale.lang === "en" ? "Project configuration" : "项目配置";
+  await trigger.press("Enter");
+  await page.getByRole("menuitem", { name: title + "…", exact: true }).press("Enter");
+  const dialog = page.getByRole("dialog", { name: title, exact: true });
+  await dialog.getByText("project-fixture", { exact: true }).waitFor();
+  return { trigger, dialog };
+}
+
+export async function verifyProjectConfiguration(page, window, model, project) {
+  const marker = join(project, "mcp-start.txt");
+  const log = join(project, "verification.log");
+  const command = "node verify-fixture.cjs";
+  mkdirSync(join(project, ".pilot"));
+  writeFileSync(join(project, ".pilot", "config.json"), JSON.stringify({
+    permissions: { allow: [{ tool: "write_file", path: "drafts" }] },
+    verification: { test: command, afterTurn: "test" },
+  }));
+  writeFileSync(join(project, ".mcp.json"), JSON.stringify({
+    mcpServers: { "project-fixture": { command: process.execPath, args: ["project-fixture.cjs"] } },
+  }));
+  writeFileSync(join(project, "project-fixture.cjs"), [
+    'const fs = require("node:fs");',
+    'fs.writeFileSync("mcp-start.txt", String(process.pid));',
+    'const input = require("node:readline").createInterface({ input: process.stdin });',
+    'input.on("line", (line) => {',
+    '  const message = JSON.parse(line);',
+    '  if (!Object.hasOwn(message, "id")) return;',
+    '  const results = {',
+    '    initialize: { protocolVersion: message.params?.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "Project fixture", version: "1.0" } },',
+    '    "tools/list": { tools: [{ name: "status", description: "Read project fixture status", inputSchema: { type: "object" } }] },',
+    '    "tools/call": { content: [{ type: "text", text: "Called the project MCP fixture" }] },',
+    '  };',
+    '  console.log(JSON.stringify({ jsonrpc: "2.0", id: message.id, result: results[message.method] ?? {} }));',
+    '});',
+  ].join("\n"));
+  writeFileSync(join(project, "verify-fixture.cjs"), [
+    'require("node:fs").appendFileSync("verification.log", process.cwd() + "\\n");',
+    'console.log("Verified the project declaration");',
+  ].join("\n"));
+  await page.evaluate(async ({ baseUrl, modelId }) => {
+    await window.pi.settingsSave({
+      providers: [{ id: "project-model", kind: "openai-compatible", name: "Project fixture",
+        baseUrl, modelId, models: [{ id: modelId, name: "Project test model" }] }],
+      activeProviderId: "project-model",
+    });
+    await window.pi.settingsSetNotificationsEnabled(false);
+  }, { baseUrl: model.baseUrl, modelId: model.modelId });
+  await page.reload();
+  await waitForProjectDraft(page, project);
+
+  let current = locales[0];
+  let contrast = Infinity;
+  for (const [size, zoom] of [[wide, 1], [narrow, 1], [narrow, 1.5]]) {
+    await resize(page, window, size, zoom);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        const { dialog, trigger } = await openProjectConfiguration(page, locale);
+        await assertFits(dialog);
+        await assertFits(button(dialog, locale.close));
+        await dialog.getByText(command, { exact: true }).waitFor();
+        contrast = Math.min(contrast, await minimumTextContrast(dialog, "h2, h3, p, code"));
+        await page.keyboard.press("Escape");
+        await dialog.waitFor({ state: "hidden" });
+        await trigger.and(page.locator(":focus")).waitFor();
+      }
+    }
+  }
+  assert.ok(contrast >= 4.5, "Project configuration text contrast " + contrast.toFixed(2) + ":1");
+  console.log("Project sources at 1100 × 750 and 720 × 480, 150%, zh/en, light/dark, contrast " +
+    contrast.toFixed(2) + ":1");
+
+  const card = page.locator("[data-project-trust-card]");
+  const toolDescription = "Read project fixture status";
+  await send(page, "Continue without project settings");
+  await card.getByText("Trust this project's configuration?", { exact: true }).waitFor();
+  await page.keyboard.press("Control+l");
+  await card.and(page.locator(":focus")).waitFor();
+  await assertFits(card);
+  await assertFits(button(card, "Skip for this run"));
+  await assertFits(button(card, "Trust project configuration"));
+  assert.ok(await minimumTextContrast(card, "h2, h3, p, code") >= 4.5);
+  assert.ok(!existsSync(marker));
+  assert.ok(!existsSync(log));
+  await page.keyboard.press("Escape");
+  const skipped = await model.nextCompletion();
+  assert.ok(!skipped.input.tools.some(({ function: tool }) => tool.description === toolDescription));
+  skipped.write({ content: "Continued without project settings." });
+  skipped.finish();
+  await button(page, "Send").waitFor();
+  await editor(page).and(page.locator(":focus")).waitFor();
+  assert.ok(!existsSync(marker));
+  assert.ok(!existsSync(log));
+
+  await resize(page, window, wide);
+  await send(page, "Use the reviewed project settings");
+  await card.getByText(command, { exact: true }).waitFor();
+  await button(card, "Trust project configuration").press("Enter");
+  const ready = await model.nextCompletion();
+  const server = ready.input.tools.find(({ function: tool }) => tool.description === toolDescription);
+  assert.ok(server, "Expected the trusted project MCP tool");
+  const pid = Number(readFileSync(marker, "utf8"));
+  assert.ok(pid > 0);
+  sendTool(ready, "project-mcp-call", server.function.name, {});
+  await button(page.locator("[data-permission-card]"), "Allow once").press("Enter");
+  const result = await model.nextCompletion();
+  assert.match(JSON.stringify(result.input.messages.find(({ role }) => role === "tool")), /Called the project MCP fixture/);
+  result.write({ content: "Used the trusted project MCP service." });
+  result.finish();
+  await button(page, "Send").waitFor();
+  assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+
+  const snapshot = await page.evaluate(() => window.pi.getSnapshot());
+  await page.keyboard.press("Control+Shift+t");
+  const panel = page.locator("[data-verification-panel]");
+  await panel.locator('[data-verification-trigger="after-turn"] [data-verification-status="success"]').waitFor();
+  assert.equal(readFileSync(log, "utf8").trim(), project);
+  const input = panel.getByRole("textbox", { name: "Command", exact: true });
+  await panel.locator("form [data-project-config-source]").getByText(".pilot/config.json").waitFor();
+  assert.equal(await input.inputValue(), command);
+  await button(panel, "Run").click();
+  await panel.locator('[data-verification-detail]:not([data-verification-trigger]) [data-verification-status="success"]').waitFor();
+  assert.deepEqual(readFileSync(log, "utf8").trim().split(/\r?\n/), [project, project]);
+  return snapshot.sessionId;
+}
+
+export async function verifyRestoredProjectConfiguration(page, app, model, id, otherProject) {
+  await page.evaluate((session) => window.pi.sessionLoad(session), id);
+  const en = locales[1];
+  await openSettings(page, en, "MCP servers");
+  const mcp = page.locator('[data-project-config-settings="mcp"]');
+  await mcp.getByText("project-fixture", { exact: true }).waitFor();
+  await mcp.getByText(".mcp.json", { exact: true }).waitFor();
+  await openSettings(page, en, "Permissions");
+  const rules = page.locator('[data-project-config-settings="permissions"]');
+  await rules.getByText("Trusted", { exact: true }).waitFor();
+  await button(rules, "Project configuration…").press("Enter");
+  const dialog = page.getByRole("dialog", { name: "Project configuration", exact: true });
+  await button(dialog, "Revoke project trust").press("Enter");
+  await dialog.getByText("Awaiting trust", { exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "hidden" });
+  await page.keyboard.press("Control+l");
+  await app.evaluate(({ dialog }, folder) => {
+    const original = dialog.showOpenDialog;
+    dialog.showOpenDialog = async () => {
+      dialog.showOpenDialog = original;
+      return { canceled: false, filePaths: [folder] };
+    };
+  }, otherProject);
+  await page.keyboard.press("Control+o");
+  await waitForProjectDraft(page, otherProject);
+  await send(page, "Run in the other project");
+  const request = await model.nextCompletion();
+  assert.ok(!request.input.tools.some(({ function: tool }) => tool.description === "Read project fixture status"));
+  request.write({ content: "Ran in the other project." });
+  request.finish();
+  await page.getByText("Ran in the other project.", { exact: true }).waitFor();
+  await button(page, "Send").waitFor();
+
+  await page.evaluate((session) => window.pi.sessionLoad(session), id);
+  await send(page, "Ask again after trust was revoked");
+  const card = page.locator("[data-project-trust-card]");
+  await card.getByText("Trust this project's configuration?", { exact: true }).waitFor();
+  await button(card, "Stop the task").press("Enter");
+  await card.waitFor({ state: "hidden" });
+  await button(page, "Send").waitFor();
+}
+
 export async function verifyGitPublishing(page, window, app, project, remote) {
   const git = (...args) => execFileSync("git", args, {
     cwd: project, windowsHide: true, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],

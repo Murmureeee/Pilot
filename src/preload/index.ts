@@ -132,6 +132,9 @@ const api: PiApi = {
     ipcRenderer.invoke(IPC.sessionPersona, id, persona),
   sessionInstructionSources: (composerId) =>
     ipcRenderer.invoke(IPC.sessionInstructionSources, composerId),
+  sessionProjectConfig: (composerId) => ipcRenderer.invoke(IPC.sessionProjectConfig, composerId),
+  sessionSetProjectTrust: (composerId, directory, revision) =>
+    ipcRenderer.invoke(IPC.sessionSetProjectTrust, composerId, directory, revision),
   sessionPreviewMemory: (composerId, directory, scope, text) =>
     ipcRenderer.invoke(IPC.sessionPreviewMemory, composerId, directory, scope, text),
   sessionSaveMemory: (composerId, token) =>
@@ -227,6 +230,8 @@ const api: PiApi = {
     ipcRenderer.invoke(IPC.settingsTestProvider, ref) as Promise<ProviderTestResult>,
   permissionRespond: (run, requestId, decision) =>
     ipcRenderer.invoke(IPC.toolPermissionRespond, run, requestId, decision),
+  projectTrustRespond: (run, requestId, decision) =>
+    ipcRenderer.invoke(IPC.toolProjectTrustRespond, run, requestId, decision),
   onAgentEvent: (callback: (event: UiAgentEvent) => void) => {
     const listener = (_event: unknown, event: UiAgentEvent): void => callback(event);
     ipcRenderer.on(AGENT_EVENT_CHANNEL, listener);

@@ -22,6 +22,8 @@ import {
   type VerificationProject,
 } from "@shared/contract";
 
+import { ProjectConfigSource } from "./project-config-details";
+
 export function VerificationSettingsDialog({
   composerId,
   project,
@@ -36,7 +38,7 @@ export function VerificationSettingsDialog({
   commands: Partial<Record<VerificationKind, string>>;
   defaultKind: VerificationKind;
   finalFocus: RefObject<HTMLButtonElement | null>;
-  onSaved(config: AfterTurnVerification | null): void;
+  onSaved(): void;
   onClose(): void;
 }): JSX.Element {
   const locale = useLocale();
@@ -53,13 +55,13 @@ export function VerificationSettingsDialog({
   const command = drafts[kind] ?? commands[kind] ?? "";
   const shell = project.shell;
 
-  const save = async (config: AfterTurnVerification | null): Promise<void> => {
+  const save = async (config: AfterTurnVerification | "project" | null): Promise<void> => {
     if (pending) return;
     setPending(true);
     setError(undefined);
     try {
       await window.pi.sessionSetAfterTurnVerification(composerId, project.directory, config);
-      onSaved(config);
+      onSaved();
       setOpen(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -107,6 +109,7 @@ export function VerificationSettingsDialog({
               <dd>{COMMAND_SHELL_LABELS[shell]}</dd>
             </div>
           </dl>
+          {project.afterTurnSource === "project" && <ProjectConfigSource />}
           <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("验证类型", locale)}>
             {VERIFICATION_KINDS.map((item) => (
               <Button
@@ -146,6 +149,16 @@ export function VerificationSettingsDialog({
             </p>
           )}
           <DialogFooter className="flex-row flex-wrap justify-end gap-2">
+            {project.afterTurnOverride && (
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={pending}
+                onClick={() => void save("project")}
+              >
+                {t("使用项目设置", locale)}
+              </Button>
+            )}
             {project.afterTurn && (
               <Button
                 type="button"

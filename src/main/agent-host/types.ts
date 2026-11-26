@@ -67,7 +67,12 @@ export interface HostDeps {
   saveSettings: (settings: Settings) => void;
   broadcast: (event: UiAgentEvent) => void;
   onActivityChanged?: () => void;
-  onTurnCompleted?: (sessionId: string, directory: string, task: VerificationTask) => void;
+  onTurnCompleted?: (
+    sessionId: string,
+    directory: string,
+    task: VerificationTask,
+    projectFingerprint?: string,
+  ) => void;
   skillsDir: string;
   mcp: McpManager;
   terminal?: TerminalManager;

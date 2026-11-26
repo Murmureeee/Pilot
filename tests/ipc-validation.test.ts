@@ -110,6 +110,8 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.sessionExportMarkdown]: [sessionId, "en"],
   [IPC.sessionPersona]: [sessionId, null],
   [IPC.sessionInstructionSources]: [sessionId],
+  [IPC.sessionProjectConfig]: [sessionId],
+  [IPC.sessionSetProjectTrust]: [sessionId, "E:/project", "a".repeat(64)],
   [IPC.sessionPreviewMemory]: [sessionId, "E:/project", "project", "Use pnpm."],
   [IPC.sessionSaveMemory]: [sessionId, run.runId],
   [IPC.sessionUndoMemory]: [sessionId, run.runId],
@@ -185,9 +187,23 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.settingsMcpReconnect]: [sessionId],
   [IPC.settingsMcpRemove]: [sessionId],
   [IPC.toolPermissionRespond]: [run, sessionId, "once"],
+  [IPC.toolProjectTrustRespond]: [run, sessionId, "trust"],
 };
 
 describe("IPC argument validation", () => {
+  it("validates the project preview revision and the run-scoped trust decision", () => {
+    expect(parseIpcArgs(IPC.sessionSetProjectTrust, [sessionId, "E:/project", null])).toEqual([
+      sessionId,
+      "E:/project",
+      null,
+    ]);
+    expect(() =>
+      parseIpcArgs(IPC.sessionSetProjectTrust, [sessionId, "E:/project", "old"]),
+    ).toThrow(/Invalid IPC arguments/);
+    expect(() => parseIpcArgs(IPC.toolProjectTrustRespond, [run, sessionId, "global"])).toThrow(
+      /Invalid IPC arguments/,
+    );
+  });
   it("checks registry query lengths, cursors and Git subdirectories", () => {
     expect(parseIpcArgs(IPC.settingsSearchMcpRegistry, [""])).toEqual([""]);
     expect(parseIpcArgs(IPC.settingsSearchMcpRegistry, [" search ", "next"])).toEqual([

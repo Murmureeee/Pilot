@@ -35,6 +35,7 @@ import {
   type VerificationState,
 } from "@shared/contract";
 
+import { ProjectConfigDialog, ProjectConfigSource } from "./project-config-details";
 import { VerificationSettingsDialog } from "./verification-settings-dialog";
 
 function isRunning(run: VerificationRun): boolean {
@@ -256,9 +257,15 @@ export function VerificationPanel({
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [configuring, setConfiguring] = useState(false);
+  const [showProject, setShowProject] = useState(false);
   const configure = useRef<HTMLButtonElement>(null);
+  const projectDetails = useRef<HTMLButtonElement>(null);
   const project = state?.project?.directory === projectDirectory ? state?.project : undefined;
   const command = drafts[kind] ?? state?.commands[kind] ?? "";
+  const projectRevision =
+    drafts[kind] === undefined && project?.commandSources?.includes(kind)
+      ? project.configRevision
+      : undefined;
   const busy = runs.some(isRunning);
   const selectedId = selected ?? runs.find(isRunning)?.runId ?? runs[0]?.runId;
   const current = loaded?.runId === selectedId ? loaded : undefined;
@@ -280,6 +287,11 @@ export function VerificationPanel({
     const unsubscribe = window.pi.onAgentEvent((event) => {
       if (event.type === "verification_updated" && event.result.sessionId === composerId)
         receive(event.result);
+      if (
+        (event.type === "snapshot" && event.snapshot.composerId === composerId) ||
+        (event.type === "project_trust_resolved" && event.run.sessionId === composerId)
+      )
+        setRetry((value) => value + 1);
     });
     void window.pi.sessionVerification(composerId).then(
       (value) => {
@@ -295,7 +307,7 @@ export function VerificationPanel({
       active = false;
       unsubscribe();
     };
-  }, [composerId, projectDirectory, receive, retry, shell, workingDirectory]);
+  }, [composerId, projectDirectory, receive, retry, shell, visible, workingDirectory]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -348,6 +360,7 @@ export function VerificationPanel({
                     workingDirectory,
                     kind,
                     command,
+                    projectRevision,
                   }),
                 );
               }
@@ -391,6 +404,7 @@ export function VerificationPanel({
                 {t("运行", locale)}
               </Button>
             </div>
+            {projectRevision && <ProjectConfigSource />}
           </form>
         )}
         {project && (
@@ -403,16 +417,34 @@ export function VerificationPanel({
               <p className="text-xs wrap-anywhere text-muted-foreground">
                 {project.afterTurn?.command ?? t("已停用", locale)}
               </p>
+              {project.afterTurnSource === "project" && <ProjectConfigSource />}
             </div>
-            <Button
-              ref={configure}
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setConfiguring(true)}
-            >
-              {t("配置回合后验证…", locale)}
-            </Button>
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                ref={configure}
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setConfiguring(true)}
+              >
+                {t("配置回合后验证…", locale)}
+              </Button>
+              <Button
+                ref={projectDetails}
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowProject(true)}
+              >
+                {t("项目配置…", locale)}
+              </Button>
+            </div>
+            <ProjectConfigDialog
+              composerId={composerId}
+              open={showProject}
+              onOpenChange={setShowProject}
+              finalFocus={projectDetails}
+            />
             {configuring && (
               <VerificationSettingsDialog
                 key={project.directory}
@@ -422,16 +454,7 @@ export function VerificationPanel({
                 defaultKind={kind}
                 finalFocus={configure}
                 onClose={() => setConfiguring(false)}
-                onSaved={(afterTurn) =>
-                  setState((current) =>
-                    current?.project?.directory === project.directory
-                      ? {
-                          ...current,
-                          project: { ...current.project, afterTurn: afterTurn ?? undefined },
-                        }
-                      : current,
-                  )
-                }
+                onSaved={() => setRetry((value) => value + 1)}
               />
             )}
           </div>

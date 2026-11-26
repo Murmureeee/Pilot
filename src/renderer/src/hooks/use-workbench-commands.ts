@@ -311,6 +311,9 @@ export function useWorkbenchCommands({
             kind,
             command,
             workingDirectory: state.workingDirectory,
+            projectRevision: state.project?.commandSources?.includes(kind)
+              ? state.project.configRevision
+              : undefined,
           });
         },
       });

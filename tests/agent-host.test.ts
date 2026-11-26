@@ -32,6 +32,7 @@ import * as models from "../src/main/agent-host/models";
 import { loadProjectInstructions } from "../src/main/agent-host/project-instructions";
 import { actionFingerprint } from "../src/main/agent-host/recovery";
 import { SessionStore, toUiMessages } from "../src/main/agent-host/session-store";
+import { revokeProjectTrust } from "../src/main/project-config";
 import type { Settings } from "../src/main/settings/types";
 import * as gitChanges from "../src/main/workspace/git-changes";
 import { previewWorkspaceReference } from "../src/main/workspace/reference";
@@ -162,9 +163,137 @@ it("plans with read-only tools, restores the edited plan after restart, and exec
     composerId,
     root,
     expect.objectContaining({ agentRunId: expect.any(String) }),
+    undefined,
   );
   expect(restarted.getSnapshot().sessions[0].approvalMode).toBeUndefined();
   expect(restarted.getSnapshot().sessions[0].planMode).toBeUndefined();
+});
+
+it("binds project trust, MCP startup and file rules to the selected run", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-project-trust-"));
+  const root = realpathSync(profile.path);
+  const directory = join(root, "project");
+  const other = join(root, "other");
+  mkdirSync(join(directory, ".pilot"), { recursive: true });
+  mkdirSync(other);
+  const configPath = join(directory, ".pilot", "config.json");
+  const configure = (scope: string): void =>
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        mcpServers: { fixture: { command: "fixture-mcp", env: { TEST_TOKEN: "fixture-value" } } },
+        permissions: { allow: [{ tool: "write_file", path: scope }] },
+      }),
+    );
+  configure("safe");
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  let settings: Settings = { providers: [provider], activeProviderId: provider.id };
+  const faux = fauxProvider({ tokensPerSecond: 100_000 });
+  faux.appendResponses([
+    fauxAssistantMessage([fauxText("Skipped project configuration.")]),
+    fauxAssistantMessage([
+      fauxToolCall("write_file", { path: "reviewed/allowed.txt", content: "allowed" }),
+      fauxToolCall("write_file", {
+        path: "reviewed-sibling/needs-approval.txt",
+        content: "blocked",
+      }),
+    ]),
+    fauxAssistantMessage([fauxText("Finished with project configuration.")]),
+  ]);
+  const catalog = createModels();
+  catalog.setProvider(faux.provider);
+  using resolve = vi.spyOn(models, "resolveModel").mockReturnValue({
+    model: faux.getModel()!,
+    streamFn: (model, context, options) =>
+      fixtureTitle(context) ?? catalog.streamSimple(model, context, options),
+  });
+  const mcp = new McpManager(() => settings, "0.0.0");
+  using mcpTools = vi.spyOn(mcp, "tools").mockResolvedValue([]);
+  const approvals: string[] = [];
+  const completed =
+    vi.fn<(id: string, directory: string, task: VerificationTask, fingerprint?: string) => void>();
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: (updated) => {
+      settings = updated;
+    },
+    onTurnCompleted: completed,
+    broadcast: (event) => {
+      if (event.type !== "permission_request") return;
+      approvals.push(event.requestId);
+      setTimeout(() => host.respondPermission(event.run, event.requestId, "deny"), 0);
+    },
+    store: new SessionStore(join(root, "sessions")),
+    skillsDir: join(root, "skills"),
+    mcp,
+  });
+  const waiting = async (previous?: string) =>
+    vi.waitFor(() => {
+      const { activeRun, pendingProjectTrust } = host.getSnapshot();
+      expect(activeRun?.status).toBe("waiting_approval");
+      expect(pendingProjectTrust?.requestId).toBeTruthy();
+      expect(pendingProjectTrust?.requestId).not.toBe(previous);
+      return { run: activeRun!, request: pendingProjectTrust! };
+    });
+
+  try {
+    host.openProject(directory);
+    expect(host.getSnapshot().sessionId).toBeNull();
+    expect(host.getSnapshot().pendingProjectTrust).toBeNull();
+    const firstTurn = host.prompt("Skip the first request");
+    const first = await waiting();
+    expect(first.request.directory).toBe(directory);
+    expect(first.request.trust).toBe("untrusted");
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(JSON.stringify(first.request)).not.toContain("fixture-value");
+    expect(mcpTools).not.toHaveBeenCalled();
+
+    expect(host.openProject(other).pendingProjectTrust).toBeNull();
+    host.respondProjectTrust(first.run, first.request.requestId, "trust");
+    expect(settings.projectTrust).toBeUndefined();
+    expect(host.loadSession(first.run.sessionId).pendingProjectTrust?.requestId).toBe(
+      first.request.requestId,
+    );
+    host.respondProjectTrust(first.run, first.request.requestId, "skip");
+    await firstTurn;
+    expect(mcpTools.mock.lastCall?.[2]).toBeUndefined();
+    expect(completed.mock.lastCall?.[3]).toBeUndefined();
+    expect(settings.projectTrust).toBeUndefined();
+
+    const secondTurn = host.prompt("Apply the reviewed configuration");
+    const second = await waiting(first.request.requestId);
+    configure("reviewed");
+    host.respondProjectTrust(second.run, second.request.requestId, "trust");
+    const changed = await waiting(second.request.requestId);
+    expect(changed.request).toMatchObject({
+      trust: "changed",
+      toolRules: [{ toolName: "write_file", pathPrefix: "reviewed" }],
+    });
+    host.respondProjectTrust(second.run, second.request.requestId, "trust");
+    expect(settings.projectTrust).toBeUndefined();
+    expect(mcpTools).toHaveBeenCalledOnce();
+    host.respondProjectTrust(changed.run, changed.request.requestId, "trust");
+    await secondTurn;
+    expect(mcpTools.mock.lastCall?.[2]).toEqual([
+      expect.objectContaining({ name: "fixture", project: expect.objectContaining({ directory }) }),
+    ]);
+    expect(readFileSync(join(directory, "reviewed", "allowed.txt"), "utf8")).toBe("allowed");
+    expect(existsSync(join(directory, "reviewed-sibling", "needs-approval.txt"))).toBe(false);
+    expect(approvals).toHaveLength(1);
+    expect(completed.mock.lastCall?.[3]).toBe(settings.projectTrust?.[directory]?.fingerprint);
+
+    settings = revokeProjectTrust(settings, directory);
+    const thirdTurn = host.prompt("Stop while waiting for trust");
+    const third = await waiting(changed.request.requestId);
+    host.abort(third.run);
+    await thirdTurn;
+    host.respondProjectTrust(third.run, third.request.requestId, "trust");
+    expect(host.getSnapshot().pendingProjectTrust).toBeNull();
+    expect(mcpTools).toHaveBeenCalledTimes(2);
+    expect(settings.projectTrust?.[directory]).toBeUndefined();
+  } finally {
+    await host.stopForExit();
+  }
 });
 
 it("keeps a failed planning turn read-only on retry and discards the proposal without executing it", async () => {
@@ -719,7 +848,9 @@ it("keeps the original run, approval, and transcript while another project is se
   const ref = host.getSnapshot().activeRun!;
   const invalid = { sessionId: a, runId: b };
   try {
-    await vi.waitFor(() => expect(tools).toHaveBeenCalledWith(original, expect.any(AbortSignal)));
+    await vi.waitFor(() =>
+      expect(tools).toHaveBeenCalledWith(original, expect.any(AbortSignal), undefined),
+    );
     expect(host.openProject(next)).toMatchObject({
       status: "idle",
       sessionId: null,

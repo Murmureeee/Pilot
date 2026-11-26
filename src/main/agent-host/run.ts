@@ -30,10 +30,20 @@ import type {
   UiUserPart,
   VerificationTask,
 } from "@shared/contract";
+import type { ProjectTrustDecision, ProjectTrustRequest } from "@shared/project-config";
 
 import { visibleMessageText } from "../../shared/mentions";
 import { applyMessageEvent } from "../../shared/message-events";
 import { isWebTool, webSources } from "../../shared/web";
+import {
+  loadProjectConfig,
+  projectMcpServers,
+  projectToolRules,
+  projectTrustState,
+  summarizeProjectConfig,
+  trustProject,
+} from "../project-config";
+import type { PendingProjectTrust, ProjectConfig } from "../project-config/types";
 import { sameToolRule } from "../settings/tool-rules";
 import { readFileChange } from "../workspace/file-changes";
 import { relativeGitPath } from "../workspace/git";
@@ -108,6 +118,9 @@ export class AgentRun {
   private readonly permissions: PermissionManager;
   private readonly approvalMode: ApprovalMode;
   private readonly projectScopes: ProjectInstructionScopes;
+  private projectTrust?: PendingProjectTrust;
+  private projectConfig?: ProjectConfig;
+  private projectRules: ToolRule[] = [];
   private suppliedScopes: ReadonlySet<string> = new Set();
   private readonly previousActions: ReadonlySet<string>;
   private readonly finishedTools = new Map<string, ApprovedToolResult>();
@@ -193,6 +206,7 @@ export class AgentRun {
       () => this.approvalMode,
       deps.sessionRules,
       this.planning,
+      () => this.projectRules,
     );
     this.previousActions = new Set(previous?.actions);
     this.resumed = previous !== undefined;
@@ -234,6 +248,14 @@ export class AgentRun {
     return this.permissions.listPending();
   }
 
+  get pendingProjectTrust(): ProjectTrustRequest | undefined {
+    return this.projectTrust?.request;
+  }
+
+  get projectFingerprint(): string | undefined {
+    return this.projectConfig?.fingerprint;
+  }
+
   start(): Promise<void> {
     void this.execute().then(this.completion.resolve, this.completion.reject);
     return this.completion.promise;
@@ -243,6 +265,7 @@ export class AgentRun {
     this.preparation.abort();
     this.deps.agent.abort();
     this.permissions.abortAll();
+    this.finishProjectTrust();
     this.sendStatus("stopping");
   }
 
@@ -272,6 +295,58 @@ export class AgentRun {
     });
     this.send({ type: "permission_resolved", requestId, callId, approval });
     if (!this.permissions.hasPending()) this.sendStatus("streaming");
+  }
+
+  respondProjectTrust(requestId: string, decision: ProjectTrustDecision): void {
+    const pending = this.projectTrust;
+    if (!pending || pending.request.requestId !== requestId || this.preparation.signal.aborted)
+      return;
+    if (decision === "skip") {
+      this.finishProjectTrust();
+      return;
+    }
+    const current = loadProjectConfig(pending.config.directory);
+    // A decision applies to the configuration the user saw.
+    if (current.fingerprint === pending.config.fingerprint)
+      this.deps.saveSettings(trustProject(this.deps.getSettings(), current));
+    this.finishProjectTrust(current);
+  }
+
+  private finishProjectTrust(config?: ProjectConfig): void {
+    const pending = this.projectTrust;
+    if (!pending) return;
+    this.projectTrust = undefined;
+    this.send({ type: "project_trust_resolved", requestId: pending.request.requestId });
+    pending.resolve(config);
+  }
+
+  private async prepareProject(directory: string): Promise<void> {
+    const { signal } = this.preparation;
+    const shell = this.deps.environment.commandShell;
+    let config: ProjectConfig | undefined = loadProjectConfig(directory);
+    let changed = false;
+    while (config && !signal.aborted) {
+      const trust = projectTrustState(this.deps.getSettings(), config);
+      if (trust === "not-needed") break;
+      if (trust === "trusted") {
+        this.projectConfig = config;
+        this.projectRules = projectToolRules(config, shell);
+        break;
+      }
+      const decision = Promise.withResolvers<ProjectConfig | undefined>();
+      const request: ProjectTrustRequest = {
+        ...summarizeProjectConfig(config, shell),
+        type: "project_trust_request",
+        requestId: randomUUID(),
+        trust: changed ? "changed" : trust,
+      };
+      this.projectTrust = { request, config, resolve: decision.resolve };
+      this.sendStatus("waiting_approval");
+      this.send(request);
+      config = await decision.promise;
+      changed = true;
+    }
+    if (!signal.aborted && changed) this.sendStatus("streaming");
   }
 
   enqueue(message: ReferencedUserMessage, clearDraftFor?: string): void {
@@ -471,14 +546,28 @@ export class AgentRun {
         this.gitFilesBefore = await captureGitCheckpointBase(directory, gitBaseline);
       if (this.checkpoint.gitBaseline === undefined)
         this.saveCheckpoint({ ...this.checkpoint, gitBaseline });
+      const projectDirectory = this.deps.instructions.projectDirectory;
+      if (
+        !this.planning &&
+        this.approvalMode !== "read-only" &&
+        projectDirectory &&
+        !signal.aborted
+      )
+        await this.prepareProject(projectDirectory);
       // Loading MCP tools can start a stdio server before any tool call is made.
       const externalTools =
         this.planning || signal.aborted
           ? []
-          : await this.deps.mcp.tools(directory, signal).catch((error: unknown) => {
-              if (signal.aborted) return [];
-              throw error;
-            });
+          : await this.deps.mcp
+              .tools(
+                directory,
+                signal,
+                this.projectConfig ? projectMcpServers(this.projectConfig) : undefined,
+              )
+              .catch((error: unknown) => {
+                if (signal.aborted) return [];
+                throw error;
+              });
       if (signal.aborted) {
         if (this.interruptedForExit) return;
         const messages = initialMessage
@@ -583,6 +672,8 @@ export class AgentRun {
         }
       }
       this.permissions.abortAll();
+      this.finishProjectTrust();
+      if (this.projectConfig?.servers.length) await this.deps.mcp.closeProjectServers();
       agent.clearAllQueues();
       unsubscribe();
       agent.beforeToolCall = undefined;

@@ -110,6 +110,7 @@ export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[
     "已保存的授权",
     "命令前缀",
     "撤销规则",
+    "项目授权规则",
   ],
   providers: [
     "提供方",
@@ -151,7 +152,7 @@ export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[
     "发现插件",
     "插件市场",
   ],
-  mcp: ["添加 MCP 服务", "stdio", "HTTP", "发现 MCP 服务", "MCP Registry"],
+  mcp: ["添加 MCP 服务", "stdio", "HTTP", "发现 MCP 服务", "MCP Registry", "项目 MCP 服务"],
   imports: [
     "Codex",
     "Claude Code",

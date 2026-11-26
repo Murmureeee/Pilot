@@ -1,7 +1,7 @@
 // @env node
 // 权限门：读类默认放行；写类/命令按规则放行，未命中规则则广播确认请求并阻塞等待应答。
 import { randomUUID } from "node:crypto";
-import { isAbsolute } from "node:path";
+import { isAbsolute, resolve as resolvePath } from "node:path";
 
 import type { BeforeToolCallResult } from "@earendil-works/pi-agent-core";
 
@@ -56,6 +56,18 @@ function ruleMatches(rule: ToolRule, args: unknown): boolean {
     : path.startsWith(rule.pathPrefix);
 }
 
+function projectPathMatches(rule: ToolRule, args: unknown, directory?: string): boolean {
+  const path = pathOfArgs(args);
+  if (!directory || !path || !rule.pathPrefix) return false;
+  const scope = resolvePath(directory, rule.pathPrefix);
+  if (!isWithinDirectory(scope, resolvePath(directory, path))) return false;
+  try {
+    return isWithinDirectory(scope, createToolPathResolver(directory)(path));
+  } catch {
+    return false;
+  }
+}
+
 export class PermissionManager {
   private readonly pending = new Map<string, PendingPermission>();
 
@@ -66,6 +78,7 @@ export class PermissionManager {
     private readonly getApprovalMode: () => ApprovalMode = () => "standard",
     private readonly sessionRules: ToolRule[] = [],
     private readonly planning = false,
+    private readonly getProjectRules: () => ToolRule[] = () => [],
   ) {}
 
   needsConfirmation(
@@ -98,7 +111,11 @@ export class PermissionManager {
         rule.domain === web.domain &&
         !rule.pathPrefix &&
         !rule.commandPrefix;
-      if (this.sessionRules.some(sameDomain) || this.getGlobalRules().some(sameDomain))
+      if (
+        this.sessionRules.some(sameDomain) ||
+        this.getGlobalRules().some(sameDomain) ||
+        this.getProjectRules().some(sameDomain)
+      )
         return { kind: "allow" };
       return { kind: "ask", web, rule: { toolName, domain: web.domain } };
     }
@@ -121,12 +138,15 @@ export class PermissionManager {
       const rules = [...this.getGlobalRules(), ...this.sessionRules].filter(
         (candidate) => candidate.toolName === toolName,
       );
+      const projectRules = this.getProjectRules().filter(
+        (candidate) => candidate.toolName === toolName,
+      );
       if (toolName === "bash") {
         const { commandShell: shell } = environment;
         const commands = command === undefined ? undefined : parseCommandScope(command, shell);
         if (
           commands?.every((words) =>
-            rules.some(
+            [...rules, ...projectRules].some(
               ({ commandPrefix }) =>
                 commandPrefix && commandPrefixMatches(commandPrefix, shell, words),
             ),
@@ -139,7 +159,13 @@ export class PermissionManager {
           rule = { toolName, commandPrefix: { shell, args: commands[0] } };
         }
       } else {
-        if (rules.some((candidate) => ruleMatches(candidate, args))) return { kind: "allow" };
+        if (
+          rules.some((candidate) => ruleMatches(candidate, args)) ||
+          projectRules.some((candidate) =>
+            projectPathMatches(candidate, args, environment.workingDirectory),
+          )
+        )
+          return { kind: "allow" };
         rule = ruleFor(toolName, args);
       }
     }

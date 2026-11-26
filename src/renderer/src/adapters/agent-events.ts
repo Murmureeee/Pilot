@@ -11,6 +11,7 @@ import type {
   UiAgentEvent,
   UiMessage,
 } from "@shared/contract";
+import type { ProjectTrustRequest } from "@shared/project-config";
 
 import { applyMessageEvent } from "../../../shared/message-events";
 
@@ -30,6 +31,7 @@ export interface AgentUiState {
   sessions: SessionMeta[];
   recentProjects: string[];
   pendingPermissions: PermissionRequest[];
+  pendingProjectTrust: ProjectTrustRequest | null;
 }
 
 export function initialAgentUiState(): AgentUiState {
@@ -48,6 +50,7 @@ export function initialAgentUiState(): AgentUiState {
     sessions: [],
     recentProjects: [],
     pendingPermissions: [],
+    pendingProjectTrust: null,
   };
 }
 
@@ -88,6 +91,8 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
               failedRun: event.status === "idle" ? (event.failedRun ?? null) : null,
               pendingPermissions:
                 event.status === "waiting_approval" ? state.pendingPermissions : [],
+              pendingProjectTrust:
+                event.status === "waiting_approval" ? state.pendingProjectTrust : null,
               steerCount: event.status === "idle" ? 0 : state.steerCount,
             }
           : {}),
@@ -134,6 +139,14 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
           ({ requestId }) => requestId !== event.requestId,
         ),
       };
+    case "project_trust_request": {
+      const { run: _run, ...request } = event;
+      return { ...state, pendingProjectTrust: request };
+    }
+    case "project_trust_resolved":
+      return state.pendingProjectTrust?.requestId === event.requestId
+        ? { ...state, pendingProjectTrust: null }
+        : state;
     case "error":
       return { ...state, error: event.message };
     default: {

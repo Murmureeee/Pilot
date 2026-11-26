@@ -33,6 +33,7 @@ import {
   verifyPlanDraft,
   verifyPlanExecution,
   verifyPluginPackages,
+  verifyProjectConfiguration,
   verifyProjectInstructions,
   verifyProjectEntry,
   verifyQuickMemory,
@@ -44,6 +45,7 @@ import {
   verifyRestoredAuxiliaryModels,
   verifyRestoredPluginPackages,
   verifyRestoredDiscovery,
+  verifyRestoredProjectConfiguration,
   verifySearchAndExport,
   verifySettings,
   verifyStreamingReply,
@@ -147,6 +149,8 @@ const profile = join(scratch, "profile");
 const utilityProfile = join(scratch, "auxiliary-model-profile");
 const pluginProfile = join(scratch, "plugin-profile");
 const discoveryProfile = join(scratch, "discovery-profile");
+const projectConfigProfile = join(scratch, "project-config-profile");
+const configurableProject = join(scratch, "configurable-project");
 const discoveryMarket = join(scratch, "catalog fixture");
 const pluginFixture = {
   root: join(scratch, "plugin fixture"),
@@ -184,6 +188,8 @@ try {
   mkdirSync(utilityProfile);
   mkdirSync(pluginProfile);
   mkdirSync(discoveryProfile);
+  mkdirSync(projectConfigProfile);
+  mkdirSync(configurableProject);
   mkdirSync(project);
   mkdirSync(commandProject);
   mkdirSync(instructionProject);
@@ -347,6 +353,17 @@ try {
   await withApp(discoveryProfile, async (page) => {
     await runScene("Restore marketplace and MCP settings and remove the source independently", () =>
       verifyRestoredDiscovery(page),
+    );
+  });
+  let trustedSession;
+  await withApp(projectConfigProfile, async (page, window) => {
+    await runScene("Review project sources, skip trust, then use a project MCP service and verification", async () => {
+      trustedSession = await verifyProjectConfiguration(page, window, model, configurableProject);
+    });
+  }, configurableProject);
+  await withApp(projectConfigProfile, async (page, _window, app) => {
+    await runScene("Restore trust, check project settings sources, and revoke trust", () =>
+      verifyRestoredProjectConfiguration(page, app, model, trustedSession, secondEntryProject),
     );
   });
 } finally {

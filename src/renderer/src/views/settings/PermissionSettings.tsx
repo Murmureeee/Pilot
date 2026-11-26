@@ -4,6 +4,7 @@ import { CheckIcon, EyeIcon, ShieldCheckIcon, ZapIcon } from "lucide-react";
 import { useRef, useState, type JSX } from "react";
 
 import { ListEmpty } from "@renderer/components/ai/list-empty";
+import { ProjectConfigSettingsSection } from "@renderer/components/ai/project-config-details";
 import { Button } from "@renderer/components/ui/button";
 import {
   APPROVAL_MODE_OPTIONS,
@@ -28,6 +29,7 @@ const RISK_TEXT = "text-amber-600 dark:text-amber-400";
 
 export function PermissionSettings({ settings }: { settings: PublicSettings }): JSX.Element {
   const locale = useLocale();
+  const composerId = useAgentStore((s) => s.composerId);
   const setDefaultApprovalMode = useAgentStore((s) => s.setDefaultApprovalMode);
   const removeToolRule = useAgentStore((s) => s.removeToolRule);
   const rulesList = useRef<HTMLFieldSetElement>(null);
@@ -148,6 +150,7 @@ export function PermissionSettings({ settings }: { settings: PublicSettings }): 
           ))}
         </fieldset>
       </SettingsGroup>
+      {composerId && <ProjectConfigSettingsSection composerId={composerId} section="permissions" />}
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {localizeError(error, locale)}

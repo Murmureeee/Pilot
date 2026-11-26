@@ -42,6 +42,8 @@ import type { McpRegistryConnection, McpRegistryEntry } from "@shared/discovery"
 import type { ImportReport } from "@shared/imports";
 import type { McpServerInfo, McpServerInput, McpTransportConfig } from "@shared/mcp";
 
+import { ProjectConfigSettingsSection } from "./project-config-details";
+
 type McpDraft = McpServerInput & { transport: McpTransportConfig; imported: boolean };
 type RegistryDraft = { type: McpTransportConfig["type"]; required: string[] };
 
@@ -68,9 +70,11 @@ function readStringPairs(text: string, invalid: string): [string, string][] | un
 }
 
 export function McpSettings({
+  composerId,
   locale,
   workingDirectory,
 }: {
+  composerId: string | null;
   locale: Locale;
   workingDirectory: string | null;
 }): JSX.Element {
@@ -366,6 +370,7 @@ export function McpSettings({
               </section>
             ))}
           </div>
+          {composerId && <ProjectConfigSettingsSection composerId={composerId} section="mcp" />}
           {error && !draft && (
             <p role="alert" className="text-xs text-destructive">
               {error}

@@ -107,8 +107,12 @@ export class McpManager {
     private readonly request?: typeof globalThis.fetch,
   ) {}
 
-  private sync(workingDirectory: string | undefined, reconnectId?: string): McpConnection[] {
-    const { mcpServers = [] } = this.getSettings();
+  private sync(
+    workingDirectory: string | undefined,
+    reconnectId?: string,
+    projectServers: readonly McpServerConfig[] = [],
+  ): McpConnection[] {
+    const mcpServers = [...(this.getSettings().mcpServers ?? []), ...projectServers];
     this.configs = mcpServers;
     const active = mcpServers.filter(
       (config) => config.enabled && !this.pausedPluginServers.has(config.id),
@@ -130,6 +134,7 @@ export class McpManager {
         config.encryptedHeaders,
         config.encryptedImport,
         config.transport.type === "stdio" ? workingDirectory : undefined,
+        ...(config.project ? [config.project] : []),
       ]);
       const existing = this.connections.get(config.id);
       if (existing?.signature === signature) return existing;
@@ -162,6 +167,14 @@ export class McpManager {
     void closed.then(() => this.closing.delete(closed));
   }
 
+  async closeProjectServers(): Promise<void> {
+    for (const config of this.configs) {
+      if (config.project) this.disconnect(config.id);
+    }
+    this.configs = this.configs.filter((config) => !config.project);
+    await Promise.all(this.closing);
+  }
+
   async withPluginServersClosed(ids: readonly string[], change: () => void): Promise<void> {
     for (const id of ids) {
       this.pausedPluginServers.set(id, (this.pausedPluginServers.get(id) ?? 0) + 1);
@@ -186,7 +199,8 @@ export class McpManager {
   ): Promise<void> {
     const { client, signature } = connection;
     try {
-      const imported = readEncrypted<ImportedMcpConnection>(config.encryptedImport);
+      const imported =
+        config.project?.connection ?? readEncrypted<ImportedMcpConnection>(config.encryptedImport);
       await client.connect(createTransport(config, cwd, imported, this.request));
       const entries = client.serverCapabilities?.tools ? await client.listTools() : [];
       const include = imported?.includeTools ? new Set(imported.includeTools) : undefined;
@@ -221,11 +235,10 @@ export class McpManager {
   ): Promise<McpServerInfo[]> {
     // A tool in flight still holds the client created for its run's working directory.
     if (preserveConnections && reconnectId) this.reconnectOnSync.add(reconnectId);
-    const connections = preserveConnections
-      ? [...this.connections.values()]
-      : this.sync(workingDirectory, reconnectId);
-    await Promise.all(connections.map((connection) => connection.ready));
-    return (this.getSettings().mcpServers ?? []).map(
+    if (!preserveConnections) this.sync(workingDirectory, reconnectId);
+    const configs = this.getSettings().mcpServers ?? [];
+    await Promise.all(configs.map(({ id }) => this.connections.get(id)?.ready));
+    return configs.map(
       ({ id, name, transport, enabled, policy, encryptedEnv, encryptedImport }) => {
         const connection = this.connections.get(id);
         const connected = connection?.client.connectionState === "connected" && !connection.error;
@@ -247,9 +260,13 @@ export class McpManager {
     );
   }
 
-  async tools(workingDirectory: string | undefined, signal?: AbortSignal): Promise<AgentTool[]> {
+  async tools(
+    workingDirectory: string | undefined,
+    signal?: AbortSignal,
+    projectServers?: readonly McpServerConfig[],
+  ): Promise<AgentTool[]> {
     signal?.throwIfAborted();
-    const connections = this.sync(workingDirectory);
+    const connections = this.sync(workingDirectory, undefined, projectServers);
     const ready = Promise.all(connections.map((connection) => connection.ready));
     if (signal) {
       const cancelled = Promise.withResolvers<never>();

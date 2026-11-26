@@ -79,6 +79,7 @@ import type {
   PluginPackageSource,
 } from "./imports";
 import type { McpServerInfo, McpServerInput } from "./mcp";
+import type { ProjectConfigInfo, ProjectTrustDecision } from "./project-config";
 
 export interface PiApi {
   ping(request: PingRequest): Promise<PingResponse>;
@@ -197,6 +198,12 @@ export interface PiApi {
   /** 会话级人设覆盖（null = 清除，回落全局） */
   sessionPersona(id: string, persona: string | null): Promise<void>;
   sessionInstructionSources(composerId: string): Promise<SessionInstructionSources>;
+  sessionProjectConfig(composerId: string): Promise<ProjectConfigInfo | null>;
+  sessionSetProjectTrust(
+    composerId: string,
+    directory: string,
+    revision: string | null,
+  ): Promise<void>;
   sessionPreviewMemory(
     composerId: string,
     projectDirectory: string | null,
@@ -211,7 +218,7 @@ export interface PiApi {
   sessionSetAfterTurnVerification(
     composerId: string,
     directory: string,
-    config: AfterTurnVerification | null,
+    config: AfterTurnVerification | "project" | null,
   ): Promise<void>;
   sessionRepairVerification(composerId: string, runId: string, locale: Locale): Promise<void>;
   sessionVerificationRun(composerId: string, runId: string): Promise<VerificationResult>;
@@ -284,6 +291,12 @@ export interface PiApi {
   testProvider(ref: string | ProviderInput): Promise<ProviderTestResult>;
   /** 对权限确认弹窗应答；requestId 来自 permission_request 事件 */
   permissionRespond(run: RunRef, requestId: string, decision: PermissionDecision): Promise<void>;
+  /** 对项目信任请求应答；requestId 来自 project_trust_request 事件 */
+  projectTrustRespond(
+    run: RunRef,
+    requestId: string,
+    decision: ProjectTrustDecision,
+  ): Promise<void>;
   /** 订阅主进程事件流；返回退订函数 */
   onAgentEvent(callback: (event: UiAgentEvent) => void): () => void;
 }

@@ -7,6 +7,7 @@ import type {
   SUPPORTED_LOCALES,
   THINKING_LEVELS,
 } from "./constants";
+import type { ProjectTrustRequest } from "./project-config";
 
 export const IPC = {
   ping: "app:ping",
@@ -73,6 +74,8 @@ export const IPC = {
   sessionExportMarkdown: "session:export-markdown",
   sessionPersona: "session:persona",
   sessionInstructionSources: "session:instruction-sources",
+  sessionProjectConfig: "session:project-config",
+  sessionSetProjectTrust: "session:set-project-trust",
   sessionPreviewMemory: "session:preview-memory",
   sessionSaveMemory: "session:save-memory",
   sessionUndoMemory: "session:undo-memory",
@@ -127,6 +130,7 @@ export const IPC = {
   settingsMcpReconnect: "settings:mcp-reconnect",
   settingsMcpRemove: "settings:mcp-remove",
   toolPermissionRespond: "tool:permission-respond",
+  toolProjectTrustRespond: "tool:project-trust-respond",
 } as const;
 
 export interface WorkspaceEntry {
@@ -506,6 +510,8 @@ export type AgentRunEvent =
   | { type: "queue"; steerCount: number }
   | PermissionRequest
   | { type: "permission_resolved"; requestId: string; callId: string; approval: ToolApproval }
+  | ProjectTrustRequest
+  | { type: "project_trust_resolved"; requestId: string }
   | { type: "error"; message: string };
 
 export type SessionNavigation = "record" | "reset" | "reveal";
@@ -846,6 +852,10 @@ export interface VerificationProject {
   directory: string;
   shell: CommandShell;
   afterTurn?: AfterTurnVerification;
+  afterTurnSource?: "project";
+  afterTurnOverride?: boolean;
+  configRevision?: string;
+  commandSources?: VerificationKind[];
 }
 
 export interface AfterTurnVerification {
@@ -858,6 +868,7 @@ export interface StartVerification {
   workingDirectory: string;
   kind: VerificationKind;
   command: string;
+  projectRevision?: string;
 }
 
 export type ProviderKind = "anthropic" | "openai-compatible" | "openai-responses" | "faux";
@@ -1000,6 +1011,7 @@ export interface Snapshot {
   interruptedRun: InterruptedRun | null;
   failedRun: FailedRun | null;
   pendingPermissions: PermissionRequest[];
+  pendingProjectTrust: ProjectTrustRequest | null;
   error: string | null;
   settings: PublicSettings;
   usage: UsageTotals & { costTotal: number };

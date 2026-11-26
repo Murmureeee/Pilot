@@ -28,6 +28,35 @@ function applyRunEvent(state: AgentUiState, event: AgentRunEvent): AgentUiState 
 }
 
 describe("agent-events adapter", () => {
+  it("applies project trust requests only to their run and ignores stale resolutions", () => {
+    const initial = initialRunUiState();
+    const request = {
+      type: "project_trust_request",
+      requestId: "request",
+      trust: "untrusted",
+      directory: "E:/a",
+      files: [".mcp.json"],
+      mcpServers: [],
+      toolRules: [],
+      verification: {},
+      issues: [],
+    } as const satisfies AgentRunEvent;
+    const waiting = applyRunEvent(initial, request);
+    expect(waiting.pendingProjectTrust).toEqual(request);
+    expect(waiting.messages).toBe(initial.messages);
+    expect(waiting.usage).toBe(initial.usage);
+    expect(applyRunEvent(waiting, { type: "project_trust_resolved", requestId: "stale" })).toBe(
+      waiting,
+    );
+    expect(applyAgentEvent(initial, { ...request, run: { ...run, runId: "other" } })).toBe(initial);
+    expect(
+      applyRunEvent(waiting, { type: "project_trust_resolved", requestId: "request" })
+        .pendingProjectTrust,
+    ).toBeNull();
+    expect(
+      applyRunEvent(waiting, { type: "status", status: "stopping" }).pendingProjectTrust,
+    ).toBeNull();
+  });
   it("keeps terminal output and lifecycle outside the transcript and usage event stream", () => {
     expectTypeOf<Extract<TerminalEvent, UiAgentEvent>>().toBeNever();
   });

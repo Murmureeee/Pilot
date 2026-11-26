@@ -100,7 +100,13 @@ export function SettingsView(): JSX.Element {
           />
         )}
 
-        {section === "mcp" && <McpSettings locale={locale} workingDirectory={workingDirectory} />}
+        {section === "mcp" && (
+          <McpSettings
+            composerId={composerId}
+            locale={locale}
+            workingDirectory={workingDirectory}
+          />
+        )}
 
         {section === "imports" && (
           <div className="min-w-0">

@@ -35,6 +35,7 @@ import {
 } from "./ipc/transport";
 import { createDesktopNetwork } from "./network";
 import { prepareUserDataDirectory } from "./profile";
+import { afterTurnVerificationFor } from "./project-config";
 import {
   applicationArguments,
   projectEntryArgument,
@@ -206,13 +207,13 @@ function startDesktop(): (entry: ProjectEntry) => void {
       notifications.handleEvent(event);
     },
     onActivityChanged: syncSleepBlocker,
-    onTurnCompleted: (sessionId, directory, task) => {
-      const config = getSettings().afterTurnVerification?.[directory];
+    onTurnCompleted: (sessionId, directory, task, projectFingerprint) => {
+      const config = afterTurnVerificationFor(getSettings(), directory, projectFingerprint);
       if (!config) return;
       verification.afterTurn({ ...config, sessionId, workingDirectory: directory, task }, () => {
         try {
           exit.checkWorkAllowed();
-          const current = getSettings().afterTurnVerification?.[directory];
+          const current = afterTurnVerificationFor(getSettings(), directory, projectFingerprint);
           return (
             current?.shell === config.shell &&
             current.kind === config.kind &&

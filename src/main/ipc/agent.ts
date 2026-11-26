@@ -3,10 +3,11 @@ import { writeFile } from "node:fs/promises";
 
 import { app, BrowserWindow, dialog, shell } from "electron";
 
-import { IPC } from "../../shared/contract";
+import { IPC, VERIFICATION_KINDS } from "../../shared/contract";
 import { MemoryChanges } from "../agent-host/memory";
 import { runAgentSmoke } from "../agent-host/smoke";
 import { NATIVE_DIALOG_TITLES } from "../constants";
+import { projectConfigInfo, revokeProjectTrust, trustProjectRevision } from "../project-config";
 import { verificationRepairPrompt } from "../verification/commands";
 import { openExternalEditor } from "../workspace/editor";
 import { readProjectGitHead } from "../workspace/git";
@@ -197,6 +198,24 @@ export function registerAgentRoutes({
   handle(IPC.sessionInstructionSources, (_event, composerId) =>
     host.getInstructionSources(composerId),
   );
+  handle(IPC.sessionProjectConfig, (_event, composerId) => {
+    host.checkComposerId(composerId);
+    const directory = host.getProjectDirectory();
+    return directory ? projectConfigInfo(getSettings(), directory) : null;
+  });
+  handle(IPC.sessionSetProjectTrust, (_event, composerId, directory, revision) => {
+    exit.checkWorkAllowed();
+    host.checkComposerId(composerId);
+    if (host.getProjectDirectory() !== directory)
+      throw new Error("项目已切换。请重新打开项目配置。");
+    const settings = getSettings();
+    saveSettings(
+      revision === null
+        ? revokeProjectTrust(settings, directory)
+        : trustProjectRevision(settings, directory, revision),
+    );
+    host.publishSnapshot();
+  });
   handle(IPC.sessionPreviewMemory, (_event, composerId, expectedDirectory, scope, text) => {
     host.checkComposerId(composerId);
     const directory = host.getProjectDirectory();
@@ -224,12 +243,23 @@ export function registerAgentRoutes({
     const directory = host.getProjectDirectory();
     if (!directory) return state;
     const settings = getSettings();
+    const config = projectConfigInfo(settings, directory);
+    const saved = settings.afterTurnVerification?.[directory];
+    const declared = config.trust === "trusted" ? config.afterTurn : undefined;
+    const commands =
+      workingDirectory === directory && config.trust === "trusted" ? config.verification : {};
+    const commandSources = VERIFICATION_KINDS.filter((kind) => commands[kind] !== undefined);
     return {
       ...state,
+      commands: { ...state.commands, ...commands },
       project: {
         directory,
         shell: getCommandShell(settings.commandShell),
-        afterTurn: settings.afterTurnVerification?.[directory],
+        afterTurn: saved === undefined ? declared : (saved ?? undefined),
+        afterTurnSource: saved === undefined && declared ? "project" : undefined,
+        afterTurnOverride: saved !== undefined && Boolean(config.afterTurn),
+        commandSources,
+        configRevision: commandSources.length ? config.revision : undefined,
       },
     };
   });
@@ -240,9 +270,11 @@ export function registerAgentRoutes({
       throw new Error("项目已切换。请重新打开验证设置。");
     const settings = getSettings();
     const projects = { ...settings.afterTurnVerification };
-    if (config) projects[directory] = config;
-    else delete projects[directory];
+    if (config === "project" || (!config && !projectConfigInfo(settings, directory).afterTurn))
+      delete projects[directory];
+    else projects[directory] = config;
     saveSettings({ ...settings, afterTurnVerification: projects });
+    host.publishSnapshot();
   });
   const verificationRef = (
     composerId: string,
@@ -257,11 +289,23 @@ export function registerAgentRoutes({
   handle(IPC.sessionStartVerification, (_event, composerId, request) => {
     exit.checkWorkAllowed();
     const { sessionId, task } = host.verificationScope(composerId, request.workingDirectory);
+    const { projectRevision, ...command } = request;
+    const settings = getSettings();
+    if (projectRevision !== undefined) {
+      const config = projectConfigInfo(settings, command.workingDirectory);
+      if (
+        host.getProjectDirectory() !== command.workingDirectory ||
+        config.trust !== "trusted" ||
+        config.revision !== projectRevision ||
+        config.verification[command.kind] !== command.command
+      )
+        throw new Error("项目配置已更改。请刷新并重新核对。");
+    }
     return verification.start({
-      ...request,
+      ...command,
       sessionId,
       task,
-      shell: getCommandShell(getSettings().commandShell),
+      shell: getCommandShell(settings.commandShell),
     });
   });
   handle(IPC.sessionStopVerification, (_event, composerId, runId) =>
@@ -290,5 +334,8 @@ export function registerAgentRoutes({
 
   handle(IPC.toolPermissionRespond, (_event, run, requestId, decision) =>
     host.respondPermission(run, requestId, decision),
+  );
+  handle(IPC.toolProjectTrustRespond, (_event, run, requestId, decision) =>
+    host.respondProjectTrust(run, requestId, decision),
   );
 }
