@@ -38,7 +38,7 @@ import { previewWorkspaceReference } from "../src/main/workspace/reference";
 import { searchWorkspace } from "../src/main/workspace/search";
 import type { GitSnapshot } from "../src/main/workspace/types";
 import { MENTION_CONTEXT_HEADING } from "../src/shared/constants";
-import type { ComposerDraft, UiAgentEvent } from "../src/shared/contract";
+import type { ComposerDraft, UiAgentEvent, VerificationTask } from "../src/shared/contract";
 import { promptFromDraft } from "../src/shared/mentions";
 
 vi.mock("electron", () => ({ safeStorage: {} }));
@@ -81,10 +81,12 @@ it("plans with read-only tools, restores the edited plan after restart, and exec
   const mcp = new McpManager(() => settings, "0.0.0");
   using mcpTools = vi.spyOn(mcp, "tools").mockResolvedValue([]);
   const approvals: string[] = [];
+  const afterTurn = vi.fn<(sessionId: string, directory: string, task: VerificationTask) => void>();
   const createHost = (): AgentHost => {
     const host = new AgentHost({
       getSettings: () => settings,
       saveSettings: () => {},
+      onTurnCompleted: afterTurn,
       broadcast: (event) => {
         if (event.type !== "permission_request") return;
         approvals.push(event.toolName);
@@ -117,6 +119,7 @@ it("plans with read-only tools, restores the edited plan after restart, and exec
     expect(request.system).toContain("Pilot is in Plan Mode");
   }
   expect(mcpTools).not.toHaveBeenCalled();
+  expect(afterTurn).not.toHaveBeenCalled();
   expect(approvals).toEqual([]);
   expect(existsSync(output)).toBe(false);
   const plan = host.getSnapshot().sessions[0].planMode!;
@@ -152,6 +155,11 @@ it("plans with read-only tools, restores the edited plan after restart, and exec
   expect(mcpTools).toHaveBeenCalledOnce();
   expect(resolve).toHaveBeenCalledTimes(2);
   expect(readFileSync(output, "utf8")).toBe("Revised");
+  expect(afterTurn).toHaveBeenCalledExactlyOnceWith(
+    composerId,
+    root,
+    expect.objectContaining({ agentRunId: expect.any(String) }),
+  );
   expect(restarted.getSnapshot().sessions[0].approvalMode).toBeUndefined();
   expect(restarted.getSnapshot().sessions[0].planMode).toBeUndefined();
 });

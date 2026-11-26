@@ -20,6 +20,23 @@ import { modelCatalogInput } from "../src/shared/providers";
 vi.mock("electron", () => ({ safeStorage: { isEncryptionAvailable: () => false } }));
 vi.mock("node:fs", { spy: true });
 
+it("keeps a project's after-turn command and shell through ordinary settings saves", () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-after-turn-settings-"));
+  const settings = loadSettings(profile.path);
+  const afterTurnVerification = {
+    [profile.path]: { kind: "test", command: "node check.cjs", shell: "bash" },
+  } as const;
+  saveSettings(profile.path, { ...settings, afterTurnVerification });
+  const reopened = loadSettings(profile.path);
+  const updated = mergeSettingsInput(reopened, {
+    providers: reopened.providers,
+    activeProviderId: reopened.activeProviderId,
+    persona: "Keep the project settings.",
+  });
+  saveSettings(profile.path, updated);
+  expect(loadSettings(profile.path).afterTurnVerification).toEqual(afterTurnVerification);
+});
+
 describe("settings recovery", () => {
   it.each([
     Buffer.from('{"providers":[{"apiKey":"saved"}'),

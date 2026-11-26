@@ -75,6 +75,8 @@ export const IPC = {
   sessionStartVerification: "session:start-verification",
   sessionStopVerification: "session:stop-verification",
   sessionRerunVerification: "session:rerun-verification",
+  sessionSetAfterTurnVerification: "session:set-after-turn-verification",
+  sessionRepairVerification: "session:repair-verification",
   sessionTerminals: "session:terminals",
   sessionOpenTerminal: "session:open-terminal",
   sessionTerminalOutput: "session:terminal-output",
@@ -737,6 +739,7 @@ export interface VerificationTask {
 export interface VerificationRun extends RunRef {
   task: VerificationTask;
   rerunOf?: string;
+  trigger?: "after-turn";
   kind: VerificationKind;
   workingDirectory: string;
   command: string;
@@ -759,6 +762,19 @@ export interface VerificationState {
   workingDirectory: string | null;
   commands: Partial<Record<VerificationKind, string>>;
   runs: VerificationRun[];
+  project?: VerificationProject;
+}
+
+export interface VerificationProject {
+  directory: string;
+  shell: CommandShell;
+  afterTurn?: AfterTurnVerification;
+}
+
+export interface AfterTurnVerification {
+  kind: VerificationKind;
+  command: string;
+  shell: CommandShell;
 }
 
 export interface StartVerification {

@@ -199,6 +199,23 @@ function startDesktop(): void {
       notifications.handleEvent(event);
     },
     onActivityChanged: syncSleepBlocker,
+    onTurnCompleted: (sessionId, directory, task) => {
+      const config = getSettings().afterTurnVerification?.[directory];
+      if (!config) return;
+      verification.afterTurn({ ...config, sessionId, workingDirectory: directory, task }, () => {
+        try {
+          exit.checkWorkAllowed();
+          const current = getSettings().afterTurnVerification?.[directory];
+          return (
+            current?.shell === config.shell &&
+            current.kind === config.kind &&
+            current.command === config.command
+          );
+        } catch {
+          return false;
+        }
+      });
+    },
     skillsDir,
     mcp,
     terminal,

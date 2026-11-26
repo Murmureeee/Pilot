@@ -1,5 +1,6 @@
 // @env node
 import type {
+  AfterTurnVerification,
   ApprovalMode,
   CommandShell,
   LogLevel,
@@ -41,6 +42,7 @@ export interface Settings {
   notificationsEnabled?: boolean;
   persona?: string;
   promptTemplates?: PromptTemplate[];
+  afterTurnVerification?: Record<string, AfterTurnVerification>;
   skillsEnabled?: string[];
   mcpServers?: McpServerConfig[];
   importedPlugins?: ImportedPlugin[];

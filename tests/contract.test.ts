@@ -128,5 +128,7 @@ describe("IPC contract", () => {
     expect(IPC.sessionStartVerification).toBe("session:start-verification");
     expect(IPC.sessionStopVerification).toBe("session:stop-verification");
     expect(IPC.sessionRerunVerification).toBe("session:rerun-verification");
+    expect(IPC.sessionSetAfterTurnVerification).toBe("session:set-after-turn-verification");
+    expect(IPC.sessionRepairVerification).toBe("session:repair-verification");
   });
 });

@@ -15,6 +15,7 @@ import { startModelFixture } from "./windows-ui/model.mjs";
 import {
   prepareTerminalExit,
   verifyAgentMemory,
+  verifyAfterTurnVerification,
   verifyApprovals,
   verifyBackgroundTerminal,
   verifyCommandsAndTemplates,
@@ -29,6 +30,7 @@ import {
   verifyProjectInstructions,
   verifyQuickMemory,
   verifyRestoredMemory,
+  verifyRestoredAfterTurnVerification,
   verifyRestoredPromptTemplates,
   verifyRestoredSettings,
   verifySearchAndExport,
@@ -134,6 +136,7 @@ const project = join(scratch, "fixture-project");
 const commandProject = join(scratch, "commands-project");
 const instructionProject = join(scratch, "instructions-project");
 const memoryProject = join(scratch, "memory-project");
+const verificationProject = join(scratch, "verification-project");
 const imageFixture = {
   chosen: join(scratch, "chosen.png"),
   dropped: join(scratch, "dropped.png"),
@@ -143,12 +146,14 @@ const imageFixture = {
 let model;
 let instructionSession;
 let memorySession;
+let verificationSession;
 try {
   mkdirSync(profile);
   mkdirSync(project);
   mkdirSync(commandProject);
   mkdirSync(instructionProject);
   mkdirSync(memoryProject);
+  mkdirSync(verificationProject);
   execFileSync("git", ["init", "-q", commandProject]);
   writeFileSync(join(commandProject, "package.json"), JSON.stringify({
     scripts: { test: 'node -e "console.log(123456789)"' },
@@ -236,9 +241,17 @@ try {
       memorySession = await verifyAgentMemory(page, model, memoryProject);
     });
   });
-  await withApp(profile, async (page) => {
+  await withApp(profile, async (page, window, app) => {
     await runScene("Restore saved memory and send a literal hash heading", () =>
       verifyRestoredMemory(page, model, memoryProject, memorySession),
+    );
+    await runScene("Configure after-turn verification and send a failed result to the original chat", async () => {
+      verificationSession = await verifyAfterTurnVerification(page, window, app, model, verificationProject, memoryProject);
+    });
+  });
+  await withApp(profile, async (page) => {
+    await runScene("Restore automatic verification history and turn off the project command", () =>
+      verifyRestoredAfterTurnVerification(page, model, verificationSession),
     );
   });
 } finally {

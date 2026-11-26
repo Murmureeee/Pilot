@@ -537,6 +537,160 @@ export async function verifyRestoredMemory(page, model, project, sessionId) {
   await button(page, "Send").waitFor();
 }
 
+const afterTurnCommand = "node check-after-turn.cjs";
+const afterTurnFailure = "The fixture needs fixed.txt";
+const afterTurnSuccess = "The after-turn check passed";
+
+export async function verifyAfterTurnVerification(page, window, app, model, project, otherProject) {
+  writeFileSync(join(project, "check-after-turn.cjs"), [
+    "const fs = require('node:fs');",
+    "fs.appendFileSync('after-turn.log', process.cwd() + '\\n');",
+    `if (fs.existsSync('fixed.txt')) console.log(${JSON.stringify(afterTurnSuccess)});`,
+    `else { console.error(${JSON.stringify(afterTurnFailure)}); process.exitCode = 7; }`,
+  ].join("\n"));
+  const log = join(project, "after-turn.log");
+  const openProject = async (directory) => {
+    await app.evaluate(({ dialog }, folder) => {
+      const original = dialog.showOpenDialog;
+      dialog.showOpenDialog = async () => {
+        dialog.showOpenDialog = original;
+        return { canceled: false, filePaths: [folder] };
+      };
+    }, directory);
+    await page.keyboard.press("Control+o");
+    await waitForProjectDraft(page, directory);
+  };
+  const panel = page.locator("[data-verification-panel]");
+  const openConfiguration = async (locale) => {
+    const en = locale.lang === "en";
+    await page.keyboard.press("Control+Shift+t");
+    const trigger = button(panel, en ? "Configure after-turn verification…" : "配置回合后验证…");
+    await trigger.press("Enter");
+    const dialog = page.getByRole("dialog", { name: en ? "After-turn verification" : "回合后验证" });
+    const command = dialog.getByRole("textbox", { name: en ? "Command" : "命令", exact: true });
+    await command.waitFor();
+    return { dialog, command, trigger };
+  };
+
+  await openProject(project);
+  let current = locales[1];
+  let contrast = Infinity;
+  for (const size of [wide, narrow]) {
+    await resize(page, window, size);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        const { dialog, command, trigger } = await openConfiguration(locale);
+        await assertFits(dialog);
+        await assertFits(command);
+        await command.fill(afterTurnCommand);
+        await assertFits(button(dialog, locale.lang === "en" ? "Save" : "保存"));
+        contrast = Math.min(contrast, await minimumTextContrast(dialog, "h2, p, dt, dd, label"));
+        await page.keyboard.press("Escape");
+        await dialog.waitFor({ state: "hidden" });
+        await page.waitForFunction((label) => document.activeElement?.textContent?.trim() === label, await trigger.innerText());
+        console.log("Checked after-turn verification at " + size.width + " × " + size.height + " " + locale.lang + " " + theme);
+      }
+    }
+  }
+  assert.ok(contrast >= 4.5, "Verification configuration text must meet the contrast requirement");
+  console.log("After-turn verification text minimum contrast " + contrast.toFixed(2) + ":1");
+  await page.keyboard.press("Control+l");
+  await resize(page, window, narrow, 1.5);
+  const { dialog, command } = await openConfiguration(current);
+  assert.equal(await command.inputValue(), "");
+  await command.fill(afterTurnCommand);
+  await assertFits(dialog);
+  await button(dialog, "Save").press("Enter");
+  await dialog.waitFor({ state: "hidden" });
+  await panel.locator('[data-after-turn-verification="enabled"]').getByText(afterTurnCommand, { exact: true }).waitFor();
+  const draft = await page.evaluate(() => window.pi.getSnapshot());
+  assert.equal(draft.sessionId, null);
+  await page.keyboard.press("Control+l");
+  await resize(page, window, wide);
+
+  await send(page, "Implement the after-turn verification fixture.");
+  const first = await model.nextCompletion();
+  assert.ok(!existsSync(log));
+  sendTool(first, "after-turn-read", "read_file", { path: "check-after-turn.cjs" });
+  const next = await model.nextCompletion();
+  assert.ok(!existsSync(log), "Interim tool calls must not trigger verification");
+  await openProject(otherProject);
+  next.write({ content: "The fixture turn is complete." });
+  next.finish();
+  await page.waitForFunction(async () => !(await window.pi.getSnapshot()).activeRun);
+  const other = await page.evaluate(async () => {
+    const { composerId } = await window.pi.getSnapshot();
+    return window.pi.sessionVerification(composerId);
+  });
+  assert.equal(other.project.directory, otherProject);
+  assert.equal(other.project.afterTurn, undefined);
+  assert.deepEqual(other.runs, []);
+
+  await page.evaluate((id) => window.pi.sessionLoad(id), draft.composerId);
+  await editor(page).fill("Keep this draft while the agent repairs the fixture.");
+  await resize(page, window, narrow);
+  await page.keyboard.press("Control+Shift+t");
+  const details = panel.locator('[data-verification-trigger="after-turn"]');
+  await details.locator('[data-verification-status="failed"]').waitFor();
+  assert.equal(await details.locator("[data-verification-exit-code]").innerText(), "7");
+  await details.locator("[data-verification-output]").getByText(afterTurnFailure).waitFor();
+  const failed = await page.evaluate((id) => window.pi.sessionVerification(id), draft.composerId);
+  assert.equal(failed.runs.length, 1);
+  assert.equal(failed.runs[0].workingDirectory, project);
+  assert.equal(failed.runs[0].task.title, "Implement the after-turn verification fixture.");
+  assert.equal(readFileSync(log, "utf8").trim(), project);
+
+  await button(details, "Send to agent to fix").press("Enter");
+  const repair = await model.nextCompletion();
+  const repairText = repair.input.messages.at(-1).content;
+  for (const detail of [project, afterTurnCommand, "Exit code 7", afterTurnFailure])
+    assert.ok(repairText.includes(detail));
+  await panel.waitFor({ state: "hidden" });
+  assert.equal(await editor(page).innerText(), "Keep this draft while the agent repairs the fixture.");
+  sendTool(repair, "after-turn-fix", "write_file", { path: "fixed.txt", content: "fixture fixed" });
+  await button(page.locator("[data-permission-card]"), "Allow once").press("Enter");
+  const fixed = await model.nextCompletion();
+  fixed.write({ content: "The fixture file is fixed." });
+  fixed.finish();
+  await page.getByText("The fixture file is fixed.", { exact: true }).waitFor();
+  await page.keyboard.press("Control+Shift+t");
+  await details.locator('[data-verification-status="success"]').waitFor();
+  await details.locator("[data-verification-output]").waitFor({ state: "hidden" });
+  await resize(page, window, wide);
+  return draft.composerId;
+}
+
+export async function verifyRestoredAfterTurnVerification(page, model, sessionId) {
+  await page.evaluate((id) => window.pi.sessionLoad(id), sessionId);
+  await page.getByText("The fixture file is fixed.", { exact: true }).waitFor();
+  await page.locator("#review-trigger").press("Enter");
+  await page.getByRole("tab", { name: /^Verify/ }).press("Enter");
+  const panel = page.locator("[data-verification-panel]");
+  await panel.locator('[data-after-turn-verification="enabled"]').getByText(afterTurnCommand, { exact: true }).waitFor();
+  const state = () => page.evaluate((id) => window.pi.sessionVerification(id), sessionId);
+  const saved = await state();
+  assert.deepEqual(saved.runs.map(({ status, trigger }) => [status, trigger]), [
+    ["success", "after-turn"], ["failed", "after-turn"],
+  ]);
+  await button(panel, "Configure after-turn verification…").press("Enter");
+  const dialog = page.getByRole("dialog", { name: "After-turn verification" });
+  await button(dialog, "Turn off after-turn verification").press("Enter");
+  await dialog.waitFor({ state: "hidden" });
+  await panel.locator('[data-after-turn-verification="disabled"]').waitFor();
+  await page.keyboard.press("Control+l");
+  await send(page, "Complete a turn with the automatic check off.");
+  const reply = await model.nextCompletion();
+  reply.write({ content: "The final fixture turn is complete." });
+  reply.finish();
+  await page.getByText("The final fixture turn is complete.", { exact: true }).waitFor();
+  await button(page, "Send").waitFor();
+  const disabled = await state();
+  assert.equal(disabled.project.afterTurn, undefined);
+  assert.deepEqual(disabled.runs, saved.runs);
+}
+
 async function openInstructionSources(page, locale) {
   const trigger = button(page.locator("main"), locale.more);
   await trigger.press("Enter");

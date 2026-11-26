@@ -7,6 +7,7 @@ import { IPC } from "../../shared/contract";
 import { MemoryChanges } from "../agent-host/memory";
 import { runAgentSmoke } from "../agent-host/smoke";
 import { NATIVE_DIALOG_TITLES } from "../constants";
+import { verificationRepairPrompt } from "../verification/commands";
 import { openVsCodeAtLine } from "../workspace/editor";
 import { readProjectGitHead } from "../workspace/git";
 import { previewWorkspaceReference } from "../workspace/reference";
@@ -193,7 +194,29 @@ export function registerAgentRoutes({
   handle(IPC.sessionUndoFileChange, (_event, id, changeId) => host.undoFileChange(id, changeId));
   handle(IPC.sessionVerification, (_event, composerId) => {
     const { sessionId, workingDirectory } = host.verificationScope(composerId);
-    return verification.state(sessionId, workingDirectory);
+    const state = verification.state(sessionId, workingDirectory);
+    const directory = host.getProjectDirectory();
+    if (!directory) return state;
+    const settings = getSettings();
+    return {
+      ...state,
+      project: {
+        directory,
+        shell: getCommandShell(settings.commandShell),
+        afterTurn: settings.afterTurnVerification?.[directory],
+      },
+    };
+  });
+  handle(IPC.sessionSetAfterTurnVerification, (_event, composerId, directory, config) => {
+    exit.checkWorkAllowed();
+    host.checkComposerId(composerId);
+    if (host.getProjectDirectory() !== directory)
+      throw new Error("项目已切换。请重新打开验证设置。");
+    const settings = getSettings();
+    const projects = { ...settings.afterTurnVerification };
+    if (config) projects[directory] = config;
+    else delete projects[directory];
+    saveSettings({ ...settings, afterTurnVerification: projects });
   });
   const verificationRef = (
     composerId: string,
@@ -221,6 +244,21 @@ export function registerAgentRoutes({
   handle(IPC.sessionRerunVerification, (_event, composerId, runId) => {
     exit.checkWorkAllowed();
     return verification.rerun(verificationRef(composerId, runId));
+  });
+  handle(IPC.sessionRepairVerification, (_event, composerId, runId, locale) => {
+    exit.checkWorkAllowed();
+    const ref = verificationRef(composerId, runId);
+    if (host.selectedSessionId() !== ref.sessionId)
+      throw new Error("请先发送一条消息，再把验证结果交给 Agent。");
+    if (host.hasActiveRun()) throw new Error("请等待当前任务结束后再修复验证失败。");
+    const result = verification.result(ref);
+    if (result.status !== "failed") throw new Error("请选择失败的验证结果。");
+    void host.prompt(
+      verificationRepairPrompt(result, locale),
+      undefined,
+      result.workingDirectory,
+      true,
+    );
   });
   handle(IPC.agentClearQueue, (_event, run) => host.clearQueue(run));
 

@@ -18,6 +18,7 @@ import type { ActiveVerification, VerificationRequest } from "./types";
 export class VerificationManager {
   private readonly history: VerificationHistory;
   private readonly active = new Map<string, ActiveVerification>();
+  private readonly queued = new Map<string, (() => void)[]>();
 
   constructor(
     directory: string,
@@ -56,11 +57,11 @@ export class VerificationManager {
       output: "",
       revision: 0,
     };
-    this.history.save(initial);
     const started = performance.now();
     const done = Promise.withResolvers<VerificationResult>();
     let entry: ActiveVerification;
     try {
+      this.history.save(initial);
       entry = { result: initial, child: launchVerification(request), started, done };
     } catch (cause) {
       return this.publish({
@@ -90,9 +91,10 @@ export class VerificationManager {
       if (this.active.get(sessionId) !== entry) return;
       this.active.delete(sessionId);
       clearTimeout(entry.update);
-      this.onActivityChanged?.();
       const status = entry.stopReason ?? (exitCode === 0 ? "success" : "failed");
       done.resolve(this.flush(entry, { status, exitCode, error }));
+      this.startQueued(sessionId);
+      this.onActivityChanged?.();
     };
     entry.child.stdout.setEncoding("utf8").on("data", collect);
     entry.child.stderr.setEncoding("utf8").on("data", collect);
@@ -101,6 +103,31 @@ export class VerificationManager {
       finish(code, signal && !entry.stopReason ? signal : undefined),
     );
     return initial;
+  }
+
+  afterTurn(request: VerificationRequest, isCurrent: () => boolean): void {
+    const start = (): void => {
+      if (isCurrent()) this.start({ ...request, trigger: "after-turn" });
+    };
+    const { sessionId } = request;
+    if (!this.active.has(sessionId)) {
+      start();
+      return;
+    }
+    const queued = this.queued.get(sessionId) ?? [];
+    queued.push(start);
+    this.queued.set(sessionId, queued);
+  }
+
+  private startQueued(sessionId: string): void {
+    const queued = this.queued.get(sessionId);
+    if (!queued) return;
+    while (!this.active.has(sessionId)) {
+      const start = queued.shift();
+      if (!start) break;
+      start();
+    }
+    if (!queued.length) this.queued.delete(sessionId);
   }
 
   rerun(ref: RunRef): VerificationResult {
@@ -180,6 +207,7 @@ export class VerificationManager {
   }
 
   async remove(sessionId: string): Promise<void> {
+    this.queued.delete(sessionId);
     const entry = this.active.get(sessionId);
     if (entry) await this.stopEntry(entry, "stopped");
     this.history.remove(sessionId);
@@ -190,6 +218,7 @@ export class VerificationManager {
   }
 
   async stopAll(): Promise<void> {
+    this.queued.clear();
     const stopped = await Promise.allSettled(
       [...this.active.values()].map((entry) => this.stopEntry(entry, "interrupted")),
     );

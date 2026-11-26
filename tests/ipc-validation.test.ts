@@ -101,6 +101,12 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.sessionFileDiff]: [sessionId, sessionId],
   [IPC.sessionUndoFileChange]: [sessionId, sessionId],
   [IPC.sessionVerification]: [sessionId],
+  [IPC.sessionSetAfterTurnVerification]: [
+    sessionId,
+    "E:/project",
+    { kind: "test", command: "pnpm test", shell: "powershell" },
+  ],
+  [IPC.sessionRepairVerification]: [sessionId, run.runId, "en"],
   [IPC.sessionVerificationRun]: [sessionId, sessionId],
   [IPC.sessionStartVerification]: [
     sessionId,
@@ -158,6 +164,22 @@ const valid: Record<IpcChannel, unknown[]> = {
 };
 
 describe("IPC argument validation", () => {
+  it("requires an exact command and shell for after-turn verification and allows removal", () => {
+    const args = [sessionId, "E:/project"];
+    expect(parseIpcArgs(IPC.sessionSetAfterTurnVerification, [...args, null])).toEqual([
+      ...args,
+      null,
+    ]);
+    for (const config of [
+      { kind: "test", command: " ", shell: "bash" },
+      { kind: "test", command: "node check.cjs\0", shell: "bash" },
+      { kind: "test", command: "node check.cjs" },
+    ])
+      expect(() => parseIpcArgs(IPC.sessionSetAfterTurnVerification, [...args, config])).toThrow(
+        /Invalid IPC arguments/,
+      );
+  });
+
   it("limits memory previews to the supported scopes and checks their text and tokens", () => {
     expect(
       parseIpcArgs(IPC.sessionPreviewMemory, [sessionId, null, "global", "Use pnpm."]),

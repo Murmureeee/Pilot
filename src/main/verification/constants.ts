@@ -2,6 +2,7 @@
 import type { VerificationKind } from "@shared/contract";
 
 export const VERIFICATION_OUTPUT_LIMIT = 128 * 1024;
+export const VERIFICATION_REPAIR_OUTPUT_LIMIT = 12_000;
 export const VERIFICATION_UPDATE_INTERVAL_MS = 100;
 export const VERIFICATION_SCRIPTS: Record<VerificationKind, string[]> = {
   test: ["test"],

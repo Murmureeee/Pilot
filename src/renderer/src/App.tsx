@@ -552,6 +552,10 @@ export default function App(): JSX.Element {
                   <VerificationPanel
                     composerId={composerId}
                     visible={reviewOpen && tab === "verification"}
+                    onRepairStarted={() => {
+                      if (useAgentStore.getState().composerId === composerId)
+                        editComposer({ shortcut: "focus-composer" });
+                    }}
                   />
                 }
                 terminal={

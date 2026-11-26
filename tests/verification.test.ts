@@ -10,6 +10,7 @@ import { McpManager } from "../src/main/agent-host/mcp";
 import { SessionStore } from "../src/main/agent-host/session-store";
 import type { Settings } from "../src/main/settings/types";
 import { VerificationManager } from "../src/main/verification";
+import { verificationRepairPrompt } from "../src/main/verification/commands";
 import { getCommandShell } from "../src/main/workspace/shell";
 import type { RunRef, UiAgentEvent, VerificationResult } from "../src/shared/contract";
 
@@ -24,6 +25,80 @@ function processExists(pid: number): boolean {
     throw cause;
   }
 }
+
+it("queues a completed turn's verification in its original chat and checks the saved command again", async () => {
+  using fixture = mkdtempDisposableSync(join(tmpdir(), "pilot-after-turn-"));
+  const root = realpathSync(fixture.path);
+  const a = join(root, "Project A");
+  const b = join(root, "Project B");
+  mkdirSync(a);
+  mkdirSync(b);
+  writeFileSync(join(a, "fail.cjs"), "console.error('fixture problem'); process.exitCode = 7;");
+  const directory = join(root, "sessions");
+  const manager = new VerificationManager(join(directory, "verification"), () => {});
+  const shell = getCommandShell();
+  const settings: Settings = {
+    providers: [{ id: "demo", kind: "faux", name: "Demo", modelId: "faux-default" }],
+    activeProviderId: "demo",
+  };
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: () => {},
+    broadcast: () => {},
+    store: new SessionStore(directory),
+    skillsDir: join(root, "skills"),
+    mcp: new McpManager(() => settings, "0.0.0"),
+    onTurnCompleted: (sessionId, workingDirectory, task) => {
+      manager.afterTurn(
+        { sessionId, workingDirectory, task, kind: "test", shell, command: "node fail.cjs" },
+        () => true,
+      );
+    },
+  });
+  const { composerId } = host.openProject(a);
+  const request = {
+    sessionId: composerId,
+    workingDirectory: a,
+    kind: "test",
+    shell,
+    command: 'node -e "setInterval(() => {}, 1000)"',
+  } as const;
+  try {
+    const manual = manager.start(request);
+    let enabled = true;
+    manager.afterTurn({ ...request, command: "node fail.cjs" }, () => enabled);
+    const task = host.prompt("Complete the task in Project A", composerId);
+    const owner = host.verificationScope(composerId).task;
+    const other = host.openProject(b);
+    await task;
+    enabled = false;
+    expect(manager.state(composerId, a).runs).toHaveLength(1);
+    await manager.stop(manual);
+    await vi.waitFor(
+      () => {
+        const runs = manager.state(composerId, a).runs;
+        expect(runs).toHaveLength(2);
+        expect(runs[0]).toMatchObject({
+          task: owner,
+          trigger: "after-turn",
+          workingDirectory: a,
+          status: "failed",
+        });
+      },
+      { timeout: 10_000 },
+    );
+    expect(manager.state(other.composerId, b).runs).toEqual([]);
+    const failed = manager.result(manager.state(composerId, a).runs[0]);
+    expect(verificationRepairPrompt(failed, "en")).toContain(
+      "Exit code 7\n\nOutput\nfixture problem",
+    );
+    const long = { ...failed, output: "discard-before-tail" + "x".repeat(12_000) + "problem" };
+    expect(verificationRepairPrompt(long, "en")).toMatch(/Output tail\n[^\n]*problem$/);
+    expect(verificationRepairPrompt(long, "en")).not.toContain("discard-before-tail");
+  } finally {
+    await manager.stopAll();
+  }
+}, 20_000);
 
 it("streams and saves successful, failed and stopped runs under the original chat and task", async () => {
   using fixture = mkdtempDisposableSync(join(tmpdir(), "pilot-verification-"));

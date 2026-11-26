@@ -58,6 +58,7 @@ export interface HostDeps {
   saveSettings: (settings: Settings) => void;
   broadcast: (event: UiAgentEvent) => void;
   onActivityChanged?: () => void;
+  onTurnCompleted?: (sessionId: string, directory: string, task: VerificationTask) => void;
   skillsDir: string;
   mcp: McpManager;
   terminal?: TerminalManager;
@@ -100,7 +101,7 @@ export interface AgentRunOptions extends Pick<
   settingsOnStart?: SessionSettings;
   onStarted: () => void;
   onSessionUpdated: () => void;
-  onFinished: () => void;
+  onFinished: (completedTask?: VerificationTask) => void;
 }
 
 type CompactionRequest = { mode: "manual"; focus: string } | { mode: "retry" };

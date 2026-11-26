@@ -1,6 +1,13 @@
 // @env browser
 import { cn } from "cn";
-import { CheckIcon, ChevronRightIcon, PlayIcon, RotateCcwIcon, SquareIcon } from "lucide-react";
+import {
+  ArrowUpRightIcon,
+  CheckIcon,
+  ChevronRightIcon,
+  PlayIcon,
+  RotateCcwIcon,
+  SquareIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from "react";
 
 import { Button } from "@renderer/components/ui/button";
@@ -14,12 +21,21 @@ import { Input } from "@renderer/components/ui/input";
 import { VERIFICATION_LABELS, VERIFICATION_STATUS_LABELS } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import {
+  selectPlanReview,
+  selectProjectDirectory,
+  selectWorkingDirectory,
+  useAgentStore,
+} from "@renderer/stores/agent";
+import { VERIFICATION_COMMAND_LIMIT } from "@shared/constants";
+import {
   VERIFICATION_KINDS,
   type VerificationKind,
   type VerificationResult,
   type VerificationRun,
   type VerificationState,
 } from "@shared/contract";
+
+import { VerificationSettingsDialog } from "./verification-settings-dialog";
 
 function isRunning(run: VerificationRun): boolean {
   return run.status === "running" || run.status === "stopping";
@@ -83,15 +99,19 @@ function VerificationDetails({
   visible,
   busy,
   pending,
+  canRepair,
   onStop,
   onRerun,
+  onRepair,
 }: {
   result: VerificationResult;
   visible: boolean;
   busy: boolean;
   pending: boolean;
+  canRepair: boolean;
   onStop(): void;
   onRerun(): void;
+  onRepair(): void;
 }): JSX.Element {
   const locale = useLocale();
   const active = isRunning(result);
@@ -105,7 +125,11 @@ function VerificationDetails({
   }, [active, visible]);
   const duration = active ? Math.max(result.durationMs, now - result.startedAt) : result.durationMs;
   return (
-    <div className="grid min-w-0 content-start gap-2.5" data-verification-detail={result.runId}>
+    <div
+      className="grid min-w-0 content-start gap-2.5"
+      data-verification-detail={result.runId}
+      data-verification-trigger={result.trigger}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">{t(VERIFICATION_LABELS[result.kind], locale)}</h3>
@@ -128,6 +152,9 @@ function VerificationDetails({
           </Button>
         )}
       </div>
+      {result.trigger === "after-turn" && (
+        <p className="text-xs text-muted-foreground">{t("回合后验证", locale)}</p>
+      )}
       <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 text-xs">
         <div className="col-span-2 min-w-0">
           <dt className="text-muted-foreground">{t("工作目录", locale)}</dt>
@@ -186,6 +213,18 @@ function VerificationDetails({
           {t(result.saveError, locale)}
         </p>
       )}
+      {result.status === "failed" && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="justify-self-start"
+          disabled={pending || !canRepair}
+          onClick={onRepair}
+        >
+          <ArrowUpRightIcon data-icon="inline-start" />
+          {t("交给 Agent 修复", locale)}
+        </Button>
+      )}
     </div>
   );
 }
@@ -193,11 +232,19 @@ function VerificationDetails({
 export function VerificationPanel({
   composerId,
   visible,
+  onRepairStarted,
 }: {
   composerId: string;
   visible: boolean;
+  onRepairStarted(): void;
 }): JSX.Element {
   const locale = useLocale();
+  const projectDirectory = useAgentStore(selectProjectDirectory);
+  const workingDirectory = useAgentStore(selectWorkingDirectory);
+  const shell = useAgentStore((store) => store.settings?.commandShell);
+  const canRepair = useAgentStore(
+    (store) => store.sessionId === composerId && !store.activeRun && !selectPlanReview(store),
+  );
   const [state, setState] = useState<VerificationState>();
   const [runs, setRuns] = useState<VerificationRun[]>([]);
   const [latest, setLatest] = useState<VerificationResult>();
@@ -208,6 +255,9 @@ export function VerificationPanel({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
+  const [configuring, setConfiguring] = useState(false);
+  const configure = useRef<HTMLButtonElement>(null);
+  const project = state?.project?.directory === projectDirectory ? state?.project : undefined;
   const command = drafts[kind] ?? state?.commands[kind] ?? "";
   const busy = runs.some(isRunning);
   const selectedId = selected ?? runs.find(isRunning)?.runId ?? runs[0]?.runId;
@@ -245,7 +295,7 @@ export function VerificationPanel({
       active = false;
       unsubscribe();
     };
-  }, [composerId, receive, retry]);
+  }, [composerId, projectDirectory, receive, retry, shell, workingDirectory]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -263,14 +313,16 @@ export function VerificationPanel({
     };
   }, [composerId, selectedId, retry]);
 
-  const perform = async (action: () => Promise<VerificationResult>): Promise<void> => {
+  const perform = async (action: () => Promise<VerificationResult | void>): Promise<void> => {
     if (pending) return;
     setPending(true);
     setError("");
     try {
       const next = await action();
-      receive(next);
-      setSelected(next.runId);
+      if (next) {
+        receive(next);
+        setSelected(next.runId);
+      }
     } catch (cause) {
       setError(String(cause));
     } finally {
@@ -330,7 +382,7 @@ export function VerificationPanel({
                     setDrafts((values) => ({ ...values, [kind]: event.target.value }))
                   }
                   placeholder={t("输入验证命令", locale)}
-                  maxLength={4096}
+                  maxLength={VERIFICATION_COMMAND_LIMIT}
                   className="font-mono text-sm"
                 />
               </label>
@@ -340,6 +392,49 @@ export function VerificationPanel({
               </Button>
             </div>
           </form>
+        )}
+        {project && (
+          <div
+            className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-border pb-3"
+            data-after-turn-verification={project.afterTurn ? "enabled" : "disabled"}
+          >
+            <div className="grid min-w-0 flex-1 gap-0.5">
+              <h3 className="text-sm font-medium">{t("回合后验证", locale)}</h3>
+              <p className="text-xs wrap-anywhere text-muted-foreground">
+                {project.afterTurn?.command ?? t("已停用", locale)}
+              </p>
+            </div>
+            <Button
+              ref={configure}
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setConfiguring(true)}
+            >
+              {t("配置回合后验证…", locale)}
+            </Button>
+            {configuring && (
+              <VerificationSettingsDialog
+                key={project.directory}
+                composerId={composerId}
+                project={project}
+                commands={state?.workingDirectory === project.directory ? state.commands : {}}
+                defaultKind={kind}
+                finalFocus={configure}
+                onClose={() => setConfiguring(false)}
+                onSaved={(afterTurn) =>
+                  setState((current) =>
+                    current?.project?.directory === project.directory
+                      ? {
+                          ...current,
+                          project: { ...current.project, afterTurn: afterTurn ?? undefined },
+                        }
+                      : current,
+                  )
+                }
+              />
+            )}
+          </div>
         )}
         {state && !state.workingDirectory && (
           <p className="text-xs text-muted-foreground">{t("请先选择工作目录。", locale)}</p>
@@ -415,11 +510,18 @@ export function VerificationPanel({
                 visible={visible}
                 busy={busy}
                 pending={pending}
+                canRepair={canRepair}
                 onStop={() =>
                   void perform(() => window.pi.sessionStopVerification(composerId, result.runId))
                 }
                 onRerun={() =>
                   void perform(() => window.pi.sessionRerunVerification(composerId, result.runId))
+                }
+                onRepair={() =>
+                  void perform(async () => {
+                    await window.pi.sessionRepairVerification(composerId, result.runId, locale);
+                    onRepairStarted();
+                  })
                 }
               />
             ) : (

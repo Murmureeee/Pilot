@@ -715,9 +715,16 @@ export class AgentHost {
       onSessionUpdated: () => {
         this.sendSessions();
       },
-      onFinished: () => {
+      onFinished: (completedTask) => {
         if (this.run !== run) return;
         this.run = undefined;
+        const directory = run.state.workingDirectory;
+        if (
+          completedTask &&
+          directory &&
+          this.deps.store.getMeta(sessionId)?.workingDirectory === directory
+        )
+          this.deps.onTurnCompleted?.(sessionId, directory, completedTask);
         this.deps.onActivityChanged?.();
       },
     });

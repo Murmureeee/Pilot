@@ -111,6 +111,7 @@ describe("agent-events adapter", () => {
           ...run,
           runId: "check-1",
           task: { taskId: "task-1", agentRunId: run.runId },
+          trigger: "after-turn",
           kind: "test",
           command: "pnpm test --run",
           shell: "powershell",

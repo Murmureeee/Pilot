@@ -591,7 +591,11 @@ export class AgentRun {
       agent.state.tools = tools;
       this.queuedMessages = 0;
       this.deps.onSessionUpdated();
-      this.deps.onFinished();
+      this.deps.onFinished(
+        this.result === "success" && !this.planning && !signal.aborted
+          ? this.checkpoint.task
+          : undefined,
+      );
       const checkpoint = store.checkpoint(sessionId);
       this.deps.broadcast({
         type: "status",

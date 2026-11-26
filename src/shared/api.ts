@@ -2,6 +2,7 @@
 // 渲染层可用的 API 形状。preload 实现它，renderer 通过 window.pi 消费。
 import type {
   ActiveRun,
+  AfterTurnVerification,
   AgentSmokeResult,
   AppInfo,
   ComposerDraft,
@@ -177,6 +178,12 @@ export interface PiApi {
   sessionFileDiff(id: string, changeId: string): Promise<FileDiff>;
   sessionUndoFileChange(id: string, changeId: string): Promise<void>;
   sessionVerification(composerId: string): Promise<VerificationState>;
+  sessionSetAfterTurnVerification(
+    composerId: string,
+    directory: string,
+    config: AfterTurnVerification | null,
+  ): Promise<void>;
+  sessionRepairVerification(composerId: string, runId: string, locale: Locale): Promise<void>;
   sessionVerificationRun(composerId: string, runId: string): Promise<VerificationResult>;
   sessionStartVerification(
     composerId: string,

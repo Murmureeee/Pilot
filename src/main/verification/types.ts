@@ -13,6 +13,7 @@ export interface VerificationRequest extends StartVerification {
   shell: CommandShell;
   task?: VerificationTask;
   rerunOf?: string;
+  trigger?: VerificationResult["trigger"];
 }
 
 export interface ActiveVerification {

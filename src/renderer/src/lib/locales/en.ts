@@ -636,6 +636,20 @@ export const EN_MESSAGES: Record<string, string> = {
   "运行验证后，结果会显示在这里。": "Verification results appear here after you run a command.",
   暂无输出: "No output yet",
   输入验证命令: "Enter a verification command",
+  回合后验证: "After-turn verification",
+  "配置回合后验证…": "Configure after-turn verification…",
+  "Agent 成功完成一轮后，在此项目中运行命令。":
+    "Run a command in this project after the agent completes a turn successfully.",
+  停用回合后验证: "Turn off after-turn verification",
+  已停用: "Off",
+  项目目录: "Project folder",
+  "交给 Agent 修复": "Send to agent to fix",
+  "项目已切换。请重新打开验证设置。": "The project changed. Reopen verification settings.",
+  "请先发送一条消息，再把验证结果交给 Agent。":
+    "Send a chat message before sending a verification result to the agent.",
+  "请等待当前任务结束后再修复验证失败。":
+    "Wait for the current task to finish before repairing the verification failure.",
+  "请选择失败的验证结果。": "Select a failed verification result.",
   关闭验证: "Close verification",
   "运行项目命令并查看会话的验证记录。":
     "Run project commands and view this chat's verification history.",

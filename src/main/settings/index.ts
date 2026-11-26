@@ -143,6 +143,7 @@ export function mergeSettingsInput(current: Settings, input: SettingsInput): Set
     // 人设传 "" 即清空（空串不是 nullish，不会被 ?? 吞掉）；技能启停整表提交
     persona: input.persona ?? current.persona ?? "",
     promptTemplates: current.promptTemplates,
+    afterTurnVerification: current.afterTurnVerification,
     skillsEnabled: input.skillsEnabled ?? current.skillsEnabled ?? [],
     mcpServers: current.mcpServers,
     importedPlugins: current.importedPlugins,

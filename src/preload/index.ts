@@ -129,6 +129,10 @@ const api: PiApi = {
   sessionUndoFileChange: (id, changeId) =>
     ipcRenderer.invoke(IPC.sessionUndoFileChange, id, changeId),
   sessionVerification: (id) => ipcRenderer.invoke(IPC.sessionVerification, id),
+  sessionSetAfterTurnVerification: (id, directory, config) =>
+    ipcRenderer.invoke(IPC.sessionSetAfterTurnVerification, id, directory, config),
+  sessionRepairVerification: (id, runId, locale) =>
+    ipcRenderer.invoke(IPC.sessionRepairVerification, id, runId, locale),
   sessionVerificationRun: (id, runId) => ipcRenderer.invoke(IPC.sessionVerificationRun, id, runId),
   sessionStartVerification: (id, request) =>
     ipcRenderer.invoke(IPC.sessionStartVerification, id, request),

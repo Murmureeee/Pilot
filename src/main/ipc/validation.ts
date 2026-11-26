@@ -13,7 +13,12 @@ import {
 } from "../../shared/constants";
 import { IPC, VERIFICATION_KINDS } from "../../shared/contract";
 import { imageAttachmentsSchema } from "../agent-host/image-attachments";
-import { promptTemplatesSchema, toolRuleSchema } from "../settings/schema";
+import {
+  afterTurnVerificationSchema,
+  promptTemplatesSchema,
+  toolRuleSchema,
+  verificationCommandSchema,
+} from "../settings/schema";
 import type { IpcChannel } from "./types";
 
 const none = z.tuple([]);
@@ -273,18 +278,19 @@ const inputs = {
   [IPC.sessionFileDiff]: sessionChange,
   [IPC.sessionUndoFileChange]: sessionChange,
   [IPC.sessionVerification]: session,
+  [IPC.sessionSetAfterTurnVerification]: z.tuple([
+    z.uuid(),
+    mentionId,
+    afterTurnVerificationSchema.nullable(),
+  ]),
+  [IPC.sessionRepairVerification]: z.tuple([z.uuid(), z.uuid(), z.enum(SUPPORTED_LOCALES)]),
   [IPC.sessionVerificationRun]: sessionChange,
   [IPC.sessionStartVerification]: z.tuple([
     z.uuid(),
     z.strictObject({
       workingDirectory: mentionId,
       kind: z.enum(VERIFICATION_KINDS),
-      command: z
-        .string()
-        .trim()
-        .min(1)
-        .max(4096)
-        .refine((command) => !command.includes("\0")),
+      command: verificationCommandSchema,
     }),
   ]),
   [IPC.sessionStopVerification]: sessionChange,

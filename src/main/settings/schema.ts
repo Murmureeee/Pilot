@@ -8,12 +8,25 @@ import {
   PROMPT_TEMPLATE_NAME_PATTERN,
   PROMPT_TEMPLATE_TEXT_LIMIT,
   THINKING_LEVELS,
+  VERIFICATION_COMMAND_LIMIT,
 } from "../../shared/constants";
+import { VERIFICATION_KINDS } from "../../shared/contract";
 import { WEB_DOMAIN_PATTERN } from "../../shared/web";
 import { normalizeModelCatalog } from "./models";
 import type { Settings } from "./types";
 
 const optionalText = z.string().optional();
+export const verificationCommandSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(VERIFICATION_COMMAND_LIMIT)
+  .refine((command) => !command.includes("\0"));
+export const afterTurnVerificationSchema = z.strictObject({
+  kind: z.enum(VERIFICATION_KINDS),
+  command: verificationCommandSchema,
+  shell: z.enum(["powershell", "bash"]),
+});
 const domain = z.string().regex(WEB_DOMAIN_PATTERN).optional();
 const commandPrefix = z.strictObject({
   shell: z.enum(["powershell", "bash"]),
@@ -102,6 +115,7 @@ const storedSettings = z.looseObject({
   notificationsEnabled: z.boolean().optional().catch(undefined),
   persona: optionalText,
   promptTemplates: promptTemplatesSchema.optional(),
+  afterTurnVerification: z.record(z.string(), afterTurnVerificationSchema).optional(),
   skillsEnabled: z.array(z.string()).optional(),
   mcpServers: z.array(mcpServer).optional(),
   importedPlugins: z.array(importedPlugin).optional(),
