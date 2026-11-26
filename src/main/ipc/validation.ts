@@ -22,6 +22,7 @@ import {
   toolRuleSchema,
   verificationCommandSchema,
 } from "../settings/schema";
+import { gitDiffReferenceSchema } from "../workspace/reference";
 import type { IpcChannel } from "./types";
 
 const none = z.tuple([]);
@@ -35,7 +36,13 @@ const gitBranchName = z
 const mentionId = id.refine((value) => !value.includes("\0"));
 const mentionOffset = z.number().int().nonnegative().optional();
 const fileMention = z.strictObject({
-  type: z.enum(["file", "directory"]),
+  type: z.literal("file"),
+  id: mentionId,
+  label: id,
+  meta: z.strictObject({ workingDirectory: nonBlank, diff: gitDiffReferenceSchema.optional() }),
+});
+const directoryMention = z.strictObject({
+  type: z.literal("directory"),
   id: mentionId,
   label: id,
   meta: z.strictObject({ workingDirectory: nonBlank }),
@@ -47,7 +54,10 @@ const skillMention = z.strictObject({
   meta: z.strictObject({ description: z.string(), workingDirectory: nonBlank.optional() }),
 });
 const composerDraft = z.array(
-  z.union([z.string(), z.discriminatedUnion("type", [fileMention, skillMention])]),
+  z.union([
+    z.string(),
+    z.discriminatedUnion("type", [fileMention, directoryMention, skillMention]),
+  ]),
 );
 const promptInput = z
   .strictObject({
@@ -55,6 +65,7 @@ const promptInput = z
     mentions: z.array(
       z.discriminatedUnion("type", [
         fileMention.extend({ offset: mentionOffset }),
+        directoryMention.extend({ offset: mentionOffset }),
         skillMention.extend({ offset: mentionOffset }),
       ]),
     ),

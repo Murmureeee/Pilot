@@ -48,6 +48,7 @@ import {
 import { backupCorruptFile } from "../corrupt-file";
 import { toolRuleSchema } from "../settings/schema";
 import { readFileChange } from "../workspace/file-changes";
+import { gitDiffReferenceSchema } from "../workspace/reference";
 import { CONVERSATION_INDEX_CACHE_SIZE, CONVERSATION_SEARCH_LIMIT } from "./constants";
 import { imageAttachmentsSchema, messageImages } from "./image-attachments";
 import { legacyMentionParts } from "./mentions";
@@ -106,7 +107,9 @@ export function messageParts(message: AgentMessage, getToolLabel = labelOf): UiP
             (part.kind === "directory" || part.kind === "file" || part.kind === "skill") &&
             typeof part.label === "string" &&
             typeof part.id === "string" &&
-            (part.workingDirectory === undefined || typeof part.workingDirectory === "string"),
+            (part.workingDirectory === undefined || typeof part.workingDirectory === "string") &&
+            (part.diff === undefined ||
+              (part.kind === "file" && gitDiffReferenceSchema.safeParse(part.diff).success)),
       )
     ) {
       return images.length ? [...parts, ...images] : parts;

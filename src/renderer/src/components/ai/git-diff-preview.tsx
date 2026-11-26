@@ -1,4 +1,5 @@
 // @env browser
+import { MessageSquarePlusIcon } from "lucide-react";
 import { useEffect, useRef, useState, type JSX } from "react";
 
 import { Button } from "@renderer/components/ui/button";
@@ -13,6 +14,7 @@ import {
 } from "@renderer/components/ui/dialog";
 import { GIT_ROLLBACK_CONFLICT_LABELS } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
+import type { GitAnnotationSource } from "@renderer/lib/types";
 import type {
   GitCheckpointDiff,
   GitDiffRequest,
@@ -47,6 +49,8 @@ export function GitDiffPreview({
   selection,
   onSelect,
   onStage,
+  workingDirectory,
+  onAnnotate,
 }: {
   composerId: string;
   request: GitDiffRequest;
@@ -54,6 +58,8 @@ export function GitDiffPreview({
   selection?: GitPatchSelection;
   onSelect(selection?: GitPatchSelection): void;
   onStage(selection: GitStageSelection): void;
+  workingDirectory: string | null;
+  onAnnotate(source: GitAnnotationSource): void;
 }): JSX.Element {
   const locale = useLocale();
   const { area, path, live } = request;
@@ -77,6 +83,21 @@ export function GitDiffPreview({
   const selected = selection?.revision === data?.revision ? selection : undefined;
   const revision = data?.revision;
   const hunks = data?.diff?.hunks;
+  const referencePaths = data?.referencePaths;
+  const annotate = (index: number, trigger: HTMLButtonElement): void => {
+    const rows = hunks?.[index];
+    if (!rows?.length || !workingDirectory || !referencePaths) return;
+    onAnnotate({
+      id: crypto.randomUUID(),
+      area,
+      paths: referencePaths,
+      diff: { hunks: [rows], truncated: false },
+      canOpen: data.canOpen,
+      lineTargets: data.lineTargets,
+      workingDirectory,
+      trigger,
+    });
+  };
   const selectedHunks =
     area === "staged"
       ? (selected?.hunks ?? (selected && hunks ? hunks.map((_, index) => index) : []))
@@ -117,23 +138,35 @@ export function GitDiffPreview({
                         .catch((reason: unknown) => setError(String(reason)))
                   : undefined
               }
-              hunkAction={
-                revision && data.selectableHunks
-                  ? (index) => (
-                      <label className="flex items-center gap-1.5 font-sans text-xs text-foreground">
-                        <input
-                          type="checkbox"
-                          className="size-3.5 rounded-sm accent-brand focus-visible:ring-2 focus-visible:ring-ring"
-                          data-git-select-hunk={index}
-                          checked={selectedHunks.includes(index)}
-                          disabled={blocked}
-                          onChange={(event) => toggleHunk(index, event.currentTarget.checked)}
-                        />
-                        {t("选择区块 {0}", locale, [index + 1])}
-                      </label>
-                    )
-                  : undefined
-              }
+              hunkAction={(index) => (
+                <>
+                  {revision && data.selectableHunks && (
+                    <label className="flex items-center gap-1.5 font-sans text-xs text-foreground">
+                      <input
+                        type="checkbox"
+                        className="size-3.5 rounded-sm accent-brand focus-visible:ring-2 focus-visible:ring-ring"
+                        data-git-select-hunk={index}
+                        checked={selectedHunks.includes(index)}
+                        disabled={blocked}
+                        onChange={(event) => toggleHunk(index, event.currentTarget.checked)}
+                      />
+                      {t("选择区块 {0}", locale, [index + 1])}
+                    </label>
+                  )}
+                  {referencePaths && workingDirectory && (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      className="font-sans"
+                      onClick={(event) => annotate(index, event.currentTarget)}
+                    >
+                      <MessageSquarePlusIcon data-icon="inline-start" aria-hidden="true" />
+                      {t("批注行…", locale)}
+                    </Button>
+                  )}
+                </>
+              )}
             />
           </div>
         )

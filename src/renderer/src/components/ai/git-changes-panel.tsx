@@ -14,8 +14,9 @@ import {
   GIT_REVIEW_PHASE_LABELS,
 } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
-import type { GitReview } from "@renderer/lib/types";
+import type { AppendGitAnnotations, GitAnnotationSource, GitReview } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
+import { useGitAnnotationStore } from "@renderer/stores/git-annotations";
 import type {
   GitChange,
   GitCommitResult,
@@ -23,6 +24,7 @@ import type {
   GitStageSelection,
 } from "@shared/contract";
 
+import { GitAnnotationEditor, GitAnnotationQueue } from "./git-annotations";
 import { GitBranchActions } from "./git-branch-actions";
 import { GitCommitDialog } from "./git-commit-dialog";
 import { GitCheckpointFilePreview, GitDiffPreview } from "./git-diff-preview";
@@ -38,6 +40,8 @@ function GitChangeRow({
   onToggle,
   onSelect,
   onStage,
+  workingDirectory,
+  onAnnotate,
 }: {
   change: GitChange;
   composerId: string;
@@ -49,6 +53,8 @@ function GitChangeRow({
   onToggle(): void;
   onSelect(selection?: GitPatchSelection): void;
   onStage(selection: GitStageSelection): void;
+  workingDirectory: string | null;
+  onAnnotate(source: GitAnnotationSource): void;
 }): JSX.Element {
   const locale = useLocale();
   return (
@@ -111,6 +117,8 @@ function GitChangeRow({
           selection={selection}
           onSelect={onSelect}
           onStage={onStage}
+          workingDirectory={workingDirectory}
+          onAnnotate={onAnnotate}
         />
       )}
     </li>
@@ -121,10 +129,12 @@ export function GitChangesPanel({
   composerId,
   workingDirectory,
   liveReview,
+  onAppendAnnotations,
 }: {
   composerId: string;
   workingDirectory: string | null;
   liveReview: GitReview;
+  onAppendAnnotations?: AppendGitAnnotations;
 }): JSX.Element {
   const locale = useLocale();
   const [showCheckpoint, setShowCheckpoint] = useState(false);
@@ -135,6 +145,8 @@ export function GitChangesPanel({
   const [staging, setStaging] = useState(false);
   const [stageError, setStageError] = useState("");
   const [commit, setCommit] = useState<GitCommitResult>();
+  const [annotation, setAnnotation] = useState<GitAnnotationSource>();
+  const annotationScope = JSON.stringify([composerId, workingDirectory]);
   const busy = useAgentStore((state) => state.activeRun !== null);
   const live = !showCheckpoint && !showHistory;
   const history = useGitReview(live ? null : composerId, workingDirectory, false);
@@ -243,6 +255,17 @@ export function GitChangesPanel({
           />
         </div>
       )}
+      {workingDirectory && (
+        <GitAnnotationQueue scope={annotationScope} onAppend={onAppendAnnotations} />
+      )}
+      {annotation && (
+        <GitAnnotationEditor
+          key={annotation.id}
+          source={annotation}
+          onClose={() => setAnnotation(undefined)}
+          onSave={(note) => useGitAnnotationStore.getState().save(annotationScope, note)}
+        />
+      )}
       {(review.error || changes === null) && (
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/65 px-3 py-2">
           <p role="alert" className="min-w-0 text-xs wrap-anywhere text-destructive">
@@ -346,6 +369,8 @@ export function GitChangesPanel({
                         onToggle={() => toggle(key)}
                         onSelect={(selection) => select(change.path, selection)}
                         onStage={(selection) => void stage(selection)}
+                        workingDirectory={workingDirectory}
+                        onAnnotate={setAnnotation}
                       />
                     );
                   })}

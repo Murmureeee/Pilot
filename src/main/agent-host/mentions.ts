@@ -2,10 +2,16 @@
 import { statSync } from "node:fs";
 import { basename, isAbsolute, parse, relative, sep } from "node:path";
 
-import type { PromptInput, PromptMention, SkillMeta, UiUserPart } from "@shared/contract";
+import type {
+  GitDiffReference,
+  PromptInput,
+  PromptMention,
+  SkillMeta,
+  UiUserPart,
+} from "@shared/contract";
 
 import { MENTION_CONTEXT_HEADING } from "../../shared/constants";
-import { mentionToken } from "../../shared/mentions";
+import { diffLineLabel, mentionToken } from "../../shared/mentions";
 import { createToolPathResolver, isWithinDirectory } from "../workspace/paths";
 import { SKILL_UNAVAILABLE } from "./constants";
 import type { DisplayMention, PreparedPrompt } from "./types";
@@ -15,7 +21,7 @@ function tokenPositions(
   known: ReadonlyMap<string, DisplayMention["part"]>,
 ): DisplayMention[] {
   const matches: DisplayMention[] = [];
-  for (const match of text.matchAll(/@\[(?:file|directory|skill):[^[\]\r\n]+\]/g)) {
+  for (const match of text.matchAll(/@\[(?:file|directory|skill|diff):[^[\]\r\n]+\]/g)) {
     const part = known.get(match[0]);
     if (part) matches.push({ offset: match.index, token: match[0], part });
   }
@@ -68,16 +74,40 @@ export function legacyMentionParts(text: string): UiUserPart[] | undefined {
   return mentions.length ? displayParts(body, mentions) : undefined;
 }
 
+function assertRelativeReference(id: string): void {
+  if (
+    parse(id).root ||
+    (process.platform === "win32" && /[\\:]/.test(id)) ||
+    id.split("/").some((segment) => segment === "" || segment === "." || segment === "..")
+  ) {
+    throw new Error("Expected a workspace-relative path");
+  }
+}
+
+function diffReference(
+  path: string,
+  { area, before, after, previousPath }: GitDiffReference,
+): string {
+  try {
+    assertRelativeReference(path);
+    if (previousPath) assertRelativeReference(previousPath);
+  } catch (error) {
+    throw new Error("差异批注的文件路径无效，请重新选择差异行。", { cause: error });
+  }
+  // The selected text can refer to the index, HEAD, or a deleted file.
+  return [
+    "Git " + area + " diff for " + JSON.stringify(path),
+    before && "old " + JSON.stringify(previousPath ?? path) + " lines " + diffLineLabel(before),
+    after && "new " + JSON.stringify(path) + " lines " + diffLineLabel(after),
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
 function workspaceReference(mention: Exclude<PromptMention, { type: "skill" }>): string {
   const { id, type } = mention;
   try {
-    if (
-      parse(id).root ||
-      (process.platform === "win32" && /[\\:]/.test(id)) ||
-      id.split("/").some((segment) => segment === "" || segment === "." || segment === "..")
-    ) {
-      throw new Error("Expected a workspace-relative path");
-    }
+    assertRelativeReference(id);
     const resolve = createToolPathResolver(mention.meta.workingDirectory);
     const stat = statSync(resolve(id));
     if (type === "file" ? !stat.isFile() : !stat.isDirectory()) {
@@ -156,7 +186,11 @@ export function prepareMentionPrompt(
       if (!acceptsDirectory(mention.meta.workingDirectory)) {
         throw new Error("工作目录已变更，请重新选择文件引用。");
       }
-      if (!references.has(token)) references.set(token, workspaceReference(mention));
+      const diff = mention.type === "file" ? mention.meta.diff : undefined;
+      if (diff) part.diff = diff;
+      if (!references.has(token)) {
+        references.set(token, diff ? diffReference(mention.id, diff) : workspaceReference(mention));
+      }
       part.workingDirectory = mention.meta.workingDirectory;
     }
     if (offset === undefined) unanchored.set(token, part);

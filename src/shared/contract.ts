@@ -133,7 +133,13 @@ export type WorkspaceReferencePreview =
   | { kind: "directory"; path: string; entries: WorkspaceEntry[]; truncated: boolean };
 
 export type PromptMention =
-  | { type: WorkspaceEntry["kind"]; id: string; label: string; meta: { workingDirectory: string } }
+  | {
+      type: "file";
+      id: string;
+      label: string;
+      meta: { workingDirectory: string; diff?: GitDiffReference };
+    }
+  | { type: "directory"; id: string; label: string; meta: { workingDirectory: string } }
   | {
       type: "skill";
       id: string;
@@ -283,6 +289,7 @@ export type UiUserPart =
       id: string;
       label: string;
       workingDirectory?: string;
+      diff?: GitDiffReference;
     };
 
 export type UiPart =
@@ -657,9 +664,27 @@ export interface GitFileDiff {
   diff: FileDiff | null;
   canOpen: boolean;
   lineTargets?: Record<number, number>;
+  referencePaths?: GitDiffPaths;
   revision?: string;
   selectableHunks?: true;
   patch?: string;
+}
+
+export interface GitDiffPaths {
+  path: string;
+  previousPath?: string;
+}
+
+export interface DiffLineSpan {
+  first: number;
+  last: number;
+}
+
+export interface GitDiffReference extends Omit<GitDiffPaths, "path"> {
+  area: GitChange["area"];
+  before?: DiffLineSpan;
+  after?: DiffLineSpan;
+  openLine?: number;
 }
 
 export interface GitPatchSelection {

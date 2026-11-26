@@ -3,13 +3,19 @@ import type { LucideIcon } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 
 import type {
+  ComposerDraft,
+  FileDiff,
   FileChangeSummary,
   GitBranchOptions,
+  GitChange,
   GitChangesView,
+  GitDiffPaths,
+  GitFileDiff,
   GitPullRequestPreview,
   GitPushPreview,
   GitPushResult,
   ImageAttachment,
+  PromptMention,
   PromptTemplate,
   TranscriptLocation,
   UiMessage,
@@ -93,12 +99,19 @@ export interface ComposerShortcuts {
   recallMessage(): void;
   openMenu(menu: ComposerToolbarMenu): void;
   appendPrompt(text: string): void;
+  appendDraft(draft: ComposerDraft): boolean;
 }
 
 export type ComposerAction =
   | { shortcut: Exclude<ComposerShortcut, "stop-run" | "find-chat"> }
   | { menu: ComposerToolbarMenu; composerId: string }
-  | { prompt: string; composerId: string };
+  | { prompt: string; composerId: string }
+  | {
+      draft: ComposerDraft;
+      composerId: string;
+      workingDirectory: string;
+      onInserted(): void;
+    };
 
 export interface ComposerModelControlsProps {
   menu: ComposerToolbarMenu | null;
@@ -268,6 +281,32 @@ export interface GitReview {
   error: string | null;
   refresh(): void;
 }
+
+export interface GitAnnotationSource {
+  id: string;
+  area: GitChange["area"];
+  paths: GitDiffPaths;
+  diff: FileDiff;
+  canOpen: boolean;
+  lineTargets?: GitFileDiff["lineTargets"];
+  workingDirectory: string;
+  trigger: HTMLButtonElement;
+}
+
+export interface GitAnnotation {
+  id: string;
+  reference: Extract<PromptMention, { type: "file" }>;
+  message: string;
+  excerpt: string;
+}
+
+export interface GitAnnotationStore {
+  drafts: Record<string, GitAnnotation[]>;
+  save(scope: string, annotation: GitAnnotation): void;
+  remove(scope: string, ids: string[]): void;
+}
+
+export type AppendGitAnnotations = (draft: ComposerDraft, onInserted: () => void) => void;
 
 export type GitBranchDialogMode = "branch" | "push" | "pull-request";
 

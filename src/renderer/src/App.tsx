@@ -206,7 +206,13 @@ export default function App(): JSX.Element {
       const editor = composerShortcuts.current;
       if ("menu" in composerAction) editor?.openMenu(composerAction.menu);
       else if ("prompt" in composerAction) editor?.appendPrompt(composerAction.prompt);
-      else if (composerAction.shortcut === "cycle-approval-mode") editor?.cycleMode();
+      else if ("draft" in composerAction) {
+        if (
+          selectWorkingDirectory(useAgentStore.getState()) === composerAction.workingDirectory &&
+          editor?.appendDraft(composerAction.draft)
+        )
+          composerAction.onInserted();
+      } else if (composerAction.shortcut === "cycle-approval-mode") editor?.cycleMode();
       else if (composerAction.shortcut === "recall-message") editor?.recallMessage();
     });
     return () => cancelAnimationFrame(frame);
@@ -534,6 +540,12 @@ export default function App(): JSX.Element {
                     active={reviewOpen && tab === "changes"}
                     latestReply={latestReply}
                     git={git}
+                    onAppendAnnotations={
+                      workingDirectory && canEdit
+                        ? (draft, onInserted) =>
+                            editComposer({ draft, composerId, workingDirectory, onInserted })
+                        : undefined
+                    }
                   />
                 }
                 files={

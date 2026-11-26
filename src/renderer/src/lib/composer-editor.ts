@@ -9,6 +9,7 @@ export function mentionKey(mention: PromptMention): string {
     mention.type,
     mention.id,
     mention.type === "skill" ? null : mention.meta.workingDirectory,
+    mention.type === "file" ? mention.meta.diff : null,
   ]);
 }
 
@@ -156,4 +157,25 @@ export function insertComposerMention(
     selection?.removeAllRanges();
     selection?.addRange(after);
   }
+}
+
+export function appendComposerDraft(
+  editor: HTMLDivElement,
+  draft: ComposerDraft,
+  resources: Map<string, PromptMention>,
+): boolean {
+  const content = document.createElement("div");
+  for (const part of draft) {
+    if (typeof part === "string") {
+      const lines = part.split("\n");
+      for (const [index, line] of lines.entries()) {
+        if (index) content.append(document.createElement("br"));
+        content.append(line);
+      }
+    } else {
+      content.append(mentionNode(part, resources));
+    }
+  }
+  selectComposerRange(editor, null);
+  return document.execCommand("insertHTML", false, content.innerHTML);
 }

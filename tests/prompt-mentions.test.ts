@@ -15,7 +15,7 @@ import { legacyMentionParts, prepareMentionPrompt } from "../src/main/agent-host
 import { scanSkills } from "../src/main/agent-host/skills";
 import { MENTION_CONTEXT_HEADING } from "../src/shared/constants";
 import type { PromptMention } from "../src/shared/contract";
-import { mentionToken } from "../src/shared/mentions";
+import { draftFromMessageParts, mentionToken, promptFromDraft } from "../src/shared/mentions";
 
 describe("agent prompt mentions", () => {
   it("describes selected files and skill references without reading skill instructions", () => {
@@ -93,6 +93,48 @@ describe("agent prompt mentions", () => {
     ]);
     expect(legacyMentionParts(text)).toBeUndefined();
     expect(legacyMentionParts(text + suffix + "\nMore discussion")).toBeUndefined();
+  });
+
+  it("keeps multiple diff ranges for the same path and accepts a captured deletion", () => {
+    const workspace = "a workspace";
+    const path = "src/notes # [draft].md";
+    const removed: PromptMention = {
+      type: "file",
+      id: path,
+      label: path + ":2–4",
+      meta: {
+        workingDirectory: workspace,
+        diff: { area: "unstaged", before: { first: 2, last: 4 } },
+      },
+    };
+    const added: PromptMention = {
+      ...removed,
+      label: path + ":5",
+      meta: {
+        workingDirectory: workspace,
+        diff: {
+          area: "staged",
+          previousPath: "src/original.md",
+          before: { first: 4, last: 4 },
+          after: { first: 5, last: 5 },
+          openLine: 7,
+        },
+      },
+    };
+    const draft = ["Please review ", removed, " and ", added];
+    const input = promptFromDraft(draft);
+    expect(mentionToken(removed)).not.toBe(mentionToken(added));
+    const result = prepareMentionPrompt(input, (directory) => directory === workspace, []);
+    expect(result.reference?.context).toContain('old "src/notes # [draft].md" lines 2–4');
+    expect(result.reference?.context).toContain('old "src/original.md" lines 4');
+    expect(result.reference?.context).toContain('new "src/notes # [draft].md" lines 5');
+    expect(result.reference?.context).not.toContain(workspace);
+    expect(draftFromMessageParts(result.reference?.parts ?? [])).toEqual(draft);
+    expect(() => prepareMentionPrompt(input, () => false, [])).toThrow("工作目录已变更");
+    const escaped = { ...removed, id: "../notes.md" };
+    expect(() => prepareMentionPrompt(promptFromDraft([escaped]), () => true, [])).toThrow(
+      "差异批注的文件路径无效",
+    );
   });
 
   it("rejects replaced workspaces, escaped paths, unavailable skills, and missing inline tokens", () => {

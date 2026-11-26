@@ -2,7 +2,10 @@
 import { opendirSync, statSync } from "node:fs";
 import { relative, sep } from "node:path";
 
+import { z } from "zod";
+
 import type {
+  GitDiffReference,
   WorkspaceEntry,
   WorkspaceReferencePreview,
   WorkspaceReferenceRequest,
@@ -11,6 +14,31 @@ import type {
 import { MAX_DIRECTORY_PREVIEW_ENTRIES } from "./constants";
 import { readFileSnapshot } from "./file-changes";
 import { createToolPathResolver } from "./paths";
+
+const lineNumber = z.number().int().positive();
+const lineSpan = z
+  .strictObject({ first: lineNumber, last: lineNumber })
+  .refine(({ first, last }) => first <= last);
+
+export const gitDiffReferenceSchema = z
+  .strictObject({
+    area: z.enum(["staged", "unstaged", "untracked"]),
+    previousPath: z
+      .string()
+      .min(1)
+      .refine((value) => !value.includes("\0"))
+      .optional(),
+    before: lineSpan.optional(),
+    after: lineSpan.optional(),
+    openLine: lineNumber.optional(),
+  })
+  .refine(
+    ({ before, after, openLine, previousPath, area }) =>
+      Boolean(before || after) &&
+      (!openLine || Boolean(after)) &&
+      (!previousPath || Boolean(before)) &&
+      (area !== "untracked" || !before),
+  ) satisfies z.ZodType<GitDiffReference>;
 
 export function previewWorkspaceReference(
   workingDirectory: string | undefined,

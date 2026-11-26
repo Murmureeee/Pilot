@@ -20,6 +20,7 @@ import {
   verifyBackgroundTerminal,
   verifyCommandsAndTemplates,
   verifyFirstRun,
+  verifyGitAnnotations,
   verifyGitPublishing,
   verifyImageConversation,
   verifyImageDraft,
@@ -140,6 +141,7 @@ const memoryProject = join(scratch, "memory-project");
 const verificationProject = join(scratch, "verification-project");
 const gitProject = join(scratch, "publishing-project");
 const gitRemote = join(scratch, "publishing-remote.git");
+const annotationRepository = join(scratch, "annotation-repository");
 const imageFixture = {
   chosen: join(scratch, "chosen.png"),
   dropped: join(scratch, "dropped.png"),
@@ -158,6 +160,7 @@ try {
   mkdirSync(memoryProject);
   mkdirSync(verificationProject);
   mkdirSync(gitProject);
+  mkdirSync(annotationRepository);
   execFileSync("git", ["init", "-q", commandProject]);
   writeFileSync(join(commandProject, "package.json"), JSON.stringify({
     scripts: { test: 'node -e "console.log(123456789)"' },
@@ -259,6 +262,9 @@ try {
     );
     await runScene("Create and switch branches, preview commits, and push to a bare Git remote", () =>
       verifyGitPublishing(page, window, app, gitProject, gitRemote),
+    );
+    await runScene("Send selected Git diff comments in one message with line references", () =>
+      verifyGitAnnotations(page, window, app, model, annotationRepository),
     );
   });
 } finally {

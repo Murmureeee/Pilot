@@ -1,13 +1,33 @@
 // @env all
 import type {
   ComposerDraft,
+  DiffLineSpan,
   ImageAttachment,
   PromptInput,
   PromptMention,
   UiPart,
 } from "./contract";
 
-export function mentionToken({ type, id }: Pick<PromptMention, "type" | "id">): string {
+export function diffLineLabel(span: DiffLineSpan): string {
+  return span.first === span.last ? String(span.first) : span.first + "–" + span.last;
+}
+
+export function mentionToken(mention: PromptMention | Pick<PromptMention, "type" | "id">): string {
+  const { type, id } = mention;
+  if (mention.type === "file" && "meta" in mention && mention.meta.diff) {
+    const { area, before, after, previousPath } = mention.meta.diff;
+    const path = id.replace(/[%:[\]\r\n]/g, (character) => encodeURIComponent(character));
+    const previous = previousPath?.replace(/[%:[\]\r\n]/g, (character) =>
+      encodeURIComponent(character),
+    );
+    return (
+      "@[diff:" +
+      [path, area, previous, before && diffLineLabel(before), after && diffLineLabel(after)].join(
+        ":",
+      ) +
+      "]"
+    );
+  }
   const escaped = id.replace(/[%[\]\r\n]/g, (character) => encodeURIComponent(character));
   return `@[${type}:${escaped}]`;
 }
@@ -39,6 +59,12 @@ export function draftFromMessageParts(
         ...reference,
         type: "skill",
         meta: { description: "", workingDirectory: part.workingDirectory },
+      });
+    } else if (part.kind === "file" && workingDirectory) {
+      draft.push({
+        ...reference,
+        type: "file",
+        meta: { workingDirectory, ...(part.diff ? { diff: part.diff } : {}) },
       });
     } else if (workingDirectory) {
       draft.push({ ...reference, type: part.kind, meta: { workingDirectory } });

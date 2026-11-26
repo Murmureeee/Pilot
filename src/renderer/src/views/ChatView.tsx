@@ -275,6 +275,12 @@ export function ChatView({
                                                 chip
                                                 kind={part.kind}
                                                 path={part.id}
+                                                line={part.diff?.openLine}
+                                                previewable={
+                                                  part.diff
+                                                    ? part.diff.openLine !== undefined
+                                                    : undefined
+                                                }
                                                 workingDirectory={part.workingDirectory}
                                               >
                                                 {part.label}

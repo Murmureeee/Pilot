@@ -1,7 +1,7 @@
 // @env node
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { stripVTControlCharacters } from "node:util";
@@ -1623,6 +1623,157 @@ export async function verifyGitPublishing(page, window, app, project, remote) {
   await dialog.waitFor({ state: "hidden" });
   assert.equal(git("branch", "--show-current"), "main");
   await page.locator('header [title="Git branch main"]').waitFor({ state: "attached" });
+}
+
+export async function verifyGitAnnotations(page, window, app, model, repository) {
+  const project = join(repository, "module");
+  mkdirSync(project);
+  const git = (...args) => execFileSync("git", args, {
+    cwd: repository, windowsHide: true, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  const amended = "notes # current.txt";
+  const deleted = "obsolete.txt";
+  const existingDraft = "Keep this original instruction.";
+  const firstComment = "Keep the revised lines together.";
+  const secondComment = "Explain why the old entry was removed.";
+  git("init", "-q", "--initial-branch=main");
+  git("config", "user.name", "Pilot Desktop Test");
+  git("config", "user.email", "pilot@example.invalid");
+  git("config", "commit.gpgsign", "false");
+  git("config", "core.autocrlf", "false");
+  writeFileSync(join(project, amended), "Header\nOld item\nFooter\n");
+  writeFileSync(join(project, deleted), "Previous setting\nObsolete value\nRetired help\n");
+  git("add", ".");
+  git("commit", "-qm", "Baseline for diff comments");
+  writeFileSync(join(project, amended), "Header\nNew item A\nNew item B\nFooter\n");
+  unlinkSync(join(project, deleted));
+  const before = git("status", "--porcelain=v1");
+
+  await app.evaluate(({ dialog }, folder) => {
+    const original = dialog.showOpenDialog;
+    dialog.showOpenDialog = async () => {
+      dialog.showOpenDialog = original;
+      return { canceled: false, filePaths: [folder] };
+    };
+  }, project);
+  const opened = await page.evaluate(() => window.pi.sessionSelectProject("en"));
+  assert.equal(opened.draftWorkingDirectory, project);
+  await editor(page).fill(existingDraft);
+  await page.waitForFunction(async ([composerId, draft]) => {
+    const current = await window.pi.getSnapshot();
+    return !current.sessionId && current.composerId === composerId &&
+      current.composerDraft.join("") === draft;
+  }, [opened.composerId, existingDraft]);
+
+  const openChanges = async (locale) => {
+    const trigger = page.locator("#review-trigger");
+    if (await trigger.getAttribute("aria-expanded") === "false") await trigger.click();
+    const tab = page.getByRole("tab", { name: new RegExp("^" + locale.tabs[0]) });
+    if (await tab.getAttribute("aria-selected") !== "true") await tab.click();
+  };
+  const openComment = async (path, locale) => {
+    await openChanges(locale);
+    const file = page.locator('[data-git-file="module/' + path + '"]');
+    const toggle = file.locator("[data-git-diff-toggle]");
+    if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
+    const trigger = button(file, locale === locales[1] ? "Comment on lines…" : "批注行…");
+    await trigger.click();
+    return {
+      trigger,
+      dialog: page.getByRole("dialog", { name: locale === locales[1] ? "Add diff comment" : "添加差异批注" }),
+    };
+  };
+  let current = locales[1];
+  let contrast = Infinity;
+  for (const [size, zoom] of [[wide, 1], [narrow, 1], [narrow, 1.5]]) {
+    await resize(page, window, size, zoom);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        const { trigger, dialog } = await openComment(amended, locale);
+        const line = dialog.locator("[data-git-annotation-row][tabindex='0']");
+        await line.and(page.locator(":focus")).waitFor();
+        await assertFits(dialog);
+        await assertFits(button(dialog, locale === locales[1] ? "Save comment" : "保存批注"));
+        contrast = Math.min(contrast, await minimumTextContrast(dialog, "h2, p, label"));
+        await line.press("Escape");
+        await dialog.waitFor({ state: "hidden" });
+        await trigger.and(page.locator(":focus")).waitFor();
+        await trigger.press("Escape");
+        await page.locator("[data-review-layout]").waitFor({ state: "hidden" });
+      }
+    }
+  }
+  assert.ok(contrast >= 4.5, "Diff comment text must meet text contrast requirements");
+  console.log("Diff comment text minimum contrast " + contrast.toFixed(2) + ":1");
+
+  const en = locales[1];
+  await selectAppearance(page, current, en, "light");
+  const add = async (path, comment, select) => {
+    const { trigger, dialog } = await openComment(path, en);
+    await select(dialog);
+    await dialog.getByRole("textbox", { name: "Comment", exact: true }).fill(comment);
+    await button(dialog, "Save comment").press("Enter");
+    await dialog.waitFor({ state: "hidden" });
+    await trigger.and(page.locator(":focus")).waitFor();
+  };
+  await add(amended, "Earlier wording", async dialog => {
+    await button(dialog, "Select old line 2").click();
+    await button(dialog, "Select new line 3").click({ modifiers: ["Shift"] });
+    assert.equal(await dialog.locator("[data-git-annotation-row][aria-pressed='true']").count(), 3);
+    await dialog.getByText("Old lines 2", { exact: true }).waitFor();
+    await dialog.getByText("New lines 2–3", { exact: true }).waitFor();
+  });
+  await add(deleted, secondComment, async dialog => {
+    const firstLine = button(dialog, "Select old line 1");
+    await firstLine.and(page.locator(":focus")).waitFor();
+    await firstLine.press("Shift+ArrowDown");
+    await dialog.getByText("Old lines 1–2", { exact: true }).waitFor();
+  });
+  await add(deleted, "Remove this draft comment", async () => {});
+  await button(page, "Review comments (3)…").click();
+  const queue = page.getByRole("dialog", { name: "Diff comments" });
+  await assertFits(queue);
+  await button(queue, "Remove comment 3").click();
+  await button(queue, "Edit comment 1").click();
+  await queue.getByRole("textbox", { name: "Comment", exact: true }).fill(firstComment);
+  await button(queue, "Save comment").click();
+  await queue.getByText(firstComment, { exact: true }).waitFor();
+  await assertFits(button(queue, "Add to draft"));
+  await button(queue, "Add to draft").click();
+  await queue.waitFor({ state: "hidden" });
+  await editor(page).and(page.locator(":focus")).waitFor();
+  await editor(page).getByText(amended + ":2–3", { exact: true }).waitFor();
+  await editor(page).getByText(deleted + ":1–2", { exact: true }).waitFor();
+  assert.ok((await editor(page).innerText()).startsWith(existingDraft));
+  const snapshot = await page.evaluate(() => window.pi.getSnapshot());
+  assert.equal(snapshot.sessionId, null);
+  assert.equal(snapshot.composerId, opened.composerId);
+  assert.equal(snapshot.composerDraft.filter(part => typeof part !== "string").length, 2);
+
+  await page.reload();
+  await editor(page).getByText(amended + ":2–3", { exact: true }).waitFor();
+  await editor(page).press("Enter");
+  const reply = await model.nextCompletion();
+  const user = reply.input.messages.filter(message => message.role === "user");
+  assert.equal(user.length, 1);
+  const prompt = JSON.stringify(user[0].content);
+  assert.ok(prompt.includes(existingDraft) && prompt.includes(firstComment) && prompt.includes(secondComment));
+  assert.match(prompt, /old \\"notes # current\.txt\\" lines 2/);
+  assert.match(prompt, /new \\"notes # current\.txt\\" lines 2–3/);
+  assert.match(prompt, /old \\"obsolete\.txt\\" lines 1–2/);
+  assert.ok(prompt.includes("- Old item") && prompt.includes("+ New item B") && prompt.includes("- Obsolete value"));
+  assert.ok(!prompt.includes("Remove this draft comment") && !prompt.includes("module/notes"));
+  reply.write({ content: "Received both diff comments." });
+  reply.finish();
+  await page.getByText("Received both diff comments.", { exact: true }).waitFor();
+  const cite = page.getByRole("button", { name: amended + ":2–3", exact: true });
+  await cite.click();
+  await page.locator("[data-reference-line='2']").getByText("New item A", { exact: true }).waitFor();
+  assert.equal(git("status", "--porcelain=v1"), before);
+  const result = await page.evaluate(() => window.pi.getSnapshot());
+  assert.ok(result.sessionId && result.messages.filter(message => message.role === "user").length === 1);
 }
 
 export async function verifyCommandsAndTemplates(page, app, model, originalProject, project) {

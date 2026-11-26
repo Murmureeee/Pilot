@@ -61,6 +61,26 @@ describe("agent-events adapter", () => {
     ]);
   });
 
+  it("retains the original line span of a deleted-file comment in the user message", () => {
+    const message: UiMessage = {
+      id: "comment",
+      role: "user",
+      parts: [
+        {
+          type: "mention",
+          kind: "file",
+          id: "deleted.txt",
+          label: "deleted.txt:2–4",
+          workingDirectory: "E:/a",
+          diff: { area: "staged", before: { first: 2, last: 4 } },
+        },
+      ],
+    };
+    const state = applyRunEvent(initialRunUiState(), { type: "user_message", message });
+    expect(state.messages).toEqual([message]);
+    expect(state.usage).toEqual(initialRunUiState().usage);
+  });
+
   it("resets only the streaming reply on retry and clears the state when the task fails", () => {
     const started = applyRunEvent(initialRunUiState(), {
       type: "assistant_start",

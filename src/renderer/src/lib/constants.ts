@@ -377,6 +377,7 @@ export const VERIFICATION_STATUS_LABELS: Record<VerificationStatus, string> = {
   interrupted: "已中断",
 };
 export const GIT_CHANGE_AREAS = ["staged", "unstaged", "untracked"] as const;
+export const GIT_ANNOTATION_EXCERPT_LENGTH = 2000;
 export const GIT_BRANCH_DIALOG: Record<
   GitBranchDialogMode,
   {

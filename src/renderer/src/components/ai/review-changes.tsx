@@ -5,7 +5,7 @@ import { useEffect, type JSX } from "react";
 import { Button } from "@renderer/components/ui/button";
 import { REVIEW_PANEL_ID } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
-import type { GitReview } from "@renderer/lib/types";
+import type { AppendGitAnnotations, GitReview } from "@renderer/lib/types";
 import { useFileChangesStore } from "@renderer/stores/file-changes";
 
 import { FileChangesPanel } from "./file-changes-panel";
@@ -18,6 +18,7 @@ export function ReviewChanges({
   active,
   git,
   latestReply,
+  onAppendAnnotations,
 }: {
   composerId: string;
   sessionId: string | null;
@@ -25,6 +26,7 @@ export function ReviewChanges({
   active: boolean;
   git: GitReview;
   latestReply?: string;
+  onAppendAnnotations?: AppendGitAnnotations;
 }): JSX.Element {
   const locale = useLocale();
   const review = useFileChangesStore((state) =>
@@ -44,9 +46,11 @@ export function ReviewChanges({
       {gitAvailable && (
         <div hidden={showFileChanges} className="flex min-h-0 flex-1 flex-col">
           <GitChangesPanel
+            key={workingDirectory}
             composerId={composerId}
             workingDirectory={workingDirectory}
             liveReview={git}
+            onAppendAnnotations={onAppendAnnotations}
           />
         </div>
       )}

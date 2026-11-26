@@ -12,6 +12,7 @@ export function InlineWorkspaceReference({
   kind,
   line,
   workingDirectory,
+  previewable = true,
   chip,
   children,
 }: {
@@ -19,6 +20,7 @@ export function InlineWorkspaceReference({
   kind: PromptMention["type"];
   line?: number;
   workingDirectory?: string;
+  previewable?: boolean;
   chip?: boolean;
   children: ReactNode;
 }): JSX.Element {
@@ -29,7 +31,7 @@ export function InlineWorkspaceReference({
     chip ? "workspace-reference-chip" : "workspace-reference-link",
   );
   const title = line ? path + ":" + line : path;
-  if (kind === "skill" || !sessionId || !directory) {
+  if (!previewable || kind === "skill" || !sessionId || !directory) {
     return (
       <span className={className} title={title} data-reference-kind={kind}>
         {children}

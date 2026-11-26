@@ -52,6 +52,7 @@ import { InputGroup, InputGroupAddon } from "@renderer/components/ui/input-group
 import { isDroppedImage, useComposerImages } from "@renderer/hooks/use-composer-images";
 import { useWorkspaceSearch } from "@renderer/hooks/use-workspace-search";
 import {
+  appendComposerDraft,
   composerRange,
   insertComposerMention,
   mentionKey,
@@ -90,7 +91,13 @@ import {
 } from "@renderer/stores/agent";
 import { compactFocus } from "@shared/compact-command";
 import { APP_NAME, IMAGE_ATTACHMENT_MIME_TYPES, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
-import type { ActiveRun, ApprovalMode, PromptMention, SkillMeta } from "@shared/contract";
+import type {
+  ActiveRun,
+  ApprovalMode,
+  ComposerDraft,
+  PromptMention,
+  SkillMeta,
+} from "@shared/contract";
 import { imagesFromMessageParts } from "@shared/image-attachments";
 import { draftFromMessageParts, promptFromDraft } from "@shared/mentions";
 import { effectiveModelCapabilities } from "@shared/model-capabilities";
@@ -602,11 +609,21 @@ export function Composer({
     readEditor();
   };
 
+  const appendDraft = (parts: ComposerDraft): boolean => {
+    const field = editor.current;
+    if (!field || submitting) return false;
+    const batch = draft.text.trim() ? ["\n\n", ...parts] : parts;
+    if (!appendComposerDraft(field, batch, resources.current)) return false;
+    readEditor();
+    return true;
+  };
+
   useImperativeHandle(shortcutRef, (): ComposerShortcuts => ({
     cycleMode,
     recallMessage,
     openMenu: setToolbarMenu,
     appendPrompt,
+    appendDraft,
   }));
 
   const onSuggestionKey = (event: KeyboardEvent<HTMLElement>): boolean => {

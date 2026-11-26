@@ -315,6 +315,38 @@ describe("IPC argument validation", () => {
     }
   });
 
+  it("accepts diff comments in drafts and prompts with ordered ranges on the correct side", () => {
+    const diff = {
+      area: "unstaged",
+      before: { first: 8, last: 9 },
+      after: { first: 8, last: 10 },
+      openLine: 8,
+    };
+    const mention = {
+      type: "file",
+      id: "notes.txt",
+      label: "notes.txt:8–10",
+      meta: { workingDirectory: "E:/projects/Pilot", diff },
+    };
+    const draftArgs = [sessionId, [mention]];
+    expect(parseIpcArgs(IPC.sessionSaveDraft, draftArgs)).toEqual(draftArgs);
+    const promptArgs = [{ text: "Review the diff", mentions: [{ ...mention, offset: 0 }] }];
+    expect(parseIpcArgs(IPC.agentPrompt, promptArgs)).toEqual(promptArgs);
+    for (const invalid of [
+      { ...diff, before: { first: 9, last: 8 } },
+      { ...diff, after: undefined },
+      { ...diff, area: "untracked" },
+      { area: "staged" },
+    ]) {
+      expect(() =>
+        parseIpcArgs(IPC.sessionSaveDraft, [
+          sessionId,
+          [{ ...mention, meta: { ...mention.meta, diff: invalid } }],
+        ]),
+      ).toThrow(/Invalid IPC arguments/);
+    }
+  });
+
   it.each([
     [IPC.toolPermissionRespond, [run, sessionId, "later"]],
     [IPC.agentAbort, [{ sessionId }]],

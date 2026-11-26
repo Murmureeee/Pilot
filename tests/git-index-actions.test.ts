@@ -90,6 +90,25 @@ function fixture(root: string): {
   };
 }
 
+it("returns workspace-relative paths and old line numbers for a deleted file in a Git subfolder", async () => {
+  using temp = mkdtempDisposableSync(join(tmpdir(), "pilot-git-select-"));
+  const { project, host, git, write } = fixture(temp.path);
+  const path = "packages/reports/old # notes.txt";
+  mkdirSync(join(project, "packages", "reports"), { recursive: true });
+  write(path, "first\nsecond\n");
+  git("add", "--", path);
+  git("commit", "-qm", "Add a nested report");
+  unlinkSync(join(project, path));
+  const { composerId } = host.openProject(join(project, "packages", "reports"));
+  const view = await host.getGitFileDiff(composerId, { path, area: "unstaged", live: true });
+  expect(view.referencePaths).toEqual({ path: "old # notes.txt" });
+  expect(view.canOpen).toBe(false);
+  expect(view.diff?.hunks.flat()).toMatchObject([
+    { kind: "removed", before: 1, text: "first" },
+    { kind: "removed", before: 2, text: "second" },
+  ]);
+});
+
 it("commits only the selected task hunk and preserves the other staged and worktree edits in the same file", async () => {
   using temp = mkdtempDisposableSync(join(tmpdir(), "pilot-git-select-"));
   const { project, index, host, composerId, git, write, selection } = fixture(temp.path);

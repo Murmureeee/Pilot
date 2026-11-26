@@ -9,10 +9,10 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { setImmediate } from "node:timers/promises";
 
-import type { FileDiff, GitChange, GitFileDiff } from "@shared/contract";
+import type { FileDiff, GitChange, GitDiffPaths, GitFileDiff } from "@shared/contract";
 
 import {
   GIT_FILE_READ_CONCURRENCY,
@@ -262,9 +262,15 @@ export async function gitFileDiff(
 ): Promise<GitFileDiff> {
   const { root, entries } = snapshot;
   const { path, area, previousPath, resolved } = change;
+  let paths: GitDiffPaths;
   try {
-    gitFilePath(directory, root, path);
-    if (previousPath) gitFilePath(directory, root, previousPath);
+    const project = resolveGitDirectory(directory);
+    const relativePath = (file: string): string =>
+      relative(project, gitFilePath(directory, root, file))
+        .split(sep)
+        .join("/");
+    paths = { path: relativePath(path) };
+    if (previousPath) paths.previousPath = relativePath(previousPath);
   } catch {
     return { diff: null, canOpen: false };
   }
@@ -296,11 +302,17 @@ export async function gitFileDiff(
   const diff =
     nativeDiff ??
     (before !== undefined && shown !== undefined ? buildTextDiff(before, shown ?? "").diff : null);
-  if (typeof after !== "string" || !worktree) return { diff, canOpen: false };
-  if (worktree.text === after) return { diff, canOpen: true };
+  const referencePaths = diff?.hunks.length ? paths : undefined;
+  if (typeof after !== "string" || !worktree) return { diff, canOpen: false, referencePaths };
+  if (worktree.text === after) return { diff, canOpen: true, referencePaths };
   const lineTargets =
     area === "staged" && diff ? editorLineTargets(diff, after, worktree.text) : undefined;
-  return { diff, canOpen: Boolean(lineTargets && Object.keys(lineTargets).length), lineTargets };
+  return {
+    diff,
+    canOpen: Boolean(lineTargets && Object.keys(lineTargets).length),
+    lineTargets,
+    referencePaths,
+  };
 }
 
 export function replaceGitWorktreeFile(

@@ -61,12 +61,14 @@ export function DiffLines({
   onOpenLine,
   lineTargets,
   hunkAction,
+  lineAction,
 }: {
   diff: FileDiff;
   path: string;
   onOpenLine?(line: number): void;
   lineTargets?: Record<number, number>;
   hunkAction?(index: number): ReactNode;
+  lineAction?(line: FileDiffLine, index: number): ReactNode;
 }): JSX.Element {
   const locale = useLocale();
   const [highlighted, setHighlighted] = useState<ReactNode[][] | null>(null);
@@ -97,7 +99,7 @@ export function DiffLines({
         {diff.hunks.map((hunk, hunkIndex) => (
           <Fragment key={hunkIndex}>
             <tr className="bg-secondary/65 text-muted-foreground">
-              <td colSpan={4} className="px-3 py-0.5">
+              <td colSpan={lineAction ? 5 : 4} className="px-3 py-0.5">
                 <div className="flex flex-wrap items-center gap-x-3">
                   {hunkHeader(hunk)}
                   {hunkAction?.(hunkIndex)}
@@ -116,6 +118,7 @@ export function DiffLines({
                     line.kind === "removed" && "bg-destructive/10 dark:bg-destructive/15",
                   )}
                 >
+                  {lineAction && <td className="w-6 min-w-6">{lineAction(line, lineIndex)}</td>}
                   <td className="w-9 min-w-9 px-1.5 text-right text-muted-foreground tabular-nums select-none">
                     {line.before}
                   </td>
