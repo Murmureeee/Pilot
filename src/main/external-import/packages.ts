@@ -52,7 +52,11 @@ function packageId(origin: PluginPackageSource): string {
     process.platform === "win32" && origin.kind !== "git"
       ? origin.location.toLowerCase()
       : origin.location;
-  return fingerprint("package", origin.kind, location);
+  const selectors =
+    origin.kind === "git" && (origin.path || origin.ref || origin.sha)
+      ? [origin.path ?? "", origin.ref ?? "", origin.sha ?? ""]
+      : [];
+  return fingerprint("package", origin.kind, location, ...selectors);
 }
 
 function assets(locations: ImportLocations, id: string): string {
@@ -185,8 +189,11 @@ function prepare(
   contentId: string;
   previous?: ImportedPlugin;
 } {
+  const packagePath = source.kind === "git" ? source.path : undefined;
   const label =
-    source.location.replaceAll("\\", "/").replace(/\/$/, "").split(/[/:]/).at(-1) ?? "plugin";
+    packagePath?.split("/").at(-1) ??
+    source.location.replaceAll("\\", "/").replace(/\/$/, "").split(/[/:]/).at(-1) ??
+    "plugin";
   const manifest = readPackageManifest(root, label.replace(/\.(git|zip)$/i, ""), {
     ...locations,
     workspace: undefined,

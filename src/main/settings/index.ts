@@ -153,6 +153,7 @@ export function mergeSettingsInput(current: Settings, input: SettingsInput): Set
     skillsEnabled: input.skillsEnabled ?? current.skillsEnabled ?? [],
     mcpServers: current.mcpServers,
     importedPlugins: current.importedPlugins,
+    pluginMarketplaces: current.pluginMarketplaces,
     recoveredFrom: current.recoveredFrom,
     recoveryBlocked: current.recoveryBlocked,
   };

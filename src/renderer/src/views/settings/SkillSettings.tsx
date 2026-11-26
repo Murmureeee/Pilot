@@ -1,5 +1,5 @@
 // @env browser
-import { FolderOpenIcon, PlusIcon } from "lucide-react";
+import { CompassIcon, FolderOpenIcon, PlusIcon } from "lucide-react";
 import { useEffect, useRef, useState, type JSX } from "react";
 
 import {
@@ -13,6 +13,7 @@ import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { SkillMeta } from "@shared/contract";
 import type { ImportReport } from "@shared/imports";
 
+import { PluginMarketplace } from "./PluginMarketplace";
 import { SkillDetailsDialog } from "./SkillDetailsDialog";
 
 function messageOf(cause: unknown): string {
@@ -33,8 +34,10 @@ export function SkillSettings({
   const [pending, setPending] = useState(false);
   const [target, setTarget] = useState<SkillMeta | null>(null);
   const [open, setOpen] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
   const importButton = useRef<HTMLButtonElement>(null);
   const detailButton = useRef<HTMLButtonElement>(null);
+  const discoveryButton = useRef<HTMLButtonElement>(null);
 
   const run = async (action: () => Promise<SkillMeta[] | null>): Promise<void> => {
     setError(null);
@@ -64,6 +67,19 @@ export function SkillSettings({
     };
   }, [composerId]);
 
+  if (discovering) {
+    return (
+      <PluginMarketplace
+        locale={locale}
+        onInstalled={() => void run(() => window.pi.skillsList(composerId))}
+        onBack={() => {
+          setDiscovering(false);
+          requestAnimationFrame(() => discoveryButton.current?.focus());
+        }}
+      />
+    );
+  }
+
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -85,6 +101,14 @@ export function SkillSettings({
             void run(() => window.pi.skillsList(composerId));
           }}
         />
+        <Button
+          ref={discoveryButton}
+          variant="outline"
+          size="sm"
+          onClick={() => setDiscovering(true)}
+        >
+          <CompassIcon data-icon="inline-start" /> {t("发现插件", locale)}
+        </Button>
         <Button
           variant="ghost"
           size="sm"

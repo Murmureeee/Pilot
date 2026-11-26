@@ -94,15 +94,49 @@ export const promptTemplatesSchema = z
   .max(PROMPT_TEMPLATE_LIMIT)
   .refine((templates) => new Set(templates.map(({ name }) => name)).size === templates.length);
 
-export const pluginPackageSourceSchema = z.strictObject({
-  kind: z.enum(["git", "directory", "zip"]),
-  location: z
+export const pluginLocationSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(8192)
+  .refine((text) => !text.includes("\0"));
+
+export const gitPluginSourceSchema = z.strictObject({
+  kind: z.literal("git"),
+  location: pluginLocationSchema,
+  path: z
     .string()
-    .trim()
     .min(1)
-    .max(8192)
-    .refine((text) => !text.includes("\0")),
+    .max(2048)
+    .refine((path) =>
+      path
+        .split("/")
+        .every(
+          (part) =>
+            part.length > 0 &&
+            part !== "." &&
+            part !== ".." &&
+            !/[<>:"\\|?*]/.test(part) &&
+            Array.from(part).every((character) => character.charCodeAt(0) >= 32),
+        ),
+    )
+    .optional(),
+  ref: z
+    .string()
+    .max(255)
+    .regex(/^[\p{L}\p{N}_][\p{L}\p{N}_./-]*$/u)
+    .refine((ref) => !ref.includes("..") && !ref.includes("//"))
+    .optional(),
+  sha: z
+    .string()
+    .regex(/^[a-f0-9]{40}$/)
+    .optional(),
 });
+
+export const pluginPackageSourceSchema = z.discriminatedUnion("kind", [
+  gitPluginSourceSchema,
+  z.strictObject({ kind: z.enum(["directory", "zip"]), location: pluginLocationSchema }),
+]);
 
 const importedPlugin = z.looseObject({
   id: z.string(),
@@ -161,6 +195,14 @@ const storedSettings = z.looseObject({
   skillsEnabled: z.array(z.string()).optional(),
   mcpServers: z.array(mcpServer).optional(),
   importedPlugins: z.array(importedPlugin).optional(),
+  pluginMarketplaces: z
+    .array(
+      z.object({
+        location: pluginLocationSchema,
+        name: z.string().min(1).max(200),
+      }),
+    )
+    .optional(),
   recoveredFrom: optionalText,
   recoveryBlocked: z.never().optional(),
 }) satisfies z.ZodType<Settings>;

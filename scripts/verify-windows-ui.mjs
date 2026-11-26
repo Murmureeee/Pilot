@@ -20,6 +20,7 @@ import {
   verifyAuxiliaryModels,
   verifyBackgroundTerminal,
   verifyCommandsAndTemplates,
+  verifyDiscovery,
   verifyExternalEditor,
   verifyFirstRun,
   verifyGitAnnotations,
@@ -42,6 +43,7 @@ import {
   verifyRestoredExternalEditor,
   verifyRestoredAuxiliaryModels,
   verifyRestoredPluginPackages,
+  verifyRestoredDiscovery,
   verifySearchAndExport,
   verifySettings,
   verifyStreamingReply,
@@ -144,6 +146,8 @@ const scratch = realpathSync.native(mkdtempSync(join(temp, "pilot-windows-ui-"))
 const profile = join(scratch, "profile");
 const utilityProfile = join(scratch, "auxiliary-model-profile");
 const pluginProfile = join(scratch, "plugin-profile");
+const discoveryProfile = join(scratch, "discovery-profile");
+const discoveryMarket = join(scratch, "catalog fixture");
 const pluginFixture = {
   root: join(scratch, "plugin fixture"),
   archive: join(scratch, "plugin-fixture.zip"),
@@ -179,6 +183,7 @@ try {
   mkdirSync(profile);
   mkdirSync(utilityProfile);
   mkdirSync(pluginProfile);
+  mkdirSync(discoveryProfile);
   mkdirSync(project);
   mkdirSync(commandProject);
   mkdirSync(instructionProject);
@@ -332,6 +337,16 @@ try {
   await withApp(pluginProfile, async (page) => {
     await runScene("Restore an updated plugin and remove its files, commands, and server", () =>
       verifyRestoredPluginPackages(page, pluginFixture, pluginProfile),
+    );
+  });
+  await withApp(discoveryProfile, async (page, window, app) => {
+    await runScene("Browse a Git marketplace and review MCP Registry configurations", () =>
+      verifyDiscovery(page, window, app, discoveryMarket),
+    );
+  });
+  await withApp(discoveryProfile, async (page) => {
+    await runScene("Restore marketplace and MCP settings and remove the source independently", () =>
+      verifyRestoredDiscovery(page),
     );
   });
 } finally {

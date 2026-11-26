@@ -5,10 +5,15 @@ export type ImportSource = "codex" | "claude-code";
 export type PluginFormat = ImportSource | "pi" | "skill";
 export type ExternalImportKind = "skill" | "plugin" | "mcp";
 
-export interface PluginPackageSource {
-  kind: "git" | "directory" | "zip";
+export interface GitPluginSource {
+  kind: "git";
   location: string;
+  path?: string;
+  ref?: string;
+  sha?: string;
 }
+
+export type PluginPackageSource = GitPluginSource | { kind: "directory" | "zip"; location: string };
 
 export interface PluginPackageFile {
   path: string;

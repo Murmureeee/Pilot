@@ -11,6 +11,7 @@ import type {
   ThinkingLevel,
   ToolRule,
 } from "../../shared/contract";
+import type { PluginMarketplaceSource } from "../../shared/discovery";
 import type { ImportedPluginFields, InstalledPluginPackage } from "../../shared/imports";
 import type { McpServerFields, McpTransportConfig } from "../../shared/mcp";
 
@@ -51,6 +52,7 @@ export interface Settings {
   skillsEnabled?: string[];
   mcpServers?: McpServerConfig[];
   importedPlugins?: ImportedPlugin[];
+  pluginMarketplaces?: PluginMarketplaceSource[];
   /** 用户在界面确认后清除。 */
   recoveredFrom?: string;
   /** 只在内存中保留，供用户修复文件访问后重试。 */

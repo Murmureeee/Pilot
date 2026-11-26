@@ -19,6 +19,11 @@ import { describe, expect, it, vi } from "vitest";
 import { McpManager } from "../src/main/agent-host/mcp";
 import { scanSkills } from "../src/main/agent-host/skills";
 import {
+  browsePluginMarketplace,
+  listPluginMarketplaces,
+  rememberMarketplace,
+} from "../src/main/discovery/marketplace";
+import {
   importExternal,
   importedPlugins,
   previewExternalImport,
@@ -685,5 +690,123 @@ describe("plugin package installation", () => {
     symlinkSync(paths.home, join(root, "linked folder"), "junction");
     await expect(previewPluginPackage(source, empty, paths)).rejects.toThrow(/含有链接或无效路径/);
     expect(existsSync(paths.settingsDir)).toBe(false);
+  });
+});
+
+describe("Claude Code plugin marketplaces", () => {
+  it("reads a Git catalog and installs its sibling plugin directories independently", async () => {
+    using fixture = mkdtempDisposableSync(join(tmpdir(), "pi-marketplace-"));
+    const paths = locations(fixture.path);
+    const root = join(fixture.path, "marketplace");
+    execFileSync("git", ["init", "-q", "--template=", root]);
+    write(join(root, ".claude-plugin", "marketplace.json"), {
+      name: "fixture-market",
+      owner: { name: "Fixture owner" },
+      metadata: { pluginRoot: "./plugins" },
+      plugins: [
+        {
+          name: "one",
+          displayName: "First plugin",
+          author: { name: "Fixture author" },
+          version: "1.0.0",
+          source: "./plugins/one",
+        },
+        { name: "two", source: "two" },
+        {
+          name: "remote",
+          source: {
+            source: "git-subdir",
+            url: "example/repo",
+            path: "plugins/remote",
+            ref: "v2",
+            sha: "a".repeat(40),
+          },
+        },
+        { name: "github", source: { source: "github", repo: "example/other" } },
+        { name: "url", source: { source: "url", url: "https://example.test/project.git" } },
+        { name: "npm", source: { source: "npm", package: "test-marketplace-plugin" } },
+        { name: "missing", source: "./absent" },
+      ],
+    });
+    for (const name of ["one", "two"]) {
+      write(join(root, "plugins", name, ".claude-plugin", "plugin.json"), {
+        name: "plugin-" + name,
+      });
+      write(
+        join(root, "plugins", name, "skills", name, "SKILL.md"),
+        "---\nname: " + name + "\n---\nTest skill.",
+      );
+    }
+    const original = gitCommit(root, "Add marketplace");
+    execFileSync("git", ["tag", "v1", original], { cwd: root });
+    write(
+      join(root, "plugins", "one", "skills", "one", "SKILL.md"),
+      "---\nname: updated-one\n---\nUpdated.",
+    );
+    gitCommit(root, "Update one plugin");
+
+    const catalog = await browsePluginMarketplace(root);
+    expect(catalog.name).toBe("fixture-market");
+    expect(catalog.entries).toMatchObject([
+      { key: "one", author: "Fixture author", version: "1.0.0", source: { path: "plugins/one" } },
+      { key: "two", author: "Fixture owner", source: { path: "plugins/two" } },
+      {
+        key: "remote",
+        source: {
+          location: "https://github.com/example/repo.git",
+          path: "plugins/remote",
+          ref: "v2",
+          sha: "a".repeat(40),
+        },
+      },
+      { key: "github", source: { location: "https://github.com/example/other.git" } },
+      { key: "url", source: { location: "https://example.test/project.git" } },
+      { key: "npm", sourceType: "npm" },
+      { key: "missing", source: { path: "absent" } },
+    ]);
+    expect(catalog.entries.find((entry) => entry.key === "npm")?.source).toBeUndefined();
+    let settings = rememberMarketplace(empty, catalog);
+    expect(rememberMarketplace(settings, catalog)).toBe(settings);
+    const read = (): Settings => settings;
+    const save = (next: Settings): void => {
+      settings = next;
+    };
+    const withClosed: WithPluginServersClosed = async (_ids, change) => change();
+    const sources = catalog.entries.slice(0, 2).map(({ source }) => source!);
+    const pinned = await previewPluginPackage(
+      { ...sources[0], ref: "v1", sha: original },
+      settings,
+      paths,
+    );
+    expect(pinned).toMatchObject({ revision: original, skills: ["one"] });
+    const tagged = await previewPluginPackage({ ...sources[0], ref: "v1" }, settings, paths);
+    expect(tagged).toMatchObject({ revision: original, skills: ["one"] });
+    for (const [index, source] of sources.entries()) {
+      const preview = await previewPluginPackage(source, settings, paths);
+      expect(preview.skills).toEqual(index === 0 ? ["updated-one"] : ["two"]);
+      await installPluginPackage(source, preview.token, paths, read, save, withClosed);
+    }
+    expect(new Set(settings.importedPlugins?.map(({ id }) => id)).size).toBe(2);
+    saveSettings(paths.settingsDir, settings);
+    expect(listPluginMarketplaces(loadSettings(paths.settingsDir))).toContainEqual({
+      name: catalog.name,
+      location: catalog.location,
+    });
+    expect(importedPlugins(loadSettings(paths.settingsDir), paths.skillsDir)).toMatchObject([
+      { enabled: "none", packageSource: { path: "plugins/one" } },
+      { enabled: "none", packageSource: { path: "plugins/two" } },
+    ]);
+    await expect(
+      previewPluginPackage(catalog.entries.at(-1)!.source!, settings, paths),
+    ).rejects.toThrow(/无法读取插件来源/);
+  }, 25_000);
+
+  it("rejects a Git repository that has no market manifest", async () => {
+    using fixture = mkdtempDisposableSync(join(tmpdir(), "pi-marketplace-"));
+    const root = fixture.path;
+    execFileSync("git", ["init", "-q", "--template=", root]);
+    write(join(root, "readme.md"), "Not a marketplace.");
+    gitCommit(root, "Add unrelated file");
+    await expect(browsePluginMarketplace(root)).rejects.toThrow(/插件市场清单无效/);
   });
 });

@@ -200,6 +200,15 @@ const api: PiApi = {
   installPluginPackage: (source, token) =>
     ipcRenderer.invoke(IPC.settingsInstallPluginPackage, source, token),
   uninstallPlugin: (id) => ipcRenderer.invoke(IPC.settingsUninstallPlugin, id),
+  pluginMarketplaces: () => ipcRenderer.invoke(IPC.settingsPluginMarketplaces),
+  browsePluginMarketplace: (location, remember) =>
+    ipcRenderer.invoke(IPC.settingsBrowsePluginMarketplace, location, remember),
+  removePluginMarketplace: (location) =>
+    ipcRenderer.invoke(IPC.settingsRemovePluginMarketplace, location),
+  searchMcpRegistry: (query, cursor) =>
+    cursor === undefined
+      ? ipcRenderer.invoke(IPC.settingsSearchMcpRegistry, query)
+      : ipcRenderer.invoke(IPC.settingsSearchMcpRegistry, query, cursor),
   pickWorkingDirectory: (locale: Locale) =>
     ipcRenderer.invoke(IPC.settingsPickWorkingDirectory, locale),
   skillsList: (composerId) =>

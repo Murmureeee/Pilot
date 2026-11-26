@@ -50,6 +50,9 @@ function Inventory({
           {t(IMPORT_SOURCE_LABELS[preview.format], locale)}
         </p>
         <p className="text-xs wrap-anywhere text-muted-foreground">{preview.source.location}</p>
+        {preview.source.kind === "git" && preview.source.path && (
+          <p className="text-xs wrap-anywhere text-muted-foreground">{preview.source.path}</p>
+        )}
         <p className="text-xs wrap-anywhere text-muted-foreground">
           {t("版本 {0}", locale, [preview.version ?? t("未声明版本", locale)])}
           {preview.revision && " · " + preview.revision.slice(0, 12)}
@@ -157,11 +160,13 @@ function Inventory({
 export function PluginPackageDialog({
   locale,
   pluginId,
+  source,
   disabled,
   onInstalled,
 }: {
   locale: Locale;
   pluginId?: string;
+  source?: PluginPackageSource;
   disabled: boolean;
   onInstalled(items: ImportedPluginInfo[], updated: boolean): void;
 }): JSX.Element {
@@ -231,7 +236,8 @@ export function PluginPackageDialog({
 
   const empty =
     preview && !preview.skills.length && !preview.templates.length && !preview.servers.length;
-  const retrySource = pluginId ?? preview?.source;
+  const suppliedSource = pluginId ?? source;
+  const retrySource = suppliedSource ?? preview?.source;
   return (
     <Dialog
       open={open}
@@ -242,18 +248,18 @@ export function PluginPackageDialog({
         setPreview(undefined);
         setBusy(undefined);
         setError("");
-        if (next && pluginId) void load(pluginId);
+        if (next && suppliedSource) void load(suppliedSource);
       }}
     >
       <DialogTrigger
         render={<Button size="sm" variant={pluginId ? "ghost" : "outline"} disabled={disabled} />}
       >
-        {t(pluginId ? "检查更新" : "安装插件…", locale)}
+        {t(pluginId ? "检查更新" : source ? "预览安装" : "安装插件…", locale)}
       </DialogTrigger>
       <DialogContent
         className="max-h-[calc(100dvh-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-3 p-4 sm:max-w-xl"
         closeLabel={t("关闭", locale)}
-        initialFocus={pluginId ? undefined : gitField}
+        initialFocus={suppliedSource ? undefined : gitField}
         showCloseButton={busy !== "apply"}
       >
         <DialogHeader className="pr-8">
@@ -263,7 +269,7 @@ export function PluginPackageDialog({
           </DialogDescription>
         </DialogHeader>
         <div data-plugin-review className="min-h-0 min-w-0 [scrollbar-width:thin] overflow-y-auto">
-          {!pluginId && !preview && (
+          {!suppliedSource && !preview && (
             <div className="grid gap-3">
               <form
                 className="grid gap-2"

@@ -187,6 +187,12 @@ export function ExternalImportSettings({
                 {plugin.packageSource && (
                   <p className="text-xs wrap-anywhere text-muted-foreground">
                     {plugin.packageSource.location}
+                    {plugin.packageSource.kind === "git" && plugin.packageSource.path && (
+                      <>
+                        <br />
+                        {plugin.packageSource.path}
+                      </>
+                    )}
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">{importSummary(plugin, locale)}</p>

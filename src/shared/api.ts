@@ -69,6 +69,7 @@ import type {
   WorkspaceReferencePreview,
   WorkspaceReferenceRequest,
 } from "./contract";
+import type { McpRegistryPage, PluginMarketplace, PluginMarketplaceSource } from "./discovery";
 import type {
   ExternalImportKind,
   ExternalImportPreview,
@@ -265,6 +266,10 @@ export interface PiApi {
     token: string,
   ): Promise<ImportedPluginInfo[]>;
   uninstallPlugin(id: string): Promise<ImportedPluginInfo[]>;
+  pluginMarketplaces(): Promise<PluginMarketplaceSource[]>;
+  browsePluginMarketplace(location: string, remember: boolean): Promise<PluginMarketplace>;
+  removePluginMarketplace(location: string): Promise<PluginMarketplaceSource[]>;
+  searchMcpRegistry(query: string, cursor?: string): Promise<McpRegistryPage>;
   /** 技能列表（FR-5.8）：扫描 userData/skills/ + 合并启停状态 */
   skillsList(composerId: string): Promise<SkillMeta[]>;
   skillsRead(composerId: string, id: string, directory: string): Promise<string>;

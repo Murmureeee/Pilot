@@ -1,38 +1,24 @@
 // @env node
-import { execFile } from "node:child_process";
 import { once } from "node:events";
-import {
-  cpSync,
-  createWriteStream,
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  statSync,
-} from "node:fs";
-import { rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { cpSync, createWriteStream, lstatSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { pipeline } from "node:stream/promises";
-import { pathToFileURL } from "node:url";
-import { promisify } from "node:util";
 
 import { openPromise } from "yauzl";
 
 import type { PluginPackageSource } from "@shared/imports";
 
 import { directory } from "./files";
+import { normalizeGitLocation, openPluginGit, withPluginTemporaryDirectory } from "./git-source";
 import {
   PACKAGE_BAD_PATH,
   PACKAGE_ENTRY_LIMIT,
-  PACKAGE_GIT_TIMEOUT,
   PACKAGE_IGNORED,
   PACKAGE_SIZE_LIMIT,
   PACKAGE_TOO_LARGE,
   PACKAGE_UNREADABLE,
 } from "./package-constants";
 
-const git = promisify(execFile);
 const BAD_SEGMENT = /[<>:"\\|?*]|[. ]$|^(?:con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)/i;
 
 function checkedParts(path: string): string[] {
@@ -115,64 +101,11 @@ async function extractZip(path: string, destination: string): Promise<void> {
   }
 }
 
-function gitLocation(input: string): string {
-  const value = input.trim();
-  if (isAbsolute(value)) {
-    const root = directory(value);
-    if (root) return pathToFileURL(root).href;
-  }
-  if (
-    /^[\w.-]+@[\w.-]+:.+$/.test(value) &&
-    Array.from(value).every((char) => char.charCodeAt(0) > 32)
-  )
-    return value;
-  const url = URL.parse(value);
-  if (!url || url.hash || url.search || url.password) throw new Error(PACKAGE_UNREADABLE);
-  if (url.protocol === "ssh:" || url.protocol === "file:") return url.href;
-  if (["https:", "http:"].includes(url.protocol) && !url.username) return url.href;
-  throw new Error(PACKAGE_UNREADABLE);
-}
-
-async function archiveGit(location: string, temp: string, archive: string): Promise<string> {
-  const repo = join(temp, "repository");
-  const options = {
-    cwd: temp,
-    timeout: PACKAGE_GIT_TIMEOUT,
-    windowsHide: true,
-    env: {
-      ...process.env,
-      GIT_TERMINAL_PROMPT: "0",
-      GIT_ALLOW_PROTOCOL: "file:http:https:ssh",
-      GCM_INTERACTIVE: "never",
-    },
-  };
-  await git(
-    "git",
-    [
-      "clone",
-      "--no-checkout",
-      "--no-recurse-submodules",
-      "--no-tags",
-      "--depth=1",
-      "--template=",
-      "--",
-      location,
-      repo,
-    ],
-    options,
-  );
-  const { stdout } = await git("git", ["-C", repo, "rev-parse", "HEAD"], options);
-  await git("git", ["-C", repo, "archive", "--format=zip", "--output=" + archive, "HEAD"], options);
-  return stdout.trim();
-}
-
 export async function withPluginSource<T>(
   source: PluginPackageSource,
   visit: (root: string, origin: PluginPackageSource, revision?: string) => T | Promise<T>,
 ): Promise<T> {
-  const tempRoot = realpathSync.native(tmpdir());
-  const temp = mkdtempSync(join(tempRoot, "pilot-plugin-"));
-  try {
+  return withPluginTemporaryDirectory(async (temp) => {
     const root = join(temp, "package");
     let location: string;
     let revision: string | undefined;
@@ -186,9 +119,13 @@ export async function withPluginSource<T>(
       } else {
         mkdirSync(root);
         if (source.kind === "git") {
-          location = gitLocation(source.location);
+          location = normalizeGitLocation(source.location);
           const archive = join(temp, "source.zip");
-          revision = await archiveGit(location, temp, archive);
+          if (source.path) checkedParts(source.path);
+          const repo = await openPluginGit(temp, { ...source, location });
+          revision = repo.revision;
+          const tree = source.path ? revision + ":" + source.path : revision;
+          await repo.read(["archive", "--format=zip", "--output=" + archive, tree]);
           await extractZip(archive, root);
         } else {
           if (!isAbsolute(source.location) || !/\.zip$/i.test(source.location))
@@ -206,8 +143,6 @@ export async function withPluginSource<T>(
         throw error;
       throw new Error(PACKAGE_UNREADABLE, { cause: error });
     }
-    return await visit(root, { kind: source.kind, location }, revision);
-  } finally {
-    await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
-  }
+    return visit(root, { ...source, location }, revision);
+  });
 }

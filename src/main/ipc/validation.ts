@@ -15,10 +15,12 @@ import {
   WORKSPACE_QUERY_LENGTH,
 } from "../../shared/constants";
 import { IPC, VERIFICATION_KINDS } from "../../shared/contract";
+import { MCP_REGISTRY_MIN_QUERY } from "../../shared/discovery";
 import { imageAttachmentsSchema } from "../agent-host/image-attachments";
 import {
   afterTurnVerificationSchema,
   externalEditorSchema,
+  pluginLocationSchema,
   pluginPackageSourceSchema,
   promptTemplatesSchema,
   toolRuleSchema,
@@ -377,6 +379,24 @@ const inputs = {
   [IPC.settingsPreviewPluginPackage]: z.tuple([pluginPackageTarget]),
   [IPC.settingsInstallPluginPackage]: z.tuple([pluginPackageTarget, importId]),
   [IPC.settingsUninstallPlugin]: z.tuple([importId]),
+  [IPC.settingsPluginMarketplaces]: none,
+  [IPC.settingsBrowsePluginMarketplace]: z.tuple([pluginLocationSchema, z.boolean()]),
+  [IPC.settingsRemovePluginMarketplace]: z.tuple([pluginLocationSchema]),
+  [IPC.settingsSearchMcpRegistry]: z.tuple([
+    z
+      .string()
+      .trim()
+      .max(200)
+      .refine(
+        (query) => (!query || [...query].length >= MCP_REGISTRY_MIN_QUERY) && !query.includes("\0"),
+      ),
+    z
+      .string()
+      .min(1)
+      .max(2048)
+      .refine((cursor) => !cursor.includes("\0"))
+      .optional(),
+  ]),
   [IPC.skillsList]: session,
   [IPC.skillsRead]: z.tuple([z.uuid(), mentionId, nonBlank]),
   [IPC.skillsDelete]: z.tuple([z.uuid(), mentionId, nonBlank]),

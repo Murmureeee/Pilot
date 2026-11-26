@@ -2314,6 +2314,252 @@ export async function verifyRestoredPluginPackages(page, fixture, profile) {
   assert.ok(existsSync(join(fixture.root, "scripts", "fixture.cjs")));
 }
 
+function discoveryLabels(locale) {
+  return locale === locales[1]
+    ? {
+        skills: "Skills", plugins: "Discover plugins", market: "Plugin marketplaces", backSkills: "Back to skills",
+        source: "Official Claude Code marketplace", add: "Add marketplace", mcp: "MCP servers",
+        discoverMcp: "Discover MCP servers", backMcp: "Back to MCP servers", query: "Search MCP servers by name",
+        configure: "Configure MCP server", useConfig: "Use configuration",
+      }
+    : {
+        skills: "技能", plugins: "发现插件", market: "插件市场", backSkills: "返回技能",
+        source: "Claude Code 官方市场", add: "添加市场", mcp: "MCP 服务",
+        discoverMcp: "发现 MCP 服务", backMcp: "返回 MCP 服务", query: "按名称搜索 MCP 服务",
+        configure: "配置 MCP 服务", useConfig: "填入配置",
+      };
+}
+
+function writeDiscoveryMarket(root) {
+  execFileSync("git", ["init", "-q", "--template=", root]);
+  const plugin = join(root, "plugins", "catalog-notes");
+  const skill = join(plugin, "skills", "catalog-notes");
+  mkdirSync(join(root, ".claude-plugin"), { recursive: true });
+  mkdirSync(join(plugin, ".claude-plugin"), { recursive: true });
+  mkdirSync(skill, { recursive: true });
+  writeFileSync(join(root, ".claude-plugin", "marketplace.json"), JSON.stringify({
+    name: "fixture-market", owner: { name: "Catalog owner" },
+    plugins: [
+      { name: "catalog-notes", displayName: "Catalog notes", description: "Notes fixture", author: { name: "Fixture author" },
+        version: "1.2.0", source: "./plugins/catalog-notes" },
+      { name: "catalog-npm", source: { source: "npm", package: "fixture-plugin" } },
+    ],
+  }));
+  writeFileSync(join(plugin, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "catalog-notes", version: "1.2.0" }));
+  writeFileSync(join(skill, "SKILL.md"), "---\nname: Catalog notes skill\n---\nReview notes.");
+  execFileSync("git", ["-c", "core.autocrlf=false", "add", "--all"], { cwd: root });
+  execFileSync("git", [
+    "-c", "user.name=Pilot Desktop Test", "-c", "user.email=pilot@example.invalid", "-c", "commit.gpgSign=false",
+    "commit", "-qm", "Add discovery marketplace fixture",
+  ], { cwd: root });
+}
+
+async function mockDiscoveryRegistry(app) {
+  await app.evaluate(({ session }) => {
+    const partition = session.fromPartition("pilot-network", { cache: false });
+    const original = partition.fetch.bind(partition);
+    const receipts = { searches: [], connections: [] };
+    globalThis.pilotDiscoveryReceipts = receipts;
+    partition.fetch = async (request, options) => {
+      const url = new URL(typeof request === "string" ? request : request.url ?? request.href);
+      if (url.hostname.endsWith(".discovery.example.test")) {
+        receipts.connections.push(url.href);
+        return new Response(null, { status: 503 });
+      }
+      if (url.hostname !== "registry.modelcontextprotocol.io") return original(request, options);
+      const query = url.searchParams.get("search");
+      const cursor = url.searchParams.get("cursor");
+      receipts.searches.push({ path: url.pathname, query, cursor, version: url.searchParams.get("version"),
+        credentials: options.credentials });
+      if (query === "broken") return new Response(null, { status: 503 });
+      if (cursor === "next:1") return Response.json({
+        servers: [{ server: { name: "io.github.Fixture/legacy", title: "Legacy fixture", version: "1.0.0",
+          remotes: [{ type: "sse", url: "https://legacy.discovery.example.test/sse" }] } }],
+      });
+      return Response.json({
+        servers: [
+          { server: { name: "io.github.Fixture/http", title: "HTTP discovery fixture", description: "Fixture for review", version: "1.2.3",
+            repository: { url: "https://github.com/Fixture/discovery" },
+            remotes: [{ type: "streamable-http", url: "https://{tenant}.discovery.example.test/mcp",
+              headers: [{ name: "Authorization", isRequired: true }] }] } },
+          { server: { name: "io.github.Fixture/stdio", title: "Stdio discovery fixture", version: "2.0.0",
+            packages: [{ registryType: "npm", identifier: "@fixture/discovery", version: "2.0.0",
+              transport: { type: "stdio" }, environmentVariables: [{ name: "FIXTURE_MODE", default: "demo" }] }] } },
+        ],
+        metadata: { nextCursor: "next:1" },
+      });
+    };
+  });
+}
+
+export async function verifyDiscovery(page, window, app, root) {
+  writeDiscoveryMarket(root);
+  await mockDiscoveryRegistry(app);
+  const en = locales[1];
+  let locale = locales[0];
+  let contrast = Infinity;
+  for (const [size, zoom] of [[wide, 1], [narrow, 1], [narrow, 1.5]]) {
+    await resize(page, window, size, zoom);
+    for (const next of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, locale, next, theme);
+        locale = next;
+        const labels = discoveryLabels(locale);
+        await openSettings(page, locale, labels.skills);
+        const discoverPlugins = button(page, labels.plugins);
+        await discoverPlugins.press("Enter");
+        const market = page.locator('[data-discovery="plugins"]');
+        await market.getByRole("heading", { name: labels.market }).and(page.locator(":focus-visible")).waitFor();
+        const source = market.locator("#plugin-marketplace-source");
+        await source.getByText(labels.source, { exact: true }).waitFor();
+        await source.scrollIntoViewIfNeeded();
+        await assertFits(source);
+        await source.press("Enter");
+        const selected = page.getByRole("option", { name: labels.source, selected: true });
+        await assertFits(selected);
+        await page.keyboard.press("Escape");
+        await source.and(page.locator(":focus")).waitFor();
+        await button(market, labels.backSkills).press("Enter");
+        await discoverPlugins.and(page.locator(":focus-visible")).waitFor();
+        await page.keyboard.press("Control+l");
+
+        await openSettings(page, locale, labels.mcp);
+        const discoverMcp = button(page, labels.discoverMcp);
+        await discoverMcp.press("Enter");
+        const registry = page.locator('[data-discovery="mcp"]');
+        await registry.getByRole("heading", { name: "MCP Registry" }).and(page.locator(":focus-visible")).waitFor();
+        const query = registry.getByRole("searchbox", { name: labels.query });
+        await query.scrollIntoViewIfNeeded();
+        await assertFits(query);
+        await query.fill("fixture");
+        await query.press("Enter");
+        const http = registry.locator('[data-registry-entry="io.github.Fixture/http"]');
+        await button(http, labels.useConfig).press("Enter");
+        const edit = page.getByRole("dialog", { name: labels.configure });
+        await assertFits(edit);
+        contrast = Math.min(contrast, await minimumTextContrast(edit, "h2, p, label"));
+        await page.keyboard.press("Escape");
+        await edit.waitFor({ state: "hidden" });
+        await button(http, labels.useConfig).and(page.locator(":focus")).waitFor();
+        await button(registry, labels.backMcp).press("Enter");
+        await discoverMcp.and(page.locator(":focus-visible")).waitFor();
+        await page.keyboard.press("Control+l");
+        console.log("Checked discovery at " + size.width + " × " + size.height + " " +
+          zoom * 100 + "% " + locale.lang + " " + theme);
+      }
+    }
+  }
+  assert.ok(contrast >= 4.5);
+  console.log("MCP discovery review text minimum contrast " + contrast.toFixed(2) + ":1");
+  await resize(page, window, wide);
+
+  await openSettings(page, en, "Skills");
+  await button(page, "Discover plugins").press("Enter");
+  const market = page.locator('[data-discovery="plugins"]');
+  const address = market.getByRole("textbox", { name: "Add a Git marketplace" });
+  await address.fill("missing-marketplace");
+  await address.press("Enter");
+  await market.getByRole("alert").filter({ hasText: /Could not load the marketplace/ }).waitFor();
+  await address.fill(root);
+  await address.press("Enter");
+  const plugin = market.locator('[data-marketplace-entry="catalog-notes"]');
+  await plugin.getByText("By Fixture author · Version 1.2.0").waitFor();
+  await plugin.getByText("plugins/catalog-notes", { exact: true }).waitFor();
+  const blocked = market.locator('[data-marketplace-entry="catalog-npm"]');
+  await blocked.getByText("Installation from this source is unavailable.").waitFor();
+  const filter = market.getByRole("searchbox", { name: "Filter marketplace plugins" });
+  await filter.fill("Fixture author");
+  await blocked.waitFor({ state: "hidden" });
+  await button(plugin, "Preview installation").press("Enter");
+  const preview = page.getByRole("dialog", { name: "Install plugin" });
+  await preview.getByText("Catalog notes skill", { exact: true }).waitFor();
+  await preview.getByText("plugins/catalog-notes", { exact: true }).waitFor();
+  await button(preview, "Confirm installation").press("Enter");
+  await preview.waitFor({ state: "hidden" });
+  await button(plugin, "Preview installation").and(page.locator(":focus")).waitFor();
+  await button(market, "Back to skills").press("Enter");
+  const skill = page.getByRole("switch", { name: "Catalog notes skill" });
+  await skill.waitFor();
+  assert.equal(await skill.getAttribute("aria-checked"), "false");
+  await page.keyboard.press("Control+l");
+
+  await openSettings(page, en, "MCP servers");
+  await button(page, "Discover MCP servers").press("Enter");
+  const registry = page.locator('[data-discovery="mcp"]');
+  const query = registry.getByRole("searchbox", { name: "Search MCP servers by name" });
+  await query.fill("ab");
+  assert.ok(await button(registry, "Search").isDisabled());
+  await query.fill("broken");
+  await query.press("Enter");
+  await registry.getByRole("alert").filter({ hasText: /Could not reach MCP Registry/ }).waitFor();
+  await query.fill("fixture");
+  await query.press("Enter");
+  const http = registry.locator('[data-registry-entry="io.github.Fixture/http"]');
+  await http.getByText("Publisher Fixture · Version 1.2.3").waitFor();
+  await http.getByText("https://github.com/Fixture/discovery").waitFor();
+  await button(registry, "Load more").press("Enter");
+  await registry.getByText("No supported connection is available for this entry.").waitFor();
+  await button(http, "Use configuration").press("Enter");
+  const edit = page.getByRole("dialog", { name: "Configure MCP server" });
+  const endpoint = edit.getByRole("textbox", { name: "URL", exact: true });
+  assert.equal(await endpoint.inputValue(), "https://{tenant}.discovery.example.test/mcp");
+  await button(edit, "Save").press("Enter");
+  await edit.getByRole("alert").filter({ hasText: /required fields Authorization/ }).waitFor();
+  await edit.getByRole("textbox", { name: "Request headers (JSON)" }).fill('{"Authorization":"Bearer fixture-token"}');
+  await button(edit, "Save").press("Enter");
+  await edit.getByRole("alert").filter({ hasText: /Replace the placeholders/ }).waitFor();
+  await endpoint.fill("https://team.discovery.example.test/mcp");
+  await button(edit, "Save").press("Enter");
+  await edit.waitFor({ state: "hidden" });
+  await registry.getByText("MCP configuration saved. Enable it from the server list.").waitFor();
+  const stdio = registry.locator('[data-registry-entry="io.github.Fixture/stdio"]');
+  await stdio.getByText('npx "--yes" "@fixture/discovery@2.0.0"', { exact: true }).waitFor();
+  await button(stdio, "Use configuration").press("Enter");
+  assert.equal(await edit.getByRole("textbox", { name: "Command", exact: true }).inputValue(), "npx");
+  assert.equal(await edit.getByRole("textbox", { name: "Arguments (one per line)" }).inputValue(), "--yes\n@fixture/discovery@2.0.0");
+  await button(edit, "Save").press("Enter");
+  await edit.waitFor({ state: "hidden" });
+  await button(registry, "Back to MCP servers").press("Enter");
+  for (const name of ["HTTP discovery fixture", "Stdio discovery fixture"]) {
+    const toggle = page.getByRole("switch", { name: "Enable " + name });
+    await toggle.waitFor();
+    assert.equal(await toggle.getAttribute("aria-checked"), "false");
+  }
+  const receipts = await app.evaluate(() => globalThis.pilotDiscoveryReceipts);
+  assert.ok(receipts.searches.some(({ cursor, query }) => cursor === "next:1" && query === "fixture"));
+  assert.ok(receipts.searches.every(({ path, version, credentials }) =>
+    path === "/v0.1/servers" && version === "latest" && credentials === "omit"));
+  assert.deepEqual(receipts.connections, []);
+}
+
+export async function verifyRestoredDiscovery(page) {
+  const en = locales[1];
+  await page.waitForFunction(() => document.documentElement.lang === "en");
+  const servers = await page.evaluate(() => window.pi.mcpList());
+  assert.deepEqual(servers.map(({ name, status, policy, transport }) => ({ name, status, policy, transport })), [
+    { name: "HTTP discovery fixture", status: "disabled", policy: "confirm",
+      transport: { type: "http", url: "https://team.discovery.example.test/mcp" } },
+    { name: "Stdio discovery fixture", status: "disabled", policy: "confirm",
+      transport: { type: "stdio", command: "npx", args: ["--yes", "@fixture/discovery@2.0.0"] } },
+  ]);
+  await openSettings(page, en, "Skills");
+  await button(page, "Discover plugins").press("Enter");
+  const market = page.locator('[data-discovery="plugins"]');
+  const source = market.locator("#plugin-marketplace-source");
+  await source.getByText("Official Claude Code marketplace", { exact: true }).waitFor();
+  await source.press("Enter");
+  await page.getByRole("option", { name: "fixture-market", exact: true }).press("Enter");
+  await button(market, "Browse marketplace").press("Enter");
+  await market.getByRole("heading", { name: "Catalog notes", exact: true }).waitFor();
+  await button(market, "Remove source").press("Enter");
+  await market.getByRole("heading", { name: "Catalog notes", exact: true }).waitFor({ state: "hidden" });
+  const sources = await page.evaluate(() => window.pi.pluginMarketplaces());
+  assert.equal(sources.length, 1);
+  assert.match(sources[0].location, /anthropics\/claude-plugins-official/);
+  await button(market, "Back to skills").press("Enter");
+  await page.getByRole("switch", { name: "Catalog notes skill" }).waitFor();
+}
+
 export async function verifyCommandsAndTemplates(page, app, model, originalProject, project) {
   await app.evaluate(({ dialog }, folder) => {
     const original = dialog.showOpenDialog;

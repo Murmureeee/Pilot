@@ -4,6 +4,12 @@ import { app, dialog } from "electron";
 import { IPC } from "../../shared/contract";
 import { NATIVE_DIALOG_TITLES } from "../constants";
 import {
+  browsePluginMarketplace,
+  listPluginMarketplaces,
+  rememberMarketplace,
+} from "../discovery/marketplace";
+import { searchMcpRegistry } from "../discovery/registry";
+import {
   importedPlugins,
   importExternal,
   previewExternalImport,
@@ -27,7 +33,7 @@ import type { IpcContext } from "./types";
 export function registerIntegrationRoutes(
   ctx: Pick<
     IpcContext,
-    "settingsDir" | "skillsDir" | "getSettings" | "saveSettings" | "mcp" | "host"
+    "settingsDir" | "skillsDir" | "getSettings" | "saveSettings" | "mcp" | "host" | "request"
   >,
 ): void {
   handle(IPC.settingsImportedPlugins, () => importedPlugins(ctx.getSettings(), ctx.skillsDir));
@@ -114,6 +120,27 @@ export function registerIntegrationRoutes(
     ctx.host.publishSnapshot();
     return importedPlugins(ctx.getSettings(), ctx.skillsDir);
   });
+
+  handle(IPC.settingsPluginMarketplaces, () => listPluginMarketplaces(ctx.getSettings()));
+  handle(IPC.settingsBrowsePluginMarketplace, async (_event, location, remember) => {
+    const catalog = await browsePluginMarketplace(location);
+    if (remember) {
+      const current = ctx.getSettings();
+      const next = rememberMarketplace(current, catalog);
+      if (current !== next) ctx.saveSettings(next);
+    }
+    return catalog;
+  });
+  handle(IPC.settingsRemovePluginMarketplace, (_event, location) => {
+    const current = ctx.getSettings();
+    const next = current.pluginMarketplaces?.filter((source) => source.location !== location);
+    if (next && next.length !== current.pluginMarketplaces?.length)
+      ctx.saveSettings({ ...current, pluginMarketplaces: next });
+    return listPluginMarketplaces(ctx.getSettings());
+  });
+  handle(IPC.settingsSearchMcpRegistry, (_event, query, cursor) =>
+    searchMcpRegistry(query, cursor, ctx.request),
+  );
 
   handle(IPC.settingsMcpList, () => listMcp());
   handle(IPC.settingsMcpSave, (_event, input) => {

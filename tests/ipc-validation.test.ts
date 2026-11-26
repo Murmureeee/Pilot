@@ -147,6 +147,10 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.settingsPreviewPluginPackage]: [pluginSource],
   [IPC.settingsInstallPluginPackage]: [pluginSource, pluginId],
   [IPC.settingsUninstallPlugin]: [pluginId],
+  [IPC.settingsPluginMarketplaces]: [],
+  [IPC.settingsBrowsePluginMarketplace]: ["https://example.test/market.git", true],
+  [IPC.settingsRemovePluginMarketplace]: ["https://example.test/market.git"],
+  [IPC.settingsSearchMcpRegistry]: ["filesystem"],
   [IPC.skillsList]: [sessionId],
   [IPC.skillsRead]: [
     sessionId,
@@ -184,6 +188,31 @@ const valid: Record<IpcChannel, unknown[]> = {
 };
 
 describe("IPC argument validation", () => {
+  it("checks registry query lengths, cursors and Git subdirectories", () => {
+    expect(parseIpcArgs(IPC.settingsSearchMcpRegistry, [""])).toEqual([""]);
+    expect(parseIpcArgs(IPC.settingsSearchMcpRegistry, [" search ", "next"])).toEqual([
+      "search",
+      "next",
+    ]);
+    expect(() => parseIpcArgs(IPC.settingsSearchMcpRegistry, ["ab"])).toThrow(
+      /Invalid IPC arguments/,
+    );
+    expect(() => parseIpcArgs(IPC.settingsSearchMcpRegistry, ["search", ""])).toThrow(
+      /Invalid IPC arguments/,
+    );
+    const source = { ...pluginSource, path: "plugins/notes", ref: "v1.0.0", sha: "c".repeat(40) };
+    expect(parseIpcArgs(IPC.settingsPreviewPluginPackage, [source])).toEqual([source]);
+    for (const invalid of [
+      { ...source, path: "../notes" },
+      { ...source, path: "/notes" },
+      { ...source, ref: "refs/main:other" },
+      { ...source, sha: "deadbeef" },
+      { ...source, kind: "zip" },
+    ])
+      expect(() => parseIpcArgs(IPC.settingsPreviewPluginPackage, [invalid])).toThrow(
+        /Invalid IPC arguments/,
+      );
+  });
   it("checks package source types and requires a preview token before installation", () => {
     expect(parseIpcArgs(IPC.settingsPreviewPluginPackage, [pluginId])).toEqual([pluginId]);
     expect(parseIpcArgs(IPC.settingsInstallPluginPackage, [pluginId, pluginId])).toEqual([
