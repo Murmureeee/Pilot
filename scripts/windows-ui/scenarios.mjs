@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { stripVTControlCharacters } from "node:util";
@@ -2071,6 +2071,247 @@ export async function verifyRestoredAuxiliaryModels(page, model, chats) {
     return snapshot.sessions.some(session => session.id === snapshot.sessionId && session.titleGenerated);
   });
   assert.ok(model.titles.some(title => title.user === "Use this chat model" && title.model === model.visionModelId));
+}
+
+const desktopPlugin = "desktop-workflow";
+const desktopSkill = "Desktop plugin skill";
+const desktopTemplate = "/prompt-desktop-workflow-review";
+const desktopMcp = desktopPlugin + " / fixture";
+
+function writePluginVersion(fixture, version) {
+  const { root, marker } = fixture;
+  writeFileSync(join(root, ".claude-plugin", "plugin.json"), JSON.stringify({
+    name: desktopPlugin, version, commands: "./commands",
+  }));
+  writeFileSync(join(root, "scripts", "fixture.cjs"), [
+    'const { writeFileSync } = require("node:fs");',
+    'const { createInterface } = require("node:readline");',
+    "const version = " + JSON.stringify(version) + ";",
+    "writeFileSync(" + JSON.stringify(marker) + ", JSON.stringify({ version, pid: process.pid }));",
+    'createInterface({ input: process.stdin }).on("line", (line) => {',
+    "  const request = JSON.parse(line);",
+    '  if (!Object.hasOwn(request, "id")) return;',
+    "  const results = {",
+    "    initialize: { protocolVersion: request.params?.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'Pilot Fixture', version } },",
+    "    'tools/list': { tools: [{ name: 'fixture_status', description: 'Read plugin fixture status', inputSchema: { type: 'object', properties: {} } }] },",
+    "    'tools/call': { content: [{ type: 'text', text: 'Plugin fixture version ' + version }] },",
+    "  };",
+    '  console.log(JSON.stringify({ jsonrpc: "2.0", id: request.id, result: results[request.method] ?? {} }));',
+    "});",
+  ].join("\n"));
+  execFileSync("git", ["-c", "core.autocrlf=false", "add", "--all"], { cwd: root });
+  execFileSync("git", [
+    "-c", "user.name=Pilot Desktop Test", "-c", "user.email=pilot@example.invalid",
+    "-c", "commit.gpgSign=false", "commit", "-qm", "Fixture version " + version,
+  ], { cwd: root });
+}
+
+function preparePluginFixture(fixture) {
+  const { root, archive } = fixture;
+  execFileSync("git", ["init", "-q", "--template=", root]);
+  for (const folder of [".claude-plugin", "commands", "hooks", "skills/check", "scripts"])
+    mkdirSync(join(root, folder), { recursive: true });
+  writeFileSync(join(root, "skills", "check", "SKILL.md"),
+    "---\nname: " + desktopSkill + "\ndescription: Read the plugin fixture.\n---\nReview the fixture.");
+  writeFileSync(join(root, "commands", "review.md"), "Review $ARGUMENTS with the desktop plugin.");
+  writeFileSync(join(root, "hooks", "hooks.json"), "{}");
+  const launch = "\u0024{CLAUDE_PLUGIN_ROOT}/scripts/fixture.cjs";
+  writeFileSync(join(root, ".mcp.json"), JSON.stringify({
+    mcpServers: { fixture: { command: process.execPath, args: [launch] } },
+  }));
+  writePluginVersion(fixture, "1.0.0");
+  execFileSync("git", [
+    "archive", "--format=zip", "--prefix=workflow/", "--output=" + archive, "HEAD",
+  ], { cwd: root });
+}
+
+function installedDesktopPlugin(page) {
+  return page.locator("[data-installed-plugin]").filter({ hasText: desktopPlugin });
+}
+
+async function enableDesktopPlugin(page, row, fixture, version) {
+  await button(row, "Enable components").press("Enter");
+  await row.getByText(/· Enabled/).waitFor();
+  const servers = await page.evaluate(() => window.pi.mcpList());
+  const server = servers.find(({ name }) => name === desktopMcp);
+  assert.equal(server?.status, "connected", server?.error);
+  const processInfo = JSON.parse(readFileSync(fixture.marker, "utf8"));
+  assert.equal(processInfo.version, version);
+  process.kill(processInfo.pid, 0);
+  return processInfo.pid;
+}
+
+export async function verifyPluginPackages(page, window, app, model, fixture) {
+  const en = locales[1];
+  preparePluginFixture(fixture);
+  await page.evaluate(async ({ baseUrl, modelId }) => {
+    localStorage.setItem("pilot-locale", "en");
+    await window.pi.settingsSave({
+      providers: [{ id: "plugin-fixture", kind: "openai-compatible", name: "Plugin fixture", baseUrl, modelId }],
+      activeProviderId: "plugin-fixture",
+    });
+  }, { baseUrl: model.baseUrl, modelId: model.modelId });
+  await page.reload();
+  await page.waitForFunction(() => document.documentElement.lang === "en");
+  const row = installedDesktopPlugin(page);
+  let locale = en;
+  let contrast = Infinity;
+  for (const [size, zoom] of [[wide, 1], [narrow, 1], [narrow, 1.5]]) {
+    await resize(page, window, size, zoom);
+    for (const next of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, locale, next, theme);
+        locale = next;
+        const english = locale === en;
+        await openSettings(page, locale, english ? "Plugins" : "插件");
+        const trigger = button(page, english ? "Install plugin…" : "安装插件…");
+        await trigger.scrollIntoViewIfNeeded();
+        await assertFits(trigger);
+        await trigger.press("Enter");
+        const dialog = page.getByRole("dialog", { name: english ? "Install plugin" : "安装插件" });
+        const field = dialog.getByRole("textbox", { name: english ? "Git repository URL" : "Git 地址" });
+        await field.and(page.locator(":focus-visible")).waitFor();
+        for (const label of english ? ["Choose folder…", "Choose ZIP archive…"] : ["选择插件文件夹…", "选择 ZIP 压缩包…"])
+          await assertFits(button(dialog, label));
+        await field.fill(fixture.root);
+        await field.press("Enter");
+        await dialog.getByRole("heading", { name: desktopPlugin }).and(page.locator(":focus-visible")).waitFor();
+        await assertFits(dialog);
+        await assertFits(button(dialog, english ? "Confirm installation" : "确认安装"));
+        assert.ok(await dialog.locator("[data-plugin-review]").evaluate((area) => area.scrollWidth <= area.clientWidth + 1));
+        contrast = Math.min(contrast, await minimumTextContrast(dialog, "h2, h3, p, li, summary"));
+        await page.keyboard.press("Escape");
+        await dialog.waitFor({ state: "hidden" });
+        await trigger.and(page.locator(":focus-visible")).waitFor();
+        await page.keyboard.press("Control+l");
+        await editor(page).and(page.locator(":focus")).waitFor();
+        console.log("Checked plugin preview at " + size.width + " × " + size.height + " " +
+          zoom * 100 + "% " + locale.lang + " " + theme);
+      }
+    }
+  }
+  assert.ok(contrast >= 4.5, "Plugin preview text must meet the contrast requirement");
+  console.log("Plugin preview text minimum contrast " + contrast.toFixed(2) + ":1");
+  await resize(page, window, wide);
+  await openSettings(page, en, "Plugins");
+  const install = button(page, "Install plugin…");
+  const dialog = page.getByRole("dialog", { name: "Install plugin" });
+  for (const [label, property, path] of [
+    ["Choose folder…", "openDirectory", fixture.root],
+    ["Choose ZIP archive…", "openFile", fixture.archive],
+  ]) {
+    await app.evaluate(({ dialog }, { expected, selected }) => {
+      const original = dialog.showOpenDialog;
+      dialog.showOpenDialog = async (options) => {
+        dialog.showOpenDialog = original;
+        if (!options.properties.includes(expected)) throw new Error("Unexpected picker mode");
+        return { canceled: false, filePaths: [selected] };
+      };
+    }, { expected: property, selected: path });
+    await install.press("Enter");
+    await button(dialog, label).press("Enter");
+    await dialog.getByRole("heading", { name: desktopPlugin }).waitFor();
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+  }
+  await install.press("Enter");
+  const field = dialog.getByRole("textbox", { name: "Git repository URL" });
+  await field.fill("missing-plugin");
+  await field.press("Enter");
+  await dialog.getByRole("alert").filter({ hasText: /Could not read the plugin source/ }).waitFor();
+  await field.fill(fixture.root);
+  await field.press("Enter");
+  for (const text of [desktopSkill, desktopTemplate, "scripts/fixture.cjs", "Hooks"])
+    await dialog.getByText(text, { exact: true }).waitFor();
+  await dialog.getByText(/^Version 1\.0\.0 · [a-f0-9]{12}$/).waitFor();
+  await dialog.getByText(/\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/fixture.cjs/).waitFor();
+  assert.ok(!existsSync(fixture.marker));
+  await button(dialog, "Confirm installation").press("Enter");
+  await dialog.waitFor({ state: "hidden" });
+  await row.getByText(/Version 1.0.0 · Off/).waitFor();
+  assert.ok(!existsSync(fixture.marker));
+  assert.deepEqual(await page.evaluate(async () => {
+    const { settings, composerId } = await window.pi.getSnapshot();
+    return {
+      templates: settings.pluginPromptTemplates,
+      services: (await window.pi.mcpList()).map(({ status }) => status),
+      skills: (await window.pi.skillsList(composerId)).map(({ enabled }) => enabled),
+    };
+  }), { templates: [], services: ["disabled"], skills: [false] });
+
+  const pid = await enableDesktopPlugin(page, row, fixture, "1.0.0");
+  await page.keyboard.press("Control+l");
+  await chooseSlash(page, desktopTemplate);
+  const parameters = page.getByRole("dialog", { name: "Fill template parameters" });
+  await parameters.getByRole("textbox", { name: "arguments", exact: true }).fill("the fixture");
+  await button(parameters, "Insert into draft").press("Enter");
+  await parameters.waitFor({ state: "hidden" });
+  await page.waitForFunction(() =>
+    document.querySelector("[data-composer-editor]")?.innerText === "Review the fixture with the desktop plugin.",
+  );
+  await editor(page).press("Enter");
+  const request = await model.nextCompletion();
+  assert.match(request.input.messages.find(({ role }) => role === "system").content, /Desktop plugin skill/);
+  const tool = request.input.tools.find(({ function: entry }) => entry.description === "Read plugin fixture status");
+  assert.ok(tool, "The agent should receive the installed plugin's MCP tool");
+  sendTool(request, "plugin-fixture-call", tool.function.name, {});
+  await button(page.locator("[data-permission-card]"), "Allow once").press("Enter");
+  const response = await model.nextCompletion();
+  assert.match(JSON.stringify(response.input.messages.find(({ role }) => role === "tool")), /Plugin fixture version 1\.0\.0/);
+  response.write({ content: "Verified the plugin fixture." });
+  response.finish();
+  await page.waitForFunction(async () => !(await window.pi.getSnapshot()).activeRun);
+
+  await openSettings(page, en, "Plugins");
+  const update = page.getByRole("dialog", { name: "Check for plugin updates" });
+  await button(row, "Check for updates").press("Enter");
+  await update.getByText("The plugin is up to date.").waitFor();
+  await page.keyboard.press("Escape");
+  await update.waitFor({ state: "hidden" });
+  writePluginVersion(fixture, "2.0.0");
+  await button(row, "Check for updates").press("Enter");
+  await update.getByText(/^Version 2\.0\.0 · [a-f0-9]{12}$/).waitFor();
+  const change = update.locator("summary").filter({ hasText: /Modified scripts\/fixture\.cjs/ });
+  await change.press("Enter");
+  await update.getByText("Previous version excerpt").waitFor();
+  await update.getByText("New version excerpt").waitFor();
+  writePluginVersion(fixture, "3.0.0");
+  await button(update, "Install update").press("Enter");
+  await update.getByRole("alert").filter({ hasText: /content or installation changed/ }).waitFor();
+  await button(update, "Refresh preview").press("Enter");
+  await update.getByText(/^Version 3\.0\.0 · [a-f0-9]{12}$/).waitFor();
+  await button(update, "Install update").press("Enter");
+  await update.waitFor({ state: "hidden" });
+  await row.getByText(/Version 3.0.0 · Off/).waitFor();
+  assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+  assert.equal(JSON.parse(readFileSync(fixture.marker, "utf8")).version, "1.0.0");
+}
+
+export async function verifyRestoredPluginPackages(page, fixture, profile) {
+  await openSettings(page, locales[1], "Plugins");
+  const row = installedDesktopPlugin(page);
+  await row.getByText(/Version 3.0.0 · Off/).waitFor();
+  const pid = await enableDesktopPlugin(page, row, fixture, "3.0.0");
+  const trigger = button(row, "Uninstall");
+  const remove = page.getByRole("dialog", { name: "Uninstall plugin" });
+  await trigger.press("Enter");
+  await remove.waitFor();
+  await page.keyboard.press("Escape");
+  await remove.waitFor({ state: "hidden" });
+  await trigger.and(page.locator(":focus")).waitFor();
+  await trigger.press("Enter");
+  await button(remove, "Confirm uninstall").press("Enter");
+  await remove.waitFor({ state: "hidden" });
+  await row.waitFor({ state: "hidden" });
+  await page.getByRole("heading", { name: "Installed plugins" }).and(page.locator(":focus")).waitFor();
+  assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+  for (const name of ["imported-plugins", "imported-plugin-data", "skills"])
+    assert.deepEqual(readdirSync(join(profile, name)), []);
+  assert.deepEqual(await page.evaluate(async () => {
+    const { composerId, settings } = await window.pi.getSnapshot();
+    return [settings.pluginPromptTemplates, await window.pi.mcpList(), await window.pi.skillsList(composerId)];
+  }), [[], [], []]);
+  assert.ok(existsSync(join(fixture.root, "scripts", "fixture.cjs")));
 }
 
 export async function verifyCommandsAndTemplates(page, app, model, originalProject, project) {

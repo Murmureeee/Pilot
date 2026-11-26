@@ -19,20 +19,29 @@ import type { ImportLocations, ServerImport, SkillImport } from "./types";
 export function importedPlugins(settings: Settings, skillsDir: string): ImportedPluginInfo[] {
   const enabledSkills = new Set(settings.skillsEnabled);
   const servers = new Map(settings.mcpServers?.map((server) => [server.id, server]));
-  return (settings.importedPlugins ?? []).flatMap(({ skillIds, serverIds, ...plugin }) => {
+  return (settings.importedPlugins ?? []).flatMap(({ skillIds, serverIds, managed, ...plugin }) => {
     const skills = skillIds.filter((id) => existsSync(join(skillsDir, id, "SKILL.md")));
     const members = serverIds.flatMap((id) => servers.get(id) ?? []);
-    if (skills.length === 0 && members.length === 0) return [];
+    const templates = managed?.templates.length ?? 0;
+    if (!managed && skills.length === 0 && members.length === 0) return [];
     const enabled =
       skills.filter((id) => enabledSkills.has(id)).length +
-      members.filter((server) => server.enabled).length;
+      members.filter((server) => server.enabled).length +
+      (managed?.enabled ? templates : 0);
     return [
       {
         ...plugin,
         skills: skills.length,
         servers: members.length,
+        ...(managed
+          ? { templates, packageSource: managed.source, revision: managed.revision }
+          : {}),
         enabled:
-          enabled === 0 ? "none" : enabled === skills.length + members.length ? "all" : "some",
+          enabled === 0
+            ? "none"
+            : enabled === skills.length + members.length + templates
+              ? "all"
+              : "some",
       },
     ];
   });
@@ -50,6 +59,11 @@ export function toggleImportedPlugin(settings: Settings, id: string, enabled: bo
   return {
     ...settings,
     skillsEnabled: [...skills],
+    importedPlugins: settings.importedPlugins?.map((entry) =>
+      entry === plugin && entry.managed
+        ? { ...entry, managed: { ...entry.managed, enabled } }
+        : entry,
+    ),
     mcpServers: settings.mcpServers?.map((server) =>
       members.has(server.id) ? { ...server, enabled } : server,
     ),

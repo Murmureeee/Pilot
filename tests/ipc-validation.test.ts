@@ -8,6 +8,8 @@ const sessionId = "48687a06-2cb0-43a1-a627-9752f1621f1b";
 const run = { sessionId, runId: "7a6c4360-bb48-4cbd-ae92-b515fdd9ce8b" };
 const image = { type: "image", name: "fixture.png", mimeType: "image/png", data: "iVBORw0KGgo=" };
 const gitSelection = { path: "file.ts", revision: "a".repeat(64), hunks: [1] };
+const pluginId = "f192288a6029c4eafd0bd219";
+const pluginSource = { kind: "git", location: "https://example.test/plugin.git" };
 const draft: ProviderInput = {
   id: "local",
   kind: "openai-compatible",
@@ -140,7 +142,11 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.settingsPreviewExternalImport]: ["mcp", null],
   [IPC.settingsImportExternal]: ["mcp", null, ["f192288a6029c4eafd0bd219"]],
   [IPC.settingsImportedPlugins]: [],
-  [IPC.settingsToggleImportedPlugin]: ["f192288a6029c4eafd0bd219", true],
+  [IPC.settingsToggleImportedPlugin]: [pluginId, true],
+  [IPC.settingsPickPluginPackage]: ["zip", "en"],
+  [IPC.settingsPreviewPluginPackage]: [pluginSource],
+  [IPC.settingsInstallPluginPackage]: [pluginSource, pluginId],
+  [IPC.settingsUninstallPlugin]: [pluginId],
   [IPC.skillsList]: [sessionId],
   [IPC.skillsRead]: [
     sessionId,
@@ -178,6 +184,29 @@ const valid: Record<IpcChannel, unknown[]> = {
 };
 
 describe("IPC argument validation", () => {
+  it("checks package source types and requires a preview token before installation", () => {
+    expect(parseIpcArgs(IPC.settingsPreviewPluginPackage, [pluginId])).toEqual([pluginId]);
+    expect(parseIpcArgs(IPC.settingsInstallPluginPackage, [pluginId, pluginId])).toEqual([
+      pluginId,
+      pluginId,
+    ]);
+    expect(() => parseIpcArgs(IPC.settingsPickPluginPackage, ["git", "en"])).toThrow(
+      /Invalid IPC arguments/,
+    );
+    expect(() => parseIpcArgs(IPC.settingsInstallPluginPackage, [pluginSource, "stale"])).toThrow(
+      /Invalid IPC arguments/,
+    );
+    for (const source of [
+      { kind: "tar", location: "E:/plugin.tar" },
+      { kind: "zip", location: " " },
+      { kind: "directory", location: "E:/plugin\0folder" },
+      { ...pluginSource, token: pluginId },
+    ])
+      expect(() => parseIpcArgs(IPC.settingsPreviewPluginPackage, [source])).toThrow(
+        /Invalid IPC arguments/,
+      );
+  });
+
   it("requires an exact command and shell for after-turn verification and allows removal", () => {
     const args = [sessionId, "E:/project"];
     expect(parseIpcArgs(IPC.sessionSetAfterTurnVerification, [...args, null])).toEqual([

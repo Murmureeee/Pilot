@@ -74,6 +74,8 @@ import type {
   ExternalImportPreview,
   ImportedPluginInfo,
   ImportReport,
+  PluginPackagePreview,
+  PluginPackageSource,
 } from "./imports";
 import type { McpServerInfo, McpServerInput } from "./mcp";
 
@@ -256,6 +258,13 @@ export interface PiApi {
   ): Promise<ImportReport>;
   importedPlugins(): Promise<ImportedPluginInfo[]>;
   toggleImportedPlugin(id: string, enabled: boolean): Promise<ImportedPluginInfo[]>;
+  pickPluginPackage(kind: "directory" | "zip", locale: Locale): Promise<string | null>;
+  previewPluginPackage(source: PluginPackageSource | string): Promise<PluginPackagePreview>;
+  installPluginPackage(
+    source: PluginPackageSource | string,
+    token: string,
+  ): Promise<ImportedPluginInfo[]>;
+  uninstallPlugin(id: string): Promise<ImportedPluginInfo[]>;
   /** 技能列表（FR-5.8）：扫描 userData/skills/ + 合并启停状态 */
   skillsList(composerId: string): Promise<SkillMeta[]>;
   skillsRead(composerId: string, id: string, directory: string): Promise<string>;

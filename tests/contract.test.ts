@@ -70,6 +70,13 @@ describe("IPC contract", () => {
     expect(IPC.settingsSetPromptTemplates).toBe("settings:set-prompt-templates");
   });
 
+  it("keeps plugin package selection, preview, installation, and removal on separate routes", () => {
+    expect(IPC.settingsPickPluginPackage).toBe("settings:pick-plugin-package");
+    expect(IPC.settingsPreviewPluginPackage).toBe("settings:preview-plugin-package");
+    expect(IPC.settingsInstallPluginPackage).toBe("settings:install-plugin-package");
+    expect(IPC.settingsUninstallPlugin).toBe("settings:uninstall-plugin");
+  });
+
   it("exposes Phase 3 wrap-up channels (重命名/删除/清空队列/数据目录/标题栏主题)", () => {
     expect(IPC.sessionRename).toBe("session:rename");
     expect(IPC.sessionDelete).toBe("session:delete");

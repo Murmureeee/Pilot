@@ -112,6 +112,7 @@ export function useWorkbenchCommands({
   const choosingProject = useAgentStore((state) => state.choosingProject);
   const project = useAgentStore(selectProjectDirectory);
   const templates = useAgentStore((state) => state.settings?.promptTemplates);
+  const pluginTemplates = useAgentStore((state) => state.settings?.pluginPromptTemplates);
   const setView = useAgentStore((state) => state.setView);
   const newSession = useAgentStore((state) => state.newSession);
   const selectProject = useAgentStore((state) => state.selectProject);
@@ -223,7 +224,10 @@ export function useWorkbenchCommands({
         insertsPrompt: true,
         run: ({ insert = append } = {}) => insert(t(reviewPrompt, locale)),
       });
-    for (const template of templates ?? []) {
+    const names = new Set<string>();
+    for (const template of [...(templates ?? []), ...(pluginTemplates ?? [])]) {
+      if (names.has(template.name)) continue;
+      names.add(template.name);
       const slash = PROMPT_TEMPLATE_PREFIX + template.name;
       commands.push({
         id: slash,

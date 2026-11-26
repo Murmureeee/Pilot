@@ -1,5 +1,16 @@
 // @env node
-import { existsSync, mkdirSync, mkdtempDisposableSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempDisposableSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -14,11 +25,30 @@ import {
   toggleImportedPlugin,
 } from "../src/main/external-import";
 import { resolveImportedMcp } from "../src/main/external-import/mcp";
-import type { ImportedMcpConnection, ImportLocations } from "../src/main/external-import/types";
-import { mergeSettingsInput } from "../src/main/settings";
+import {
+  installPluginPackage,
+  previewPluginPackage,
+  uninstallPluginPackage,
+} from "../src/main/external-import/packages";
+import type {
+  ImportedMcpConnection,
+  ImportLocations,
+  WithPluginServersClosed,
+} from "../src/main/external-import/types";
+import {
+  loadSettings,
+  mergeSettingsInput,
+  saveSettings,
+  toPublicSettings,
+} from "../src/main/settings";
 import { decryptSecret } from "../src/main/settings/secrets";
 import type { Settings } from "../src/main/settings/types";
-import type { ExternalImportItem, ExternalImportKind, ImportSource } from "../src/shared/imports";
+import type {
+  ExternalImportItem,
+  ExternalImportKind,
+  ImportSource,
+  PluginPackageSource,
+} from "../src/shared/imports";
 
 vi.mock("electron", () => ({
   safeStorage: {
@@ -66,6 +96,26 @@ function importedConnection(settings: Settings, serverName: string): ImportedMcp
   const value = decryptSecret(server?.encryptedImport);
   if (!value) throw new Error("Missing test server");
   return JSON.parse(value) as ImportedMcpConnection;
+}
+
+function gitCommit(root: string, message: string): string {
+  execFileSync("git", ["-c", "core.autocrlf=false", "add", "--all"], { cwd: root });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=Pilot Fixture",
+      "-c",
+      "user.email=fixture@example.test",
+      "-c",
+      "commit.gpgSign=false",
+      "commit",
+      "-qm",
+      message,
+    ],
+    { cwd: root },
+  );
+  return execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
 }
 
 describe("external import selection", () => {
@@ -362,5 +412,278 @@ describe("external import selection", () => {
     expect(existsSync(join(copied, "server.mjs"))).toBe(true);
     expect(existsSync(join(copied, "connections/tool.json"))).toBe(false);
     expect(options("plugin", "claude-code", empty, { ...paths, workspace: undefined })).toEqual([]);
+  });
+});
+
+describe("plugin package installation", () => {
+  it("reviews a Git revision, installs a Claude Code plugin disabled and replaces it after reviewing changes", async () => {
+    using fixture = mkdtempDisposableSync(join(tmpdir(), "pi-package-git-"));
+    const paths = locations(fixture.path);
+    const root = join(fixture.path, "local repository");
+    execFileSync("git", ["init", "-q", "--template=", root]);
+    const manifest = join(root, ".claude-plugin", "plugin.json");
+    const script = join(root, "scripts", "server.mjs");
+    write(manifest, { name: "workflow", version: "1.0.0", commands: "./commands" });
+    write(
+      join(root, "skills", "review", "SKILL.md"),
+      "---\nname: Review fixture\n---\nReview the sample.",
+    );
+    write(
+      join(root, "commands", "summarize.md"),
+      "---\ndescription: Sample\n---\nReview $ARGUMENTS and $1.",
+    );
+    write(script, "export const version = 1;\n");
+    write(join(root, "scripts", "old.sh"), "# previous version");
+    write(join(root, "hooks", "hooks.json"), {});
+    write(join(root, ".mcp.json"), {
+      mcpServers: {
+        echo: {
+          command: "node",
+          args: ["${CLAUDE_PLUGIN_ROOT}/scripts/server.mjs", "--token", "fixture-private-arg"],
+        },
+        chat: { url: "https://example.test/mcp", auth: "chatgpt" },
+      },
+    });
+    const firstRevision = gitCommit(root, "Add fixture plugin");
+    const source = { kind: "git", location: root } satisfies PluginPackageSource;
+    const read = (): Settings => loadSettings(paths.settingsDir);
+    const save = (settings: Settings): void => saveSettings(paths.settingsDir, settings);
+    const close = vi.fn<WithPluginServersClosed>(async (_ids, change) => change());
+
+    const preview = await previewPluginPackage(source, empty, paths);
+    expect(preview).toMatchObject({
+      name: "workflow",
+      version: "1.0.0",
+      format: "claude-code",
+      revision: firstRevision,
+      skills: ["Review fixture"],
+      templates: [
+        {
+          name: "workflow-summarize",
+          path: "commands/summarize.md",
+          text: "Review {{arguments}} and {{arg1}}.",
+        },
+      ],
+      scripts: ["scripts/old.sh", "scripts/server.mjs"],
+      servers: [
+        {
+          name: "echo",
+          command: "node",
+          args: ["${CLAUDE_PLUGIN_ROOT}/scripts/server.mjs", "--token", "••••"],
+        },
+      ],
+      unsupported: ["钩子", "MCP chat"],
+      current: false,
+    });
+    expect(existsSync(paths.settingsDir)).toBe(false);
+    await installPluginPackage(preview.source, preview.token, paths, read, save, close);
+    const saved = read();
+    const [first] = saved.importedPlugins!;
+    const firstAssets = join(paths.settingsDir, "imported-plugins", first.managed!.contentId);
+    const data = join(paths.settingsDir, "imported-plugin-data", first.id);
+    expect(readFileSync(join(firstAssets, "scripts", "server.mjs"), "utf8")).toContain(
+      "version = 1",
+    );
+    expect(existsSync(join(firstAssets, ".mcp.json"))).toBe(false);
+    expect(existsSync(join(firstAssets, ".claude-plugin", "plugin.json"))).toBe(false);
+    expect(importedPlugins(saved, paths.skillsDir)).toMatchObject([
+      { enabled: "none", templates: 1 },
+    ]);
+    expect(toPublicSettings(saved).pluginPromptTemplates).toEqual([]);
+    expect(saved.mcpServers![0]).toMatchObject({
+      enabled: false,
+      policy: "confirm",
+      transport: { command: "", args: [] },
+    });
+    expect(resolveImportedMcp(importedConnection(saved, "workflow / echo"))).toMatchObject({
+      cwd: firstAssets,
+      transport: {
+        command: "node",
+        args: [firstAssets + "/scripts/server.mjs", "--token", "fixture-private-arg"],
+      },
+    });
+    save(toggleImportedPlugin(saved, first.id, true));
+    expect(importedPlugins(read(), paths.skillsDir)[0].enabled).toBe("all");
+    expect(scanSkills(paths.skillsDir, read().skillsEnabled ?? [])).toMatchObject([
+      { name: "Review fixture", enabled: true },
+    ]);
+    expect(toPublicSettings(read()).pluginPromptTemplates?.[0].name).toBe("workflow-summarize");
+    const same = await previewPluginPackage(first.id, read(), paths);
+    expect(same.current).toBe(true);
+    await expect(
+      installPluginPackage(first.id, same.token, paths, read, save, close),
+    ).rejects.toThrow(/重新预览/);
+
+    write(manifest, { name: "workflow", version: "2.0.0", commands: "./commands" });
+    write(script, "export const version = 2;\n");
+    write(join(root, "scripts", "new.sh"), "# new version");
+    unlinkSync(join(root, "scripts", "old.sh"));
+    write(join(data, "cache.txt"), "Plugin data survives an update");
+    const secondRevision = gitCommit(root, "Update fixture plugin");
+    const update = await previewPluginPackage(first.id, read(), paths);
+    expect(update.revision).toBe(secondRevision);
+    expect(update.previous).toMatchObject({
+      version: "1.0.0",
+      revision: firstRevision,
+      changes: [
+        { path: ".claude-plugin/plugin.json", kind: "modified" },
+        { path: "scripts/new.sh", kind: "added", after: "# new version" },
+        { path: "scripts/old.sh", kind: "removed", before: "# previous version" },
+        {
+          path: "scripts/server.mjs",
+          kind: "modified",
+          before: expect.stringMatching(/^export const version = 1;\r?\n$/),
+          after: expect.stringMatching(/^export const version = 2;\r?\n$/),
+        },
+      ],
+    });
+    await installPluginPackage(first.id, update.token, paths, read, save, close);
+    expect(close).toHaveBeenCalledExactlyOnceWith(first.serverIds, expect.any(Function));
+    const updated = read();
+    expect(importedPlugins(updated, paths.skillsDir)).toMatchObject([
+      { id: first.id, enabled: "none", version: "2.0.0", revision: secondRevision },
+    ]);
+    expect(updated.mcpServers![0].id).not.toBe(first.serverIds[0]);
+    expect(existsSync(firstAssets)).toBe(false);
+    expect(existsSync(join(paths.skillsDir, first.skillIds[0]))).toBe(false);
+    expect(readFileSync(join(data, "cache.txt"), "utf8")).toBe("Plugin data survives an update");
+
+    uninstallPluginPackage(first.id, paths, updated, save);
+    expect(read()).toMatchObject({ importedPlugins: [], mcpServers: [], skillsEnabled: [] });
+    expect(readdirSync(join(paths.settingsDir, "imported-plugins"))).toEqual([]);
+    expect(readdirSync(paths.skillsDir)).toEqual([]);
+    expect(existsSync(data)).toBe(false);
+    expect(existsSync(script)).toBe(true);
+  }, 15_000);
+
+  it("reads a wrapped ZIP and installs only the Pi resources declared by the package", async () => {
+    using fixture = mkdtempDisposableSync(join(tmpdir(), "pi-package-zip-"));
+    const paths = locations(fixture.path);
+    const root = join(fixture.path, "pi-fixture");
+    execFileSync("git", ["init", "-q", "--template=", root]);
+    write(join(root, "package.json"), {
+      name: "@example/tools",
+      version: "1.1.0",
+      pi: {
+        skills: ["./resources/*", "!./resources/internal"],
+        prompts: ["./resources/*.md"],
+        extensions: ["./extension.ts"],
+      },
+      scripts: { postinstall: "node extension.ts" },
+    });
+    write(join(root, "resources", "public", "SKILL.md"), "---\nname: Public fixture\n---\nPublic.");
+    write(join(root, "resources", "internal", "SKILL.md"), "Not selected by the manifest.");
+    write(join(root, "resources", "review.md"), "Review {{file}}.");
+    write(join(root, "extension.ts"), "export {};");
+    gitCommit(root, "Add ZIP contents");
+    const archive = join(fixture.path, "fixture.zip");
+    execFileSync(
+      "git",
+      ["archive", "--format=zip", "--prefix=pi-fixture/", "--output=" + archive, "HEAD"],
+      { cwd: root },
+    );
+    const source = { kind: "zip", location: archive } satisfies PluginPackageSource;
+    let settings = empty;
+    const read = (): Settings => settings;
+    const save = (next: Settings): void => {
+      settings = next;
+    };
+    const close = vi.fn<WithPluginServersClosed>(async (_ids, change) => change());
+    const preview = await previewPluginPackage(source, settings, paths);
+    expect(preview).toMatchObject({
+      format: "pi",
+      name: "@example/tools",
+      version: "1.1.0",
+      skills: ["Public fixture"],
+      templates: [{ name: "example-tools-review", text: "Review {{file}}." }],
+      scripts: ["extension.ts"],
+      unsupported: ["扩展", "npm 生命周期脚本"],
+    });
+    const attempts = await Promise.allSettled([
+      installPluginPackage(source, preview.token, paths, read, save, close),
+      installPluginPackage(source, preview.token, paths, read, save, close),
+    ]);
+    expect(attempts.map(({ status }) => status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect(importedPlugins(settings, paths.skillsDir)).toMatchObject([
+      { skills: 1, templates: 1, enabled: "none", packageSource: { kind: "zip" } },
+    ]);
+  });
+
+  it("rejects a stale directory review and restores the previous package if saving fails", async () => {
+    using fixture = mkdtempDisposableSync(join(tmpdir(), "pi-package-directory-"));
+    const paths = locations(fixture.path);
+    const root = join(fixture.path, "codex");
+    write(join(root, "plugin.json"), {
+      name: "demo",
+      version: "1",
+      extensions: { "com.openai": { skills: "./beside" } },
+    });
+    const skill = join(root, "beside", "demo", "SKILL.md");
+    write(skill, "Previous instructions");
+    const source = { kind: "directory", location: root } satisfies PluginPackageSource;
+    let settings = empty;
+    const read = (): Settings => settings;
+    const save = (next: Settings): void => {
+      settings = next;
+    };
+    const fail = (): never => {
+      throw new Error("fixture save failed");
+    };
+    const close = vi.fn<WithPluginServersClosed>(async (_ids, change) => change());
+    const preview = await previewPluginPackage(source, read(), paths);
+    expect(preview).toMatchObject({
+      format: "codex",
+      name: "demo",
+      version: "1",
+      skills: ["demo"],
+    });
+    write(skill, "Changed after review");
+    await expect(
+      installPluginPackage(source, preview.token, paths, read, save, close),
+    ).rejects.toThrow(/重新预览/);
+    expect(existsSync(paths.settingsDir)).toBe(false);
+    const refreshed = await previewPluginPackage(source, read(), paths);
+    await expect(
+      installPluginPackage(source, refreshed.token, paths, read, fail, close),
+    ).rejects.toThrow(/无法保存插件变更/);
+    const installedRoot = join(paths.settingsDir, "imported-plugins");
+    expect(readdirSync(installedRoot)).toEqual([]);
+    expect(readdirSync(paths.skillsDir)).toEqual([]);
+    await installPluginPackage(source, refreshed.token, paths, read, save, close);
+    const [plugin] = settings.importedPlugins!;
+    save(toggleImportedPlugin(read(), plugin.id, true));
+    const old = read();
+    write(skill, "An update");
+    const next = await previewPluginPackage(plugin.id, read(), paths);
+    await expect(
+      installPluginPackage(plugin.id, next.token, paths, read, fail, close),
+    ).rejects.toThrow(/无法保存插件变更/);
+    expect(() => uninstallPluginPackage(plugin.id, paths, read(), fail)).toThrow(
+      /无法保存插件变更/,
+    );
+    expect(read()).toBe(old);
+    expect(readdirSync(installedRoot)).toEqual([plugin.managed!.contentId]);
+    expect(readdirSync(paths.skillsDir)).toEqual(plugin.skillIds);
+    expect(readFileSync(join(paths.skillsDir, plugin.skillIds[0], "SKILL.md"), "utf8")).toBe(
+      "Changed after review",
+    );
+  });
+
+  it("accepts a single skill directory and refuses links within a package", async () => {
+    using fixture = mkdtempDisposableSync(join(tmpdir(), "pi-package-skill-"));
+    const paths = locations(fixture.path);
+    const root = join(fixture.path, "standalone skill");
+    write(join(root, "SKILL.md"), "---\nname: Standalone fixture\n---\nUse this fixture.");
+    const source = { kind: "directory", location: root } satisfies PluginPackageSource;
+    const preview = await previewPluginPackage(source, empty, paths);
+    expect(preview).toMatchObject({
+      format: "skill",
+      source: { location: realpathSync(root) },
+      skills: ["Standalone fixture"],
+    });
+    mkdirSync(paths.home);
+    symlinkSync(paths.home, join(root, "linked folder"), "junction");
+    await expect(previewPluginPackage(source, empty, paths)).rejects.toThrow(/含有链接或无效路径/);
+    expect(existsSync(paths.settingsDir)).toBe(false);
   });
 });

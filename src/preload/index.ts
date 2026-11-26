@@ -194,6 +194,12 @@ const api: PiApi = {
   importedPlugins: () => ipcRenderer.invoke(IPC.settingsImportedPlugins),
   toggleImportedPlugin: (id, enabled) =>
     ipcRenderer.invoke(IPC.settingsToggleImportedPlugin, id, enabled),
+  pickPluginPackage: (kind, locale) =>
+    ipcRenderer.invoke(IPC.settingsPickPluginPackage, kind, locale),
+  previewPluginPackage: (source) => ipcRenderer.invoke(IPC.settingsPreviewPluginPackage, source),
+  installPluginPackage: (source, token) =>
+    ipcRenderer.invoke(IPC.settingsInstallPluginPackage, source, token),
+  uninstallPlugin: (id) => ipcRenderer.invoke(IPC.settingsUninstallPlugin, id),
   pickWorkingDirectory: (locale: Locale) =>
     ipcRenderer.invoke(IPC.settingsPickWorkingDirectory, locale),
   skillsList: (composerId) =>

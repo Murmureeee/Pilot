@@ -1,5 +1,12 @@
 // @env node
-import type { ExternalImportItem, ImportIssue, ImportSource } from "@shared/imports";
+import type {
+  ExternalImportItem,
+  ImportIssue,
+  ImportSource,
+  PluginFormat,
+  PluginPackageFile,
+  PluginPackagePreview,
+} from "@shared/imports";
 import type { McpTransportConfig } from "@shared/mcp";
 
 export type ConfigObject = Record<string, unknown>;
@@ -14,6 +21,8 @@ export interface SourcePlugin {
   servers: ConfigObject;
   configFiles: Set<string>;
   partial: boolean;
+  manifest: ConfigObject;
+  unsupported: string[];
 }
 
 export interface DiscoveredImport {
@@ -102,3 +111,24 @@ export interface ImportCatalogGroup {
   candidates: ImportCandidate[];
   issues: ImportIssue[];
 }
+
+export interface PackageManifest {
+  root: string;
+  format: PluginFormat;
+  name: string;
+  version?: string;
+  files: PluginPackageFile[];
+  skillPaths: string[];
+  templates: PluginPackagePreview["templates"];
+  scripts: string[];
+  servers: ConfigObject;
+  configFiles: ReadonlySet<string>;
+  unsupported: string[];
+}
+
+export interface PackageServer {
+  name: string;
+  connection: ImportedMcpConnection;
+}
+
+export type WithPluginServersClosed = (ids: readonly string[], change: () => void) => Promise<void>;

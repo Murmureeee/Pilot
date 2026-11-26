@@ -97,6 +97,7 @@ function buildTool(client: McpClient, entry: Tool, name: string, serverName: str
 export class McpManager {
   private readonly connections = new Map<string, McpConnection>();
   private readonly closing = new Set<Promise<void>>();
+  private readonly pausedPluginServers = new Map<string, number>();
   private readonly reconnectOnSync = new Set<string>();
   private configs: McpServerConfig[] = [];
 
@@ -109,7 +110,9 @@ export class McpManager {
   private sync(workingDirectory: string | undefined, reconnectId?: string): McpConnection[] {
     const { mcpServers = [] } = this.getSettings();
     this.configs = mcpServers;
-    const active = mcpServers.filter((config) => config.enabled);
+    const active = mcpServers.filter(
+      (config) => config.enabled && !this.pausedPluginServers.has(config.id),
+    );
     const enabledIds = new Set(active.map((config) => config.id));
     for (const id of this.connections.keys()) {
       if (!enabledIds.has(id) || id === reconnectId || this.reconnectOnSync.has(id)) {
@@ -157,6 +160,23 @@ export class McpManager {
     const closed = connection.client.close().catch(() => {});
     this.closing.add(closed);
     void closed.then(() => this.closing.delete(closed));
+  }
+
+  async withPluginServersClosed(ids: readonly string[], change: () => void): Promise<void> {
+    for (const id of ids) {
+      this.pausedPluginServers.set(id, (this.pausedPluginServers.get(id) ?? 0) + 1);
+      this.disconnect(id);
+    }
+    try {
+      await Promise.all(this.closing);
+      change();
+    } finally {
+      for (const id of ids) {
+        const remaining = (this.pausedPluginServers.get(id) ?? 1) - 1;
+        if (remaining > 0) this.pausedPluginServers.set(id, remaining);
+        else this.pausedPluginServers.delete(id);
+      }
+    }
   }
 
   private async connect(

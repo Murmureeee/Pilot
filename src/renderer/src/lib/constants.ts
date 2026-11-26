@@ -61,7 +61,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   about: "关于",
   skills: "技能",
   mcp: "MCP 服务",
-  imports: "导入",
+  imports: "插件",
 };
 
 export const SETTINGS_SECTION_DESCRIPTIONS: Record<SettingsSection, string> = {
@@ -76,7 +76,7 @@ export const SETTINGS_SECTION_DESCRIPTIONS: Record<SettingsSection, string> = {
   about: "版本信息、应用更新和反馈渠道。",
   skills: "查看本机和当前项目的技能。已启用的技能会在任务需要时读取。",
   mcp: "连接外部工具服务。可手动添加，也可从 Codex 或 Claude Code 导入，工具调用遵循权限设置。",
-  imports: "从 Codex 或 Claude Code 一次导入技能、MCP 服务和插件组件，并管理已导入的插件。",
+  imports: "预览、安装和管理插件，或从 Codex 和 Claude Code 导入现有组件。",
 };
 
 export const EXTERNAL_EDITOR_LABELS: Record<ExternalEditor["kind"], string> = {
@@ -144,7 +144,16 @@ export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[
   about: ["版本", "软件更新", "检查更新", "更新记录", "反馈问题"],
   skills: ["导入技能目录", "打开技能目录", "查看技能", "项目技能", "删除技能"],
   mcp: ["添加 MCP 服务", "stdio", "HTTP"],
-  imports: ["Codex", "Claude Code", "插件组件"],
+  imports: [
+    "Codex",
+    "Claude Code",
+    "插件组件",
+    "Pi Packages",
+    "Git",
+    "ZIP",
+    "安装插件",
+    "检查更新",
+  ],
 };
 
 export const SEND_KEY_LABELS: Record<SendKey, string> = {
@@ -325,7 +334,12 @@ export const EXTERNAL_IMPORT_OPTIONS: Record<
   },
 };
 
-export const IMPORT_SOURCE_LABELS = { codex: "Codex", "claude-code": "Claude Code" } as const;
+export const IMPORT_SOURCE_LABELS = {
+  codex: "Codex",
+  "claude-code": "Claude Code",
+  pi: "Pi Packages",
+  skill: "技能",
+} as const;
 
 export const MESSAGE_JUMP = {
   minTurns: 5,

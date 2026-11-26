@@ -103,7 +103,9 @@ export function SettingsView(): JSX.Element {
         {section === "mcp" && <McpSettings locale={locale} workingDirectory={workingDirectory} />}
 
         {section === "imports" && (
-          <ExternalImportSettings locale={locale} workingDirectory={workingDirectory} />
+          <div className="min-w-0">
+            <ExternalImportSettings locale={locale} workingDirectory={workingDirectory} />
+          </div>
         )}
       </div>
     </div>

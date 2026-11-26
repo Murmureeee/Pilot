@@ -19,6 +19,7 @@ import { imageAttachmentsSchema } from "../agent-host/image-attachments";
 import {
   afterTurnVerificationSchema,
   externalEditorSchema,
+  pluginPackageSourceSchema,
   promptTemplatesSchema,
   toolRuleSchema,
   verificationCommandSchema,
@@ -178,6 +179,7 @@ const settings = z.strictObject({
 
 const importKind = z.enum(["skill", "plugin", "mcp"]);
 const importId = z.string().regex(/^[a-f0-9]{24}$/);
+const pluginPackageTarget = z.union([pluginPackageSourceSchema, importId]);
 
 const inputs = {
   [IPC.ping]: z.tuple([z.strictObject({ payload: z.string() })]),
@@ -368,6 +370,13 @@ const inputs = {
   ]),
   [IPC.settingsImportedPlugins]: none,
   [IPC.settingsToggleImportedPlugin]: z.tuple([importId, z.boolean()]),
+  [IPC.settingsPickPluginPackage]: z.tuple([
+    z.enum(["directory", "zip"]),
+    z.enum(SUPPORTED_LOCALES),
+  ]),
+  [IPC.settingsPreviewPluginPackage]: z.tuple([pluginPackageTarget]),
+  [IPC.settingsInstallPluginPackage]: z.tuple([pluginPackageTarget, importId]),
+  [IPC.settingsUninstallPlugin]: z.tuple([importId]),
   [IPC.skillsList]: session,
   [IPC.skillsRead]: z.tuple([z.uuid(), mentionId, nonBlank]),
   [IPC.skillsDelete]: z.tuple([z.uuid(), mentionId, nonBlank]),

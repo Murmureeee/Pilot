@@ -190,6 +190,9 @@ export function toPublicSettings(settings: Settings): PublicSettings {
     notificationsEnabled: settings.notificationsEnabled !== false,
     persona: settings.persona ?? "",
     promptTemplates: settings.promptTemplates ?? [],
+    pluginPromptTemplates: settings.importedPlugins?.flatMap(({ managed }) =>
+      managed?.enabled ? managed.templates : [],
+    ),
     skillsEnabled: settings.skillsEnabled ?? [],
     recovery: recoveryPath
       ? { status: settings.recoveryBlocked ? "blocked" : "recovered", path: recoveryPath }

@@ -31,6 +31,7 @@ import {
   verifyLayouts,
   verifyPlanDraft,
   verifyPlanExecution,
+  verifyPluginPackages,
   verifyProjectInstructions,
   verifyProjectEntry,
   verifyQuickMemory,
@@ -40,6 +41,7 @@ import {
   verifyRestoredSettings,
   verifyRestoredExternalEditor,
   verifyRestoredAuxiliaryModels,
+  verifyRestoredPluginPackages,
   verifySearchAndExport,
   verifySettings,
   verifyStreamingReply,
@@ -141,6 +143,12 @@ const temp = realpathSync.native(tmpdir());
 const scratch = realpathSync.native(mkdtempSync(join(temp, "pilot-windows-ui-")));
 const profile = join(scratch, "profile");
 const utilityProfile = join(scratch, "auxiliary-model-profile");
+const pluginProfile = join(scratch, "plugin-profile");
+const pluginFixture = {
+  root: join(scratch, "plugin fixture"),
+  archive: join(scratch, "plugin-fixture.zip"),
+  marker: join(scratch, "plugin-process.json"),
+};
 const project = join(scratch, "fixture-project");
 const commandProject = join(scratch, "commands-project");
 const instructionProject = join(scratch, "instructions-project");
@@ -170,6 +178,7 @@ let verificationSession;
 try {
   mkdirSync(profile);
   mkdirSync(utilityProfile);
+  mkdirSync(pluginProfile);
   mkdirSync(project);
   mkdirSync(commandProject);
   mkdirSync(instructionProject);
@@ -313,6 +322,16 @@ try {
   await withApp(utilityProfile, async (page) => {
     await runScene("Restore the utility setting and use the current chat model by default", () =>
       verifyRestoredAuxiliaryModels(page, model, utilityChats),
+    );
+  });
+  await withApp(pluginProfile, async (page, window, app) => {
+    await runScene("Review and install a plugin, use it with the agent, and confirm a fresh update", () =>
+      verifyPluginPackages(page, window, app, model, pluginFixture),
+    );
+  });
+  await withApp(pluginProfile, async (page) => {
+    await runScene("Restore an updated plugin and remove its files, commands, and server", () =>
+      verifyRestoredPluginPackages(page, pluginFixture, pluginProfile),
     );
   });
 } finally {

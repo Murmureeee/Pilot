@@ -53,7 +53,7 @@ function asEntries(value: unknown): unknown[] {
   return Array.isArray(value) ? value : value === undefined ? [] : [value];
 }
 
-function readPlugin(
+export function readPlugin(
   source: ImportSource,
   root: string,
   key: string,
@@ -126,8 +126,8 @@ function readPlugin(
     }
   }
 
-  const partial =
-    [
+  const unsupported = [
+    ...[
       "apps",
       "hooks",
       "agents",
@@ -137,8 +137,8 @@ function readPlugin(
       "workflows",
       "themes",
       "monitors",
-    ].some((feature) => manifest[feature] !== undefined) ||
-    [
+    ].filter((feature) => manifest[feature] !== undefined),
+    ...[
       ".app.json",
       "hooks/hooks.json",
       "commands",
@@ -146,7 +146,8 @@ function readPlugin(
       ".lsp.json",
       "workflows",
       "themes",
-    ].some((component) => existsSync(join(root, component)));
+    ].filter((component) => existsSync(join(root, component))),
+  ];
   return {
     key,
     name,
@@ -156,7 +157,9 @@ function readPlugin(
     skills: [...skills],
     servers,
     configFiles,
-    partial,
+    partial: unsupported.length > 0,
+    manifest,
+    unsupported: [...new Set(unsupported)],
   };
 }
 

@@ -80,6 +80,8 @@ export const NATIVE_DIALOG_TITLES = {
   zh: {
     skill: "选择技能目录（须含 SKILL.md）",
     importProject: "选择导入来源项目",
+    pluginDirectory: "选择插件文件夹",
+    pluginZip: "选择插件 ZIP 压缩包",
     workingDirectory: "选择工具工作目录",
     openProject: "打开项目",
     bindProject: "关联项目",
@@ -88,6 +90,8 @@ export const NATIVE_DIALOG_TITLES = {
   en: {
     skill: "Choose a skill folder containing SKILL.md",
     importProject: "Choose a project to import from",
+    pluginDirectory: "Choose a plugin folder",
+    pluginZip: "Choose a plugin ZIP archive",
     workingDirectory: "Choose the tools’ working directory",
     openProject: "Open project",
     bindProject: "Link project",
@@ -98,6 +102,8 @@ export const NATIVE_DIALOG_TITLES = {
   {
     skill: string;
     importProject: string;
+    pluginDirectory: string;
+    pluginZip: string;
     workingDirectory: string;
     openProject: string;
     bindProject: string;

@@ -99,6 +99,10 @@ export const IPC = {
   settingsImportExternal: "settings:import-external",
   settingsImportedPlugins: "settings:imported-plugins",
   settingsToggleImportedPlugin: "settings:toggle-imported-plugin",
+  settingsPickPluginPackage: "settings:pick-plugin-package",
+  settingsPreviewPluginPackage: "settings:preview-plugin-package",
+  settingsInstallPluginPackage: "settings:install-plugin-package",
+  settingsUninstallPlugin: "settings:uninstall-plugin",
   skillsList: "skills:list",
   skillsRead: "skills:read",
   skillsDelete: "skills:delete",
@@ -950,6 +954,7 @@ export interface PublicSettings {
   /** 全局人设/自定义指令（设置页「个性化」编辑） */
   persona: string;
   promptTemplates: PromptTemplate[];
+  pluginPromptTemplates?: PromptTemplate[];
   /** 启用的技能 id 列表 */
   skillsEnabled: string[];
   recovery?: SettingsRecovery;

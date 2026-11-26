@@ -84,16 +84,6 @@ const mcpServer = z.looseObject({
   importKey: optionalText,
 });
 
-const importedPlugin = z.looseObject({
-  id: z.string(),
-  name: z.string(),
-  source: z.enum(["codex", "claude-code"]),
-  version: optionalText,
-  partial: z.boolean(),
-  skillIds: z.array(z.string()),
-  serverIds: z.array(z.string()),
-});
-
 export const promptTemplatesSchema = z
   .array(
     z.strictObject({
@@ -103,6 +93,36 @@ export const promptTemplatesSchema = z
   )
   .max(PROMPT_TEMPLATE_LIMIT)
   .refine((templates) => new Set(templates.map(({ name }) => name)).size === templates.length);
+
+export const pluginPackageSourceSchema = z.strictObject({
+  kind: z.enum(["git", "directory", "zip"]),
+  location: z
+    .string()
+    .trim()
+    .min(1)
+    .max(8192)
+    .refine((text) => !text.includes("\0")),
+});
+
+const importedPlugin = z.looseObject({
+  id: z.string(),
+  name: z.string(),
+  source: z.enum(["codex", "claude-code", "pi", "skill"]),
+  version: optionalText,
+  partial: z.boolean(),
+  skillIds: z.array(z.string()),
+  serverIds: z.array(z.string()),
+  managed: z
+    .object({
+      source: pluginPackageSourceSchema,
+      revision: optionalText,
+      contentId: z.string().regex(/^[a-f0-9]{24}$/),
+      files: z.array(z.object({ path: z.string(), digest: z.string() })),
+      templates: promptTemplatesSchema,
+      enabled: z.boolean(),
+    })
+    .optional(),
+});
 
 const storedSettings = z.looseObject({
   providers: z.array(provider),

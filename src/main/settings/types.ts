@@ -11,7 +11,7 @@ import type {
   ThinkingLevel,
   ToolRule,
 } from "../../shared/contract";
-import type { ImportedPluginFields } from "../../shared/imports";
+import type { ImportedPluginFields, InstalledPluginPackage } from "../../shared/imports";
 import type { McpServerFields, McpTransportConfig } from "../../shared/mcp";
 
 export interface ProviderConfig extends ProviderFields {
@@ -26,9 +26,10 @@ export interface McpServerConfig extends McpServerFields {
   importKey?: string;
 }
 
-interface ImportedPlugin extends ImportedPluginFields {
+export interface ImportedPlugin extends ImportedPluginFields {
   skillIds: string[];
   serverIds: string[];
+  managed?: InstalledPluginPackage;
 }
 
 export interface Settings {
