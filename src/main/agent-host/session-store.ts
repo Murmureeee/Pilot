@@ -573,6 +573,24 @@ export class SessionStore {
     return meta;
   }
 
+  saveGeneratedTitle(id: string, runId: string, title: string): boolean {
+    const meta = this.getMeta(id);
+    if (!meta || meta.titleCustom || meta.titleGenerated) return false;
+    const history = this.messageHistory(id);
+    if (
+      history.rollback ||
+      !history.tasks.some(({ task, result }) => task.agentRunId === runId && result === "success")
+    )
+      return false;
+    this.writeIndex({
+      ...this.index,
+      sessions: this.index.sessions.map((session) =>
+        session.id === id ? { ...session, title, titleGenerated: true } : session,
+      ),
+    });
+    return true;
+  }
+
   /** 置顶/取消置顶（渲染层在同一项目内优先展示） */
   setPinned(id: string, pinned: boolean): SessionMeta | null {
     const meta = this.index.sessions.find((s) => s.id === id);
@@ -942,7 +960,7 @@ export class SessionStore {
       ...previous,
       ...settlement?.settings,
       id,
-      title: previous?.titleCustom ? previous.title : title,
+      title: previous?.titleCustom || previous?.titleGenerated ? previous.title : title,
       createdAt: previous?.createdAt ?? now,
       updatedAt: now,
       lastTask: settlement?.task ?? previous?.lastTask,

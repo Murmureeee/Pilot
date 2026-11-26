@@ -1,6 +1,12 @@
 // @env node
-import type { Agent, AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
+import type { Agent, AgentMessage, AgentTool, StreamFn } from "@earendil-works/pi-agent-core";
+import type {
+  Api,
+  AssistantMessage,
+  Model,
+  ToolResultMessage,
+  UserMessage,
+} from "@earendil-works/pi-ai";
 
 import type {
   ApprovalMode,
@@ -78,6 +84,12 @@ export interface AgentSessionView {
   contextTokens: number;
 }
 
+export interface TextModelRequest {
+  model: Model<Api>;
+  stream: StreamFn;
+  apiKey?: string;
+}
+
 export interface AgentRunOptions extends Pick<
   HostDeps,
   | "store"
@@ -90,6 +102,7 @@ export interface AgentRunOptions extends Pick<
   | "webRequests"
 > {
   agent: Agent;
+  auxiliaryModel?: TextModelRequest;
   sessionId: string;
   environment: ToolEnvironment;
   tools: AgentTool[];

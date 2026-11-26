@@ -592,8 +592,9 @@ export interface SessionMeta extends SessionSettings {
   workingDirectory?: string;
   lastTask?: VerificationTask;
   lastRunResult?: SessionRunResult;
-  /** 用户手动重命名后为 true：自动标题（首条用户消息）不再覆盖 */
+  /** 用户手动重命名后保留当前标题 */
   titleCustom?: boolean;
+  titleGenerated?: true;
   /** 置顶：侧栏「置顶」分区（时间倒序在其内），悬浮按钮/右键菜单可切换 */
   pinned?: boolean;
   /** 归档：从主列表隐藏，进「已归档」分区，可取消归档恢复 */
@@ -936,6 +937,7 @@ export type ExternalEditor =
 export interface PublicSettings {
   providers: PublicProvider[];
   activeProviderId: string;
+  auxiliaryModel: SessionModelSelection | null;
   toolRules?: ToolRule[];
   approvalMode: ApprovalMode;
   thinkingLevel: ThinkingLevel;
@@ -960,6 +962,8 @@ export interface ProviderInput extends ProviderFields {
 export interface SettingsInput {
   providers: ProviderInput[];
   activeProviderId: string;
+  /** null 跟随会话模型，缺省保留已保存的选择 */
+  auxiliaryModel?: SessionModelSelection | null;
   approvalMode?: ApprovalMode;
   thinkingLevel?: ThinkingLevel;
   thinkingLevels?: ThinkingLevel[];

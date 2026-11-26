@@ -17,6 +17,7 @@ import {
   verifyAgentMemory,
   verifyAfterTurnVerification,
   verifyApprovals,
+  verifyAuxiliaryModels,
   verifyBackgroundTerminal,
   verifyCommandsAndTemplates,
   verifyExternalEditor,
@@ -38,6 +39,7 @@ import {
   verifyRestoredPromptTemplates,
   verifyRestoredSettings,
   verifyRestoredExternalEditor,
+  verifyRestoredAuxiliaryModels,
   verifySearchAndExport,
   verifySettings,
   verifyStreamingReply,
@@ -138,6 +140,7 @@ assert.ok(
 const temp = realpathSync.native(tmpdir());
 const scratch = realpathSync.native(mkdtempSync(join(temp, "pilot-windows-ui-")));
 const profile = join(scratch, "profile");
+const utilityProfile = join(scratch, "auxiliary-model-profile");
 const project = join(scratch, "fixture-project");
 const commandProject = join(scratch, "commands-project");
 const instructionProject = join(scratch, "instructions-project");
@@ -166,6 +169,7 @@ let memorySession;
 let verificationSession;
 try {
   mkdirSync(profile);
+  mkdirSync(utilityProfile);
   mkdirSync(project);
   mkdirSync(commandProject);
   mkdirSync(instructionProject);
@@ -300,6 +304,17 @@ try {
       }),
     );
   }, entryProject);
+  let utilityChats;
+  await withApp(utilityProfile, async (page, window) => {
+    await runScene("Choose a utility model for titles and compaction while preserving manual titles", async () => {
+      utilityChats = await verifyAuxiliaryModels(page, window, model);
+    });
+  });
+  await withApp(utilityProfile, async (page) => {
+    await runScene("Restore the utility setting and use the current chat model by default", () =>
+      verifyRestoredAuxiliaryModels(page, model, utilityChats),
+    );
+  });
 } finally {
   try {
     await model?.close();

@@ -1913,6 +1913,166 @@ export async function verifyRestoredExternalEditor(page, fixture) {
   await page.keyboard.press("Control+l");
 }
 
+async function chooseUtilityModel(page, option) {
+  await openSettings(page, locales[1], "Models & providers");
+  const trigger = button(page, "Auxiliary model");
+  await trigger.press("Enter");
+  const item = page.getByRole("menuitemradio", { name: option });
+  await item.press("Enter");
+  await trigger.and(page.locator(":focus")).waitFor();
+  await button(page.getByRole("main"), "Save").press("Enter");
+  await page.getByRole("main").getByText("Saved", { exact: true }).waitFor();
+  await page.keyboard.press("Control+l");
+  await editor(page).and(page.locator(":focus")).waitFor();
+}
+
+async function waitForSessionTitle(page, title) {
+  const result = await page.waitForFunction(async (title) => {
+    const snapshot = await window.pi.getSnapshot();
+    const session = snapshot.sessions.find(({ id }) => id === snapshot.sessionId);
+    return session?.title === title ? session : false;
+  }, title);
+  return result.jsonValue();
+}
+
+export async function verifyAuxiliaryModels(page, window, model) {
+  const en = locales[1];
+  await page.evaluate(async ({ baseUrl, modelId, visionModelId, utilityModelId }) => {
+    localStorage.setItem("pilot-locale", "en");
+    await window.pi.settingsSave({
+      providers: [
+        {
+          id: "primary-model-fixture", kind: "openai-compatible", name: "Conversation provider",
+          baseUrl, modelId, models: [
+            { id: modelId, name: "Main conversation model" },
+            { id: visionModelId, name: "Vision conversation model" },
+          ],
+        },
+        {
+          id: "aux-model-fixture", kind: "openai-compatible", name: "Utility provider",
+          baseUrl, modelId: utilityModelId, models: [{ id: utilityModelId, name: "Small utility model" }],
+        },
+      ],
+      activeProviderId: "primary-model-fixture",
+    });
+  }, { baseUrl: model.baseUrl, modelId: model.modelId, visionModelId: model.visionModelId, utilityModelId: model.utilityModelId });
+  await page.reload();
+  await page.waitForFunction(() => document.documentElement.lang === "en");
+  await editor(page).waitFor();
+  await chooseUtilityModel(page, /Small utility model/);
+
+  let locale = en;
+  for (const [size, zoom] of [[wide, 1], [narrow, 1], [narrow, 1.5]]) {
+    await resize(page, window, size, zoom);
+    for (const next of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, locale, next, theme);
+        locale = next;
+        await openSettings(page, locale, locale === en ? "Models & providers" : "模型与提供方");
+        const trigger = button(page, locale === en ? "Auxiliary model" : "辅助模型");
+        await trigger.scrollIntoViewIfNeeded();
+        await assertFits(trigger);
+        await trigger.press("Enter");
+        const selected = page.getByRole("menuitemradio", { checked: true, name: /Small utility model/ });
+        await assertFits(selected);
+        await selected.getByText("Utility provider", { exact: true }).waitFor();
+        await page.keyboard.press("Escape");
+        await trigger.and(page.locator(":focus")).waitFor();
+        await page.keyboard.press("Control+l");
+        await editor(page).and(page.locator(":focus")).waitFor();
+        console.log("Checked auxiliary model at " + size.width + " × " + size.height + " " +
+          zoom * 100 + "% " + locale.lang + " " + theme);
+      }
+    }
+  }
+  await resize(page, window, wide);
+
+  const firstPrompt = "Draft a weekly report with these earlier requirements. " + "Keep project details. ".repeat(80);
+  const generatedTitle = "Weekly project report";
+  await send(page, firstPrompt);
+  const first = await model.nextCompletion();
+  assert.equal(first.input.model, model.modelId);
+  first.write({ content: "First report reply." });
+  first.finish();
+  const title = await model.nextUtilityCompletion();
+  assert.equal(title.input.model, model.utilityModelId);
+  assert.match(title.input.messages[0].content, /^Generate a short conversation title/);
+  assert.equal((title.input.tools ?? []).length, 0);
+  const source = JSON.parse(title.input.messages.at(-1).content);
+  assert.ok(firstPrompt.startsWith(source.user) && source.user.startsWith("Draft a weekly report"));
+  assert.equal(source.reply, "First report reply.");
+  title.write({ content: generatedTitle });
+  title.finish();
+  const firstChat = await waitForSessionTitle(page, generatedTitle);
+  assert.equal(firstChat.titleGenerated, true);
+  await page.locator('[data-session-id="' + firstChat.id + '"]').getByText(generatedTitle, { exact: true }).waitFor();
+
+  await send(page, "Continue the weekly report.");
+  const second = await model.nextCompletion();
+  assert.equal(second.input.model, model.modelId);
+  second.write({ content: "Second report reply." });
+  second.finish();
+  await page.waitForFunction(async () => !(await window.pi.getSnapshot()).activeRun);
+  await page.locator("[data-context-usage]").press("Enter");
+  await button(page, "Compact context").press("Enter");
+  const summary = await model.nextUtilityCompletion();
+  assert.equal(summary.input.model, model.utilityModelId);
+  assert.match(summary.input.messages[0].content, /^Summarize the supplied conversation history/);
+  assert.match(summary.input.messages.at(-1).content, /earlier requirements/);
+  summary.write({ content: "Keep project details in the weekly report." });
+  summary.finish();
+  const compacted = page.locator("[data-context-compaction]");
+  await button(compacted, "Context compacted").press("Enter");
+  await compacted.getByText("Keep project details in the weekly report.", { exact: true }).waitFor();
+  await waitForSessionTitle(page, generatedTitle);
+
+  await page.keyboard.press("Control+n");
+  await page.waitForFunction(async () => !(await window.pi.getSnapshot()).sessionId);
+  await send(page, "Prepare a note with a title I will change.");
+  const next = await model.nextCompletion();
+  assert.equal(next.input.model, model.modelId);
+  next.write({ content: "Here is the note." });
+  next.finish();
+  const late = await model.nextUtilityCompletion();
+  assert.match(late.input.messages[0].content, /^Generate a short conversation title/);
+  const manual = await page.evaluate(async () => {
+    const { sessionId } = await window.pi.getSnapshot();
+    await window.pi.sessionRename(sessionId, "My manual title");
+    return sessionId;
+  });
+  late.write({ content: "Late generated title" });
+  late.finish();
+  await waitForSessionTitle(page, "My manual title");
+  return { generated: firstChat.id, manual, title: generatedTitle };
+}
+
+export async function verifyRestoredAuxiliaryModels(page, model, chats) {
+  const snapshot = await page.evaluate(() => window.pi.getSnapshot());
+  assert.deepEqual(snapshot.settings.auxiliaryModel, {
+    providerId: "aux-model-fixture", modelId: model.utilityModelId,
+  });
+  assert.equal(snapshot.sessions.find(({ id }) => id === chats.generated)?.title, chats.title);
+  assert.equal(snapshot.sessions.find(({ id }) => id === chats.manual)?.title, "My manual title");
+  await chooseUtilityModel(page, "Follow current model");
+  assert.equal((await page.evaluate(() => window.pi.settingsGet())).auxiliaryModel, null);
+  await page.keyboard.press("Control+n");
+  await page.waitForFunction(async () => !(await window.pi.getSnapshot()).sessionId);
+  await page.evaluate(async modelId => {
+    const { composerId } = await window.pi.getSnapshot();
+    await window.pi.sessionUpdateSettings(composerId, { model: { providerId: "primary-model-fixture", modelId } });
+  }, model.visionModelId);
+  await send(page, "Use this chat model");
+  const reply = await model.nextCompletion();
+  assert.equal(reply.input.model, model.visionModelId);
+  reply.write({ content: "Reply using this chat model." });
+  reply.finish();
+  await page.waitForFunction(async () => {
+    const snapshot = await window.pi.getSnapshot();
+    return snapshot.sessions.some(session => session.id === snapshot.sessionId && session.titleGenerated);
+  });
+  assert.ok(model.titles.some(title => title.user === "Use this chat model" && title.model === model.visionModelId));
+}
+
 export async function verifyCommandsAndTemplates(page, app, model, originalProject, project) {
   await app.evaluate(({ dialog }, folder) => {
     const original = dialog.showOpenDialog;

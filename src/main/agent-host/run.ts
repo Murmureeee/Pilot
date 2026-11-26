@@ -592,9 +592,7 @@ export class AgentRun {
       this.queuedMessages = 0;
       this.deps.onSessionUpdated();
       this.deps.onFinished(
-        this.result === "success" && !this.planning && !signal.aborted
-          ? this.checkpoint.task
-          : undefined,
+        this.result === "success" && !signal.aborted ? this.checkpoint.task : undefined,
       );
       const checkpoint = store.checkpoint(sessionId);
       this.deps.broadcast({
@@ -664,6 +662,7 @@ export class AgentRun {
         previous: this.latestCompaction,
         model: agent.state.model,
         stream,
+        auxiliaryModel: this.deps.auxiliaryModel,
         signal,
         force,
         focus,

@@ -21,6 +21,41 @@ import { modelCatalogInput } from "../src/shared/providers";
 vi.mock("electron", () => ({ safeStorage: { isEncryptionAvailable: () => false } }));
 vi.mock("node:fs", { spy: true });
 
+it("persists an auxiliary selection and clears it when its catalog entry is removed", () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-aux-model-"));
+  const defaults = loadSettings(profile.path);
+  expect(toPublicSettings(defaults).auxiliaryModel).toBeNull();
+  const selection = { providerId: "utility", modelId: "small" };
+  const primary = defaults.providers[0]!;
+  const settings = {
+    activeProviderId: primary.id,
+    providers: [
+      primary,
+      {
+        id: "utility",
+        name: "Utility",
+        kind: "openai-compatible" as const,
+        baseUrl: "http://127.0.0.1:8000/v1",
+        modelId: "small",
+      },
+    ],
+    auxiliaryModel: selection,
+  };
+  expect(validateSettingsInput(settings)).toBeUndefined();
+  saveSettings(profile.path, mergeSettingsInput(defaults, settings));
+  const current = loadSettings(profile.path);
+  expect(toPublicSettings(current).auxiliaryModel).toEqual(selection);
+  const { auxiliaryModel: _selection, ...other } = settings;
+  expect(mergeSettingsInput(current, other).auxiliaryModel).toEqual(selection);
+  expect(
+    mergeSettingsInput(current, { ...settings, auxiliaryModel: null }).auxiliaryModel,
+  ).toBeUndefined();
+  expect(
+    mergeSettingsInput(current, { ...other, providers: [primary] }).auxiliaryModel,
+  ).toBeUndefined();
+  expect(validateSettingsInput({ ...settings, providers: [primary] })).toContain("辅助模型");
+});
+
 it("defaults older settings to VS Code and preserves a saved editor on other settings saves", () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-editor-settings-"));
   const settings = loadSettings(profile.path);

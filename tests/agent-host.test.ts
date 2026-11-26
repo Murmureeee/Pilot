@@ -40,6 +40,7 @@ import type { GitSnapshot } from "../src/main/workspace/types";
 import { MENTION_CONTEXT_HEADING } from "../src/shared/constants";
 import type { ComposerDraft, UiAgentEvent, VerificationTask } from "../src/shared/contract";
 import { promptFromDraft } from "../src/shared/mentions";
+import { fixtureTitle } from "./model-fixture";
 
 vi.mock("electron", () => ({ safeStorage: {} }));
 
@@ -70,6 +71,8 @@ it("plans with read-only tools, restores the edited plan after restart, and exec
   using resolve = vi.spyOn(models, "resolveModel").mockReturnValue({
     model: faux.getModel()!,
     streamFn: (model, context, options) => {
+      const generated = fixtureTitle(context);
+      if (generated) return generated;
       requests.push({
         tools: getCurrentTools(context.messages).map(({ name }) => name),
         system: getCurrentSystemPrompt(context.messages),
@@ -183,7 +186,8 @@ it("keeps a failed planning turn read-only on retry and discards the proposal wi
   catalog.setProvider(faux.provider);
   using resolve = vi.spyOn(models, "resolveModel").mockReturnValue({
     model: faux.getModel()!,
-    streamFn: catalog.streamSimple.bind(catalog),
+    streamFn: (model, context, options) =>
+      fixtureTitle(context) ?? catalog.streamSimple(model, context, options),
   });
   const host = new AgentHost({
     getSettings: () => settings,
@@ -236,7 +240,8 @@ it("previews a batch of file approvals, preserves decisions, and rejects a stale
   catalog.setProvider(faux.provider);
   const resolve = vi.spyOn(models, "resolveModel").mockReturnValue({
     model: faux.getModel()!,
-    streamFn: catalog.streamSimple.bind(catalog),
+    streamFn: (model, context, options) =>
+      fixtureTitle(context) ?? catalog.streamSimple(model, context, options),
   });
   const requests: Extract<UiAgentEvent, { type: "permission_request" }>[] = [];
   const createHost = (): AgentHost =>
@@ -320,7 +325,8 @@ it("publishes the result for a background failure and clears it after a successf
   catalog.setProvider(faux.provider);
   using resolve = vi.spyOn(models, "resolveModel").mockReturnValue({
     model: faux.getModel()!,
-    streamFn: catalog.streamSimple.bind(catalog),
+    streamFn: (model, context, options) =>
+      fixtureTitle(context) ?? catalog.streamSimple(model, context, options),
   });
   const broadcast = vi.fn<(event: UiAgentEvent) => void>();
   const createHost = (): AgentHost =>
@@ -960,7 +966,8 @@ it("resumes with a new run ID and blocks replay of an action recorded in the che
   catalog.setProvider(faux.provider);
   using resolveModel = vi.spyOn(models, "resolveModel").mockReturnValue({
     model: faux.getModel()!,
-    streamFn: catalog.streamSimple.bind(catalog),
+    streamFn: (model, context, options) =>
+      fixtureTitle(context) ?? catalog.streamSimple(model, context, options),
   });
   const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
   const settings: Settings = {
@@ -1029,6 +1036,8 @@ it("declares the current MCP tools on the first request and refreshes a resumed 
   const resolveModel = vi.spyOn(models, "resolveModel").mockReturnValue({
     model: original.model,
     streamFn: (model, context, options) => {
+      const generated = fixtureTitle(context);
+      if (generated) return generated;
       requests.push({
         tools: getCurrentTools(context.messages).map((tool) => tool.name),
         prompt: getCurrentSystemPrompt(context.messages),
@@ -1142,6 +1151,8 @@ it("loads the selected project's instructions ahead of personalization and skill
   const resolveModel = vi.spyOn(models, "resolveModel").mockReturnValue({
     model: model.model,
     streamFn: (m, context, options) => {
+      const generated = fixtureTitle(context);
+      if (generated) return generated;
       prompts.push(getCurrentSystemPrompt(context.messages));
       return model.streamFn(m, context, options);
     },
@@ -1260,6 +1271,8 @@ it("scopes project instructions to references and tool targets before a file wri
   using resolve = vi.spyOn(models, "resolveModel").mockReturnValue({
     model: faux.getModel()!,
     streamFn: (model, context, options) => {
+      const generated = fixtureTitle(context);
+      if (generated) return generated;
       requests.push({
         system: getCurrentSystemPrompt(context.messages),
         results: context.messages.flatMap((message) =>
@@ -1387,6 +1400,8 @@ it("reads an explicitly selected disabled skill only during the selected task", 
   const resolveModel = vi.spyOn(models, "resolveModel").mockReturnValue({
     model: faux.getModel()!,
     streamFn: (model, context, options) => {
+      const generated = fixtureTitle(context);
+      if (generated) return generated;
       requests.push({
         system: getCurrentSystemPrompt(context.messages),
         last: JSON.stringify(context.messages.at(-1)),
@@ -1453,6 +1468,8 @@ it("sends mention context to the provider and restores the same user parts from 
   const resolveModel = vi.spyOn(models, "resolveModel").mockReturnValue({
     model: original.model,
     streamFn: (model, context, options) => {
+      const generated = fixtureTitle(context);
+      if (generated) return generated;
       requests.push(JSON.stringify(context.messages));
       return original.streamFn(model, context, options);
     },
@@ -1650,6 +1667,8 @@ it("reviews built-in tools and shell changes against the run's original Git inde
   const resolveModel = vi.spyOn(models, "resolveModel").mockReturnValue({
     model: faux.getModel()!,
     streamFn: async (model, context, options) => {
+      const generated = fixtureTitle(context);
+      if (generated) return generated;
       if (context.messages.at(-1)?.role === "toolResult") await modelFinishing.promise;
       return catalog.streamSimple(model, context, options);
     },

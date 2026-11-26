@@ -37,6 +37,38 @@ function runningCheckpoint(dir: string, changes: Partial<RunCheckpoint> = {}): R
 }
 
 describe("SessionStore", () => {
+  it("persists a generated title only while the completed run and automatic title still match", () => {
+    const { store, dir } = makeStore();
+    const session = store.create();
+    const messages: AgentMessage[] = [
+      { role: "user", content: "Need a clearer summary of this topic", timestamp: 1 },
+      fauxAssistantMessage([fauxText("Here is the summary")]),
+    ];
+    const settlement = {
+      result: "success",
+      task: { taskId: "first-task", agentRunId: "first-run" },
+      messageRange: { startIndex: 0, workingDirectory: null, workspace: { kind: "folder" } },
+    } as const;
+    store.save(session.id, messages, undefined, null, settlement);
+    expect(store.saveGeneratedTitle(session.id, "another-run", "Wrong title")).toBe(false);
+    expect(store.saveGeneratedTitle(session.id, "first-run", "Clearer summary")).toBe(true);
+    store.save(session.id, messages);
+    const restarted = new SessionStore(dir);
+    expect(restarted.getMeta(session.id)).toMatchObject({
+      title: "Clearer summary",
+      titleGenerated: true,
+    });
+
+    const renamed = restarted.create();
+    restarted.save(renamed.id, messages, undefined, null, settlement);
+    restarted.rename(renamed.id, "Manual title");
+    expect(restarted.saveGeneratedTitle(renamed.id, "first-run", "Late title")).toBe(false);
+    expect(restarted.getMeta(renamed.id)?.title).toBe("Manual title");
+    restarted.remove(renamed.id);
+    expect(restarted.saveGeneratedTitle(renamed.id, "first-run", "Deleted title")).toBe(false);
+    expect(restarted.getMeta(renamed.id)).toBeNull();
+  });
+
   it("indexes project transcripts by visible message, file, and command, and refreshes changed records", () => {
     const { store, dir } = makeStore();
     const project = join(dir, "project");

@@ -166,6 +166,7 @@ const mcpServer = z.strictObject({
 const settings = z.strictObject({
   providers: z.array(provider),
   activeProviderId: z.string(),
+  auxiliaryModel: z.strictObject({ providerId: nonBlank, modelId: nonBlank }).nullable().optional(),
   approvalMode: executionApprovalMode.optional(),
   thinkingLevel: z.enum(THINKING_LEVELS).optional(),
   thinkingLevels: z.array(z.enum(THINKING_LEVELS)).min(1).optional(),

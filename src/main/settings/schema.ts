@@ -107,6 +107,10 @@ export const promptTemplatesSchema = z
 const storedSettings = z.looseObject({
   providers: z.array(provider),
   activeProviderId: z.string().default(""),
+  auxiliaryModel: z
+    .object({ providerId: z.string().min(1), modelId: z.string().min(1) })
+    .optional()
+    .catch(undefined),
   toolRules: z
     .array(
       toolRuleSchema.extend({

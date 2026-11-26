@@ -113,6 +113,7 @@ import { ProjectInstructionScopes, loadProjectInstructions } from "./project-ins
 import { failedRunOf, interruptedRunOf } from "./recovery";
 import { AgentRun, finishedGitView } from "./run";
 import { messageParts, toUiMessages } from "./session-store";
+import { firstCompletedReply, requestSessionTitle } from "./session-title";
 import { scanSkills, skillCatalog } from "./skills";
 import { createTools } from "./tools";
 import type { ToolEnvironment } from "./tools/types";
@@ -128,6 +129,7 @@ import type {
   NewChatDraft,
   ReferencedUserMessage,
   SavedGitChanges,
+  TextModelRequest,
 } from "./types";
 
 const BASE_SYSTEM_PROMPT = `You are a helpful assistant running inside ${APP_NAME}.`;
@@ -692,6 +694,56 @@ export class AgentHost {
     return this.beginRun(agent, { clearDraftFor, compaction: { mode: "manual", focus } });
   }
 
+  private resolveAuxiliaryModel(): TextModelRequest | undefined {
+    const { providers, auxiliaryModel } = this.deps.getSettings();
+    if (
+      !auxiliaryModel ||
+      (auxiliaryModel.providerId === this.agentProvider?.id &&
+        auxiliaryModel.modelId === this.agentProvider.modelId)
+    )
+      return;
+    const provider = providers.find(({ id }) => id === auxiliaryModel.providerId);
+    if (!provider || !hasSavedModel([provider], auxiliaryModel)) return;
+    try {
+      const apiKey = decryptSecret(provider.apiKey);
+      const { model, streamFn } = resolveModel(
+        { ...provider, modelId: auxiliaryModel.modelId },
+        apiKey,
+        this.deps.request,
+      );
+      return { model, stream: streamFn, apiKey };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async generateTitle(
+    sessionId: string,
+    runId: string,
+    agent: Agent,
+    auxiliaryModel?: TextModelRequest,
+  ): Promise<void> {
+    const { store } = this.deps;
+    const meta = store.getMeta(sessionId);
+    if (!meta || meta.titleCustom || meta.titleGenerated) return;
+    const user = agent.state.messages.find(({ role }) => role === "user");
+    const reply = firstCompletedReply(agent.state.messages);
+    if (!user || !reply) return;
+    const { model } = agent.state;
+    const stream = agent.streamFunction;
+    const selection = auxiliaryModel ?? {
+      model,
+      stream,
+      apiKey: await agent.getApiKey?.(model.provider),
+    };
+    const title = await requestSessionTitle(
+      selection,
+      visibleMessageText(messageParts(user)),
+      reply,
+    );
+    if (title && store.saveGeneratedTitle(sessionId, runId, title)) this.sendSessions();
+  }
+
   private beginRun(
     agent: Agent,
     options: Partial<
@@ -711,12 +763,19 @@ export class AgentHost {
       throw new Error("此聊天有未完成的撤销。请重新打开「回到此处」。");
     const sessionRules = this.sessionRules.get(sessionId) ?? [];
     this.sessionRules.set(sessionId, sessionRules);
-    const sessionMode = this.getCurrentSession()?.planMode;
+    const session = this.getCurrentSession();
+    const sessionMode = session?.planMode;
     const planning = options.planning ?? Boolean(sessionMode);
+    const auxiliaryModel = this.resolveAuxiliaryModel();
+    const needsTitle =
+      !session?.titleCustom &&
+      !session?.titleGenerated &&
+      !firstCompletedReply(agent.state.messages);
     const run = new AgentRun({
       ...this.deps,
       ...options,
       agent,
+      auxiliaryModel,
       sessionId,
       environment: this.agentToolEnvironment!,
       tools: this.localTools,
@@ -739,10 +798,15 @@ export class AgentHost {
         const directory = run.state.workingDirectory;
         if (
           completedTask &&
+          !planning &&
           directory &&
           this.deps.store.getMeta(sessionId)?.workingDirectory === directory
         )
           this.deps.onTurnCompleted?.(sessionId, directory, completedTask);
+        if (completedTask && needsTitle)
+          void this.generateTitle(sessionId, run.state.runId, agent, auxiliaryModel).catch(
+            () => {},
+          );
         this.deps.onActivityChanged?.();
       },
     });

@@ -11,7 +11,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { beforeEach, expect, it, vi } from "vitest";
 
-import { COMPACTION_SUMMARY_PROMPT } from "../src/main/agent-host/constants";
+import { COMPACTION_SUMMARY_PROMPT, SESSION_TITLE_PROMPT } from "../src/main/agent-host/constants";
 import { AgentHost } from "../src/main/agent-host/host";
 import { McpManager } from "../src/main/agent-host/mcp";
 import { withModelRetry } from "../src/main/agent-host/model-retry";
@@ -300,6 +300,8 @@ it("compacts and retries overflow from its checkpoint without repeating a comple
     };
     if (body.messages[0]?.content === COMPACTION_SUMMARY_PROMPT)
       return chatResponse({ content: "Keep the pending check and use the saved write." }, "stop");
+    if (body.messages[0]?.content === SESSION_TITLE_PROMPT)
+      return chatResponse({ content: "Earlier discussion" }, "stop");
     requests.push(body.messages);
     if (requests.length === 1) return chatResponse({ content: "Earlier reply" }, "stop");
     if (requests.length === 2) return write("initial_write");

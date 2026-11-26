@@ -27,7 +27,7 @@ import {
 import { messageText } from "./session-store";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
-import type { ReferencedUserMessage, SavedCompaction } from "./types";
+import type { ReferencedUserMessage, SavedCompaction, TextModelRequest } from "./types";
 
 export function compactionMarker({
   id,
@@ -275,6 +275,7 @@ export async function compactContext({
   previous,
   model,
   stream,
+  auxiliaryModel,
   force,
   focus,
   signal,
@@ -285,6 +286,7 @@ export async function compactContext({
   previous?: SavedCompaction;
   model: Model<Api>;
   stream: StreamFn;
+  auxiliaryModel?: TextModelRequest;
   force: boolean;
   focus: string;
   signal?: AbortSignal;
@@ -317,19 +319,25 @@ export async function compactContext({
     const keep = force ? Math.max(latestUser, boundary) : boundary;
     const history = messages.slice(start, keep);
     if (keep < messages.length && history.some(({ role }) => role !== "system")) {
-      const { summary, usage } = await summarizeHistory({
-        model,
-        stream,
+      const request = {
         messages: history,
         previousSummary: record.summary,
         focus,
         toolOutputLimit,
         signal,
-        apiKey,
+      };
+      const currentModel = { model, stream, apiKey };
+      const result = await summarizeHistory({
+        ...request,
+        ...(auxiliaryModel ?? currentModel),
+      }).catch((error: unknown) => {
+        signal?.throwIfAborted();
+        if (!auxiliaryModel) throw error;
+        return summarizeHistory({ ...request, ...currentModel });
       });
       record.cutoff = keep;
-      record.summary = summary;
-      record.usage = usage;
+      record.summary = result.summary;
+      record.usage = result.usage;
     }
   }
   if (

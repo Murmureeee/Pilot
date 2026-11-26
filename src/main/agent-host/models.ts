@@ -26,6 +26,7 @@ import {
   COMPACTION_SUMMARY_PROMPT,
   DEFAULT_MODEL_CAPABILITIES,
   DEFAULT_MODEL_PRICING,
+  SESSION_TITLE_PROMPT,
 } from "./constants";
 import { legacyMentionParts } from "./mentions";
 import {
@@ -62,6 +63,14 @@ function resolveFaux(cfg: ProviderConfig): ResolvedModel {
     const parts = legacyMentionParts(withoutSkillBodies);
     const echoed = (parts ? visibleMessageText(parts) : text).slice(0, 200);
     const chinese = /\p{Script=Han}/u.test(echoed);
+
+    if (messages[0]?.role === "system" && messageText(messages[0]) === SESSION_TITLE_PROMPT) {
+      const { user } = JSON.parse(text) as { user: string };
+      faux.appendResponses([
+        fauxAssistantMessage([fauxText(user.split(/\r?\n/, 1)[0]!.slice(0, 24))]),
+      ]);
+      return inner(m, context, options);
+    }
 
     // Summary requests carry transcript text, including words that trigger tool demos.
     if (messages[0]?.role === "system" && messageText(messages[0]) === COMPACTION_SUMMARY_PROMPT) {

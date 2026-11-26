@@ -171,6 +171,50 @@ it("retains the plan, file reference, current task and tool declarations after s
   });
 });
 
+it.each([false, true])(
+  "routes the summary to the auxiliary model, then falls back on failure (%s)",
+  async (fails) => {
+    const current = { role: "user", content: "Continue", timestamp: 4 } as const;
+    const messages: Message[] = [
+      { role: "user", content: "Earlier requirements and results. ".repeat(400), timestamp: 1 },
+      assistant([{ type: "text", text: "Earlier reply" }]),
+      current,
+      assistant([{ type: "text", text: "Recent reply" }]),
+    ];
+    const auxiliary = { ...model, id: "small", contextWindow: 1024 };
+    const stream = summaryStream();
+    const summary = summaryStream();
+    const unavailable: StreamFn = () => {
+      throw new Error("Auxiliary offline");
+    };
+    summary.mockImplementationOnce(fails ? unavailable : summary.getMockImplementation()!);
+    const record = await compactContext({
+      messages,
+      original: messages,
+      model,
+      stream,
+      apiKey: "primary-key",
+      auxiliaryModel: { model: auxiliary, stream: summary, apiKey: "auxiliary-key" },
+      force: true,
+      focus: "Retain the task details",
+    });
+    expect(summary).toHaveBeenCalledWith(
+      auxiliary,
+      expect.any(Object),
+      expect.objectContaining({
+        apiKey: "auxiliary-key",
+        maxTokens: 102,
+      }),
+    );
+    const fallback = new Set(
+      stream.mock.calls.map(([selected, , options]) => selected.id + ":" + options?.apiKey),
+    );
+    expect(fallback).toEqual(new Set(fails ? [model.id + ":primary-key"] : []));
+    expect(record?.summary).toBe("Outstanding: review the remaining tests.");
+    expect(compactedContext(messages, record)).toContainEqual(current);
+  },
+);
+
 it("can estimate loaded transcripts without assistant usage", () => {
   const olderMessage = assistant([{ type: "text", text: "Older answer" }]);
   const { usage: _usage, ...legacy } = olderMessage;

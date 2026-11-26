@@ -71,7 +71,7 @@ export function SettingsView(): JSX.Element {
 
         {section === "permissions" && settings && <PermissionSettings settings={settings} />}
 
-        <div hidden={section !== "providers"}>
+        <div hidden={section !== "providers"} className="min-w-0">
           {settings && <ProviderSettings settings={settings} />}
         </div>
 

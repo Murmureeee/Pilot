@@ -5,6 +5,8 @@ import { createServer } from "node:http";
 
 const modelId = "pilot-desktop-fixture";
 const visionModelId = "pilot-vision-fixture";
+const utilityModelId = "pilot-utility-fixture";
+const titlePrompt = "Generate a short conversation title";
 
 function completion(response, id, input) {
   response.writeHead(200, { "content-type": "text/event-stream" });
@@ -31,6 +33,8 @@ function completion(response, id, input) {
 
 export async function startModelFixture() {
   const pending = [];
+  const utility = [];
+  const titles = [];
   const received = new EventEmitter();
   let completionCount = 0;
   const server = createServer(async (request, response) => {
@@ -47,10 +51,24 @@ export async function startModelFixture() {
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
       const input = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-      assert.ok(input.model === modelId || input.model === visionModelId);
+      assert.ok([modelId, visionModelId, utilityModelId].includes(input.model));
       assert.equal(input.stream, true);
-      pending.push(completion(response, "fixture-" + ++completionCount, input));
-      received.emit("completion");
+      const title = input.messages.some(({ role, content }) =>
+        role === "system" && typeof content === "string" && content.startsWith(titlePrompt),
+      );
+      const exchange = title ? JSON.parse(input.messages.at(-1).content) : null;
+      const reply = completion(response, "fixture-" + ++completionCount, input);
+      if (title) titles.push({ model: input.model, user: exchange.user });
+      if (input.model === utilityModelId) {
+        utility.push(reply);
+        received.emit("utility");
+      } else if (exchange) {
+        reply.write({ content: exchange.user.slice(0, 24) || "New chat" });
+        reply.finish();
+      } else {
+        pending.push(reply);
+        received.emit("completion");
+      }
     } catch (error) {
       response.writeHead(400, { "content-type": "application/json" });
       response.end(JSON.stringify({ error: { message: String(error) } }));
@@ -63,10 +81,17 @@ export async function startModelFixture() {
     baseUrl: "http://127.0.0.1:" + server.address().port + "/v1",
     modelId,
     visionModelId,
+    utilityModelId,
+    titles,
     async nextCompletion() {
       if (!pending.length)
         await once(received, "completion", { signal: AbortSignal.timeout(15_000) });
       return pending.shift();
+    },
+    async nextUtilityCompletion() {
+      if (!utility.length)
+        await once(received, "utility", { signal: AbortSignal.timeout(15_000) });
+      return utility.shift();
     },
     async close() {
       const closed = once(server, "close");

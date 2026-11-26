@@ -27,6 +27,7 @@ import * as models from "../src/main/agent-host/models";
 import { SessionStore } from "../src/main/agent-host/session-store";
 import type { Settings } from "../src/main/settings/types";
 import { mentionToken } from "../src/shared/mentions";
+import { fixtureTitle } from "./model-fixture";
 
 vi.mock("electron", () => ({ safeStorage: {} }));
 
@@ -57,7 +58,8 @@ function useFixtureModel(
   catalog.setProvider(fake.provider);
   return vi.spyOn(models, "resolveModel").mockReturnValue({
     model: fake.getModel()!,
-    streamFn: catalog.streamSimple.bind(catalog),
+    streamFn: (model, context, options) =>
+      fixtureTitle(context) ?? catalog.streamSimple(model, context, options),
   });
 }
 

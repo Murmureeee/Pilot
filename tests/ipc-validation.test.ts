@@ -18,6 +18,7 @@ const draft: ProviderInput = {
 const settings: SettingsInput = {
   providers: [{ ...draft, modelId: "example" }],
   activeProviderId: "local",
+  auxiliaryModel: { providerId: "local", modelId: "example" },
   workingDirectory: null,
   commandShell: "bash",
   persona: "",

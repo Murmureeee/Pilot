@@ -12,7 +12,7 @@ import {
   OPENAI_RESPONSES_MIN_TOKENS,
   THINKING_LEVELS,
 } from "../../shared/constants";
-import { isOpenAiProvider } from "../../shared/providers";
+import { hasSavedModel, isOpenAiProvider } from "../../shared/providers";
 import { selectThinkingLevel } from "../../shared/thinking";
 import { automaticModelCapabilities } from "../agent-host/model-capabilities";
 import { SETTINGS_FILE_NAME, SETTINGS_SAVE_BLOCKED } from "../constants";
@@ -127,9 +127,13 @@ export function mergeSettingsInput(current: Settings, input: SettingsInput): Set
     };
   });
   const thinkingLevels = enabledThinkingLevels(input.thinkingLevels ?? current.thinkingLevels);
+  const auxiliaryModel =
+    input.auxiliaryModel === undefined ? current.auxiliaryModel : input.auxiliaryModel;
   return {
     providers: merged,
     activeProviderId: input.activeProviderId,
+    auxiliaryModel:
+      auxiliaryModel && hasSavedModel(merged, auxiliaryModel) ? auxiliaryModel : undefined,
     toolRules: current.toolRules,
     approvalMode: input.approvalMode ?? current.approvalMode ?? "standard",
     thinkingLevels,
@@ -171,6 +175,10 @@ export function toPublicSettings(settings: Settings): PublicSettings {
       hasKey: Boolean(p.apiKey),
     })),
     activeProviderId: settings.activeProviderId,
+    auxiliaryModel:
+      settings.auxiliaryModel && hasSavedModel(settings.providers, settings.auxiliaryModel)
+        ? settings.auxiliaryModel
+        : null,
     toolRules: settings.toolRules,
     approvalMode: settings.approvalMode ?? "standard",
     thinkingLevels,
@@ -238,6 +246,15 @@ export function validateSettingsInput(input: SettingsInput): string | undefined 
     !input.providers.some((p) => p.id === input.activeProviderId && getProviderModels(p).length > 0)
   ) {
     return "当前提供方需要至少一个模型。";
+  }
+  if (
+    input.auxiliaryModel &&
+    !hasSavedModel(
+      input.providers.map((provider) => ({ ...provider, models: getProviderModels(provider) })),
+      input.auxiliaryModel,
+    )
+  ) {
+    return "辅助模型已不可用。请重新选择。";
   }
   return undefined;
 }

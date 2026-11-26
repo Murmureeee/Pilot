@@ -18,10 +18,17 @@ import { displayProviderName, localizeError, t, useLocale } from "@renderer/lib/
 import { levelLabel } from "@renderer/lib/thinking-level";
 import { useAgentStore } from "@renderer/stores/agent";
 import { THINKING_LEVELS } from "@shared/constants";
-import type { ProviderInput, PublicSettings, ThinkingLevel } from "@shared/contract";
-import { isOpenAiProvider, modelCatalogInput } from "@shared/providers";
+import type {
+  ProviderInput,
+  PublicSettings,
+  SessionModelSelection,
+  ThinkingLevel,
+} from "@shared/contract";
+import { hasSavedModel, isOpenAiProvider, modelCatalogInput } from "@shared/providers";
 
+import { AuxiliaryModelSetting } from "./AuxiliaryModelSetting";
 import { ProviderEditor } from "./ProviderEditor";
+import { SettingsGroup } from "./SettingsGroup";
 import type { DraftProvider } from "./types";
 
 function toProviderInput(draft: DraftProvider): ProviderInput {
@@ -51,13 +58,23 @@ export function ProviderSettings({ settings }: { settings: PublicSettings }): JS
   const [activeId, setActiveId] = useState(settings.activeProviderId);
   const [editorId, setEditorId] = useState(settings.activeProviderId || drafts[0]?.id);
   const [levels, setLevels] = useState<ThinkingLevel[]>(settings.thinkingLevels);
+  const [auxiliaryModel, setAuxiliaryModel] = useState<SessionModelSelection | null>(
+    settings.auxiliaryModel,
+  );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editor = drafts.find(({ id }) => id === editorId);
+  const selectedAuxiliary =
+    auxiliaryModel && hasSavedModel(drafts, auxiliaryModel) ? auxiliaryModel : null;
   const dirty =
-    JSON.stringify([drafts, activeId, levels]) !==
-    JSON.stringify([toDrafts(settings), settings.activeProviderId, settings.thinkingLevels]);
+    JSON.stringify([drafts, activeId, levels, selectedAuxiliary]) !==
+    JSON.stringify([
+      toDrafts(settings),
+      settings.activeProviderId,
+      settings.thinkingLevels,
+      settings.auxiliaryModel,
+    ]);
 
   const add = (): void => {
     const id = crypto.randomUUID();
@@ -92,13 +109,19 @@ export function ProviderSettings({ settings }: { settings: PublicSettings }): JS
       providers.find((provider) => provider.id === activeId && provider.modelId) ??
       providers.find((provider) => provider.modelId);
     try {
-      await saveSettings({ providers, activeProviderId: active?.id ?? "", thinkingLevels: levels });
+      await saveSettings({
+        providers,
+        activeProviderId: active?.id ?? "",
+        thinkingLevels: levels,
+        auxiliaryModel: selectedAuxiliary,
+      });
       // 以主进程落盘后的结果为准：清空已提交的密钥输入，并同步规范化后的名称与当前提供方。
       const next = useAgentStore.getState().settings;
       if (next) {
         setDrafts(toDrafts(next));
         setActiveId(next.activeProviderId);
         setLevels(next.thinkingLevels);
+        setAuxiliaryModel(next.auxiliaryModel);
       }
       setSaved(true);
     } catch (cause) {
@@ -109,7 +132,7 @@ export function ProviderSettings({ settings }: { settings: PublicSettings }): JS
   };
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 grid-cols-1 gap-5">
       <section className="grid gap-2.5" aria-labelledby="provider-list-heading">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="provider-list-heading" className="text-sm font-medium">
@@ -169,50 +192,60 @@ export function ProviderSettings({ settings }: { settings: PublicSettings }): JS
           onRemove={() => remove(editor.id)}
         />
       )}
-      <section aria-labelledby="thinking-levels-heading" className="settings-card">
-        <div className="settings-row gap-x-3">
-          <div className="min-w-0 flex-1 basis-48">
-            <h2 id="thinking-levels-heading" className="text-sm font-medium">
-              {t("可用思考强度", locale)}
-            </h2>
-            <p className="text-xs leading-5 text-muted-foreground">
-              {t("选择聊天面板显示的档位。实际生效取决于模型支持。", locale)}
-            </p>
+      <SettingsGroup id="model-preferences-heading" title={t("模型偏好", locale)}>
+        <div className="settings-list">
+          <AuxiliaryModelSetting
+            providers={drafts}
+            selection={selectedAuxiliary}
+            onChange={setAuxiliaryModel}
+            disabled={saving}
+          />
+          <div className="settings-row gap-x-3">
+            <div className="min-w-0 flex-1 basis-48">
+              <h2 id="thinking-levels-heading" className="text-sm font-medium">
+                {t("可用思考强度", locale)}
+              </h2>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {t("选择聊天面板显示的档位。实际生效取决于模型支持。", locale)}
+              </p>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button size="sm" variant="outline" />}>
+                {t("已选 {0} 档", locale, [levels.length])}
+                <ChevronDownIcon data-icon="inline-end" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-40">
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={() => setLevels([...THINKING_LEVELS])}>
+                    {t("恢复默认", locale)}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {THINKING_LEVELS.map((level) => {
+                    const checked = levels.includes(level);
+                    return (
+                      <DropdownMenuCheckboxItem
+                        key={level}
+                        checked={checked}
+                        disabled={checked && levels.length === 1}
+                        onCheckedChange={(selected) =>
+                          setLevels((current) =>
+                            selected
+                              ? [...current, level]
+                              : current.filter((item) => item !== level),
+                          )
+                        }
+                        closeOnClick={false}
+                      >
+                        {t(levelLabel(level), locale)}
+                      </DropdownMenuCheckboxItem>
+                    );
+                  })}
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button size="sm" variant="outline" />}>
-              {t("已选 {0} 档", locale, [levels.length])}
-              <ChevronDownIcon data-icon="inline-end" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-40">
-              <DropdownMenuGroup>
-                <DropdownMenuItem onClick={() => setLevels([...THINKING_LEVELS])}>
-                  {t("恢复默认", locale)}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {THINKING_LEVELS.map((level) => {
-                  const checked = levels.includes(level);
-                  return (
-                    <DropdownMenuCheckboxItem
-                      key={level}
-                      checked={checked}
-                      disabled={checked && levels.length === 1}
-                      onCheckedChange={(selected) =>
-                        setLevels((current) =>
-                          selected ? [...current, level] : current.filter((item) => item !== level),
-                        )
-                      }
-                      closeOnClick={false}
-                    >
-                      {t(levelLabel(level), locale)}
-                    </DropdownMenuCheckboxItem>
-                  );
-                })}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
-      </section>
+      </SettingsGroup>
       {error && (
         <p role="alert" className="text-sm wrap-anywhere text-destructive">
           {localizeError(error, locale)}

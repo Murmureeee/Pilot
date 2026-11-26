@@ -7,6 +7,7 @@ import type {
   LogLevel,
   PromptTemplate,
   ProviderFields,
+  SessionModelSelection,
   ThinkingLevel,
   ToolRule,
 } from "../../shared/contract";
@@ -33,6 +34,7 @@ interface ImportedPlugin extends ImportedPluginFields {
 export interface Settings {
   providers: ProviderConfig[];
   activeProviderId: string;
+  auxiliaryModel?: SessionModelSelection;
   toolRules?: ToolRule[];
   approvalMode?: ApprovalMode;
   thinkingLevel?: ThinkingLevel;

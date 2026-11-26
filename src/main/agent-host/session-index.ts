@@ -42,6 +42,7 @@ const sessionMeta = z.looseObject({
     .optional(),
   lastRunResult: z.enum(SESSION_RUN_RESULTS).optional().catch(undefined),
   titleCustom: z.boolean().optional(),
+  titleGenerated: z.literal(true).optional().catch(undefined),
   pinned: z.boolean().optional(),
   archived: z.boolean().optional(),
   unread: z.boolean().optional(),
