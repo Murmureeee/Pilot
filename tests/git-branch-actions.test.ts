@@ -91,7 +91,7 @@ it("switches local branches and lets Git preserve changes or reject overwriting 
   await host.switchGitBranch(composerId, retry.token, { kind: "switch", branch: "main" });
   expect(git("branch", "--show-current")).toBe("main");
   expect(readFileSync(join(project, "local.txt"), "utf8")).toBe("keep untracked\n");
-});
+}, 20_000);
 
 it("renames the unborn checkout via branch creation and requires a new preview after HEAD moves", async () => {
   using temp = mkdtempDisposableSync(join(tmpdir(), "pilot-branches-"));

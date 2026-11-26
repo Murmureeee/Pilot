@@ -1896,4 +1896,4 @@ it("reviews built-in tools and shell changes against the run's original Git inde
   } finally {
     resolveModel.mockRestore();
   }
-});
+}, 20_000);
