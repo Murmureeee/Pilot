@@ -4,6 +4,10 @@
 
 ## 近期交付
 
+### 2026-11-27
+
+- **项目级配置。** 项目可通过 `.pilot/config.json` 声明 MCP 服务、授权规则和验证命令，并读取 Claude Code 的 `.mcp.json`。输入坞在首次执行或配置改变时展示范围，按 `Esc` 可跳过本次加载。配置详情和相关设置列出文件来源，可在详情中撤销信任。已保存的本机回合后验证命令或停用设置优先。Windows 隔离场景用本地模型和 stdio 服务实测了跳过、审批后的 MCP 调用、任务结束时关闭服务、手动和回合后验证，以及重启恢复、跨项目隔离和撤销。回归测试覆盖确认期间文件变化、过期回复、停止和授权路径边界。项目配置详情通过中英文、亮暗主题、1100 × 750、720 × 480 和窄窗 150% 缩放检查，最低文字对比度为 5.03:1。复核了信任卡按钮可见性和键盘焦点。八步验证、38 个 Windows 桌面场景和 594 项 Vitest 测试通过。Electron 冒烟返回 `ok: true`，开发版挂载且无未捕获异常。测试进程和临时目录已清理。[项目配置设计](./DESIGN.md#25-主列顶栏) · [场景脚本](../scripts/verify-windows-ui.mjs) · [提交 11c440e](https://github.com/Murmureeee/Pilot/commit/11c440e735de22d9506e7d8e04b0d4e024c0e5cc)
+
 ### 2026-11-26
 
 - **发现页。** 「技能 → 发现插件」可浏览 Claude Code 官方市场、添加 Git 市场、筛选条目并预览安装。「MCP 服务 → 发现 MCP 服务」可按名称搜索官方 MCP Registry 的最新版本并分页查看。从条目核对来源、发布者、版本、HTTP 地址或启动命令，预填配置并补齐必填项后保存。预填支持 Streamable HTTP 与使用固定版本 npm、PyPI 包的 stdio 配置，保存后默认停用。Windows 隔离桌面复核了来源恢复与移除、仓库子目录安装、Registry 搜索和分页、占位符校验、MCP 配置保存与重启。应用实读 Claude Code 官方市场 317 个条目和 MCP Registry 的 `filesystem` 搜索结果。中英文、亮暗主题、1100 × 750、720 × 480 和窄窗 150% 缩放的键盘与焦点检查通过，配置对话框最低文字对比度为 5.67:1。八步验证、36 个 Windows 桌面场景和 575 项 Vitest 测试通过。Electron 冒烟返回 `ok: true`，开发版挂载且无未捕获异常，测试进程和临时目录已清理。[发现页设计](./DESIGN.md#212-设置视图) · [场景脚本](../scripts/verify-windows-ui.mjs) · [提交 478e578](https://github.com/Murmureeee/Pilot/commit/478e5788e9b593da3dd68381e126748efa4999a3)
