@@ -887,11 +887,12 @@ export class AgentHost {
     return this.publishSnapshot();
   }
 
-  openProject(directory: string): Snapshot {
+  openProject(directory: string, navigation?: "reveal"): Snapshot {
     const workingDirectory = normalizeWorkingDirectory(directory);
     this.deps.store.rememberProject(workingDirectory);
-    this.switchSession(null, this.projectDraft(workingDirectory));
-    return this.publishSnapshot();
+    if (!navigation || this.getProjectDirectory() !== workingDirectory)
+      this.switchSession(null, this.projectDraft(workingDirectory));
+    return this.publishSnapshot(navigation);
   }
 
   useRecentProject(directory: string, sessionId?: string): Snapshot | Promise<Snapshot> {

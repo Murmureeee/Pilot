@@ -87,6 +87,10 @@ export function registerAgentRoutes({
   handle(IPC.sessionUseRecentProject, (_event, directory, sessionId) =>
     host.useRecentProject(directory, sessionId),
   );
+  handle(IPC.sessionOpenDroppedProject, (_event, directory) => {
+    exit.checkWorkAllowed();
+    host.openProject(directory, "reveal");
+  });
   handle(IPC.sessionOpenProjectFolder, async (_event, directory) => {
     const error = await shell.openPath(host.projectFolder(directory));
     if (error) throw new Error("无法在文件管理器中打开该项目。", { cause: error });

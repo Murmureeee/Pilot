@@ -244,6 +244,7 @@ const inputs = {
     ]),
   ]),
   [IPC.sessionSelectProject]: z.tuple([z.enum(SUPPORTED_LOCALES), z.uuid().optional()]),
+  [IPC.sessionOpenDroppedProject]: z.tuple([nonBlank.refine((value) => !value.includes("\0"))]),
   [IPC.sessionUseRecentProject]: z.tuple([nonBlank, z.uuid().optional()]),
   [IPC.sessionOpenProjectFolder]: z.tuple([nonBlank]),
   [IPC.sessionRemoveRecentProject]: z.tuple([nonBlank]),

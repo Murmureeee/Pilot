@@ -104,3 +104,16 @@ export const NATIVE_DIALOG_TITLES = {
     exportMarkdown: string;
   }
 >;
+
+export const PROJECT_ENTRY_ERROR = {
+  zh: {
+    message: "无法打开项目",
+    detail: "请选择一个可访问的文件夹，或在终端运行 pilot <目录>。",
+    close: "关闭",
+  },
+  en: {
+    message: "Could not open the project",
+    detail: "Choose one accessible folder, or run pilot <folder> in a terminal.",
+    close: "Close",
+  },
+} as const;

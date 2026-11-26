@@ -30,6 +30,7 @@ import {
   verifyPlanDraft,
   verifyPlanExecution,
   verifyProjectInstructions,
+  verifyProjectEntry,
   verifyQuickMemory,
   verifyRestoredMemory,
   verifyRestoredAfterTurnVerification,
@@ -56,7 +57,7 @@ async function runScene(label, verify) {
   }
 }
 
-async function withApp(profile, verify) {
+async function withApp(profile, verify, project) {
   const env = { ...process.env };
   delete env.ELECTRON_RENDERER_URL;
   const app = await electron.launch({
@@ -66,6 +67,7 @@ async function withApp(profile, verify) {
       "--user-data-dir=" + profile,
       "--remote-debugging-address=127.0.0.1",
       "--disable-backgrounding-occluded-windows",
+      ...(project ? [project] : []),
     ],
     cwd: repository,
     env,
@@ -142,6 +144,8 @@ const verificationProject = join(scratch, "verification-project");
 const gitProject = join(scratch, "publishing-project");
 const gitRemote = join(scratch, "publishing-remote.git");
 const annotationRepository = join(scratch, "annotation-repository");
+const entryProject = join(scratch, "启动 项目");
+const secondEntryProject = join(scratch, "Next project & notes");
 const imageFixture = {
   chosen: join(scratch, "chosen.png"),
   dropped: join(scratch, "dropped.png"),
@@ -161,6 +165,8 @@ try {
   mkdirSync(verificationProject);
   mkdirSync(gitProject);
   mkdirSync(annotationRepository);
+  mkdirSync(entryProject);
+  mkdirSync(secondEntryProject);
   execFileSync("git", ["init", "-q", commandProject]);
   writeFileSync(join(commandProject, "package.json"), JSON.stringify({
     scripts: { test: 'node -e "console.log(123456789)"' },
@@ -267,6 +273,18 @@ try {
       verifyGitAnnotations(page, window, app, model, annotationRepository),
     );
   });
+  await withApp(profile, async (page, window, app) => {
+    await runScene("Open a cold and running window from the command line and drop a project", () =>
+      verifyProjectEntry(page, window, app, {
+        electron: require("electron"),
+        repository,
+        profile,
+        caller: scratch,
+        firstProject: entryProject,
+        secondProject: secondEntryProject,
+      }),
+    );
+  }, entryProject);
 } finally {
   try {
     await model?.close();

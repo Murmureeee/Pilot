@@ -73,6 +73,7 @@ describe("IPC contract", () => {
     expect(IPC.sessionRename).toBe("session:rename");
     expect(IPC.sessionDelete).toBe("session:delete");
     expect(IPC.sessionSelectProject).toBe("session:select-project");
+    expect(IPC.sessionOpenDroppedProject).toBe("session:open-dropped-project");
     expect(IPC.sessionSaveDraft).toBe("session:save-draft");
     expect(IPC.sessionUpdateSettings).toBe("session:update-settings");
     expect(IPC.sessionSetPlanMode).toBe("session:set-plan-mode");

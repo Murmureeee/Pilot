@@ -1,10 +1,13 @@
 // @env node
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { stripVTControlCharacters } from "node:util";
+
+import { stopProcessTree } from "../windows-process.mjs";
 
 const wide = { width: 1100, height: 750 };
 const narrow = { width: 720, height: 480 };
@@ -1927,18 +1930,119 @@ async function pasteImage(page, name, data) {
   }, { name, data });
 }
 
-async function dropLocalFiles(page, files) {
+async function dropLocalFiles(page, files, target = editor(page), onOver) {
   const inspector = await page.context().newCDPSession(page);
   try {
-    const rect = await editor(page).boundingBox();
+    const rect = await target.boundingBox();
     assert.ok(rect);
     const point = { x: Math.round(rect.x + rect.width / 2), y: Math.round(rect.y + rect.height / 2) };
     const data = { items: [], files, dragOperationsMask: 1 };
-    for (const type of ["dragEnter", "dragOver", "drop"])
+    for (const type of ["dragEnter", "dragOver"])
       await inspector.send("Input.dispatchDragEvent", { type, ...point, data });
+    await onOver?.();
+    await inspector.send("Input.dispatchDragEvent", { type: "drop", ...point, data });
   } finally {
     await inspector.detach();
   }
+}
+
+export async function verifyProjectEntry(page, window, app, fixture) {
+  const { electron, repository, profile, caller, firstProject, secondProject } = fixture;
+  const localFolder = join(firstProject, "reference-folder");
+  const plainFile = join(caller, "not-a-project.txt");
+  mkdirSync(localFolder);
+  writeFileSync(plainFile, "A file is not a project folder.");
+  const draft = "Keep this project draft.";
+  async function waitForSnapshot(matches, description) {
+    const deadline = performance.now() + 10000;
+    while (performance.now() < deadline) {
+      const snapshot = await page.evaluate(() => window.pi.getSnapshot());
+      if (matches(snapshot)) return snapshot;
+      await delay(75);
+    }
+    throw new Error("Timed out waiting for " + description);
+  }
+  const waitForDirectory = directory => waitForSnapshot(
+    snapshot => !snapshot.sessionId && snapshot.draftWorkingDirectory === directory,
+    basename(directory),
+  );
+  await waitForDirectory(firstProject);
+  await page.locator("main header").getByText(basename(firstProject), { exact: true }).waitFor();
+  await editor(page).fill(draft);
+  const first = await waitForSnapshot(snapshot =>
+    snapshot.draftWorkingDirectory === firstProject && snapshot.composerDraft.join("") === draft,
+    "the saved project draft",
+  );
+
+  async function launchAgain(...args) {
+    const process = spawn(electron, [repository, "--user-data-dir=" + profile, ...args], {
+      cwd: caller, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    process.stdout.on("data", chunk => output += chunk.toString());
+    process.stderr.on("data", chunk => output += chunk.toString());
+    try {
+      const [code] = await once(process, "close", { signal: AbortSignal.timeout(10000) });
+      assert.equal(code, 0, output);
+      assert.doesNotMatch(output, /\[renderer\] \[app\] mounted/);
+    } finally {
+      stopProcessTree(process);
+    }
+  }
+
+  const windowId = await window.evaluate(win => { win.minimize(); return win.id; });
+  await launchAgain(basename(secondProject));
+  await waitForDirectory(secondProject);
+  assert.deepEqual(await app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows().map(win => [win.id, win.isMinimized()]),
+  ), [[windowId, false]]);
+  await app.evaluate(({ dialog }) => {
+    const original = dialog.showMessageBox;
+    globalThis.__pilotProjectEntryTestMessage = new Promise(resolve => {
+      dialog.showMessageBox = async (_window, options) => {
+        dialog.showMessageBox = original;
+        resolve(options.message);
+        return { response: 0, checkboxChecked: false };
+      };
+    });
+  });
+  await launchAgain("--open-project", "missing test folder");
+  assert.equal(await app.evaluate(() => globalThis.__pilotProjectEntryTestMessage), "Could not open the project");
+  await waitForDirectory(secondProject);
+
+  let current = locales[1];
+  const target = page.locator("main header").first();
+  for (const [size, zoom] of [[wide, 1], [narrow, 1], [narrow, 1.5]]) {
+    await resize(page, window, size, zoom);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        await dropLocalFiles(page, [secondProject], target, async () => {
+          const hint = page.getByText(locale === locales[1] ? "Drop a folder to open a project" : "拖入文件夹以打开项目", { exact: true });
+          await assertFits(hint);
+        });
+        await page.locator("[data-project-drop-hint]").waitFor({ state: "hidden" });
+        await waitForDirectory(secondProject);
+        await editor(page).and(page.locator(":focus")).waitFor();
+      }
+    }
+  }
+  await dropLocalFiles(page, [plainFile], target);
+  await page.locator("[data-feedback-bar]").getByText("Could not open the project. Drop a folder or use Open project.", { exact: true }).waitFor();
+  await waitForDirectory(secondProject);
+  await dropLocalFiles(page, [firstProject], target);
+  const restored = await waitForDirectory(firstProject);
+  assert.equal(restored.composerId, first.composerId);
+  assert.equal(restored.composerDraft.join(""), draft);
+  await page.waitForFunction(text => document.querySelector("[data-composer-editor]")?.innerText === text, draft);
+  await dropLocalFiles(page, [localFolder]);
+  await editor(page).getByText(basename(localFolder), { exact: true }).waitFor();
+  await launchAgain("--open-project", firstProject + "\\.");
+  const currentDraft = await page.evaluate(() => window.pi.getSnapshot());
+  assert.equal(currentDraft.composerId, first.composerId);
+  assert.equal(currentDraft.sessions.length, first.sessions.length);
+  assert.ok(currentDraft.recentProjects.includes(firstProject) && currentDraft.recentProjects.includes(secondProject));
 }
 
 export async function verifyImageDraft(page, window, model, project, files) {

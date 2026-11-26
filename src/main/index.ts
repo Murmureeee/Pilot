@@ -2,7 +2,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 
-import { BrowserWindow, Menu, app, nativeTheme, session, shell } from "electron";
+import { BrowserWindow, Menu, app, dialog, nativeTheme, session, shell } from "electron";
 
 import { APP_NAME, DEFAULT_LOCALE } from "../shared/constants";
 import {
@@ -17,6 +17,7 @@ import { runAgentSmoke } from "./agent-host/smoke";
 import {
   DEFAULT_WINDOW_SIZE,
   MINIMUM_WINDOW_SIZE,
+  PROJECT_ENTRY_ERROR,
   TITLE_BAR_OVERLAY_COLORS,
   WINDOWS_APP_ID,
   WINDOW_STATE_FILE_NAME,
@@ -34,11 +35,17 @@ import {
 } from "./ipc/transport";
 import { createDesktopNetwork } from "./network";
 import { prepareUserDataDirectory } from "./profile";
+import {
+  applicationArguments,
+  projectEntryArgument,
+  projectEntryFromInstance,
+} from "./project-entry";
 import { getLogLevel, loadSettings, saveSettings } from "./settings";
 import type { Settings } from "./settings/types";
 import { createSleepBlocker } from "./sleep-blocker";
 import { TaskNotifications } from "./task-notifications";
 import { TerminalManager } from "./terminal";
+import type { ProjectEntry } from "./types";
 import { DesktopUpdater } from "./updater";
 import { VerificationManager } from "./verification";
 import { createSearchRequest, createWebRequest } from "./web/request";
@@ -138,7 +145,7 @@ function createWindow(log: DiagnosticLog, stateFile: string): BrowserWindow {
   return win;
 }
 
-function startDesktop(): void {
+function startDesktop(): (entry: ProjectEntry) => void {
   // 无边框设计：移除默认应用菜单（File/Edit/View/Window）
   Menu.setApplicationMenu(null);
 
@@ -297,15 +304,34 @@ function startDesktop(): void {
     }
     return mainWindow;
   };
-  app.on("second-instance", () => {
-    if (!exit.isExiting()) revealWindow(getMainWindow());
-  });
   app.on("activate", () => {
     if (!exit.isExiting()) getMainWindow();
   });
   getMainWindow();
 
   setTimeout(() => void updater.check(), 2000).unref();
+  return (entry) => {
+    if (exit.isExiting()) return;
+    const window = getMainWindow();
+    revealWindow(window);
+    if (entry === undefined) return;
+    try {
+      exit.checkWorkAllowed();
+      if (entry === null) throw new Error("Invalid project argument");
+      host.openProject(entry, "reveal");
+    } catch {
+      const copy = PROJECT_ENTRY_ERROR[getRendererLocale(window.webContents)];
+      void dialog
+        .showMessageBox(window, {
+          type: "warning",
+          title: APP_NAME,
+          message: copy.message,
+          detail: copy.detail,
+          buttons: [copy.close],
+        })
+        .catch(() => log.write("warn", "main", "show-project-entry-error"));
+    }
+  };
 }
 
 // 开发态屏蔽 Electron 的 CSP 安全告警（CSP 仅在生产注入，见上）
@@ -313,7 +339,15 @@ if (isDev) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
 }
 
-if (process.argv.includes("--smoke")) {
+const args = applicationArguments(process.argv, process.defaultApp === true);
+const firstEntryFlag = args.find(
+  (argument) =>
+    argument === "--" ||
+    argument === "--open-project" ||
+    argument.startsWith("--open-project=") ||
+    argument === "--smoke",
+);
+if (firstEntryFlag === "--smoke") {
   void app.whenReady().then(runSmoke);
 } else {
   const requestedProfile = app.commandLine.getSwitchValue("user-data-dir")
@@ -324,8 +358,20 @@ if (process.argv.includes("--smoke")) {
   app.setPath("userData", profile);
   app.setPath("sessionData", profile);
 
-  if (app.requestSingleInstanceLock()) {
-    app.once("ready", startDesktop);
+  const project = projectEntryArgument(args, process.cwd());
+  if (app.requestSingleInstanceLock(project === undefined ? {} : { project })) {
+    // A second launch can arrive before settings and the project host are available.
+    const pending: ProjectEntry[] = project === undefined ? [] : [project];
+    let open = (entry: ProjectEntry): void => {
+      pending.push(entry);
+    };
+    app.on("second-instance", (_event, _commandLine, _workingDirectory, data) =>
+      open(projectEntryFromInstance(data)),
+    );
+    app.once("ready", () => {
+      open = startDesktop();
+      for (const entry of pending.splice(0)) open(entry);
+    });
     app.on("window-all-closed", () => {
       if (process.platform !== "darwin") app.quit();
     });

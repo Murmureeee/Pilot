@@ -37,6 +37,7 @@ export const IPC = {
   sessionSetPlanMode: "session:set-plan-mode",
   sessionReviewPlan: "session:review-plan",
   sessionSelectProject: "session:select-project",
+  sessionOpenDroppedProject: "session:open-dropped-project",
   sessionUseRecentProject: "session:use-recent-project",
   sessionOpenProjectFolder: "session:open-project-folder",
   sessionRemoveRecentProject: "session:remove-recent-project",

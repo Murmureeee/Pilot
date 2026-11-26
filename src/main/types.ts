@@ -30,3 +30,4 @@ export interface DesktopNetwork {
   fetch: typeof globalThis.fetch;
   configureProxy(session: Pick<Session, "setProxy">): Promise<void>;
 }
+export type ProjectEntry = string | null | undefined;

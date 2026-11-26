@@ -1310,6 +1310,11 @@ export const EN_MESSAGES: Record<string, string> = {
   "Git Bash 需要 Git for Windows。": "Git Bash requires Git for Windows.",
   已保存: "Saved",
   "无法使用该工作目录。": "This working directory is unavailable.",
+  拖入文件夹以打开项目: "Drop a folder to open a project",
+  "请一次拖入一个项目文件夹。": "Drop one project folder at a time.",
+  "拖放内容没有可用的本地路径。": "There is no local path for the dropped item.",
+  "无法打开项目。请拖入文件夹或使用「打开项目」。":
+    "Could not open the project. Drop a folder or use Open project.",
   "找不到 Git Bash。请安装 Git for Windows，或切换到 PowerShell。":
     "Git Bash could not be found. Install Git for Windows or switch to PowerShell.",
   "不支持此命令环境。": "This command shell is unavailable on this platform.",

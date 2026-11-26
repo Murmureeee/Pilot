@@ -5,6 +5,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { ChatHeader } from "@renderer/components/ai/chat-header";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
 import { FeedbackBar } from "@renderer/components/ai/feedback-bar";
+import { ProjectDropTarget } from "@renderer/components/ai/project-drop-target";
 import { PromptTemplateDialog } from "@renderer/components/ai/prompt-template-dialog";
 import { ReviewChanges } from "@renderer/components/ai/review-changes";
 import { ReviewPanel } from "@renderer/components/ai/review-panel";
@@ -456,7 +457,7 @@ export default function App(): JSX.Element {
 
       <div className="col-span-2 flex min-h-0 pt-1.5 pr-2.5 pb-2.5">
         <AppRail collapsed={sidebarCollapsed} onExpand={expandSidebar} />
-        <div className="relative flex min-w-0 flex-1 overflow-hidden rounded-xl border border-sidebar-border bg-background">
+        <ProjectDropTarget>
           {sidebarOverlay && (
             <button
               type="button"
@@ -584,7 +585,7 @@ export default function App(): JSX.Element {
               />
             )}
           </div>
-        </div>
+        </ProjectDropTarget>
       </div>
 
       <CommandPalette commands={commands} onOpenChatFind={openChatFind} />

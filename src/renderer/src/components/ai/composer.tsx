@@ -785,6 +785,7 @@ export function Composer({
         </p>
       )}
       <InputGroup
+        data-composer-file-drop
         className={cn(COMPOSER_SURFACE_CLASS, fileDragging && "ring-2 ring-ring")}
         onDragOver={(event) => {
           if (!event.dataTransfer.types.includes("Files")) return;
