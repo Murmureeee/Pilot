@@ -28,6 +28,7 @@ import type {
 } from "@shared/project-config";
 
 import { PROJECT_CONFIG_FILE } from "../../../../shared/project-config";
+import { McpOAuthControl } from "./mcp-oauth-control";
 
 const TRUST_LABELS: Record<ProjectTrustState, string> = {
   "not-needed": "没有需要信任的项目配置",
@@ -62,9 +63,11 @@ export function ProjectConfigSource({
 export function ProjectConfigEntries({
   config,
   section = "all",
+  mcpActions,
 }: {
   config: ProjectConfigSummary;
   section?: ConfigSection;
+  mcpActions?(name: string): JSX.Element | undefined;
 }): JSX.Element {
   const locale = useLocale();
   const verification = VERIFICATION_KINDS.filter((kind) => config.verification[kind]);
@@ -101,6 +104,7 @@ export function ProjectConfigEntries({
                 <p className="text-xs text-muted-foreground">
                   {t(policy === "confirm" ? "确认工具调用" : "沿用会话权限", locale)}
                 </p>
+                {mcpActions?.(name)}
               </li>
             ))}
           </ul>
@@ -389,7 +393,24 @@ export function ProjectConfigSettingsSection({
           {t("项目配置…", locale)}
         </Button>
       </div>
-      <ProjectConfigEntries config={config} section={section} />
+      <ProjectConfigEntries
+        config={config}
+        section={section}
+        mcpActions={(name) => {
+          if (!Object.hasOwn(config.mcpOAuth ?? {}, name)) return;
+          const oauth = config.mcpOAuth?.[name];
+          if (oauth)
+            return (
+              <McpOAuthControl
+                key={composerId + oauth.revision}
+                info={oauth}
+                name={name}
+                composerId={composerId}
+                onChanged={refresh}
+              />
+            );
+        }}
+      />
       <ProjectConfigDialog
         composerId={composerId}
         open={open}

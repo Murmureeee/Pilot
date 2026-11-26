@@ -274,6 +274,41 @@ export const EN_MESSAGES: Record<string, string> = {
   使用确认模式和授权规则: "Use confirmation mode and saved rules",
   "删除 MCP 服务": "Remove MCP server",
   "此 MCP 服务需要身份验证。": "This MCP server requires authentication.",
+  "MCP 登录": "MCP sign-in",
+  "登录…": "Sign in…",
+  "重新登录…": "Sign in again…",
+  重新登录: "Sign in again",
+  需要登录: "Sign-in required",
+  需要重新登录: "Sign in again to continue",
+  已登录: "Signed in",
+  "管理登录…": "Manage sign-in…",
+  退出登录: "Sign out",
+  取消登录: "Cancel sign-in",
+  在浏览器中登录: "Sign in with browser",
+  "请在系统浏览器完成授权，然后返回 Pilot。":
+    "Complete authorization in your browser, then return to Pilot.",
+  "OAuth 客户端（可选）": "OAuth client (optional)",
+  "OAuth 客户端 ID": "OAuth client ID",
+  "OAuth 回调地址": "OAuth callback URL",
+  "OAuth 授权范围": "OAuth scopes",
+  "默认自动注册。如果服务提供了公共客户端 ID，可在这里填写。":
+    "Pilot registers automatically. Enter a public client ID if your service supplies one.",
+  "设置回调地址或授权范围时，请填写 OAuth 客户端 ID。":
+    "Enter an OAuth client ID to configure a callback URL or scopes.",
+  "OAuth 回调地址须使用本机 HTTP 地址，例如 http://127.0.0.1:8080/callback。":
+    "Use a loopback HTTP callback URL such as http://127.0.0.1:8080/callback.",
+  "MCP 服务配置已更改。请刷新列表后重试。":
+    "The MCP server configuration changed. Refresh the list and try again.",
+  "此 MCP 服务需要登录。请在 MCP 服务设置中登录后重试。":
+    "Sign in to this MCP server in Settings, then try again.",
+  "此 MCP 服务正在登录。请返回当前登录窗口。":
+    "Sign-in for this MCP server is in progress. Return to the sign-in window.",
+  "MCP 登录已超时。请重新登录。": "MCP sign-in timed out. Try signing in again.",
+  "无法打开系统浏览器。请检查默认浏览器后重试。":
+    "Could not open your browser. Check the default browser and try again.",
+  "MCP 授权失败。请检查服务的 OAuth 配置后重试。":
+    "MCP authorization failed. Check the server's OAuth configuration and try again.",
+  "MCP 请求失败。请检查服务连接。": "The MCP request failed. Check the server connection.",
   "连接 MCP 服务超时。": "The MCP server connection timed out.",
   "无法连接 MCP 服务，请检查命令或地址。":
     "Could not connect to the MCP server. Check the command or URL.",

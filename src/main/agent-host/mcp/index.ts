@@ -8,22 +8,29 @@ import {
   limitMcpContent,
   McpAuthRequiredError,
   McpClient,
+  McpHttpError,
   McpTimeoutError,
   normalizeMcpInputSchema,
   StdioTransport,
   StreamableHttpTransport,
   toLlmContent,
   type McpTransport,
+  type StreamableHttpTransportOptions,
   type Tool,
 } from "@earendil-works/pi-mcp";
+import { McpOAuthAuthorizationRequiredError } from "@earendil-works/pi-mcp/oauth";
 
-import type { McpServerInfo } from "@shared/mcp";
+import type { Locale } from "@shared/contract";
+import type { McpOAuthInfo, McpServerInfo } from "@shared/mcp";
 
 import { APP_NAME, APP_PACKAGE_NAME } from "../../../shared/constants";
 import { MissingMcpEnvironment, resolveImportedMcp } from "../../external-import/mcp";
-import type { ImportedMcpConnection } from "../../external-import/types";
+import type { ImportedMcpConnection, ResolvedImportedMcp } from "../../external-import/types";
 import { decryptSecret } from "../../settings/secrets";
 import type { McpServerConfig, Settings } from "../../settings/types";
+import { mcpOAuthEndpoint, type McpOAuth } from "./oauth";
+import { MCP_OAUTH_CHANGED, MCP_OAUTH_REQUIRED } from "./oauth/constants";
+import type { McpOAuthEndpoint } from "./oauth/types";
 import type { McpConnection, McpTool, McpToolPolicy } from "./types";
 
 function readEncrypted<T>(stored?: string): T | undefined {
@@ -33,15 +40,18 @@ function readEncrypted<T>(stored?: string): T | undefined {
   return JSON.parse(plaintext) as T;
 }
 
-function createTransport(
+function importedConnection(config: McpServerConfig): ImportedMcpConnection | undefined {
+  return config.project?.connection ?? readEncrypted<ImportedMcpConnection>(config.encryptedImport);
+}
+
+function resolveConnection(
   config: McpServerConfig,
   cwd?: string,
   imported?: ImportedMcpConnection,
-  request = globalThis.fetch,
-): McpTransport {
+): ResolvedImportedMcp {
   const envPairs = readEncrypted<[string, string][]>(config.encryptedEnv);
   const headerPairs = readEncrypted<[string, string][]>(config.encryptedHeaders);
-  const resolved = imported
+  return imported
     ? resolveImportedMcp(imported, cwd, envPairs, headerPairs)
     : {
         transport: config.transport,
@@ -49,17 +59,25 @@ function createTransport(
         env: Object.fromEntries(envPairs ?? []),
         headers: Object.fromEntries(headerPairs ?? []),
       };
+}
+
+function createTransport(
+  resolved: ResolvedImportedMcp,
+  request = globalThis.fetch,
+  authProvider?: StreamableHttpTransportOptions["authProvider"],
+): McpTransport {
   const { transport } = resolved;
   if (transport.type === "http") {
     const headers = resolved.headers;
     return new StreamableHttpTransport({
       url: transport.url,
       headers,
+      authProvider,
       // A redirected endpoint must never receive the previous server's private headers.
-      fetch:
-        headers && Object.keys(headers).length
-          ? (url, init) => request(url, { ...init, redirect: "error" })
-          : request,
+      fetch: (url, init) =>
+        (headers && Object.keys(headers).length) || new Headers(init?.headers).has("Authorization")
+          ? request(url, { ...init, redirect: "error" })
+          : request(url, init),
     });
   }
   return new StdioTransport({
@@ -70,7 +88,13 @@ function createTransport(
   });
 }
 
-function buildTool(client: McpClient, entry: Tool, name: string, serverName: string): McpTool {
+function buildTool(
+  client: McpClient,
+  entry: Tool,
+  name: string,
+  serverName: string,
+  describeError: (error: unknown) => string | undefined,
+): McpTool {
   const label = `${serverName} / ${entry.title ?? entry.name}`;
   return {
     name,
@@ -80,7 +104,13 @@ function buildTool(client: McpClient, entry: Tool, name: string, serverName: str
     parameters: normalizeMcpInputSchema(entry.inputSchema),
     executionMode: "sequential",
     execute: async (_id, args, signal): Promise<AgentToolResult> => {
-      const result = await client.callTool(entry.name, args as Record<string, unknown>, { signal });
+      const result = await client
+        .callTool(entry.name, args as Record<string, unknown>, { signal })
+        .catch((error: unknown) => {
+          const message = describeError(error);
+          if (message) throw new Error(message);
+          throw error;
+        });
       const { content } = await limitMcpContent(toLlmContent(result));
       if (result.isError) {
         const reason = content
@@ -105,7 +135,53 @@ export class McpManager {
     private readonly getSettings: () => Settings,
     private readonly version: string,
     private readonly request?: typeof globalThis.fetch,
+    private readonly oauth?: McpOAuth,
   ) {}
+
+  oauthInfo(config: McpServerConfig): McpOAuthInfo | undefined {
+    const endpoint = this.oauthEndpoint(config);
+    if (endpoint) return this.oauth?.info(endpoint);
+  }
+
+  private oauthEndpoint(config?: McpServerConfig): McpOAuthEndpoint | undefined {
+    if (!this.oauth || !config || config.transport.type !== "http") return;
+    try {
+      const connection = resolveConnection(config, undefined, importedConnection(config));
+      if (connection.transport.type !== "http") return;
+      return mcpOAuthEndpoint(config, connection.transport.url, connection.headers);
+    } catch {
+      // Editing a connection while browser authorization is open invalidates the pending grant.
+    }
+  }
+
+  async signIn(
+    config: () => McpServerConfig | undefined,
+    revision: string,
+    requestId: string,
+    locale: Locale,
+  ): Promise<boolean> {
+    const endpoint = this.oauthEndpoint(config());
+    if (endpoint?.revision !== revision || !this.oauth) throw new Error(MCP_OAUTH_CHANGED);
+    const signedIn = await this.oauth.signIn(
+      endpoint,
+      requestId,
+      locale,
+      () => this.oauthEndpoint(config())?.revision === revision,
+    );
+    if (signedIn) this.reconnectOnSync.add(endpoint.id);
+    return signedIn;
+  }
+
+  cancelSignIn(requestId?: string): void {
+    this.oauth?.cancel(requestId);
+  }
+
+  signOut(config: McpServerConfig | undefined, revision: string): void {
+    const endpoint = this.oauthEndpoint(config);
+    if (endpoint?.revision !== revision || !this.oauth) throw new Error(MCP_OAUTH_CHANGED);
+    this.oauth.signOut(endpoint);
+    this.reconnectOnSync.add(endpoint.id);
+  }
 
   private sync(
     workingDirectory: string | undefined,
@@ -135,6 +211,7 @@ export class McpManager {
         config.encryptedImport,
         config.transport.type === "stdio" ? workingDirectory : undefined,
         ...(config.project ? [config.project] : []),
+        ...(config.oauthClient ? [config.oauthClient] : []),
       ]);
       const existing = this.connections.get(config.id);
       if (existing?.signature === signature) return existing;
@@ -198,10 +275,23 @@ export class McpManager {
     cwd?: string,
   ): Promise<void> {
     const { client, signature } = connection;
+    let endpoint: McpOAuthEndpoint | undefined;
+    const loginRequired = (error: unknown): boolean =>
+      error instanceof McpOAuthAuthorizationRequiredError ||
+      Boolean(
+        endpoint &&
+        this.oauth &&
+        error instanceof McpAuthRequiredError &&
+        this.oauth.recordChallenge(endpoint, error.wwwAuthenticate),
+      );
     try {
-      const imported =
-        config.project?.connection ?? readEncrypted<ImportedMcpConnection>(config.encryptedImport);
-      await client.connect(createTransport(config, cwd, imported, this.request));
+      const imported = importedConnection(config);
+      const resolved = resolveConnection(config, cwd, imported);
+      if (this.oauth && resolved.transport.type === "http")
+        endpoint = mcpOAuthEndpoint(config, resolved.transport.url, resolved.headers);
+      await client.connect(
+        createTransport(resolved, this.request, endpoint && this.oauth?.provider(endpoint)),
+      );
       const entries = client.serverCapabilities?.tools ? await client.listTools() : [];
       const include = imported?.includeTools ? new Set(imported.includeTools) : undefined;
       const exclude = new Set(imported?.excludeTools);
@@ -212,12 +302,16 @@ export class McpManager {
         .map((tool) => {
           const name = createMcpToolName(namespace, tool.name, (candidate) => names.has(candidate));
           names.add(name);
-          return buildTool(client, tool, name, config.name);
+          return buildTool(client, tool, name, config.name, (error) => {
+            if (loginRequired(error)) return MCP_OAUTH_REQUIRED;
+            if (endpoint && error instanceof McpHttpError) return "MCP 请求失败。请检查服务连接。";
+          });
         });
     } catch (error) {
       // Process output and response bodies can contain secrets from the server environment.
-      connection.error =
-        error instanceof MissingMcpEnvironment
+      connection.error = loginRequired(error)
+        ? MCP_OAUTH_REQUIRED
+        : error instanceof MissingMcpEnvironment
           ? "缺少 MCP 所需的环境变量。"
           : error instanceof McpTimeoutError
             ? "连接 MCP 服务超时。"
@@ -238,26 +332,28 @@ export class McpManager {
     if (!preserveConnections) this.sync(workingDirectory, reconnectId);
     const configs = this.getSettings().mcpServers ?? [];
     await Promise.all(configs.map(({ id }) => this.connections.get(id)?.ready));
-    return configs.map(
-      ({ id, name, transport, enabled, policy, encryptedEnv, encryptedImport }) => {
-        const connection = this.connections.get(id);
-        const connected = connection?.client.connectionState === "connected" && !connection.error;
-        return {
-          id,
-          name,
-          transport,
-          enabled,
-          policy,
-          imported: Boolean(encryptedImport),
-          hasEnv: Boolean(encryptedEnv || (encryptedImport && transport.type === "stdio")),
-          status: !enabled ? "disabled" : connected ? "connected" : "error",
-          tools: connected
-            ? connection.tools.map((tool) => ({ name: tool.name, label: tool.label }))
-            : [],
-          error: enabled && !connected ? (connection?.error ?? "MCP 连接已断开。") : undefined,
-        };
-      },
-    );
+    return configs.map((config) => {
+      const { id, name, transport, enabled, policy, encryptedEnv, encryptedImport, oauthClient } =
+        config;
+      const connection = this.connections.get(id);
+      const connected = connection?.client.connectionState === "connected" && !connection.error;
+      return {
+        id,
+        name,
+        transport,
+        enabled,
+        policy,
+        imported: Boolean(encryptedImport),
+        oauth: this.oauthInfo(config),
+        oauthClient,
+        hasEnv: Boolean(encryptedEnv || (encryptedImport && transport.type === "stdio")),
+        status: !enabled ? "disabled" : connected ? "connected" : "error",
+        tools: connected
+          ? connection.tools.map((tool) => ({ name: tool.name, label: tool.label }))
+          : [],
+        error: enabled && !connected ? (connection?.error ?? "MCP 连接已断开。") : undefined,
+      };
+    });
   }
 
   async tools(
@@ -301,6 +397,6 @@ export class McpManager {
 
   async close(): Promise<void> {
     for (const id of this.connections.keys()) this.disconnect(id);
-    await Promise.all(this.closing);
+    await Promise.all([this.oauth?.close(), ...this.closing]);
   }
 }

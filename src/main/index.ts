@@ -12,6 +12,7 @@ import {
 } from "../shared/contract";
 import { AgentHost } from "./agent-host/host";
 import { McpManager } from "./agent-host/mcp";
+import { McpOAuth } from "./agent-host/mcp/oauth";
 import { SessionStore } from "./agent-host/session-store";
 import { runAgentSmoke } from "./agent-host/smoke";
 import {
@@ -196,7 +197,17 @@ function startDesktop(): (entry: ProjectEntry) => void {
     },
     APP_NAME + "/" + app.getVersion(),
   );
-  const mcp = new McpManager(getSettings, app.getVersion(), network.fetch);
+  const mcp = new McpManager(
+    getSettings,
+    app.getVersion(),
+    network.fetch,
+    new McpOAuth({
+      getSettings,
+      saveSettings: persistSettings,
+      request: network.fetch,
+      openBrowser: (url) => shell.openExternal(url),
+    }),
+  );
   const host = new AgentHost({
     store,
     getSettings,

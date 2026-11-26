@@ -1,6 +1,8 @@
 // @env node
 import { app, dialog } from "electron";
 
+import type { McpOAuthRef } from "@shared/mcp";
+
 import { IPC } from "../../shared/contract";
 import { NATIVE_DIALOG_TITLES } from "../constants";
 import {
@@ -26,14 +28,23 @@ import {
   previewPluginPackage,
   uninstallPluginPackage,
 } from "../external-import/packages";
+import { loadProjectConfig, projectMcpServers, projectTrustState } from "../project-config";
 import { mergeMcpServer } from "../settings/mcp";
+import type { McpServerConfig } from "../settings/types";
 import { handle } from "./transport";
 import type { IpcContext } from "./types";
 
 export function registerIntegrationRoutes(
   ctx: Pick<
     IpcContext,
-    "settingsDir" | "skillsDir" | "getSettings" | "saveSettings" | "mcp" | "host" | "request"
+    | "settingsDir"
+    | "skillsDir"
+    | "getSettings"
+    | "saveSettings"
+    | "mcp"
+    | "host"
+    | "request"
+    | "exit"
   >,
 ): void {
   handle(IPC.settingsImportedPlugins, () => importedPlugins(ctx.getSettings(), ctx.skillsDir));
@@ -148,6 +159,42 @@ export function registerIntegrationRoutes(
     return listMcp();
   });
   handle(IPC.settingsMcpReconnect, (_event, id) => listMcp(id));
+  const oauthConfig = ({ id, composerId }: McpOAuthRef): McpServerConfig | undefined => {
+    const settings = ctx.getSettings();
+    if (composerId === undefined) return settings.mcpServers?.find((server) => server.id === id);
+    try {
+      ctx.host.checkComposerId(composerId);
+    } catch {
+      return;
+    }
+    const directory = ctx.host.getProjectDirectory();
+    if (!directory) return;
+    const config = loadProjectConfig(directory);
+    if (projectTrustState(settings, config) !== "trusted") return;
+    return projectMcpServers(config).find((server) => server.id === id);
+  };
+  handle(IPC.settingsMcpOAuthStart, async (event, target, requestId, locale) => {
+    ctx.exit.checkWorkAllowed();
+    const cancel = (): void => ctx.mcp.cancelSignIn(requestId);
+    event.sender.once("destroyed", cancel);
+    try {
+      const signedIn = await ctx.mcp.signIn(
+        () => oauthConfig(target),
+        target.revision,
+        requestId,
+        locale,
+      );
+      if (signedIn && target.composerId) ctx.host.publishSnapshot();
+      return signedIn;
+    } finally {
+      event.sender.removeListener("destroyed", cancel);
+    }
+  });
+  handle(IPC.settingsMcpOAuthCancel, (_event, requestId) => ctx.mcp.cancelSignIn(requestId));
+  handle(IPC.settingsMcpOAuthSignOut, (_event, target) => {
+    ctx.mcp.signOut(oauthConfig(target), target.revision);
+    if (target.composerId) ctx.host.publishSnapshot();
+  });
   handle(IPC.settingsMcpRemove, (_event, id) => {
     const settings = ctx.getSettings();
     ctx.saveSettings({

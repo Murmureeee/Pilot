@@ -188,6 +188,10 @@ const api: PiApi = {
   mcpList: () => ipcRenderer.invoke(IPC.settingsMcpList),
   mcpSave: (input) => ipcRenderer.invoke(IPC.settingsMcpSave, input),
   mcpReconnect: (id) => ipcRenderer.invoke(IPC.settingsMcpReconnect, id),
+  mcpOAuthStart: (target, requestId, locale) =>
+    ipcRenderer.invoke(IPC.settingsMcpOAuthStart, target, requestId, locale),
+  mcpOAuthCancel: (requestId) => ipcRenderer.invoke(IPC.settingsMcpOAuthCancel, requestId),
+  mcpOAuthSignOut: (target) => ipcRenderer.invoke(IPC.settingsMcpOAuthSignOut, target),
   mcpRemove: (id) => ipcRenderer.invoke(IPC.settingsMcpRemove, id),
   pickImportDirectory: (locale) => ipcRenderer.invoke(IPC.settingsPickImportDirectory, locale),
   previewExternalImport: (kind, project) =>

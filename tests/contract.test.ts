@@ -61,6 +61,12 @@ describe("IPC contract", () => {
     expect(IPC.settingsRevokeToolRule).toBe("settings:revoke-tool-rule");
   });
 
+  it("keeps MCP account controls on dedicated settings routes", () => {
+    expect(IPC.settingsMcpOAuthStart).toBe("settings:mcp-oauth-start");
+    expect(IPC.settingsMcpOAuthCancel).toBe("settings:mcp-oauth-cancel");
+    expect(IPC.settingsMcpOAuthSignOut).toBe("settings:mcp-oauth-sign-out");
+  });
+
   it("keeps focused model and thinking changes separate from editing providers", () => {
     expect(IPC.settingsSelectModel).toBe("settings:select-model");
     expect(IPC.settingsSetThinkingLevel).toBe("settings:set-thinking-level");

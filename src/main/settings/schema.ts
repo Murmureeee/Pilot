@@ -11,6 +11,7 @@ import {
   VERIFICATION_COMMAND_LIMIT,
 } from "../../shared/constants";
 import { VERIFICATION_KINDS, type ExternalEditor } from "../../shared/contract";
+import { isMcpOAuthCallbackUrl } from "../../shared/mcp";
 import { WEB_DOMAIN_PATTERN } from "../../shared/web";
 import { normalizeModelCatalog } from "./models";
 import type { Settings } from "./types";
@@ -69,6 +70,12 @@ const provider = z.looseObject({
   apiKey: optionalText,
 });
 
+export const mcpOAuthClientSchema = z.strictObject({
+  clientId: z.string().trim().min(1).max(2048),
+  callbackUrl: z.string().trim().max(2048).refine(isMcpOAuthCallbackUrl).optional(),
+  scope: z.string().trim().min(1).max(2048).optional(),
+});
+
 const mcpServer = z.looseObject({
   id: z.string(),
   name: z.string(),
@@ -82,6 +89,7 @@ const mcpServer = z.looseObject({
   encryptedHeaders: optionalText,
   encryptedImport: optionalText,
   importKey: optionalText,
+  oauthClient: mcpOAuthClientSchema.optional().catch(undefined),
 });
 
 export const promptTemplatesSchema = z
@@ -201,6 +209,17 @@ const storedSettings = z.looseObject({
     .catch(undefined),
   skillsEnabled: z.array(z.string()).optional(),
   mcpServers: z.array(mcpServer).optional(),
+  mcpOAuth: z
+    .record(
+      z.string(),
+      z.strictObject({
+        binding: z.hash("sha256"),
+        encryptedState: z.string().min(1),
+        project: optionalText,
+      }),
+    )
+    .optional()
+    .catch(undefined),
   importedPlugins: z.array(importedPlugin).optional(),
   pluginMarketplaces: z
     .array(

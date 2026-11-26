@@ -20,6 +20,7 @@ import { imageAttachmentsSchema } from "../agent-host/image-attachments";
 import {
   afterTurnVerificationSchema,
   externalEditorSchema,
+  mcpOAuthClientSchema,
   pluginLocationSchema,
   pluginPackageSourceSchema,
   promptTemplatesSchema,
@@ -165,6 +166,12 @@ const mcpServer = z.strictObject({
       ]),
     )
     .optional(),
+  oauthClient: mcpOAuthClientSchema.nullable().optional(),
+});
+const mcpOAuthRef = z.strictObject({
+  id: z.union([z.uuid(), z.string().regex(/^project:[a-f0-9]{16}$/)]),
+  revision: z.hash("sha256"),
+  composerId: z.uuid().optional(),
 });
 const settings = z.strictObject({
   providers: z.array(provider),
@@ -418,6 +425,9 @@ const inputs = {
   [IPC.settingsMcpList]: none,
   [IPC.settingsMcpSave]: z.tuple([mcpServer]),
   [IPC.settingsMcpReconnect]: z.tuple([z.uuid()]),
+  [IPC.settingsMcpOAuthStart]: z.tuple([mcpOAuthRef, z.uuid(), z.enum(SUPPORTED_LOCALES)]),
+  [IPC.settingsMcpOAuthCancel]: z.tuple([z.uuid()]),
+  [IPC.settingsMcpOAuthSignOut]: z.tuple([mcpOAuthRef]),
   [IPC.settingsMcpRemove]: z.tuple([z.uuid()]),
   [IPC.toolPermissionRespond]: z.tuple([
     runRef,

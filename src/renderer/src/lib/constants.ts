@@ -152,7 +152,16 @@ export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[
     "发现插件",
     "插件市场",
   ],
-  mcp: ["添加 MCP 服务", "stdio", "HTTP", "发现 MCP 服务", "MCP Registry", "项目 MCP 服务"],
+  mcp: [
+    "添加 MCP 服务",
+    "stdio",
+    "HTTP",
+    "发现 MCP 服务",
+    "MCP Registry",
+    "项目 MCP 服务",
+    "MCP 登录",
+    "OAuth 客户端 ID",
+  ],
   imports: [
     "Codex",
     "Claude Code",

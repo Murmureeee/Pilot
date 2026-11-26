@@ -12,6 +12,7 @@ import { _electron as electron } from "playwright-core";
 
 import { stopProcessTree } from "./windows-process.mjs";
 import { startModelFixture } from "./windows-ui/model.mjs";
+import { startMcpOAuthFixture } from "./windows-ui/mcp-oauth.mjs";
 import {
   prepareTerminalExit,
   verifyAgentMemory,
@@ -30,6 +31,8 @@ import {
   verifyInstructionSourceLayouts,
   verifyInteractiveTerminal,
   verifyLayouts,
+  verifyMcpOAuth,
+  verifyRestoredMcpOAuth,
   verifyPlanDraft,
   verifyPlanExecution,
   verifyPluginPackages,
@@ -150,6 +153,8 @@ const utilityProfile = join(scratch, "auxiliary-model-profile");
 const pluginProfile = join(scratch, "plugin-profile");
 const discoveryProfile = join(scratch, "discovery-profile");
 const projectConfigProfile = join(scratch, "project-config-profile");
+const oauthProfile = join(scratch, "mcp-oauth-profile");
+const oauthProject = join(scratch, "oauth-project");
 const configurableProject = join(scratch, "configurable-project");
 const discoveryMarket = join(scratch, "catalog fixture");
 const pluginFixture = {
@@ -180,6 +185,7 @@ const imageFixture = {
   outside: join(scratch, "outside.txt"),
 };
 let model;
+let oauthFixture;
 let instructionSession;
 let memorySession;
 let verificationSession;
@@ -189,6 +195,8 @@ try {
   mkdirSync(pluginProfile);
   mkdirSync(discoveryProfile);
   mkdirSync(projectConfigProfile);
+  mkdirSync(oauthProfile);
+  mkdirSync(oauthProject);
   mkdirSync(configurableProject);
   mkdirSync(project);
   mkdirSync(commandProject);
@@ -366,9 +374,22 @@ try {
       verifyRestoredProjectConfiguration(page, app, model, trustedSession, secondEntryProject),
     );
   });
+  oauthFixture = await startMcpOAuthFixture();
+  let oauthServer;
+  await withApp(oauthProfile, async (page, window, app) => {
+    await runScene("Authorize an MCP server in the browser, cancel safely, and store the grant", async () => {
+      oauthServer = await verifyMcpOAuth(page, window, app, oauthFixture, oauthProfile);
+    });
+  });
+  oauthFixture.expire();
+  await withApp(oauthProfile, async (page, _window, app) => {
+    await runScene("Refresh an MCP grant after restarting, sign in again, and isolate project credentials", () =>
+      verifyRestoredMcpOAuth(page, app, model, oauthFixture, oauthProfile, oauthServer, oauthProject),
+    );
+  });
 } finally {
   try {
-    await model?.close();
+    await Promise.all([model?.close(), oauthFixture?.close()]);
   } finally {
     assert.equal(dirname(scratch), temp);
     assert.equal(realpathSync.native(scratch), scratch);

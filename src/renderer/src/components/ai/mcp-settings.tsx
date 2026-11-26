@@ -42,6 +42,8 @@ import type { McpRegistryConnection, McpRegistryEntry } from "@shared/discovery"
 import type { ImportReport } from "@shared/imports";
 import type { McpServerInfo, McpServerInput, McpTransportConfig } from "@shared/mcp";
 
+import { isMcpOAuthCallbackUrl } from "../../../../shared/mcp";
+import { McpOAuthControl } from "./mcp-oauth-control";
 import { ProjectConfigSettingsSection } from "./project-config-details";
 
 type McpDraft = McpServerInput & { transport: McpTransportConfig; imported: boolean };
@@ -138,7 +140,12 @@ export function McpSettings({
     setHeaders("");
     setDraft(
       server
-        ? { ...asInput(server), transport: server.transport, imported: server.imported }
+        ? {
+            ...asInput(server),
+            transport: server.transport,
+            imported: server.imported,
+            oauthClient: server.oauthClient,
+          }
         : {
             id: crypto.randomUUID(),
             name: "",
@@ -194,6 +201,16 @@ export function McpSettings({
         transport.type === "http"
           ? readStringPairs(headers, "请求头须为字符串值的 JSON 对象。")
           : undefined;
+      const oauthClient = input.oauthClient;
+      const clientId = oauthClient?.clientId.trim();
+      const callbackUrl = oauthClient?.callbackUrl?.trim() || undefined;
+      const scope = oauthClient?.scope?.trim() || undefined;
+      if (transport.type === "http" && !clientId && (callbackUrl || scope))
+        throw new Error(t("设置回调地址或授权范围时，请填写 OAuth 客户端 ID。", locale));
+      if (transport.type === "http" && callbackUrl && !isMcpOAuthCallbackUrl(callbackUrl))
+        throw new Error(
+          t("OAuth 回调地址须使用本机 HTTP 地址，例如 http://127.0.0.1:8080/callback。", locale),
+        );
       const catalogValues = variables ?? requestHeaders ?? [];
       if (registry?.type === transport.type) {
         const missing = registry.required.filter(
@@ -218,6 +235,14 @@ export function McpSettings({
             : transport,
         env: registry ? variables?.filter(([, value]) => value !== "") : variables,
         headers: registry ? requestHeaders?.filter(([, value]) => value !== "") : requestHeaders,
+        oauthClient:
+          transport.type === "http" && clientId
+            ? {
+                clientId,
+                callbackUrl,
+                scope,
+              }
+            : null,
       });
       if (registry) setRegistrySaved(true);
       setDraft(null);
@@ -319,10 +344,18 @@ export function McpSettings({
                         {t("已连接，{0} 个工具", locale, [0])}
                       </p>
                     ))}
-                  {server.error && (
+                  {server.error && server.oauth?.status !== "required" && (
                     <p className="text-xs wrap-anywhere text-destructive">
                       {t(server.error, locale)}
                     </p>
+                  )}
+                  {server.oauth && (
+                    <McpOAuthControl
+                      key={server.oauth.revision}
+                      info={server.oauth}
+                      name={server.name}
+                      onChanged={() => void run(() => window.pi.mcpList())}
+                    />
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -425,6 +458,7 @@ export function McpSettings({
                     setDraft({
                       ...draft,
                       imported: false,
+                      oauthClient: null,
                       transport:
                         type === "stdio" ? { type, command: "", args: [] } : { type, url: "" },
                     });
@@ -497,6 +531,64 @@ export function McpSettings({
                       {t("留空保留同一连接的请求头，输入 {} 可清空。", locale)}
                     </span>
                   </label>
+                  <details className="text-xs">
+                    <summary className="cursor-pointer">
+                      {t("OAuth 客户端（可选）", locale)}
+                    </summary>
+                    <div className="mt-2 grid gap-2">
+                      <p className="text-muted-foreground">
+                        {t("默认自动注册。如果服务提供了公共客户端 ID，可在这里填写。", locale)}
+                      </p>
+                      <label className="grid gap-1">
+                        {t("OAuth 客户端 ID", locale)}
+                        <Input
+                          value={draft.oauthClient?.clientId ?? ""}
+                          maxLength={2048}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              oauthClient: { ...draft.oauthClient, clientId: event.target.value },
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="grid gap-1">
+                        {t("OAuth 回调地址", locale)}
+                        <Input
+                          value={draft.oauthClient?.callbackUrl ?? ""}
+                          maxLength={2048}
+                          placeholder="http://127.0.0.1:8080/callback"
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              oauthClient: {
+                                clientId: "",
+                                ...draft.oauthClient,
+                                callbackUrl: event.target.value,
+                              },
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="grid gap-1">
+                        {t("OAuth 授权范围", locale)}
+                        <Input
+                          value={draft.oauthClient?.scope ?? ""}
+                          maxLength={2048}
+                          onChange={(event) =>
+                            setDraft({
+                              ...draft,
+                              oauthClient: {
+                                clientId: "",
+                                ...draft.oauthClient,
+                                scope: event.target.value,
+                              },
+                            })
+                          }
+                        />
+                      </label>
+                    </div>
+                  </details>
                 </>
               )}
               <Select

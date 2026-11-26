@@ -78,7 +78,7 @@ import type {
   PluginPackagePreview,
   PluginPackageSource,
 } from "./imports";
-import type { McpServerInfo, McpServerInput } from "./mcp";
+import type { McpOAuthRef, McpServerInfo, McpServerInput } from "./mcp";
 import type { ProjectConfigInfo, ProjectTrustDecision } from "./project-config";
 
 export interface PiApi {
@@ -252,6 +252,9 @@ export interface PiApi {
   mcpList(): Promise<McpServerInfo[]>;
   mcpSave(input: McpServerInput): Promise<McpServerInfo[]>;
   mcpReconnect(id: string): Promise<McpServerInfo[]>;
+  mcpOAuthStart(target: McpOAuthRef, requestId: string, locale: Locale): Promise<boolean>;
+  mcpOAuthCancel(requestId: string): Promise<void>;
+  mcpOAuthSignOut(target: McpOAuthRef): Promise<void>;
   mcpRemove(id: string): Promise<McpServerInfo[]>;
   pickWorkingDirectory(locale: Locale): Promise<string | null>;
   pickImportDirectory(locale: Locale): Promise<string | null>;

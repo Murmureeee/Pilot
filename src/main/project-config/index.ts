@@ -283,8 +283,11 @@ export function summarizeProjectConfig(
   };
 }
 
-export function projectConfigInfo(settings: Settings, directory: string): ProjectConfigInfo {
-  const config = loadProjectConfig(directory);
+export function projectConfigInfo(
+  settings: Settings,
+  directory: string,
+  config = loadProjectConfig(directory),
+): ProjectConfigInfo {
   return {
     ...summarizeProjectConfig(config, getCommandShell(settings.commandShell)),
     trust: projectTrustState(settings, config),

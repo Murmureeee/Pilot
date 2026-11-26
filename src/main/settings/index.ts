@@ -19,6 +19,7 @@ import { SETTINGS_FILE_NAME, SETTINGS_SAVE_BLOCKED } from "../constants";
 import { backupCorruptFile } from "../corrupt-file";
 import { normalizeWorkingDirectory } from "../workspace/paths";
 import { findGitBash, getCommandShell } from "../workspace/shell";
+import { pruneMcpOAuth } from "./mcp";
 import { getProviderModels, normalizeModelCatalog } from "./models";
 import { parseSettings } from "./schema";
 import { encryptSecret } from "./secrets";
@@ -99,7 +100,7 @@ export function saveSettings(dir: string, settings: Settings): void {
   if (settings.recoveryBlocked || (existing && !parseSettings(existing))) {
     throw new Error(SETTINGS_SAVE_BLOCKED);
   }
-  writeJsonAtomic(path, settings);
+  writeJsonAtomic(path, pruneMcpOAuth(settings));
 }
 
 /** 渲染层提交 → 存储形态：新 key 加密，未变更的 key 保留原密文 */
@@ -153,6 +154,7 @@ export function mergeSettingsInput(current: Settings, input: SettingsInput): Set
     projectTrust: current.projectTrust,
     skillsEnabled: input.skillsEnabled ?? current.skillsEnabled ?? [],
     mcpServers: current.mcpServers,
+    mcpOAuth: current.mcpOAuth,
     importedPlugins: current.importedPlugins,
     pluginMarketplaces: current.pluginMarketplaces,
     recoveredFrom: current.recoveredFrom,

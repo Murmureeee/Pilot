@@ -13,7 +13,7 @@ import type {
 } from "../../shared/contract";
 import type { PluginMarketplaceSource } from "../../shared/discovery";
 import type { ImportedPluginFields, InstalledPluginPackage } from "../../shared/imports";
-import type { McpServerFields, McpTransportConfig } from "../../shared/mcp";
+import type { McpOAuthClient, McpServerFields, McpTransportConfig } from "../../shared/mcp";
 import type { ImportedMcpConnection } from "../external-import/types";
 
 export interface ProviderConfig extends ProviderFields {
@@ -26,8 +26,15 @@ export interface McpServerConfig extends McpServerFields {
   encryptedHeaders?: string;
   encryptedImport?: string;
   importKey?: string;
+  oauthClient?: McpOAuthClient;
   /** 项目声明的服务只保存在内存中。 */
   project?: { directory: string; file: string; connection: ImportedMcpConnection };
+}
+
+interface McpOAuthCredential {
+  binding: string;
+  encryptedState: string;
+  project?: string;
 }
 
 interface ProjectTrustRecord {
@@ -60,6 +67,7 @@ export interface Settings {
   projectTrust?: Record<string, ProjectTrustRecord>;
   skillsEnabled?: string[];
   mcpServers?: McpServerConfig[];
+  mcpOAuth?: Record<string, McpOAuthCredential>;
   importedPlugins?: ImportedPlugin[];
   pluginMarketplaces?: PluginMarketplaceSource[];
   /** 用户在界面确认后清除。 */

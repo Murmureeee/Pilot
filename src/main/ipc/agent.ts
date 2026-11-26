@@ -7,7 +7,13 @@ import { IPC, VERIFICATION_KINDS } from "../../shared/contract";
 import { MemoryChanges } from "../agent-host/memory";
 import { runAgentSmoke } from "../agent-host/smoke";
 import { NATIVE_DIALOG_TITLES } from "../constants";
-import { projectConfigInfo, revokeProjectTrust, trustProjectRevision } from "../project-config";
+import {
+  loadProjectConfig,
+  projectConfigInfo,
+  projectMcpServers,
+  revokeProjectTrust,
+  trustProjectRevision,
+} from "../project-config";
 import { verificationRepairPrompt } from "../verification/commands";
 import { openExternalEditor } from "../workspace/editor";
 import { readProjectGitHead } from "../workspace/git";
@@ -23,7 +29,11 @@ export function registerAgentRoutes({
   getSettings,
   saveSettings,
   exit,
-}: Pick<IpcContext, "host" | "verification" | "getSettings" | "saveSettings" | "exit">): void {
+  mcp,
+}: Pick<
+  IpcContext,
+  "host" | "verification" | "getSettings" | "saveSettings" | "exit" | "mcp"
+>): void {
   const memory = new MemoryChanges({ getSettings, saveSettings });
   handle(IPC.runAgentSmoke, () => runAgentSmoke());
   handle(IPC.agentGetSnapshot, () => host.publishSnapshot());
@@ -201,7 +211,19 @@ export function registerAgentRoutes({
   handle(IPC.sessionProjectConfig, (_event, composerId) => {
     host.checkComposerId(composerId);
     const directory = host.getProjectDirectory();
-    return directory ? projectConfigInfo(getSettings(), directory) : null;
+    if (!directory) return null;
+    const config = loadProjectConfig(directory);
+    const info = projectConfigInfo(getSettings(), directory, config);
+    if (info.trust !== "trusted") return info;
+    return {
+      ...info,
+      mcpOAuth: Object.fromEntries(
+        projectMcpServers(config).flatMap((server) => {
+          const oauth = mcp.oauthInfo(server);
+          return oauth ? [[server.name, oauth]] : [];
+        }),
+      ),
+    };
   });
   handle(IPC.sessionSetProjectTrust, (_event, composerId, directory, revision) => {
     exit.checkWorkAllowed();

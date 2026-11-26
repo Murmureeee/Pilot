@@ -1,6 +1,6 @@
 // @env all
 import type { AfterTurnVerification, ToolRule, VerificationKind } from "./contract";
-import type { McpTransportConfig } from "./mcp";
+import type { McpOAuthInfo, McpTransportConfig } from "./mcp";
 
 export const PROJECT_CONFIG_FILE = ".pilot/config.json";
 
@@ -51,4 +51,5 @@ export interface ProjectConfigInfo extends ProjectConfigSummary {
   trust: ProjectTrustState;
   hasSavedTrust: boolean;
   revision: string;
+  mcpOAuth?: Record<string, McpOAuthInfo>;
 }

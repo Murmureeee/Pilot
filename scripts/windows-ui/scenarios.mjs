@@ -1702,6 +1702,169 @@ export async function verifyRestoredProjectConfiguration(page, app, model, id, o
   await button(page, "Send").waitFor();
 }
 
+async function interceptMcpBrowser(app) {
+  await app.evaluate(({ shell }) => {
+    globalThis.pilotMcpBrowserUrls = [];
+    shell.openExternal = async (url) => { globalThis.pilotMcpBrowserUrls.push(url); };
+  });
+  return async () => {
+    const deadline = performance.now() + 10_000;
+    do {
+      const opened = await app.evaluate(() => globalThis.pilotMcpBrowserUrls.shift());
+      if (opened) return new URL(opened);
+      await delay(30);
+    } while (performance.now() < deadline);
+    throw new Error("The system-browser handoff did not run");
+  };
+}
+
+async function finishMcpBrowser(url, language = "en") {
+  const page = await fetch(url);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), new RegExp('lang="' + language + '"'));
+}
+
+function mcpGrantText(profile) {
+  return readFileSync(join(profile, "settings.json"), "utf8");
+}
+
+function mcpGrants(profile) {
+  return JSON.parse(mcpGrantText(profile)).mcpOAuth ?? {};
+}
+
+export async function verifyMcpOAuth(page, window, app, fixture, profile) {
+  const nextBrowser = await interceptMcpBrowser(app);
+  const name = "OAuth desktop fixture";
+  const id = await page.evaluate(async ({ name, url }) => {
+    const id = crypto.randomUUID();
+    await window.pi.mcpSave({ id, name, enabled: true, policy: "confirm", transport: { type: "http", url } });
+    return id;
+  }, { name, url: fixture.url });
+  assert.equal(fixture.seen.authorized, 0);
+  let current = locales[0];
+  let contrast = Infinity;
+  const row = page.locator(".settings-row").filter({ has: page.getByRole("heading", { name, exact: true }) });
+  const loginDialog = page.locator("[data-mcp-oauth-dialog]");
+  for (const [size, zoom] of [[wide, 1], [narrow, 1], [narrow, 1.5]]) {
+    await resize(page, window, size, zoom);
+    for (const locale of locales) {
+      const english = locale.lang === "en";
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        await openSettings(page, locale, english ? "MCP servers" : "MCP 服务");
+        const trigger = button(row, english ? "Sign in…" : "登录…");
+        await trigger.press("Enter");
+        const url = await nextBrowser();
+        assert.equal(url.origin, new URL(fixture.url).origin);
+        await assertFits(loginDialog);
+        await assertFits(button(loginDialog, english ? "Cancel sign-in" : "取消登录"));
+        contrast = Math.min(contrast, await minimumTextContrast(loginDialog, "h2, p, bdi"));
+        await page.keyboard.press("Escape");
+        await loginDialog.waitFor({ state: "hidden" });
+        await trigger.and(page.locator(":focus")).waitFor();
+      }
+    }
+  }
+  assert.ok(contrast >= 4.5, "MCP OAuth dialog contrast " + contrast.toFixed(2) + ":1");
+  console.log("MCP OAuth dialog checked at 1100 × 750 and 720 × 480, 150%, zh/en, light/dark, contrast " + contrast.toFixed(2) + ":1");
+  assert.deepEqual(mcpGrants(profile), {});
+  await button(row, "Sign in…").press("Enter");
+  const url = await nextBrowser();
+  const callback = new URL(url.searchParams.get("redirect_uri"));
+  callback.searchParams.set("code", "wrong-code");
+  callback.searchParams.set("state", "wrong-state");
+  assert.equal((await fetch(callback)).status, 400);
+  assert.deepEqual(mcpGrants(profile), {});
+  await finishMcpBrowser(url);
+  await loginDialog.waitFor({ state: "hidden" });
+  await row.getByText("Signed in", { exact: true }).waitFor();
+  await button(row, "Manage sign-in…").and(page.locator(":focus")).waitFor();
+  await row.getByText(/Connected, 1 tool/).waitFor();
+  const encrypted = mcpGrants(profile)[id]?.encryptedState;
+  assert.ok(encrypted);
+  assert.doesNotMatch(mcpGrantText(profile), /fixture-(?:access|refresh)-|codeVerifier|oauthState/);
+  await resize(page, window, wide);
+  return { id, name, encrypted };
+}
+
+export async function verifyRestoredMcpOAuth(page, app, model, fixture, profile, server, project) {
+  const nextBrowser = await interceptMcpBrowser(app);
+  await openSettings(page, locales[1], "MCP servers");
+  const row = page.locator(".settings-row").filter({
+    has: page.getByRole("heading", { name: server.name, exact: true }),
+  });
+  await row.getByText("Signed in", { exact: true }).waitFor();
+  await row.getByText(/Connected, 1 tool/).waitFor();
+  assert.equal(fixture.seen.refreshed, 1);
+  assert.notEqual(mcpGrants(profile)[server.id]?.encryptedState, server.encrypted);
+
+  fixture.expire(true);
+  await button(row, "Actions for " + server.name).press("Enter");
+  await page.getByRole("menuitem", { name: "Reconnect", exact: true }).press("Enter");
+  const again = button(row, "Sign in again…");
+  await again.press("Enter");
+  await finishMcpBrowser(await nextBrowser());
+  await row.getByText("Signed in", { exact: true }).waitFor();
+  await button(row, "Manage sign-in…").press("Enter");
+  await button(page.locator("[data-mcp-oauth-dialog]"), "Sign out").press("Enter");
+  await row.getByText("Sign-in required", { exact: true }).waitFor();
+  assert.deepEqual(mcpGrants(profile), {});
+
+  const projectName = "Trusted OAuth project";
+  writeFileSync(join(project, ".mcp.json"), JSON.stringify({
+    mcpServers: { [projectName]: { type: "http", url: fixture.url } },
+  }));
+  await app.evaluate(({ dialog }, folder) => {
+    const original = dialog.showOpenDialog;
+    dialog.showOpenDialog = async () => {
+      dialog.showOpenDialog = original;
+      return { canceled: false, filePaths: [folder] };
+    };
+  }, project);
+  await page.keyboard.press("Control+l");
+  await page.keyboard.press("Control+o");
+  await waitForProjectDraft(page, project);
+  await openSettings(page, locales[1], "MCP servers");
+  const projectList = page.locator('[data-project-config-settings="mcp"]');
+  await projectList.getByText(projectName, { exact: true }).waitFor();
+  assert.equal(await button(projectList, "Sign in…").count(), 0);
+  await page.evaluate(async ({ baseUrl, modelId }) => {
+    const { composerId } = await window.pi.getSnapshot();
+    const config = await window.pi.sessionProjectConfig(composerId);
+    await window.pi.sessionSetProjectTrust(composerId, config.directory, config.revision);
+    await window.pi.settingsSave({
+      providers: [{ id: "mcp-oauth-model", kind: "openai-compatible", name: "MCP fixture model", baseUrl, modelId }],
+      activeProviderId: "mcp-oauth-model",
+    });
+  }, { baseUrl: model.baseUrl, modelId: model.modelId });
+  await button(projectList, "Sign in…").press("Enter");
+  await finishMcpBrowser(await nextBrowser());
+  await projectList.getByText("Signed in", { exact: true }).waitFor();
+  const ids = Object.keys(mcpGrants(profile));
+  assert.equal(ids.length, 1);
+  assert.match(ids[0], /^project:/);
+  await page.keyboard.press("Control+l");
+  await send(page, "Use the authenticated project tool");
+  const request = await model.nextCompletion();
+  const tool = request.input.tools.find(({ function: entry }) => entry.description === "Read signed-in fixture");
+  assert.ok(tool);
+  sendTool(request, "oauth-fixture-call", tool.function.name, {});
+  await button(page.locator("[data-permission-card]"), "Allow once").press("Enter");
+  const result = await model.nextCompletion();
+  assert.match(JSON.stringify(result.input.messages.find(({ role }) => role === "tool")), /Signed-in MCP tool executed/);
+  result.write({ content: "Called the OAuth-protected project tool." });
+  result.finish();
+  await page.getByText("Called the OAuth-protected project tool.", { exact: true }).waitFor();
+  await button(page, "Send").waitFor();
+  await page.evaluate(async () => {
+    const { composerId } = await window.pi.getSnapshot();
+    const config = await window.pi.sessionProjectConfig(composerId);
+    await window.pi.sessionSetProjectTrust(composerId, config.directory, null);
+  });
+  assert.deepEqual(mcpGrants(profile), {});
+}
+
 export async function verifyGitPublishing(page, window, app, project, remote) {
   const git = (...args) => execFileSync("git", args, {
     cwd: project, windowsHide: true, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"],
