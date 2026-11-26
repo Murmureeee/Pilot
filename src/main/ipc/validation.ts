@@ -5,6 +5,7 @@ import {
   CONVERSATION_QUERY_LENGTH,
   EXECUTION_APPROVAL_MODES,
   LOG_LEVELS,
+  MEMORY_TEXT_LIMIT,
   PLAN_PROPOSAL_MAX_LENGTH,
   SUPPORTED_LOCALES,
   THINKING_LEVELS,
@@ -258,6 +259,17 @@ const inputs = {
   [IPC.sessionExportMarkdown]: z.tuple([z.uuid(), z.enum(SUPPORTED_LOCALES)]),
   [IPC.sessionPersona]: z.tuple([z.uuid(), z.string().nullable()]),
   [IPC.sessionInstructionSources]: session,
+  [IPC.sessionPreviewMemory]: z.tuple([
+    z.uuid(),
+    mentionId.nullable(),
+    z.enum(["project", "global"]),
+    z
+      .string()
+      .max(MEMORY_TEXT_LIMIT)
+      .refine((text) => !text.includes("\0")),
+  ]),
+  [IPC.sessionSaveMemory]: sessionChange,
+  [IPC.sessionUndoMemory]: sessionChange,
   [IPC.sessionFileDiff]: sessionChange,
   [IPC.sessionUndoFileChange]: sessionChange,
   [IPC.sessionVerification]: session,

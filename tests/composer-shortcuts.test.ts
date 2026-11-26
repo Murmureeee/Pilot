@@ -6,12 +6,33 @@ import {
   composerTrigger,
   matchesComposerQuery,
   nextApprovalMode,
+  quickMemoryText,
   trimPrompt,
 } from "../src/renderer/src/lib/composer-shortcuts";
 import type { PromptMention } from "../src/shared/contract";
 import { draftFromMessageParts, promptFromDraft } from "../src/shared/mentions";
 
 describe("composer shortcuts", () => {
+  it("opens quick memory for a single leading hash with an instruction", () => {
+    expect(quickMemoryText(promptFromDraft([" # Use pnpm.  "]))).toBe("Use pnpm.");
+    for (const text of ["#", "#  ", "## Markdown", "Issue #42"]) {
+      expect(quickMemoryText(promptFromDraft([text]))).toBeUndefined();
+    }
+    expect(
+      quickMemoryText(
+        promptFromDraft([
+          "# See ",
+          {
+            type: "file",
+            id: "notes.md",
+            label: "notes.md",
+            meta: { workingDirectory: "E:/project" },
+          },
+        ]),
+      ),
+    ).toBeUndefined();
+  });
+
   it("finds the entire slash token while leaving neighboring prose outside the token", () => {
     expect(composerTrigger("/model", 6, 6)).toEqual({
       kind: "command",

@@ -95,6 +95,9 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.sessionExportMarkdown]: [sessionId, "en"],
   [IPC.sessionPersona]: [sessionId, null],
   [IPC.sessionInstructionSources]: [sessionId],
+  [IPC.sessionPreviewMemory]: [sessionId, "E:/project", "project", "Use pnpm."],
+  [IPC.sessionSaveMemory]: [sessionId, run.runId],
+  [IPC.sessionUndoMemory]: [sessionId, run.runId],
   [IPC.sessionFileDiff]: [sessionId, sessionId],
   [IPC.sessionUndoFileChange]: [sessionId, sessionId],
   [IPC.sessionVerification]: [sessionId],
@@ -155,6 +158,21 @@ const valid: Record<IpcChannel, unknown[]> = {
 };
 
 describe("IPC argument validation", () => {
+  it("limits memory previews to the supported scopes and checks their text and tokens", () => {
+    expect(
+      parseIpcArgs(IPC.sessionPreviewMemory, [sessionId, null, "global", "Use pnpm."]),
+    ).toEqual([sessionId, null, "global", "Use pnpm."]);
+    for (const args of [
+      [sessionId, null, "file", "Use pnpm."],
+      [sessionId, null, "global", "bad\0text"],
+      [sessionId, null, "global", "a".repeat(12_001)],
+    ])
+      expect(() => parseIpcArgs(IPC.sessionPreviewMemory, args)).toThrow(/Invalid IPC arguments/);
+    expect(() => parseIpcArgs(IPC.sessionSaveMemory, [sessionId, "stale"])).toThrow(
+      /Invalid IPC arguments/,
+    );
+  });
+
   it("requires at least one image for a blank prompt and checks attachment formats", () => {
     const input = { text: "", mentions: [], images: [image] };
     expect(parseIpcArgs(IPC.agentPrompt, [input])).toEqual([input]);

@@ -14,6 +14,7 @@ import { stopProcessTree } from "./windows-process.mjs";
 import { startModelFixture } from "./windows-ui/model.mjs";
 import {
   prepareTerminalExit,
+  verifyAgentMemory,
   verifyApprovals,
   verifyBackgroundTerminal,
   verifyCommandsAndTemplates,
@@ -26,6 +27,8 @@ import {
   verifyPlanDraft,
   verifyPlanExecution,
   verifyProjectInstructions,
+  verifyQuickMemory,
+  verifyRestoredMemory,
   verifyRestoredPromptTemplates,
   verifyRestoredSettings,
   verifySearchAndExport,
@@ -130,6 +133,7 @@ const profile = join(scratch, "profile");
 const project = join(scratch, "fixture-project");
 const commandProject = join(scratch, "commands-project");
 const instructionProject = join(scratch, "instructions-project");
+const memoryProject = join(scratch, "memory-project");
 const imageFixture = {
   chosen: join(scratch, "chosen.png"),
   dropped: join(scratch, "dropped.png"),
@@ -138,11 +142,13 @@ const imageFixture = {
 };
 let model;
 let instructionSession;
+let memorySession;
 try {
   mkdirSync(profile);
   mkdirSync(project);
   mkdirSync(commandProject);
   mkdirSync(instructionProject);
+  mkdirSync(memoryProject);
   execFileSync("git", ["init", "-q", commandProject]);
   writeFileSync(join(commandProject, "package.json"), JSON.stringify({
     scripts: { test: 'node -e "console.log(123456789)"' },
@@ -219,9 +225,20 @@ try {
       instructionSession = await verifyProjectInstructions(page, app, model, instructionProject);
     });
   });
-  await withApp(profile, async (page, window) => {
+  await withApp(profile, async (page, window, app) => {
     await runScene("Restore instruction scopes and check wide and narrow dialog layouts", () =>
       verifyInstructionSourceLayouts(page, window, instructionSession),
+    );
+    await runScene("Preview, cancel, save and undo quick memory without creating a chat", () =>
+      verifyQuickMemory(page, window, app, memoryProject),
+    );
+    await runScene("Review and save an Agent memory proposal to global personalization", async () => {
+      memorySession = await verifyAgentMemory(page, model, memoryProject);
+    });
+  });
+  await withApp(profile, async (page) => {
+    await runScene("Restore saved memory and send a literal hash heading", () =>
+      verifyRestoredMemory(page, model, memoryProject, memorySession),
     );
   });
 } finally {

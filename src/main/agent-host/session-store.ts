@@ -54,7 +54,8 @@ import { legacyMentionParts } from "./mentions";
 import { completeToolResults } from "./recovery";
 import { parseNewChatDrafts, parseSessionIndex } from "./session-index";
 import { labelOf } from "./tools";
-import { PLAN_TOOL_NAME } from "./tools/constants";
+import { PLAN_TOOL_NAME, PROPOSE_MEMORY_TOOL_NAME } from "./tools/constants";
+import { readMemoryProposal } from "./tools/memory";
 import { readPlanSteps } from "./tools/plan";
 import { transcriptFilename, transcriptMarkdown } from "./transcript-markdown";
 import type {
@@ -206,6 +207,8 @@ export function toUiMessages(
       part.state = message.isError ? "error" : "success";
       part.error = message.isError ? output || "工具执行失败" : undefined;
       if (!message.isError && isWebTool(message.toolName)) part.sources = webSources(details);
+      if (!message.isError && message.toolName === PROPOSE_MEMORY_TOOL_NAME)
+        part.memory = readMemoryProposal(details);
       if (typeof message.durationMs === "number") part.durationMs = message.durationMs;
       const { pilotApproval } = message as ApprovedToolResult;
       if (pilotApproval && ["once", "deny", "session", "global"].includes(pilotApproval.decision)) {

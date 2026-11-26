@@ -300,6 +300,7 @@ export function ChatView({
                                 messages={row.messages}
                                 sessionId={sessionId}
                                 composerId={composerId}
+                                projectDirectory={projectDirectory}
                                 live={live}
                                 busy={busy}
                                 hasActiveRun={activeRun !== null}
@@ -435,6 +436,7 @@ export function ChatView({
               key={composerId}
               composerId={composerId}
               workingDirectory={workingDirectory}
+              projectDirectory={projectDirectory}
               shortcutRef={shortcutRef}
               showStopHint={showStopHint}
               commands={commands}

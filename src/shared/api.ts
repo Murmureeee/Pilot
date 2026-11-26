@@ -19,6 +19,8 @@ import type {
   ImageAttachment,
   Locale,
   LogLevel,
+  MemoryPreview,
+  MemoryScope,
   MenuAction,
   MessageBranchAction,
   MessageRollbackPreview,
@@ -164,6 +166,14 @@ export interface PiApi {
   /** 会话级人设覆盖（null = 清除，回落全局） */
   sessionPersona(id: string, persona: string | null): Promise<void>;
   sessionInstructionSources(composerId: string): Promise<SessionInstructionSources>;
+  sessionPreviewMemory(
+    composerId: string,
+    projectDirectory: string | null,
+    scope: MemoryScope,
+    text: string,
+  ): Promise<MemoryPreview>;
+  sessionSaveMemory(composerId: string, token: string): Promise<void>;
+  sessionUndoMemory(composerId: string, token: string): Promise<void>;
   sessionFileDiff(id: string, changeId: string): Promise<FileDiff>;
   sessionUndoFileChange(id: string, changeId: string): Promise<void>;
   sessionVerification(composerId: string): Promise<VerificationState>;

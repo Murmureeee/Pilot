@@ -65,6 +65,9 @@ export const IPC = {
   sessionExportMarkdown: "session:export-markdown",
   sessionPersona: "session:persona",
   sessionInstructionSources: "session:instruction-sources",
+  sessionPreviewMemory: "session:preview-memory",
+  sessionSaveMemory: "session:save-memory",
+  sessionUndoMemory: "session:undo-memory",
   sessionFileDiff: "session:file-diff",
   sessionUndoFileChange: "session:undo-file-change",
   sessionVerification: "session:verification",
@@ -243,6 +246,19 @@ export type FileDiff = {
   truncated: boolean;
 };
 
+export type MemoryScope = "project" | "global";
+
+export interface MemoryProposal {
+  text: string;
+  scope?: MemoryScope;
+}
+
+export interface MemoryPreview {
+  token: string;
+  path: string | null;
+  diff: FileDiff;
+}
+
 interface ToolInvocation {
   callId: string;
   toolName: string;
@@ -281,6 +297,7 @@ export type UiPart =
       fileChange?: FileChangeSummary;
       approval?: ToolApproval;
       sources?: WebSource[];
+      memory?: MemoryProposal;
     });
 
 export type WebSource = { title: string; url: string };
@@ -449,6 +466,7 @@ export type AgentRunEvent =
       error?: string;
       durationMs?: number;
       sources?: WebSource[];
+      memory?: MemoryProposal;
     }
   | { type: "file_change"; callId: string; change: FileChangeSummary }
   | {

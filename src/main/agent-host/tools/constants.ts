@@ -3,6 +3,7 @@ import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL } from "../../../shared/web";
 
 export const PLAN_TOOL_NAME = "update_plan";
 export const PROPOSE_PLAN_TOOL_NAME = "propose_plan";
+export const PROPOSE_MEMORY_TOOL_NAME = "propose_memory";
 export const READ_SKILL_TOOL_NAME = "read_skill";
 export const READ_BACKGROUND_TOOL_NAME = "read_background_command";
 export const STOP_BACKGROUND_TOOL_NAME = "stop_background_command";
@@ -27,4 +28,5 @@ export const TOOL_LABELS: Readonly<Record<string, string>> = {
   [WEB_SEARCH_TOOL]: "搜索网页",
   [PLAN_TOOL_NAME]: "任务计划",
   [PROPOSE_PLAN_TOOL_NAME]: "提交计划",
+  [PROPOSE_MEMORY_TOOL_NAME]: "建议记忆",
 };

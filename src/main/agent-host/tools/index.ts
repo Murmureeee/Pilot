@@ -6,6 +6,7 @@ import { createToolPathResolver } from "../../workspace/paths";
 import { createBashTool } from "./bash";
 import {
   PLAN_TOOL_NAME,
+  PROPOSE_MEMORY_TOOL_NAME,
   READ_BACKGROUND_TOOL_NAME,
   READ_SKILL_TOOL_NAME,
   TOOL_LABELS,
@@ -42,6 +43,7 @@ const READ_ONLY_TOOLS = new Set([
   "glob",
   "grep",
   PLAN_TOOL_NAME,
+  PROPOSE_MEMORY_TOOL_NAME,
   READ_BACKGROUND_TOOL_NAME,
   READ_SKILL_TOOL_NAME,
 ]);

@@ -4,6 +4,7 @@ import { writeFile } from "node:fs/promises";
 import { app, BrowserWindow, dialog, shell } from "electron";
 
 import { IPC } from "../../shared/contract";
+import { MemoryChanges } from "../agent-host/memory";
 import { runAgentSmoke } from "../agent-host/smoke";
 import { NATIVE_DIALOG_TITLES } from "../constants";
 import { openVsCodeAtLine } from "../workspace/editor";
@@ -18,8 +19,10 @@ export function registerAgentRoutes({
   host,
   verification,
   getSettings,
+  saveSettings,
   exit,
-}: Pick<IpcContext, "host" | "verification" | "getSettings" | "exit">): void {
+}: Pick<IpcContext, "host" | "verification" | "getSettings" | "saveSettings" | "exit">): void {
+  const memory = new MemoryChanges({ getSettings, saveSettings });
   handle(IPC.runAgentSmoke, () => runAgentSmoke());
   handle(IPC.agentGetSnapshot, () => host.publishSnapshot());
   handle(IPC.agentSearchWorkspace, (_event, query, expectedDirectory) => {
@@ -167,6 +170,25 @@ export function registerAgentRoutes({
   handle(IPC.sessionInstructionSources, (_event, composerId) =>
     host.getInstructionSources(composerId),
   );
+  handle(IPC.sessionPreviewMemory, (_event, composerId, expectedDirectory, scope, text) => {
+    host.checkComposerId(composerId);
+    const directory = host.getProjectDirectory();
+    if (scope === "project" && (directory ?? null) !== expectedDirectory)
+      throw new Error("项目已切换。请重新打开记忆审阅。");
+    return memory.preview(composerId, directory, scope, text);
+  });
+  handle(IPC.sessionSaveMemory, (_event, composerId, token) => {
+    exit.checkWorkAllowed();
+    host.checkComposerId(composerId);
+    memory.save(composerId, token, host.getProjectDirectory());
+    host.publishSnapshot();
+  });
+  handle(IPC.sessionUndoMemory, (_event, composerId, token) => {
+    exit.checkWorkAllowed();
+    host.checkComposerId(composerId);
+    memory.undo(composerId, token, host.getProjectDirectory());
+    host.publishSnapshot();
+  });
   handle(IPC.sessionFileDiff, (_event, id, changeId) => host.getFileDiff(id, changeId));
   handle(IPC.sessionUndoFileChange, (_event, id, changeId) => host.undoFileChange(id, changeId));
   handle(IPC.sessionVerification, (_event, composerId) => {

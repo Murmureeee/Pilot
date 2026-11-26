@@ -118,6 +118,9 @@ describe("IPC contract", () => {
     expect(IPC.skillsToggle).toBe("skills:toggle");
     expect(IPC.sessionPersona).toBe("session:persona");
     expect(IPC.sessionInstructionSources).toBe("session:instruction-sources");
+    expect(IPC.sessionPreviewMemory).toBe("session:preview-memory");
+    expect(IPC.sessionSaveMemory).toBe("session:save-memory");
+    expect(IPC.sessionUndoMemory).toBe("session:undo-memory");
     expect(IPC.sessionFileDiff).toBe("session:file-diff");
     expect(IPC.sessionUndoFileChange).toBe("session:undo-file-change");
     expect(IPC.sessionVerification).toBe("session:verification");

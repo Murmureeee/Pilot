@@ -124,6 +124,7 @@ export function applyMessageEvent(messages: UiMessage[], event: AgentRunEvent): 
         ...part,
         state: event.state,
         sources: event.sources,
+        memory: event.memory,
         output: event.output ?? part.output,
         error: event.error,
         durationMs: event.durationMs,

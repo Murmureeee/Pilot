@@ -261,6 +261,17 @@ export interface ProjectInstruction {
   body?: string;
 }
 
+export type MemoryChange = { composerId: string; token: string } & (
+  | { scope: "global"; before: string | undefined; after: string }
+  | {
+      scope: "project";
+      directory: string;
+      filename: string;
+      before: GitFileState;
+      after: NonNullable<GitFileState>;
+    }
+);
+
 export interface ScopedProjectInstruction extends ScopedProjectInstructionSource {
   body?: string;
 }

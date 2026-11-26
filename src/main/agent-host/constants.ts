@@ -24,6 +24,13 @@ export const PROJECT_SKILL_FOLDERS = [".agents/skills", ".claude/skills"] as con
 export const SKILL_UNAVAILABLE = "所选技能已不可用，请重新选择。";
 export const SKILL_FILE_UNAVAILABLE = "无法读取技能文件。请检查文件是否存在并且位于技能目录内。";
 export const PROJECT_INSTRUCTION_FILES = ["AGENTS.md", "CLAUDE.md"] as const;
+export const MEMORY_PREVIEW_STALE = "保存位置或内容已变更。请重新预览差异。";
+export const MEMORY_UNDO_CONFLICT =
+  "保存位置或内容已有后续改动。请在原位置手动核对并撤回这条记忆。";
+export const MEMORY_TEXT_REQUIRED = "请输入要记录的约定。";
+export const MEMORY_ALREADY_EXISTS = "这条记忆已存在。请编辑内容或选择其他范围。";
+export const MEMORY_TOOL_INSTRUCTIONS =
+  "For an explicit request to remember a standing instruction, use propose_memory to give the user a reviewable draft. Ask the user to confirm the resulting memory in Pilot.";
 export const PROJECT_INSTRUCTION_PRIORITY =
   "When instructions supplied by Pilot conflict, follow application instructions first, then applicable project instructions, then chat instructions or their global personalization fallback, and finally skills. Directory-specific instructions apply only to paths within that directory. For a particular path the closest applicable directory takes precedence over its ancestors.";
 export const PROJECT_INSTRUCTIONS_RETRY =

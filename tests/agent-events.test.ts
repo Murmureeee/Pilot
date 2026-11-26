@@ -31,6 +31,25 @@ describe("agent-events adapter", () => {
   it("keeps terminal output and lifecycle outside the transcript and usage event stream", () => {
     expectTypeOf<Extract<TerminalEvent, UiAgentEvent>>().toBeNever();
   });
+  it("attaches a reviewable memory to its tool step without changing usage", () => {
+    let state = applyRunEvent(initialRunUiState(), { type: "assistant_start", id: "a", timing });
+    state = applyRunEvent(state, {
+      type: "tool_call",
+      callId: "memory",
+      toolName: "propose_memory",
+      label: "建议记忆",
+    });
+    const memory = { text: "Use pnpm.", scope: "project" } as const;
+    const result = applyRunEvent(state, {
+      type: "tool_end",
+      callId: "memory",
+      state: "success",
+      memory,
+    });
+    expect(result.messages[0].parts[0]).toMatchObject({ type: "tool", callId: "memory", memory });
+    expect(state.messages[0].parts[0]).not.toHaveProperty("memory");
+    expect(result.usage).toBe(state.usage);
+  });
   it("retains image-only user messages in the visible transcript", () => {
     const message: UiMessage = {
       id: "image",

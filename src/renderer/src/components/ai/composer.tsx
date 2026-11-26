@@ -3,6 +3,7 @@ import { cn } from "cn";
 import {
   ArrowUpIcon,
   BlocksIcon,
+  BookmarkPlusIcon,
   CheckIcon,
   ClipboardListIcon,
   EyeIcon,
@@ -64,6 +65,7 @@ import {
   composerEnterAction,
   matchesComposerQuery,
   nextApprovalMode,
+  quickMemoryText,
   trimPrompt,
 } from "@renderer/lib/composer-shortcuts";
 import type { ComposerSelection } from "@renderer/lib/composer/types";
@@ -98,6 +100,7 @@ import { ComposerModelControls } from "./composer-model-controls";
 import { ComposerCaretMenu, ComposerSuggestions } from "./composer-suggestions";
 import { ContextUsage } from "./context-usage";
 import { ImageAttachments } from "./image-attachments";
+import { MemoryDialog } from "./memory-dialog";
 
 // 语义色分级（AGENTS.md）：红 = 破坏性动作；amber 橙 = 风险提示（警觉但不吓退）；灰 = 常态
 type ModeTone = "neutral" | "amber";
@@ -136,12 +139,14 @@ const TONE_BADGE: Record<ModeTone, string> = {
 export function Composer({
   composerId,
   workingDirectory,
+  projectDirectory,
   shortcutRef,
   showStopHint,
   commands,
 }: {
   composerId: string;
   workingDirectory: string | null;
+  projectDirectory: string | null;
   shortcutRef: Ref<ComposerShortcuts>;
   showStopHint: boolean;
   commands: readonly WorkbenchCommand[];
@@ -169,6 +174,7 @@ export function Composer({
   const [sendError, setSendError] = useState<string | null>(null);
   const [blockedSend, setBlockedSend] = useState<ActiveRun | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [memoryDraft, setMemoryDraft] = useState<string | null>(null);
   const [fileDragging, setFileDragging] = useState(false);
   const [dropPending, setDropPending] = useState(false);
   const [dropError, setDropError] = useState<string | null>(null);
@@ -503,6 +509,8 @@ export function Composer({
       )
     : undefined;
   const shouldRunCommand = Boolean(standalone) || focus !== undefined;
+  const memoryText = attachments.images.length ? undefined : quickMemoryText(draft);
+  const sendLabel = t(memoryText ? "审阅记忆…" : "发送", locale);
   const canSend =
     status !== "stopping" &&
     !composing &&
@@ -510,16 +518,20 @@ export function Composer({
     !attachments.pending &&
     !dropPending &&
     (draft.text.trim().length > 0 || attachments.images.length > 0) &&
-    (shouldRunCommand ? Boolean(standalone) : !commandPending);
+    (memoryText !== undefined || (shouldRunCommand ? Boolean(standalone) : !commandPending));
   const placeholder = busy
     ? t("输入插话消息…", locale)
     : planning
       ? t("描述要规划的任务…", locale)
       : t("给 {0} 发消息…", locale, [APP_NAME]);
 
-  const send = async (): Promise<void> => {
+  const send = async (asMessage = false): Promise<void> => {
     if (!canSend || submitting) return;
-    if (standalone && editor.current) {
+    if (memoryText !== undefined && !asMessage) {
+      setMemoryDraft(memoryText);
+      return;
+    }
+    if (!asMessage && standalone && editor.current) {
       const range = document.createRange();
       range.selectNodeContents(editor.current);
       await runCommand(standalone, range, focus);
@@ -636,7 +648,7 @@ export function Composer({
       void send();
       return;
     }
-    if (onSuggestionKey(event)) return;
+    if (!(memoryText !== undefined && action === "send") && onSuggestionKey(event)) return;
     const shortcut = composerEditingShortcut(
       event,
       draft.text.length === 0 && !attachments.images.length,
@@ -1094,15 +1106,37 @@ export function Composer({
                 className="rounded-full disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
                 disabled={submitting || !canSend}
                 onClick={() => void send()}
-                aria-label={t("发送", locale)}
-                title={t("发送", locale)}
+                aria-label={sendLabel}
+                title={sendLabel}
               >
-                <ArrowUpIcon className="size-4" />
+                {memoryText === undefined ? (
+                  <ArrowUpIcon className="size-4" />
+                ) : (
+                  <BookmarkPlusIcon className="size-4" />
+                )}
               </Button>
             )}
           </div>
         </InputGroupAddon>
       </InputGroup>
+      {memoryDraft !== null && (
+        <MemoryDialog
+          composerId={composerId}
+          projectDirectory={projectDirectory}
+          proposal={{ text: memoryDraft }}
+          finalFocus={editor}
+          onClose={(saved) => {
+            setMemoryDraft(null);
+            if (saved && editor.current) {
+              editor.current.replaceChildren();
+              resources.current.clear();
+              lastRange.current = null;
+              readEditor();
+            }
+          }}
+          onSendAsMessage={() => void send(true)}
+        />
+      )}
     </div>
   );
 }

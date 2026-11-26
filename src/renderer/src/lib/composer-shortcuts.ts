@@ -54,6 +54,12 @@ export function trimPrompt(input: PromptInput): PromptInput {
   };
 }
 
+export function quickMemoryText(input: PromptInput): string | undefined {
+  if (input.mentions.length || input.images?.length) return;
+  const text = input.text.trimStart();
+  if (text.startsWith("#") && !text.startsWith("##")) return text.slice(1).trim() || undefined;
+}
+
 export function composerEnterAction(
   event: { key: string; shiftKey: boolean; ctrlKey: boolean; metaKey: boolean },
   sendKey: SendKey,

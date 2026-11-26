@@ -48,6 +48,7 @@ import type {
 } from "../workspace/types";
 import {
   CONTEXT_COMPACTION_RATIO,
+  MEMORY_TOOL_INSTRUCTIONS,
   PLAN_MODE_INSTRUCTIONS,
   PROJECT_INSTRUCTIONS_RETRY,
 } from "./constants";
@@ -75,7 +76,12 @@ import { skillCatalog } from "./skills";
 import { isReadOnly, labelOf } from "./tools";
 import { createBackgroundTools } from "./tools/background";
 import { createBashTool } from "./tools/bash";
-import { PLAN_TOOL_NAME, PROPOSE_PLAN_TOOL_NAME } from "./tools/constants";
+import {
+  PLAN_TOOL_NAME,
+  PROPOSE_MEMORY_TOOL_NAME,
+  PROPOSE_PLAN_TOOL_NAME,
+} from "./tools/constants";
+import { proposeMemoryTool, readMemoryProposal } from "./tools/memory";
 import { proposePlanTool, readPlanProposal, readPlanSteps } from "./tools/plan";
 import { createReadSkillTool } from "./tools/read-skill";
 import { createWebTools } from "./tools/web";
@@ -505,7 +511,10 @@ export class AgentRun {
         return tool;
       });
       if (this.planning) localTools.push(proposePlanTool);
-      else if (terminal) localTools.push(...createBackgroundTools(terminal, run));
+      else {
+        localTools.push(proposeMemoryTool);
+        if (terminal) localTools.push(...createBackgroundTools(terminal, run));
+      }
       if (!this.planning && webRequests) localTools.push(...createWebTools(webRequests));
       if (this.listedSkills.size) {
         localTools.push(
@@ -690,7 +699,9 @@ export class AgentRun {
 
   private projectSystemPrompt(scoped: string): string {
     const { appPrompt, contextPrompt } = this.deps.instructions;
-    return [appPrompt, scoped, contextPrompt].filter(Boolean).join("\n\n");
+    return [appPrompt, this.planning ? "" : MEMORY_TOOL_INSTRUCTIONS, scoped, contextPrompt]
+      .filter(Boolean)
+      .join("\n\n");
   }
 
   private addUsage(usage: Snapshot["usage"]): void {
@@ -961,6 +972,10 @@ export class AgentRun {
         sources:
           !event.isError && isWebTool(event.toolName)
             ? webSources(event.result.details)
+            : undefined,
+        memory:
+          !event.isError && event.toolName === PROPOSE_MEMORY_TOOL_NAME
+            ? readMemoryProposal(event.result.details)
             : undefined,
       });
       return;

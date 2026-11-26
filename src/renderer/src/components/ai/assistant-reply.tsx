@@ -19,6 +19,7 @@ import type { TranscriptLocation, UiMessage } from "@shared/contract";
 import { transcriptPartKey } from "@shared/transcript-search";
 
 import { FileChangesCard } from "./file-changes-card";
+import { MemorySuggestion } from "./memory-dialog";
 import { MessageActions } from "./message-actions";
 import { PlanCard } from "./plan-card";
 import { Response } from "./response";
@@ -29,6 +30,7 @@ export function AssistantReply({
   messages,
   sessionId,
   composerId,
+  projectDirectory,
   live,
   busy,
   hasActiveRun,
@@ -38,6 +40,7 @@ export function AssistantReply({
   messages: UiMessage[];
   sessionId: string | null;
   composerId: string | null;
+  projectDirectory: string | null;
   live: boolean;
   busy: boolean;
   hasActiveRun: boolean;
@@ -174,6 +177,18 @@ export function AssistantReply({
           busy={busy}
         />
       )}
+      {composerId &&
+        tools.map(
+          ({ callId, memory }) =>
+            memory && (
+              <MemorySuggestion
+                key={callId}
+                composerId={composerId}
+                projectDirectory={projectDirectory}
+                proposal={memory}
+              />
+            ),
+        )}
       {!live && composerId && (
         <MessageActions
           composerId={composerId}

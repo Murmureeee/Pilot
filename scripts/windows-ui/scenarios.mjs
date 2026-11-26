@@ -399,6 +399,144 @@ function sendTool(completion, id, name, args) {
   completion.finish("tool_calls");
 }
 
+const projectMemory = "Use the project's integration fixtures.";
+const globalMemory = "Quote file paths in explanations.";
+const memoryPrompt = "Please remember to cite file paths in all my chats.";
+
+export async function verifyQuickMemory(page, window, app, project) {
+  await app.evaluate(({ dialog }, folder) => {
+    const original = dialog.showOpenDialog;
+    dialog.showOpenDialog = async () => {
+      dialog.showOpenDialog = original;
+      return { canceled: false, filePaths: [folder] };
+    };
+  }, project);
+  await page.keyboard.press("Control+o");
+  await waitForProjectDraft(page, project);
+  const composer = editor(page);
+  const draft = "# " + projectMemory;
+  const path = join(project, "AGENTS.md");
+  await composer.fill(draft);
+  let current = locales[1];
+  let contrast = Infinity;
+  for (const size of [wide, narrow]) {
+    await resize(page, window, size);
+    for (const locale of locales) {
+      const en = locale.lang === "en";
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        await composer.press("Enter");
+        const dialog = page.getByRole("dialog", { name: en ? "Review memory" : "审阅记忆" });
+        const instruction = dialog.getByRole("textbox", { name: en ? "Instruction" : "约定内容" });
+        await instruction.waitFor();
+        assert.equal(await instruction.inputValue(), projectMemory);
+        await assertFits(dialog);
+        await assertFits(button(dialog, en ? "Preview changes" : "预览差异"));
+        await button(dialog, en ? "Preview changes" : "预览差异").press("Enter");
+        const diff = dialog.getByRole("region", { name: en ? "Proposed memory changes" : "拟议记忆差异" });
+        await diff.getByText(projectMemory, { exact: true }).waitFor();
+        await assertFits(button(dialog, en ? "Save memory" : "保存记忆"));
+        assert.equal(await diff.evaluate((element) => element === document.activeElement), true);
+        contrast = Math.min(contrast, await minimumTextContrast(dialog, "h2, p"));
+        await page.keyboard.press("Escape");
+        await dialog.waitFor({ state: "hidden" });
+        await page.waitForFunction(() => document.activeElement?.matches("[data-composer-editor]"));
+        assert.equal(await composer.innerText(), draft);
+        console.log("Checked memory at " + size.width + " × " + size.height + " " + locale.lang + " " + theme);
+      }
+    }
+  }
+  assert.ok(contrast >= 4.5, "Memory review text must meet the contrast requirement");
+  console.log("Memory review text minimum contrast " + contrast.toFixed(2) + ":1");
+  assert.ok(!existsSync(path));
+  assert.equal((await page.evaluate(() => window.pi.getSnapshot())).sessionId, null);
+
+  await resize(page, window, narrow, 1.5);
+  await composer.press("Enter");
+  const dialog = page.getByRole("dialog", { name: "Review memory" });
+  const scope = dialog.getByRole("combobox", { name: "Save to" });
+  await scope.press("Enter");
+  await page.getByRole("option", { name: "Global personalization", exact: true }).press("Enter");
+  await button(dialog, "Preview changes").press("Enter");
+  await dialog.getByText("Settings → Personalization → Custom instructions", { exact: true }).waitFor();
+  await assertFits(dialog);
+  await assertFits(button(dialog, "Save memory"));
+  await button(dialog, "Back to editing").press("Enter");
+  await scope.press("Enter");
+  await page.getByRole("option", { name: "Project instructions", exact: true }).press("Enter");
+  for (const undo of [true, false]) {
+    await button(dialog, "Preview changes").press("Enter");
+    await dialog.getByText(path, { exact: true }).waitFor();
+    assert.ok(!existsSync(path));
+    await button(dialog, "Save memory").press("Enter");
+    await dialog.getByText("Memory saved", { exact: true }).waitFor();
+    assert.equal(readFileSync(path, "utf8"), projectMemory + "\n");
+    if (undo) {
+      await button(dialog, "Undo save").press("Enter");
+      await dialog.getByText("Memory undone", { exact: true }).waitFor();
+      assert.ok(!existsSync(path));
+    }
+    await button(dialog, "Done").press("Enter");
+    await dialog.waitFor({ state: "hidden" });
+    await page.waitForFunction(() => document.activeElement?.matches("[data-composer-editor]"));
+    if (undo) await composer.press("Enter");
+  }
+  assert.equal(await composer.innerText(), "");
+  assert.equal((await page.evaluate(() => window.pi.getSnapshot())).sessionId, null);
+  await resize(page, window, wide);
+}
+
+export async function verifyAgentMemory(page, model, project) {
+  const snapshot = await page.evaluate(() => window.pi.getSnapshot());
+  const initial = snapshot.settings.persona;
+  await send(page, memoryPrompt);
+  const first = await model.nextCompletion();
+  assert.ok(JSON.stringify(first.input.messages).includes(projectMemory));
+  assert.ok(first.input.tools.some(({ function: { name } }) => name === "propose_memory"));
+  sendTool(first, "memory-suggestion", "propose_memory", { text: "Mention file paths in replies.", scope: "global" });
+  const reply = await model.nextCompletion();
+  assert.match(reply.input.messages.at(-1).content, /proposal is ready/);
+  reply.write({ content: "You can now review the proposed memory." });
+  reply.finish();
+  await button(page, "Send").waitFor();
+  const open = button(page, "Review memory…");
+  await open.press("Enter");
+  const dialog = page.getByRole("dialog", { name: "Review memory" });
+  const instruction = dialog.getByRole("textbox", { name: "Instruction" });
+  assert.equal(await instruction.inputValue(), "Mention file paths in replies.");
+  await instruction.fill(globalMemory);
+  await button(dialog, "Preview changes").press("Enter");
+  await dialog.getByText("Settings → Personalization → Custom instructions", { exact: true }).waitFor();
+  await dialog.getByRole("region").getByText(globalMemory, { exact: true }).waitFor();
+  assert.equal((await page.evaluate(() => window.pi.settingsGet())).persona, initial);
+  await button(dialog, "Save memory").press("Enter");
+  await dialog.getByText("Memory saved", { exact: true }).waitFor();
+  assert.ok((await page.evaluate(() => window.pi.settingsGet())).persona.endsWith(globalMemory + "\n"));
+  await button(dialog, "Done").press("Enter");
+  await dialog.waitFor({ state: "hidden" });
+  await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "Review memory…");
+  assert.equal(readFileSync(join(project, "AGENTS.md"), "utf8"), projectMemory + "\n");
+  return (await page.evaluate(() => window.pi.getSnapshot())).sessionId;
+}
+
+export async function verifyRestoredMemory(page, model, project, sessionId) {
+  await page.evaluate((id) => window.pi.sessionLoad(id), sessionId);
+  await button(page, "Review memory…").waitFor();
+  const heading = "# Markdown heading";
+  await send(page, heading);
+  await button(page.getByRole("dialog", { name: "Review memory" }), "Send as message").press("Enter");
+  const prompt = await model.nextCompletion();
+  assert.equal(prompt.input.messages.at(-1).content, heading);
+  assert.ok(JSON.stringify(prompt.input.messages).includes(projectMemory));
+  assert.ok(JSON.stringify(prompt.input.messages).includes(globalMemory));
+  assert.match(readFileSync(join(project, "AGENTS.md"), "utf8"), /integration fixtures/);
+  prompt.write({ content: "Both instruction scopes were restored." });
+  prompt.finish();
+  await page.getByText("Both instruction scopes were restored.", { exact: true }).waitFor();
+  await button(page, "Send").waitFor();
+}
+
 async function openInstructionSources(page, locale) {
   const trigger = button(page.locator("main"), locale.more);
   await trigger.press("Enter");

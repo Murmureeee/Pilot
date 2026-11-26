@@ -119,6 +119,12 @@ const api: PiApi = {
     ipcRenderer.invoke(IPC.sessionPersona, id, persona),
   sessionInstructionSources: (composerId) =>
     ipcRenderer.invoke(IPC.sessionInstructionSources, composerId),
+  sessionPreviewMemory: (composerId, directory, scope, text) =>
+    ipcRenderer.invoke(IPC.sessionPreviewMemory, composerId, directory, scope, text),
+  sessionSaveMemory: (composerId, token) =>
+    ipcRenderer.invoke(IPC.sessionSaveMemory, composerId, token),
+  sessionUndoMemory: (composerId, token) =>
+    ipcRenderer.invoke(IPC.sessionUndoMemory, composerId, token),
   sessionFileDiff: (id, changeId) => ipcRenderer.invoke(IPC.sessionFileDiff, id, changeId),
   sessionUndoFileChange: (id, changeId) =>
     ipcRenderer.invoke(IPC.sessionUndoFileChange, id, changeId),

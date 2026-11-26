@@ -526,6 +526,37 @@ export const EN_MESSAGES: Record<string, string> = {
   应用指令: "Application instructions",
   项目指令: "Project instructions",
   全局个性化: "Global personalization",
+  建议记忆: "Propose memory",
+  审阅记忆: "Review memory",
+  "审阅记忆…": "Review memory…",
+  "保存后，约定会用于后续对话。": "Save this instruction for future chats.",
+  保存范围: "Save to",
+  约定内容: "Instruction",
+  "设置 → 个性化 → 自定义指令": "Settings → Personalization → Custom instructions",
+  拟议记忆差异: "Proposed memory changes",
+  预览差异: "Preview changes",
+  "正在预览…": "Previewing…",
+  返回编辑: "Back to editing",
+  保存记忆: "Save memory",
+  作为消息发送: "Send as message",
+  记忆已保存: "Memory saved",
+  已撤销记忆: "Memory undone",
+  撤销保存: "Undo save",
+  "请输入要记录的约定。": "Enter an instruction to remember.",
+  "这条记忆已存在。请编辑内容或选择其他范围。":
+    "This instruction is already saved. Edit it or choose another scope.",
+  "请先打开项目，或选择全局个性化。": "Open a project or choose global personalization.",
+  "项目已切换。请重新打开记忆审阅。": "The project changed. Reopen the memory review.",
+  "无法预览项目指令。请检查文件位置、大小和访问权限。":
+    "Could not preview project instructions. Check the file location, size, and access.",
+  "项目指令超出差异预览上限。请缩短内容或选择全局个性化。":
+    "Project instructions are too large to preview. Shorten the content or choose global personalization.",
+  "差异超出预览上限。请缩短记忆内容后重试。":
+    "The change is too large to preview. Shorten the instruction and try again.",
+  "保存位置或内容已变更。请重新预览差异。":
+    "The destination or its contents changed. Preview the changes again.",
+  "保存位置或内容已有后续改动。请在原位置手动核对并撤回这条记忆。":
+    "The destination or its contents changed after saving. Review and remove this instruction at its original location.",
   已加载: "Loaded",
   将用于下一次请求: "Applies to the next request",
   "指令冲突时，列表上方的来源优先。":
