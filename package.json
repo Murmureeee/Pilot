@@ -20,6 +20,7 @@
     "preview": "electron-vite preview",
     "test": "vitest",
     "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
+    "verify:windows:performance": "node scripts/verify-windows-performance.mjs",
     "verify:windows:ui": "node scripts/verify-windows-ui.mjs"
   },
   "dependencies": {
