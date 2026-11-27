@@ -76,6 +76,8 @@ jobs:
         run: pnpm exec oxlint src tests
 
       - name: Test
+        env:
+          VITEST_MAX_WORKERS: '2'
         run: pnpm exec vitest --run
 
       - name: Check unused code
@@ -182,6 +184,8 @@ jobs:
               if (Test-Path -LiteralPath $certFile) { Remove-Item -LiteralPath $certFile }
             }
             Remove-Item -LiteralPath $certDir
+            if (Test-Path -LiteralPath $certDir) { throw 'Temporary certificate files were not removed.' }
+            Write-Output 'Temporary signing and TLS materials were removed.'
           }
 
       - name: Verify the published Windows update over HTTPS
