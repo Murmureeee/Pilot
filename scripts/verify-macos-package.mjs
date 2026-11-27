@@ -195,7 +195,7 @@ try {
     "-c.extraMetadata.version=" + oldVersion,
     "-c.extraMetadata.name=" + fixtureName,
     "-c.mac.target=zip",
-    "-c.mac.notarize=false",
+    ...(signed ? ["-c.mac.notarize=false"] : []),
   ], { env: { ...process.env, PILOT_UPDATE_URL: origin + "/" } });
   const oldBundle = join(baseline, arch === "arm64" ? "mac-arm64" : "mac", "Pilot.app");
   await withApp(oldBundle, join(scratch, "update-profile"), async (page, _app, info) => {

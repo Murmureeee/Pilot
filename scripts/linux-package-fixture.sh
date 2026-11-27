@@ -10,8 +10,13 @@ case "$1" in
     ;;
   select-directory)
     xdotool windowfocus --sync "$2" key --clearmodifiers ctrl+l
-    xdotool type --clearmodifiers "$3/"
-    exec xdotool key --clearmodifiers Return
+    sleep 0.2
+    xdotool type --clearmodifiers "$3"
+    xdotool key --clearmodifiers Return
+    sleep 0.5
+    if xdotool search --onlyvisible --name '^选择工具工作目录$' >/dev/null; then
+      exec xdotool key --clearmodifiers alt+o
+    fi
     ;;
   check-absent|install|purge)
     test "${RUNNER_ENVIRONMENT:-}" = github-hosted

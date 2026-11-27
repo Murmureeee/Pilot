@@ -234,7 +234,9 @@ async function verifyLinuxPicker(page) {
   const directory = join(scratch, "selected");
   await mkdir(directory);
   await page.evaluate(() => {
-    void window.pi.pickWorkingDirectory("zh").then((path) => { globalThis.pilotPickedDirectory = path; });
+    void window.pi.pickWorkingDirectory("zh").then((path) => {
+      globalThis.pilotPickedDirectory = { path };
+    });
   });
   const windowId = await waitFor("the GTK directory picker", () => {
     const search = spawnSync("bash", [fixtureScript, "picker-window"], {
@@ -247,7 +249,8 @@ async function verifyLinuxPicker(page) {
   const picked = await waitFor("the selected native directory", () =>
     page.evaluate(() => globalThis.pilotPickedDirectory),
   );
-  assert.equal(await realpath(picked), await realpath(directory));
+  assert.ok(picked.path, "The native picker was canceled");
+  assert.equal(await realpath(picked.path), await realpath(directory));
   console.log("Verified the GTK directory picker selected an existing folder");
 }
 
