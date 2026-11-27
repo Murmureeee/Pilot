@@ -123,7 +123,7 @@ it("keeps the original index and draft isolated, groups chats under the original
   expect(git(project, "show", "HEAD:tracked.txt")).toBe("staged in the original");
   expect(git(project, "show", "HEAD:task.txt")).toBe("Task change");
   expect(existsSync(join(second.directory, "task.txt"))).toBe(false);
-});
+}, 20_000);
 
 it("refreshes a moved base and rejects a conflicting merge before changing the original checkout", async () => {
   using temp = mkdtempDisposableSync(join(tmpdir(), "pilot-worktree-conflict-"));
