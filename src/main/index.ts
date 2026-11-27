@@ -2,7 +2,16 @@
 import { existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 
-import { BrowserWindow, Menu, app, dialog, nativeTheme, session, shell } from "electron";
+import {
+  BrowserWindow,
+  Menu,
+  app,
+  dialog,
+  nativeTheme,
+  powerMonitor,
+  session,
+  shell,
+} from "electron";
 
 import { APP_NAME, DEFAULT_LOCALE } from "../shared/constants";
 import {
@@ -331,10 +340,19 @@ function startDesktop(): (entry: ProjectEntry) => void {
       exit.checkWorkAllowed();
       return host.runScheduledTask(id, task.title, task.directory, task.prompt);
     },
+    settled: (id) => ({
+      status: store.getMeta(id)?.lastRunResult,
+      error: store.checkpoint(id)?.failure?.detail,
+    }),
     reportError: () => log.write("warn", "main", "scheduled-task-storage"),
   });
   scheduledTasks.start();
-  app.once("will-quit", () => scheduledTasks.stop());
+  const resumeSchedules = (): void => scheduledTasks.resume();
+  powerMonitor.on("resume", resumeSchedules);
+  app.once("will-quit", () => {
+    powerMonitor.removeListener("resume", resumeSchedules);
+    scheduledTasks.stop();
+  });
   registerIpc({
     scheduledTasks,
     settingsDir: userData,

@@ -21,6 +21,8 @@ import type { ScheduledTasksDependencies } from "./types";
 export class ScheduledTasks {
   private tasks?: ScheduledTask[];
   private timer?: ReturnType<typeof setInterval>;
+  private recovered = false;
+  private storageFailed = false;
   private readonly now: () => number;
 
   constructor(private readonly deps: ScheduledTasksDependencies) {
@@ -139,35 +141,84 @@ export class ScheduledTasks {
     });
   }
 
-  private tick(): void {
+  private tick(recovering: boolean): void {
     const now = this.now();
     for (const task of this.list()) {
       const at = task.nextAt;
       if (task.paused || at === null || at > now) continue;
-      const next = { ...task, nextAt: nextScheduledTime(task, now) };
-      const busy = task.runs.some(({ status }) => status === "running");
-      if (busy || now - at > SCHEDULE_GRACE_MS) {
-        this.record(next, { id: randomUUID(), at, trigger: "schedule", status: "missed" });
-      } else {
-        this.launch(next, at, "schedule");
+      const running = task.runs.find(({ status }) => status === "running");
+      const deadline = running || recovering ? now : now - SCHEDULE_GRACE_MS - 1;
+      const intervalDays = task.frequency === "weekly" ? 7 : 1;
+      const retainFrom = now - (SCHEDULE_HISTORY_LIMIT + 1) * intervalDays * 86_400_000;
+      let due =
+        task.frequency !== "once" && at < retainFrom ? nextScheduledTime(task, retainFrom) : at;
+      const missed: ScheduledTaskRun[] = [];
+      while (due !== null && due <= deadline) {
+        missed.push({ id: randomUUID(), at: due, trigger: "schedule", status: "missed" });
+        due = nextScheduledTime(task, due);
       }
+      const history = missed.reverse().concat(task.runs).slice(0, SCHEDULE_HISTORY_LIMIT);
+      if (running && !history.includes(running)) history.splice(-1, 1, running);
+      const latest = {
+        ...task,
+        nextAt: due,
+        runs: history,
+      };
+      if (due !== null && due <= now) {
+        this.launch({ ...latest, nextAt: nextScheduledTime(task, due) }, due, "schedule");
+      } else if (missed.length > 0) {
+        this.replace(latest);
+      }
+    }
+  }
+
+  private recover(): void {
+    const tasks = this.list();
+    if (tasks.some(({ runs }) => runs.some(({ status }) => status === "running"))) {
+      this.save(
+        tasks.map((task) => ({
+          ...task,
+          runs: task.runs.map((run) => {
+            if (run.status !== "running") return run;
+            const settled = run.sessionId ? this.deps.settled?.(run.sessionId) : undefined;
+            if (settled?.status === "success") return { ...run, status: "success" };
+            if (settled?.status === "failed")
+              return { ...run, status: "failed", error: settled.error };
+            return { ...run, status: "interrupted" };
+          }),
+        })),
+      );
+    }
+    this.tick(true);
+    this.recovered = true;
+  }
+
+  resume(): void {
+    this.check(() => this.tick(true));
+  }
+
+  private check(action: () => void): void {
+    try {
+      action();
+      this.storageFailed = false;
+    } catch {
+      if (!this.storageFailed) this.deps.reportError();
+      this.storageFailed = true;
     }
   }
 
   start(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => {
-      try {
-        this.tick();
-      } catch {
-        this.deps.reportError();
-      }
-    }, SCHEDULE_INTERVAL_MS);
-    this.timer.unref();
+    this.check(() => this.recover());
+    this.timer = setInterval(
+      () => this.check(() => (this.recovered ? this.tick(false) : this.recover())),
+      SCHEDULE_INTERVAL_MS,
+    );
   }
 
   stop(): void {
     clearInterval(this.timer);
     this.timer = undefined;
+    this.recovered = false;
   }
 }

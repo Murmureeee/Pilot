@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { repository, withDesktop as withApp } from "./windows-ui/desktop.mjs";
 import { startModelFixture } from "./windows-ui/model.mjs";
+import { seedScheduleRecovery, verifyRecoveredSchedules, verifyScheduledTasks } from "./windows-ui/scheduled-tasks.mjs";
 import { startMcpOAuthFixture } from "./windows-ui/mcp-oauth.mjs";
 import {
   prepareTerminalExit,
@@ -162,6 +163,18 @@ try {
     scripts: { test: 'node -e "console.log(123456789)"' },
   }));
   model = await startModelFixture();
+  const scheduledProfile = join(scratch, "scheduled-task-profile");
+  await withApp(scheduledProfile, async (page, _window, app) => {
+    await runScene("Create, edit and execute isolated read-only scheduled chats", () =>
+      verifyScheduledTasks(page, app, model, project),
+    );
+  });
+  seedScheduleRecovery(scheduledProfile);
+  await withApp(scheduledProfile, async (page) => {
+    await runScene("Recover missed and interrupted schedules and retry from history", () =>
+      verifyRecoveredSchedules(page, model),
+    );
+  });
   mkdirSync(subtaskProject);
   await withApp(subtaskProfile, async (page, window) => {
     await runScene("Delegate read-only research, restore its trace and cancel a planning subtask", () =>
