@@ -17,6 +17,8 @@ Linux packages are available starting with the first release built by the Linux 
 
 Packages with in-app updates check for and download updates on launch. To check manually, open **App menu → Check for updates…**. On Windows and AppImage, choose **Update and restart** after the download. For a Debian package, choose **Open download location**, install the package with your system package manager, and reopen Pilot. Linux users on v0.5.0 or earlier need to install a newer package from Releases once.
 
+The project policies describe Windows release signing, who approves signing requests, and how Pilot handles data. [Code signing policy](./CODE_SIGNING.md) · [Privacy policy](./PRIVACY.md)
+
 ## Get started
 
 1. On first launch, choose the built-in demo model to try a chat, or configure an Anthropic or OpenAI-compatible service and select a model.
@@ -40,3 +42,7 @@ pnpm dev
 ```
 
 Run `pnpm build` to build the app. Use `pnpm package:win` on Windows or `pnpm package:linux` on Linux x64 to build the platform packages. [Roadmap](./PLAN.md)
+
+## License
+
+Pilot's original code is licensed under the MIT License. Bundled third-party components are covered by their own licenses. [MIT License](../LICENSE)

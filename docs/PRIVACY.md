@@ -1,0 +1,9 @@
+# Pilot privacy policy
+
+Pilot stores chats, drafts, settings, and diagnostics locally. Saved provider credentials and supported service tokens use Electron's safeStorage. On a Linux desktop without a system secret store, saved provider credentials can use Electron's basic_text backend. You can manage chats and export or restore local data in Settings. [Storage and diagnostics](./DESIGN.md#212-设置视图) · [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)
+
+Model requests go to the provider selected in Pilot. Requests can include messages, attachments, project instructions, and tool results used as conversation context. Automatic titles and context summaries may send relevant conversation content to the configured model. Model providers handle those requests under their own policies. [OpenAI privacy policy](https://openai.com/policies/privacy-policy/) · [Anthropic privacy policy](https://www.anthropic.com/legal/privacy)
+
+Pilot contacts configured remote MCP services when you connect or use them. Web search sends the approved search terms to DuckDuckGo, and web reading contacts the approved site. Plugin sources, registries, and Git remotes receive requests when you use their corresponding features. These services handle requests under their own policies. [DuckDuckGo privacy policy](https://duckduckgo.com/privacy) · [GitHub privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)
+
+Installations configured for in-app updates contact GitHub Releases to check for a newer version and download update files. Settings controls automatic downloads. Diagnostic reports and backups are exported to the location you choose. [Releases](https://github.com/Murmureeee/Pilot/releases) · [Storage and updates](./DESIGN.md#212-设置视图)

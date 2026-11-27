@@ -6,6 +6,8 @@
 
 ### 2026-11-27
 
+- **MIT 许可证与签名申请准备。** Pilot 的原创代码采用 MIT。中英文首页公开许可证、Windows 签名政策和隐私说明，后续发行草稿自动带上签名政策链接。八步验证通过，61 个 Vitest 文件共 652 项。Electron 冒烟返回 `ok: true`，开发版正常挂载且无未捕获异常。已从 Windows 打包产物核对 MIT 正文与包元数据，并验证发行说明可保留原文且追加签名政策链接。[MIT 许可证](../LICENSE) · [Code signing policy](./CODE_SIGNING.md) · [Privacy policy](./PRIVACY.md)
+
 - **跨平台原生目录选择。** 在 Ubuntu 24.04 的 Xvfb 桌面操作已安装 Debian 包的 GTK 目录选择框，点击「打开」并核对含空格的路径。Apple Silicon 的 macOS 15 runner 从 DMG 安装，使用原生键盘事件导航到含中文和空格的目录，再确认返回路径。两边都核对了取消结果。Linux 同时复验 AppImage 原位升级和 Debian 安装、升级、卸载、重装。macOS 同时复验 DMG 安装、钥匙串凭据回读和新版 ZIP 下载。脚本结束后核对隔离配置、程序副本和更新缓存的清理。[Linux 验收](https://github.com/Murmureeee/Pilot/actions/runs/45990165712/job/140475665370) · [macOS 验收](https://github.com/Murmureeee/Pilot/actions/runs/45990165712/job/140475664985) · [提交 88fb429](https://github.com/Murmureeee/Pilot/commit/88fb42931108f2d5dafa6d9c721b12079e08a7ee)
 
 - **备份导出路径回归。** 导出前按真实目录比较配置根和目标位置。Windows 短路径和目录联接指向本机数据目录时，也会拒绝保存备份。回归用例核对数据目录外的目的地返回规范路径。本机八步验证与远端 Windows CI 通过，61 个 Vitest 文件共 652 项、52 个桌面场景通过，冒烟返回 `ok: true`，开发版正常挂载。性能复测的冷启动中位数为 770.9 ms，120 个文字增量的渲染 P95 为 33.6 ms，500 条消息的滚动帧间隔 P95 为 16.7 ms。切换会话 60 次后，回收后的渲染进程 JS 堆从 26.4 MiB 增至 27.3 MiB。测试进程和临时配置已清理。[Windows CI](https://github.com/Murmureeee/Pilot/actions/runs/45988356142/job/140469595591) · [提交 781c314](https://github.com/Murmureeee/Pilot/commit/781c31468124c64c884fa02206c80802e834179b) · [提交 a609bb9](https://github.com/Murmureeee/Pilot/commit/a609bb99cfd741bd13e76efab64d3f46d8336ccd)

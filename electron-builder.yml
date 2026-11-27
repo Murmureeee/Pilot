@@ -4,6 +4,7 @@ directories:
   output: dist
 files:
   - out/**
+  - LICENSE
 asarUnpack:
   - node_modules/@lydell/node-pty-*/**/*
 extraResources:

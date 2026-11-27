@@ -17,6 +17,8 @@ Linux 文件随启用该构建流程的正式版提供。AppImage 添加执行�
 
 支持应用内更新的发行包在启动后检查并下载更新，也可以从 **应用菜单 → 检查更新…** 手动检查。Windows 和 AppImage 下载后可选择「更新并重启」。Debian 安装包下载后可选择「打开下载位置」，用系统包管理器安装，再重新打开 Pilot。Linux v0.5.0 及更早版本需通过 Releases 手动安装一次新版。
 
+Windows 发行包的签名计划、审批流程和隐私说明见项目政策。[Code signing policy](./docs/CODE_SIGNING.md) · [Privacy policy](./docs/PRIVACY.md)
+
 ## 开始使用
 
 1. 首次打开时，选择内置演示模型体验对话，或配置 Anthropic / OpenAI 兼容服务与所用模型。
@@ -40,3 +42,7 @@ pnpm dev
 ```
 
 运行 `pnpm build` 可构建应用。Windows 使用 `pnpm package:win` 制作安装包，Linux x64 使用 `pnpm package:linux` 生成 AppImage 和 `.deb`。[开发路线图](./docs/PLAN.md)
+
+## 许可证
+
+Pilot 的原创代码采用 MIT 许可证。随应用分发的第三方组件适用各自的许可证。[MIT 许可证](./LICENSE)

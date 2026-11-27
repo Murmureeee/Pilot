@@ -141,7 +141,7 @@ P0 为首个日用版的交付条件，P1 为日常效率和发行完善，P2 �
 
 - [x] **真实模型验收。** Windows 上用已配置的 OpenAI Responses 云端模型、Ollama 和 LM Studio 实测模型发现、流式文本、只读工具调用和停止。错误回显覆盖网络中断、凭据拒绝和模型能力错误，额度不足使用受控 HTTP 429 复核。记录服务版本、模型 ID 和验收结果。[验收记录](./DEVELOPMENT_HISTORY.md#2026-11-27)
 - [x] **Windows 安装与更新。** 每次发版复验新装、旧版 HTTPS 升级、卸载和数据保留。实测了从 pi Desktop `0.1.0` 升级到公开 `v0.6.0`，签名候选包另通过自定义安装目录和卸载重装后的数据恢复检查。[公开 HTTPS 验收](https://github.com/Murmureeee/Pilot/actions/runs/45942454476) · [签名安装验收](https://github.com/Murmureeee/Pilot/actions/runs/45946604068)
-- [ ] **Windows 正式签名。** 打包和验签已接入发布流程。安装包、应用和卸载器的签名与发布者校验通过临时证书验收。生产发布需要受信任的代码签名证书。[签名验收脚本](../scripts/verify-windows-signing.mjs)
+- [ ] **Windows 正式签名。** 安装包、应用和卸载器的签名与发布者校验已通过临时证书验收。Pilot 的原创代码采用 MIT，并公开签名政策和隐私说明。计划通过 SignPath Foundation 免费开源签名计划取得证书，再接入发布流程并验收正式签名。[Code signing policy](./CODE_SIGNING.md) · [签名验收脚本](../scripts/verify-windows-signing.mjs)
 - [x] **Windows 更新入口。** 「帮助 → 检查更新…」显示检查和下载状态，侧栏设置上方可查看下载进度，下载完成后点击即可安装并重启。
 - [x] **Linux 更新入口。** AppImage 和 Debian 安装包共用「检查更新…」，下载时校验对应文件。AppImage 可保留原路径替换并重启，Debian 安装包提供下载位置，由系统包管理器安装。发行流程包含 `latest-linux.yml`，CI 用两个打包版本复核检查、下载和升级。[Linux 更新验收](../scripts/verify-linux-update.mjs)
 - [x] **更新策略。** 配置了更新源的安装版启动后检查更新，运行期间每四小时再检查。「设置 → 关于」可关闭自动下载，开关重启后保留。关闭时发现新版会在导航栏提示，可从更新面板手动下载。[更新实现](../src/main/updater.ts) · [验收记录](./DEVELOPMENT_HISTORY.md#2026-11-27)

@@ -10,6 +10,7 @@ $releaseNotes = $section.Groups['notes'].Value.Trim()
 if (!$releaseNotes) { throw "Add Chinese release notes under '## $tag' in CHANGELOG.md before preparing the draft." }
 
 $repo = $env:GITHUB_REPOSITORY
+$releaseNotes += "`n`n## Code signing policy`n`n[Code signing policy]($env:GITHUB_SERVER_URL/$repo/blob/main/docs/CODE_SIGNING.md)"
 $directory = Join-Path $env:RUNNER_TEMP 'pilot-release'
 $installer = "pilot-${version}-x64-setup.exe"
 $files = @(
