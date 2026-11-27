@@ -32,6 +32,7 @@ import type {
 } from "@shared/contract";
 import type { ProjectTrustDecision, ProjectTrustRequest } from "@shared/project-config";
 
+import { RUN_SUBTASK_TOOL_NAME } from "../../shared/constants";
 import { visibleMessageText } from "../../shared/mentions";
 import { applyMessageEvent } from "../../shared/message-events";
 import { isWebTool, webSources } from "../../shared/web";
@@ -61,8 +62,10 @@ import {
   MEMORY_TOOL_INSTRUCTIONS,
   PLAN_MODE_INSTRUCTIONS,
   PROJECT_INSTRUCTIONS_RETRY,
+  SUBTASK_INTERRUPTED,
 } from "./constants";
 import {
+  accumulateUsage,
   assistantUsage,
   compactContext,
   compactedContext,
@@ -84,6 +87,7 @@ import {
 } from "./recovery";
 import { messageParts, messageText, toUiMessages } from "./session-store";
 import { skillCatalog } from "./skills";
+import { finishSubtaskTrace, readSubtaskTrace } from "./subtask-record";
 import { isReadOnly, labelOf } from "./tools";
 import { createBackgroundTools } from "./tools/background";
 import { createBashTool } from "./tools/bash";
@@ -95,6 +99,7 @@ import {
 import { proposeMemoryTool, readMemoryProposal } from "./tools/memory";
 import { proposePlanTool, readPlanProposal, readPlanSteps } from "./tools/plan";
 import { createReadSkillTool } from "./tools/read-skill";
+import { createSubtaskTool } from "./tools/subtask";
 import { createWebTools } from "./tools/web";
 import type {
   AgentRunOptions,
@@ -107,6 +112,7 @@ import type {
   SavedCompaction,
   SavedGitChanges,
   ScopedProjectInstruction,
+  SubtaskProgress,
   TimedAssistantMessage,
 } from "./types";
 
@@ -605,6 +611,18 @@ export class AgentRun {
         if (terminal) localTools.push(...createBackgroundTools(terminal, run));
       }
       if (!this.planning && webRequests) localTools.push(...createWebTools(webRequests));
+      if (directory) {
+        localTools.push(
+          createSubtaskTool({
+            parent: agent,
+            stream: streamFunction,
+            tools,
+            projectDirectory,
+            signal,
+            report: (callId, progress) => this.recordSubtask(callId, progress),
+          }),
+        );
+      }
       if (this.listedSkills.size) {
         localTools.push(
           createReadSkillTool((id) => {
@@ -801,11 +819,7 @@ export class AgentRun {
 
   private addUsage(usage: Snapshot["usage"]): void {
     const view = this.deps.view;
-    view.usage.input += usage.input;
-    view.usage.output += usage.output;
-    view.usage.cacheRead += usage.cacheRead;
-    view.usage.cacheWrite += usage.cacheWrite;
-    view.usage.costTotal += usage.costTotal;
+    accumulateUsage(view.usage, usage);
     this.send({
       type: "usage",
       tokens: {
@@ -820,6 +834,28 @@ export class AgentRun {
     });
   }
 
+  private recordSubtask(callId: string, { trace, text, usageDelta }: SubtaskProgress): void {
+    // A started subtask can already have incurred usage even if the app exits before its conclusion.
+    const running = trace.status === "running";
+    const progress: ApprovedToolResult = {
+      role: "toolResult",
+      toolCallId: callId,
+      toolName: RUN_SUBTASK_TOOL_NAME,
+      content: [{ type: "text", text: text ?? SUBTASK_INTERRUPTED }],
+      details: {
+        pilotSubtask: running
+          ? finishSubtaskTrace(trace, "interrupted", SUBTASK_INTERRUPTED)
+          : trace,
+      },
+      timestamp: Date.now(),
+      isError: trace.status !== "success",
+    };
+    this.finishedTools.set(callId, progress);
+    this.saveCheckpoint(this.checkpoint, progress);
+    this.send({ type: "subtask_progress", callId, trace });
+    if (usageDelta) this.addUsage(usageDelta);
+  }
+
   private prepareRequestMessages(messages: AgentMessage[], systemPrompt: string): AgentMessage[] {
     this.selectedSkillIds.clear();
     const supportsImages = this.deps.agent.state.model.input.includes("image");
@@ -827,7 +863,11 @@ export class AgentRun {
       if (index === 0 && message.role === "system") {
         return { ...message, content: systemPrompt };
       }
-      if (message.role === "toolResult" && readFileChange(message.toolName, message.details)) {
+      if (
+        message.role === "toolResult" &&
+        (message.toolName === RUN_SUBTASK_TOOL_NAME ||
+          readFileChange(message.toolName, message.details))
+      ) {
         return { ...message, details: undefined };
       }
       if (message.role !== "user") return message;
@@ -1031,12 +1071,16 @@ export class AgentRun {
       // Parallel tools publish completion before pi adds their result messages to the transcript.
       const { approvals } = this.checkpoint;
       const approval = approvalForCall(approvals, event.toolCallId);
+      const subtask =
+        event.toolName === RUN_SUBTASK_TOOL_NAME
+          ? this.finishedTools.get(event.toolCallId)
+          : undefined;
       const completedTool: ApprovedToolResult = {
         role: "toolResult",
         toolCallId: event.toolCallId,
         toolName: event.toolName,
-        content: event.result.content ?? [],
-        details: event.result.details,
+        content: subtask?.content ?? event.result.content ?? [],
+        details: subtask?.details ?? event.result.details,
         usage: event.result.usage,
         durationMs: event.durationMs,
         isError: event.isError,
@@ -1056,7 +1100,9 @@ export class AgentRun {
         if (steps) this.send({ type: "plan", steps });
         return;
       }
-      const output = resultText(event.result);
+      const output = resultText(completedTool);
+      const trace = readSubtaskTrace(subtask?.details);
+      if (trace) this.send({ type: "subtask_progress", callId: event.toolCallId, trace });
       this.send({
         type: "tool_end",
         callId: event.toolCallId,
@@ -1078,8 +1124,13 @@ export class AgentRun {
 
     if (event.type === "message_end" && event.message.role === "toolResult") {
       const result: ApprovedToolResult = event.message;
-      const approval = this.finishedTools.get(result.toolCallId)?.pilotApproval;
+      const completed = this.finishedTools.get(result.toolCallId);
+      const approval = completed?.pilotApproval;
       if (approval) result.pilotApproval = approval;
+      if (completed && result.toolName === RUN_SUBTASK_TOOL_NAME) {
+        result.details = completed.details;
+        result.content = completed.content;
+      }
       this.finishedTools.delete(event.message.toolCallId);
       const change = readFileChange(event.message.toolName, event.message.details);
       if (change)

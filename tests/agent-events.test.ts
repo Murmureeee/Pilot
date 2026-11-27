@@ -57,6 +57,43 @@ describe("agent-events adapter", () => {
       applyRunEvent(waiting, { type: "status", status: "stopping" }).pendingProjectTrust,
     ).toBeNull();
   });
+
+  it("replaces progress for the matching subtask and keeps background runs and usage separate", () => {
+    const start = applyRunEvent(initialRunUiState(), {
+      type: "assistant_start",
+      id: "s-1",
+      timing,
+    });
+    const tools = ["first", "second"].reduce(
+      (state, callId) =>
+        applyRunEvent(state, {
+          type: "tool_start",
+          id: "s-1",
+          callId,
+          toolName: "run_subtask",
+          label: "子任务",
+        }),
+      start,
+    );
+    const progress = {
+      type: "subtask_progress",
+      callId: "second",
+      trace: { question: "Find files", status: "running", steps: [], usage: tools.usage },
+    } satisfies AgentRunEvent;
+    const started = applyRunEvent(tools, progress);
+    expect(applyAgentEvent(started, { ...progress, run: { ...run, runId: "old" } })).toBe(started);
+    const background = { ...started, sessionId: "other" };
+    expect(applyRunEvent(background, progress)).toBe(background);
+    const settled = applyRunEvent(started, {
+      ...progress,
+      trace: { ...progress.trace, status: "success", usage: { ...tools.usage, input: 55 } },
+    });
+    expect(settled.messages[0].parts[0]).toBe(tools.messages[0].parts[0]);
+    expect(settled.messages[0].parts[1]).toMatchObject({
+      subtask: { status: "success", usage: { input: 55 } },
+    });
+    expect(settled.usage).toBe(tools.usage);
+  });
   it("keeps terminal output and lifecycle outside the transcript and usage event stream", () => {
     expectTypeOf<Extract<TerminalEvent, UiAgentEvent>>().toBeNever();
   });

@@ -33,6 +33,7 @@ import type {
   UiPart,
 } from "@shared/contract";
 
+import { RUN_SUBTASK_TOOL_NAME } from "../../shared/constants";
 import { visibleMessageText } from "../../shared/mentions";
 import { insertCompactionMarker } from "../../shared/message-events";
 import { applyPlanUpdate } from "../../shared/plan";
@@ -55,6 +56,7 @@ import { imageAttachmentsSchema, messageImages } from "./image-attachments";
 import { legacyMentionParts } from "./mentions";
 import { completeToolResults } from "./recovery";
 import { parseNewChatDrafts, parseSessionIndex } from "./session-index";
+import { readSubtaskTrace } from "./subtask-record";
 import { labelOf } from "./tools";
 import { PLAN_TOOL_NAME, PROPOSE_MEMORY_TOOL_NAME } from "./tools/constants";
 import { readMemoryProposal } from "./tools/memory";
@@ -213,6 +215,7 @@ export function toUiMessages(
       if (!message.isError && isWebTool(message.toolName)) part.sources = webSources(details);
       if (!message.isError && message.toolName === PROPOSE_MEMORY_TOOL_NAME)
         part.memory = readMemoryProposal(details);
+      if (message.toolName === RUN_SUBTASK_TOOL_NAME) part.subtask = readSubtaskTrace(details);
       if (typeof message.durationMs === "number") part.durationMs = message.durationMs;
       const { pilotApproval } = message as ApprovedToolResult;
       if (pilotApproval && ["once", "deny", "session", "global"].includes(pilotApproval.decision)) {

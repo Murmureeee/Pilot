@@ -1,4 +1,5 @@
 // @env node
+import { RUN_SUBTASK_TOOL_NAME } from "../../../shared/constants";
 import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL } from "../../../shared/web";
 
 export const PLAN_TOOL_NAME = "update_plan";
@@ -29,4 +30,5 @@ export const TOOL_LABELS: Readonly<Record<string, string>> = {
   [PLAN_TOOL_NAME]: "任务计划",
   [PROPOSE_PLAN_TOOL_NAME]: "提交计划",
   [PROPOSE_MEMORY_TOOL_NAME]: "建议记忆",
+  [RUN_SUBTASK_TOOL_NAME]: "子任务",
 };

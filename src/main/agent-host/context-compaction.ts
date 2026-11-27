@@ -15,6 +15,7 @@ import { estimateContextTokens, estimateMessageTokens } from "@earendil-works/pi
 
 import type { ContextCompaction, Snapshot } from "@shared/contract";
 
+import { RUN_SUBTASK_TOOL_NAME } from "../../shared/constants";
 import {
   COMPACTION_REFERENCE_LIMIT,
   COMPACTION_SUMMARY_FAILURE,
@@ -25,6 +26,7 @@ import {
   CONTEXT_RETAIN_RATIO,
 } from "./constants";
 import { messageText } from "./session-store";
+import { readSubtaskTrace } from "./subtask-record";
 import { PLAN_TOOL_NAME } from "./tools/constants";
 import { readPlanSteps } from "./tools/plan";
 import type { ReferencedUserMessage, SavedCompaction, TextModelRequest } from "./types";
@@ -154,7 +156,7 @@ function historyText(message: Message, toolOutputLimit: number): string {
   return `${label}\n${[content, ...calls].filter(Boolean).join("\n")}`;
 }
 
-function addUsage(total: Snapshot["usage"], input: Snapshot["usage"]): void {
+export function accumulateUsage(total: Snapshot["usage"], input: Snapshot["usage"]): void {
   total.input += input.input;
   total.output += input.output;
   total.cacheRead += input.cacheRead;
@@ -179,10 +181,14 @@ export function transcriptUsage(
   const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costTotal: 0 };
   for (const message of messages) {
     if (message.role === "assistant" && message.usage)
-      addUsage(usage, assistantUsage(message.usage));
+      accumulateUsage(usage, assistantUsage(message.usage));
+    else if (message.role === "toolResult" && message.toolName === RUN_SUBTASK_TOOL_NAME) {
+      const trace = readSubtaskTrace(message.details);
+      if (trace) accumulateUsage(usage, trace.usage);
+    }
   }
   for (const record of compactions) {
-    if (record.usage) addUsage(usage, record.usage);
+    if (record.usage) accumulateUsage(usage, record.usage);
   }
   return usage;
 }
@@ -264,7 +270,7 @@ async function summarizeHistory({
     const text = messageText(result).trim();
     if (!text) throw new Error("模型未返回上下文摘要。请重试或更换模型。");
     summary = clip(apiKey ? text.replaceAll(apiKey, "••••") : text, summaryLimit);
-    if (result.usage) addUsage(usage, assistantUsage(result.usage));
+    if (result.usage) accumulateUsage(usage, assistantUsage(result.usage));
   }
   return { summary, usage };
 }

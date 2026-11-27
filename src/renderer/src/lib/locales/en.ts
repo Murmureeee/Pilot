@@ -945,6 +945,24 @@ export const EN_MESSAGES: Record<string, string> = {
   错误输出: "Error output",
   读取文件: "Read file",
   写入文件: "Write file",
+  子任务: "Subtask",
+  子任务步骤: "Subtask steps",
+  "子任务用量 {0} token": "Subtask usage {0} tokens",
+  "已停止 {0}": "Stopped {0}",
+  "已中断 {0}": "Interrupted {0}",
+  "子任务已停止。可在下一轮重新委派。":
+    "The subtask stopped. You can delegate it again in the next turn.",
+  "子任务已中断。可重新委派此问题。":
+    "The subtask was interrupted. You can delegate this question again.",
+  "子任务达到模型请求上限。可缩小调研范围后重试。":
+    "The subtask reached its model request limit. Narrow the question and try again.",
+  "本次运行已有两个子任务。可等它们结束后再委派。":
+    "Two subtasks are already running. Wait for one to finish before delegating again.",
+  "请明确要调研的问题。": "Specify a research question.",
+  "子任务未返回结论。可重新委派或直接核对项目文件。":
+    "The subtask returned no conclusion. Delegate it again or check the project files directly.",
+  "子任务的模型请求失败。检查错误详情后可重新委派。":
+    "The subtask model request failed. Check the error details before delegating again.",
   编辑文件: "Edit file",
   执行命令: "Run command",
   命令: "Command",

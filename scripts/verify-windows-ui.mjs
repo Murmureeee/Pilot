@@ -54,6 +54,7 @@ import {
   verifySearchAndExport,
   verifySettings,
   verifyStreamingReply,
+  verifySubtasks,
   verifyUnsentDraft,
   verifyWebTools,
 } from "./windows-ui/scenarios.mjs";
@@ -159,6 +160,8 @@ const oauthProfile = join(scratch, "mcp-oauth-profile");
 const parallelProfile = join(scratch, "parallel-profile");
 const worktreeProfile = join(scratch, "worktree-profile");
 const worktreeProject = join(scratch, "Worktree project");
+const subtaskProfile = join(scratch, "subtask-profile");
+const subtaskProject = join(scratch, "Subtask project");
 const parallelProjects = ["Parallel project A", "Parallel project B", "Parallel project C"].map(
   (name) => join(scratch, name),
 );
@@ -220,6 +223,12 @@ try {
     scripts: { test: 'node -e "console.log(123456789)"' },
   }));
   model = await startModelFixture();
+  mkdirSync(subtaskProject);
+  await withApp(subtaskProfile, async (page, window) => {
+    await runScene("Delegate read-only research, restore its trace and cancel a planning subtask", () =>
+      verifySubtasks(page, window, model, subtaskProject),
+    );
+  }, subtaskProject);
   mkdirSync(worktreeProject);
   execFileSync("git", ["init", "-q", "--template=", "--initial-branch=main"], { cwd: worktreeProject });
   execFileSync("git", ["config", "user.name", "Pilot Desktop Test"], { cwd: worktreeProject });

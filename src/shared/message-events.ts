@@ -119,6 +119,8 @@ export function applyMessageEvent(messages: UiMessage[], event: AgentRunEvent): 
     }
     case "tool_update":
       return updateTool(messages, event.callId, (part) => ({ ...part, output: event.output }));
+    case "subtask_progress":
+      return updateTool(messages, event.callId, (part) => ({ ...part, subtask: event.trace }));
     case "tool_end":
       return updateTool(messages, event.callId, (part) => ({
         ...part,

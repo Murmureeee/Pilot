@@ -14,6 +14,7 @@ export const IMAGE_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 export const IMAGE_ATTACHMENT_NAME_LIMIT = 255;
 export const EXECUTION_APPROVAL_MODES = ["standard", "read-only", "full-access"] as const;
 export const PLAN_PROPOSAL_MAX_LENGTH = 12_000;
+export const RUN_SUBTASK_TOOL_NAME = "run_subtask";
 export const MEMORY_TEXT_LIMIT = 12_000;
 export const VERIFICATION_COMMAND_LIMIT = 4_096;
 export const PROMPT_TEMPLATE_PREFIX = "prompt-";

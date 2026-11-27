@@ -10,23 +10,25 @@ const titlePrompt = "Generate a short conversation title";
 
 function completion(response, id, input) {
   response.writeHead(200, { "content-type": "text/event-stream" });
-  const write = (delta, finishReason = null) => {
-    const chunk = {
-      id,
-      object: "chat.completion.chunk",
-      created: 1,
-      model: input.model,
-      choices: [{ index: 0, delta, finish_reason: finishReason }],
-    };
-    response.write("data: " + JSON.stringify(chunk) + "\n\n");
+  const writeChunk = (data) => {
+    response.write("data: " + JSON.stringify({
+      id, object: "chat.completion.chunk", created: 1, model: input.model, ...data,
+    }) + "\n\n");
   };
+  const write = (delta, finishReason = null) =>
+    writeChunk({ choices: [{ index: 0, delta, finish_reason: finishReason }] });
   write({ role: "assistant" });
   return {
     input,
     write,
-    finish(reason = "stop") {
+    finish(reason = "stop", usage) {
       write({}, reason);
+      if (usage) writeChunk({ choices: [], usage });
       response.end("data: [DONE]\n\n");
+    },
+    async waitForClose() {
+      if (!response.closed)
+        await once(response, "close", { signal: AbortSignal.timeout(15_000) });
     },
   };
 }

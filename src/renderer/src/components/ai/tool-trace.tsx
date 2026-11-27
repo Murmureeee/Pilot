@@ -5,6 +5,7 @@ import {
   GlobeIcon,
   LayersIcon,
   LoaderCircleIcon,
+  ListTreeIcon,
   PlugIcon,
   SearchIcon,
   TerminalIcon,
@@ -13,6 +14,7 @@ import { useMemo, useState, type JSX } from "react";
 
 import { CodeBlock, CodeBlockContent } from "@renderer/components/ui/code-block";
 import {
+  Trace,
   TraceCollapsible,
   TraceCollapsibleContent,
   TraceCollapsibleTrigger,
@@ -28,7 +30,8 @@ import { describeToolScope } from "@renderer/lib/tool-rules";
 import { parseToolFailure, stackDisplayPath } from "@renderer/lib/tool-trace";
 import type { ToolFailure } from "@renderer/lib/types";
 import { selectWorkingDirectory, useAgentStore } from "@renderer/stores/agent";
-import type { TranscriptLocation, UiPart, WebSource } from "@shared/contract";
+import { RUN_SUBTASK_TOOL_NAME } from "@shared/constants";
+import type { SubtaskTrace, TranscriptLocation, UiPart, WebSource } from "@shared/contract";
 import { toolInput } from "@shared/tool-input";
 import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL, isWebTool, webLink } from "@shared/web";
 
@@ -43,6 +46,7 @@ const TOOL_ICONS = {
   grep: SearchIcon,
   [WEB_FETCH_TOOL]: GlobeIcon,
   [WEB_SEARCH_TOOL]: SearchIcon,
+  [RUN_SUBTASK_TOOL_NAME]: ListTreeIcon,
 } satisfies Record<string, typeof TerminalIcon>;
 
 function SourceLinks({ sources }: { sources: WebSource[] }): JSX.Element {
@@ -177,6 +181,36 @@ function FailureDetails({
   );
 }
 
+function SubtaskDetails({ trace }: { trace: SubtaskTrace }): JSX.Element {
+  const locale = useLocale();
+  const { input, output, cacheRead, cacheWrite } = trace.usage;
+  const tokens = input + output + cacheRead + cacheWrite;
+  return (
+    <div data-subtask-trace className="grid min-w-0 gap-2">
+      {trace.steps.length > 0 && (
+        <Trace role="group" aria-label={t("子任务步骤", locale)}>
+          {trace.steps.map(({ id, ...step }, index) => (
+            <ToolTrace
+              key={id + ":" + index}
+              part={{
+                ...step,
+                type: "tool",
+                callId: id,
+                error: step.state === "error" ? step.output : undefined,
+              }}
+            />
+          ))}
+        </Trace>
+      )}
+      {tokens > 0 && (
+        <p data-subtask-usage className="text-xs text-muted-foreground">
+          {t("子任务用量 {0} token", locale, [tokens])}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function ToolTrace({
   part,
   searchField,
@@ -198,24 +232,36 @@ export function ToolTrace({
     [failureText],
   );
   const shell = part.toolName === "bash";
-  const action = [t(part.label, locale), input.preview].filter(Boolean).join(" ");
+  const subtask = part.toolName === RUN_SUBTASK_TOOL_NAME;
+  const action = [t(part.label, locale), part.subtask?.question ?? input.preview]
+    .filter(Boolean)
+    .join(" ");
   const target = shell && input.preview ? input.preview : action;
-  const title = failure
-    ? t("失败 {0}", locale, [t(failure.summary, locale)])
-    : part.state === "pending"
-      ? t("等待执行 {0}", locale, [target])
-      : part.state === "running"
-        ? t("正在执行 {0}", locale, [target])
-        : shell && input.preview
-          ? t("运行了 {0}", locale, [input.preview])
-          : action;
+  const stopped = part.subtask?.status === "stopped";
+  const interrupted = part.subtask?.status === "interrupted";
+  const title =
+    stopped || interrupted
+      ? t(stopped ? "已停止 {0}" : "已中断 {0}", locale, [target])
+      : failure
+        ? t("失败 {0}", locale, [subtask ? target : t(failure.summary, locale)])
+        : part.state === "pending"
+          ? t("等待执行 {0}", locale, [target])
+          : part.state === "running"
+            ? t("正在执行 {0}", locale, [target])
+            : shell && input.preview
+              ? t("运行了 {0}", locale, [input.preview])
+              : action;
   const ToolIcon = Object.hasOwn(TOOL_ICONS, part.toolName)
     ? TOOL_ICONS[part.toolName as keyof typeof TOOL_ICONS]
     : PlugIcon;
   const line = (
     <TraceLine
-      status={part.state === "success" ? undefined : part.state}
+      status={stopped || interrupted || part.state === "success" ? undefined : part.state}
       data-tool-state={part.state}
+      data-subtask-status={part.subtask?.status}
+      className={
+        subtask && part.state === "running" ? "text-emerald-700 dark:text-emerald-400" : undefined
+      }
     >
       <TraceIcon>
         {part.state === "running" ? (
@@ -235,12 +281,14 @@ export function ToolTrace({
   );
 
   const { approval, sources } = part;
-  if (!output && !failure && !input.details && !approval && !sources) return line;
+  if (!output && !failure && !input.details && !approval && !sources && !part.subtask) return line;
 
   const showArguments =
     input.details && (failure || input.details !== input.preview || input.details.includes("\n"));
   // 命令运行时跟着输出展开，成功后收起；失败始终展开。用户手动开合过就以用户为准。
-  const autoOpen = Boolean(failure || (shell && output && part.state === "running"));
+  const autoOpen = Boolean(
+    failure || part.subtask?.status === "running" || (shell && output && part.state === "running"),
+  );
   return (
     <TraceCollapsible open={Boolean(searchField) || (open ?? autoOpen)} onOpenChange={setOpen}>
       <TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
@@ -266,7 +314,7 @@ export function ToolTrace({
                 failure={failure}
                 output={failureText}
                 revealOutput={searchField === "output"}
-                translateFirstLine={isWebTool(part.toolName)}
+                translateFirstLine={isWebTool(part.toolName) || subtask}
               />
             </div>
           ) : (
@@ -276,7 +324,8 @@ export function ToolTrace({
               </div>
             )
           )}
-          {(failure || output) && showArguments && (
+          {part.subtask && <SubtaskDetails trace={part.subtask} />}
+          {!part.subtask && (failure || output) && showArguments && (
             <ToolDetails
               title={t(shell ? "命令" : "参数", locale)}
               text={input.details}

@@ -124,7 +124,14 @@ it("plans with read-only tools, restores the edited plan after restart, and exec
   await planning;
   expect(requests).toHaveLength(3);
   for (const request of requests) {
-    expect(request.tools).toEqual(["read_file", "glob", "grep", "update_plan", "propose_plan"]);
+    expect(request.tools).toEqual([
+      "read_file",
+      "glob",
+      "grep",
+      "update_plan",
+      "propose_plan",
+      "run_subtask",
+    ]);
     expect(request.system).toContain("Pilot is in Plan Mode");
   }
   expect(mcpTools).not.toHaveBeenCalled();

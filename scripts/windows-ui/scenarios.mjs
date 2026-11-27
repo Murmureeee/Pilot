@@ -389,7 +389,7 @@ export async function verifyLayouts(page, window) {
   await resize(page, window, wide);
 }
 
-function sendTool(completion, id, name, args) {
+function sendTool(completion, id, name, args, usage) {
   completion.write({
     tool_calls: [
       {
@@ -400,7 +400,7 @@ function sendTool(completion, id, name, args) {
       },
     ],
   });
-  completion.finish("tool_calls");
+  completion.finish("tool_calls", usage);
 }
 
 const projectMemory = "Use the project's integration fixtures.";
@@ -1193,6 +1193,7 @@ function minimumTextContrast(container, selector) {
   return container.evaluate((element, textSelector) => {
     const context = document.createElement("canvas").getContext("2d");
     const luminance = (color) => {
+      context.clearRect(0, 0, 1, 1);
       context.fillStyle = color;
       context.fillRect(0, 0, 1, 1);
       const rgb = context.getImageData(0, 0, 1, 1).data.slice(0, 3);
@@ -1202,7 +1203,10 @@ function minimumTextContrast(container, selector) {
         return total + weight * linear;
       }, 0);
     };
-    const background = luminance(getComputedStyle(element).backgroundColor);
+    let surface = element;
+    while (getComputedStyle(surface).backgroundColor === "rgba(0, 0, 0, 0)" && surface.parentElement)
+      surface = surface.parentElement;
+    const background = luminance(getComputedStyle(surface).backgroundColor);
     const ratios = Array.from(element.querySelectorAll(textSelector), (text) => {
       const foreground = luminance(getComputedStyle(text).color);
       return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
@@ -1281,6 +1285,7 @@ export async function verifyPlanDraft(page, window, model, project) {
     "grep",
     "update_plan",
     "propose_plan",
+    "run_subtask",
   ]);
   await editor(page).fill(planningDraft);
   sendTool(research, "fixture-plan-read", "read_file", { path: approvedFile });
@@ -1528,6 +1533,149 @@ async function waitForProjectDraft(page, directory) {
     const snapshot = await window.pi.getSnapshot();
     return !snapshot.sessionId && snapshot.draftWorkingDirectory === project;
   }, directory);
+}
+
+export async function verifySubtasks(page, window, model, project) {
+  const snapshot = () => page.evaluate(() => window.pi.getSnapshot());
+  const tokenUsage = (input, output) => ({
+    prompt_tokens: input,
+    completion_tokens: output,
+    total_tokens: input + output,
+  });
+  const toolNames = ({ input }) => input.tools.map(({ function: tool }) => tool.name);
+  const question = "What does notes.txt say?";
+  const evidence = "Private trace fixture details.";
+  const conclusion = "The workspace note describes the fixture.";
+  const answer = "The project research is complete.";
+  const success = page.locator("[data-subtask-status=success]");
+  const trigger = (line) => page.locator("[data-slot=trace-collapsible-trigger]").filter({ has: line });
+  const activity = page.locator(
+    "[data-reply-activity] > [data-slot=trace-collapsible] > [data-slot=trace-collapsible-trigger]",
+  );
+  const subtask = trigger(success);
+  const trace = page.locator("[data-subtask-trace]");
+  const waitForUsage = (input, output, contextTokens) => page.waitForFunction(
+    async ({ input, output, contextTokens }) => {
+      const { usage, contextTokens: context } = await window.pi.getSnapshot();
+      return usage.input === input && usage.output === output && context === contextTokens;
+    },
+    { input, output, contextTokens },
+  );
+  writeFileSync(join(project, "notes.txt"), evidence + "\n");
+  await page.evaluate(async ({ baseUrl, modelId }) => {
+    await window.pi.settingsSave({
+      providers: [{ id: "subtask-model", kind: "openai-compatible", name: "Subtask fixture",
+        baseUrl, modelId, models: [{ id: modelId, name: "Subtask test model" }] }],
+      activeProviderId: "subtask-model",
+    });
+    await window.pi.settingsSetNotificationsEnabled(false);
+  }, { baseUrl: model.baseUrl, modelId: model.modelId });
+  await page.reload();
+  await waitForProjectDraft(page, project);
+
+  await send(page, "Delegate research on the workspace note.");
+  const parent = await model.nextCompletion();
+  assert.ok(toolNames(parent).includes("run_subtask"));
+  sendTool(parent, "fixture-subtask", "run_subtask", { question }, tokenUsage(11, 3));
+  const child = await model.nextCompletion();
+  assert.equal(child.input.model, parent.input.model);
+  assert.deepEqual(toolNames(child), ["read_file", "glob", "grep"]);
+  assert.deepEqual(child.input.messages.filter(({ role }) => role === "user").map(({ content }) => content),
+    [[{ type: "text", text: question }]]);
+  await page.locator("[data-subtask-status=running][data-status=running]").getByText(question, { exact: false }).waitFor();
+  sendTool(child, "fixture-subtask-read", "read_file", { path: "notes.txt" }, tokenUsage(17, 5));
+  const childReply = await model.nextCompletion();
+  assert.ok(childReply.input.messages.at(-1).content.includes(evidence));
+  await trace.getByRole("group", { name: "子任务步骤" }).getByText("读取文件 notes.txt").waitFor();
+  await trace.getByText("子任务用量 22 token", { exact: true }).waitFor();
+  await waitForUsage(28, 8, 14);
+  const sessionId = (await snapshot()).sessionId;
+  assert.ok(sessionId);
+  await page.reload();
+  await trace.getByText("子任务用量 22 token", { exact: true }).waitFor();
+  assert.equal((await snapshot()).sessionId, sessionId);
+
+  childReply.write({ content: conclusion });
+  childReply.finish("stop", tokenUsage(31, 7));
+  const parentReply = await model.nextCompletion();
+  assert.equal(parentReply.input.messages.at(-1).content, conclusion);
+  assert.ok(!JSON.stringify(parentReply.input.messages).includes(evidence));
+  parentReply.write({ content: answer });
+  parentReply.finish("stop", tokenUsage(12, 4));
+  await page.getByText(answer, { exact: true }).waitFor();
+  await waitForIdle(page);
+  await waitForUsage(71, 19, 16);
+  await activity.and(page.locator('[aria-expanded="false"]')).waitFor();
+
+  let current = locales[0];
+  let contrast = Infinity;
+  for (const [size, zoom] of [[wide, 1], [narrow, 1], [narrow, 1.5]]) {
+    await resize(page, window, size, zoom);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        const english = locale.lang === "en";
+        await activity.press("Enter");
+        await subtask.and(page.locator('[aria-expanded="false"]')).waitFor();
+        assert.match(await subtask.innerText(), english ? /Subtask/ : /子任务/);
+        await page.keyboard.press("Tab");
+        await subtask.and(page.locator(":focus-visible")).waitFor();
+        await assertFits(subtask);
+        await page.keyboard.press("Space");
+        await trace.getByText(english ? "Subtask usage 60 tokens" : "子任务用量 60 token", { exact: true }).waitFor();
+        await page.getByText(conclusion, { exact: true }).waitFor();
+        const read = button(trace.getByRole("group", { name: english ? "Subtask steps" : "子任务步骤" }),
+          english ? "Read file notes.txt" : "读取文件 notes.txt");
+        await page.keyboard.press("Tab");
+        await page.keyboard.press("Tab");
+        await read.and(page.locator(":focus-visible")).waitFor();
+        await assertFits(read);
+        await page.keyboard.press("Enter");
+        await trace.getByText(evidence, { exact: true }).waitFor();
+        contrast = Math.min(contrast, await minimumTextContrast(trace, "[data-slot=trace-title], [data-subtask-usage]"));
+        await page.keyboard.press("Enter");
+        await read.and(page.locator(':focus-visible[aria-expanded="false"]')).waitFor();
+        await subtask.press("Space");
+        await subtask.and(page.locator(':focus-visible[aria-expanded="false"]')).waitFor();
+        await activity.press("Enter");
+        await activity.and(page.locator(':focus-visible[aria-expanded="false"]')).waitFor();
+      }
+    }
+  }
+  assert.ok(contrast >= 4.5, "Subtask trace contrast " + contrast.toFixed(2) + ":1");
+  console.log("Subtask trace minimum contrast " + contrast.toFixed(2) + ":1");
+  await resize(page, window, wide);
+
+  await chooseSlash(page, "/plan");
+  await send(page, "Start a second research task in Plan mode.");
+  const planning = await model.nextCompletion();
+  assert.ok(toolNames(planning).includes("run_subtask"));
+  assert.ok(!toolNames(planning).includes("write_file"));
+  sendTool(planning, "fixture-stopped-subtask", "run_subtask", { question: "Recheck notes.txt." });
+  const pending = await model.nextCompletion();
+  const running = page.locator("[data-subtask-status=running]");
+  await running.waitFor();
+  await button(page, "Stop").press("Enter");
+  await pending.waitForClose();
+  const stopped = page.locator("[data-subtask-status=stopped]");
+  const stoppedMessage = "The subtask stopped. You can delegate it again in the next turn.";
+  await stopped.getByText(/Stopped Subtask Recheck notes.txt/).waitFor();
+  await page.getByText(stoppedMessage, { exact: true }).waitFor();
+  await page.waitForFunction(async () => (await window.pi.getSnapshot()).activeRuns.length === 0);
+  await page.reload();
+  assert.equal((await snapshot()).sessionId, sessionId);
+  assert.deepEqual((await snapshot()).usage, {
+    input: 71, output: 19, cacheRead: 0, cacheWrite: 0, costTotal: 0,
+  });
+  await stopped.waitFor();
+  await page.getByText(stoppedMessage, { exact: true }).waitFor();
+  await activity.press("Enter");
+  await subtask.press("Enter");
+  await trace.getByText("Subtask usage 60 tokens", { exact: true }).waitFor();
+  await button(trace, "Read file notes.txt").press("Enter");
+  await trace.getByText(evidence, { exact: true }).waitFor();
+  assert.equal(readFileSync(join(project, "notes.txt"), "utf8"), evidence + "\n");
 }
 
 export async function verifyGitWorktrees(page, window, model, project) {

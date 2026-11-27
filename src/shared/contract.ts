@@ -256,6 +256,23 @@ export interface AgentSmokeResult {
 
 type ToolState = "pending" | "running" | "success" | "error";
 
+export type SubtaskStep = {
+  id: string;
+  toolName: string;
+  label: string;
+  inputSummary: string;
+  state: "running" | "success" | "error";
+  output?: string;
+  durationMs?: number;
+};
+
+export type SubtaskTrace = {
+  question: string;
+  status: "running" | "success" | "error" | "stopped" | "interrupted";
+  steps: SubtaskStep[];
+  usage: UsageTotals & { costTotal: number };
+};
+
 export const PLAN_STATUSES = ["pending", "in_progress", "completed"] as const;
 
 export interface PlanStep {
@@ -337,6 +354,7 @@ export type UiPart =
       approval?: ToolApproval;
       sources?: WebSource[];
       memory?: MemoryProposal;
+      subtask?: SubtaskTrace;
     });
 
 export type WebSource = { title: string; url: string };
@@ -470,12 +488,12 @@ export interface PermissionRequest {
   rule?: ToolRule;
 }
 
-export interface UsageTotals {
+export type UsageTotals = {
   input: number;
   output: number;
   cacheRead: number;
   cacheWrite: number;
-}
+};
 
 export type AgentRunEvent =
   | {
@@ -499,6 +517,7 @@ export type AgentRunEvent =
   | { type: "plan"; steps: PlanStep[] }
   | (ToolInvocation & { type: "tool_call" | "tool_start"; id?: string })
   | { type: "tool_update"; callId: string; output: string }
+  | { type: "subtask_progress"; callId: string; trace: SubtaskTrace }
   | {
       type: "tool_end";
       callId: string;

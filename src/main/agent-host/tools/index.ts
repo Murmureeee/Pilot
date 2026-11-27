@@ -2,6 +2,7 @@
 // 工具注册表：权限门按此判定只读/写类，UI 按 label 展示。
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 
+import { RUN_SUBTASK_TOOL_NAME } from "../../../shared/constants";
 import { createToolPathResolver } from "../../workspace/paths";
 import { createBashTool } from "./bash";
 import {
@@ -46,6 +47,7 @@ const READ_ONLY_TOOLS = new Set([
   PROPOSE_MEMORY_TOOL_NAME,
   READ_BACKGROUND_TOOL_NAME,
   READ_SKILL_TOOL_NAME,
+  RUN_SUBTASK_TOOL_NAME,
 ]);
 
 export function labelOf(toolName: string): string {

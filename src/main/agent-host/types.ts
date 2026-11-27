@@ -29,6 +29,7 @@ import type {
   SessionSettings,
   SessionRunResult,
   Snapshot,
+  SubtaskTrace,
   ToolRule,
   ToolApproval,
   UiAgentEvent,
@@ -239,6 +240,21 @@ export interface RecordedApproval {
 }
 
 export type ApprovedToolResult = ToolResultMessage & { pilotApproval?: ToolApproval };
+
+export interface SubtaskProgress {
+  trace: SubtaskTrace;
+  text?: string;
+  usageDelta?: Snapshot["usage"];
+}
+
+export interface SubtaskToolOptions {
+  parent: Agent;
+  stream: StreamFn;
+  tools: AgentTool[];
+  projectDirectory?: string;
+  signal: AbortSignal;
+  report(callId: string, progress: SubtaskProgress): void;
+}
 
 export type ToolAccess =
   | { kind: "allow" }
