@@ -21,6 +21,7 @@ import { scheduledTaskInput } from "../scheduled-tasks/schema";
 import {
   afterTurnVerificationSchema,
   externalEditorSchema,
+  hookCommandsSchema,
   mcpOAuthClientSchema,
   pluginLocationSchema,
   pluginPackageSourceSchema,
@@ -437,6 +438,11 @@ const inputs = {
   [IPC.skillsToggle]: z.tuple([z.uuid(), mentionId, z.boolean()]),
   [IPC.settingsGet]: none,
   [IPC.settingsSave]: z.tuple([settings]),
+  [IPC.settingsSetProjectHooks]: z.tuple([
+    nonBlank,
+    z.enum(["powershell", "bash"]),
+    hookCommandsSchema,
+  ]),
   [IPC.settingsSetPromptTemplates]: z.tuple([promptTemplatesSchema]),
   [IPC.settingsSetLogLevel]: z.tuple([z.enum(LOG_LEVELS)]),
   [IPC.settingsSetNotificationsEnabled]: z.tuple([z.boolean()]),

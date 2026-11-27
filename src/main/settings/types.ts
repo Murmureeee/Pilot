@@ -5,6 +5,7 @@ import type {
   CommandShell,
   ExternalEditor,
   LogLevel,
+  ProjectHooks,
   PromptTemplate,
   ProviderFields,
   SessionModelSelection,
@@ -64,6 +65,7 @@ export interface Settings {
   notificationsEnabled?: boolean;
   autoDownloadUpdates?: boolean;
   persona?: string;
+  projectHooks?: Record<string, ProjectHooks>;
   promptTemplates?: PromptTemplate[];
   afterTurnVerification?: Record<string, AfterTurnVerification | null>;
   projectTrust?: Record<string, ProjectTrustRecord>;

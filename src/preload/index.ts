@@ -197,6 +197,8 @@ const api: PiApi = {
   },
   settingsGet: () => ipcRenderer.invoke(IPC.settingsGet),
   settingsSave: (input: SettingsInput) => ipcRenderer.invoke(IPC.settingsSave, input),
+  settingsSetProjectHooks: (directory, shell, commands) =>
+    ipcRenderer.invoke(IPC.settingsSetProjectHooks, directory, shell, commands),
   settingsSetPromptTemplates: (templates) =>
     ipcRenderer.invoke(IPC.settingsSetPromptTemplates, templates),
   settingsSetLogLevel: (level) => ipcRenderer.invoke(IPC.settingsSetLogLevel, level),

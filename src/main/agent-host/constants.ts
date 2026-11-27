@@ -47,6 +47,8 @@ export const CONVERSATION_SEARCH_LIMIT = 80;
 export const CONVERSATION_INDEX_CACHE_SIZE = 48;
 export const APPROVED_PLAN_INSTRUCTIONS =
   "The user approved the plan in this message. Execute this version of the plan under the current approval mode.";
+export const HOOK_TIMEOUT_SEC = 30;
+
 export const CONTEXT_COMPACTION_RATIO = 0.8;
 export const CONTEXT_RETAIN_RATIO = 0.5;
 export const COMPACTION_SUMMARY_MAX_TOKENS = 2048;

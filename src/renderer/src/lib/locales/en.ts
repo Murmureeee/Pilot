@@ -44,6 +44,24 @@ export const EN_MESSAGES: Record<string, string> = {
   "定时任务会话固定使用只读权限。": "Scheduled task chats use read-only permissions.",
   "定时任务执行失败。请查看会话后重试。": "The scheduled task failed. Review its chat, then retry.",
   // 窗口菜单与侧栏
+  项目钩子: "Project hooks",
+  工具调用前钩子: "Before-tool hook",
+  工具调用后钩子: "After-tool hook",
+  回合结束钩子: "After-turn hook",
+  "为当前项目配置自动运行的命令。":
+    "Configure commands that run automatically in the current project.",
+  "打开项目后可配置钩子。": "Open a project to configure its hooks.",
+  "配置钩子…": "Configure hooks…",
+  "保存后，命令将在当前项目的后续执行回合中自动运行。":
+    "After saving, commands run automatically on subsequent execution turns in this project.",
+  "清空一项可停用该钩子。调用前钩子失败会拦截工具。只读和计划模式跳过钩子。":
+    "Clear a command to disable its hook. A failed before-tool hook blocks the tool. Hooks are skipped in read-only and plan mode.",
+  "命令环境已更改。核对命令并保存后，钩子会重新启用。":
+    "The command shell changed. Review and save the commands to re-enable their hooks.",
+  "命令环境已更改。请重新打开设置后保存钩子。":
+    "The command shell changed. Reopen Settings and save the hooks.",
+  "在常规设置中修正该项目的钩子，再重试。":
+    "Fix this project's hooks in General settings, then try again.",
   应用菜单: "App menu",
   编辑: "Edit",
   视图: "View",

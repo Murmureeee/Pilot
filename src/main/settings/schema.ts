@@ -4,6 +4,8 @@ import { z } from "zod";
 import {
   EXECUTION_APPROVAL_MODES,
   LOG_LEVELS,
+  HOOK_COMMAND_LIMIT,
+  HOOK_PHASES,
   PROMPT_TEMPLATE_LIMIT,
   PROMPT_TEMPLATE_NAME_PATTERN,
   PROMPT_TEMPLATE_TEXT_LIMIT,
@@ -46,6 +48,19 @@ export const afterTurnVerificationSchema = z.strictObject({
   kind: z.enum(VERIFICATION_KINDS),
   command: verificationCommandSchema,
   shell: z.enum(["powershell", "bash"]),
+});
+export const hookCommandsSchema = z.partialRecord(
+  z.enum(HOOK_PHASES),
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(HOOK_COMMAND_LIMIT)
+    .refine((command) => !command.includes("\0")),
+);
+const projectHooksSchema = z.strictObject({
+  shell: z.enum(["powershell", "bash"]),
+  commands: hookCommandsSchema,
 });
 const domain = z.string().regex(WEB_DOMAIN_PATTERN).optional();
 const commandPrefix = z.strictObject({
@@ -202,6 +217,7 @@ const storedSettings = z.looseObject({
   notificationsEnabled: z.boolean().optional().catch(undefined),
   autoDownloadUpdates: z.boolean().optional().catch(undefined),
   persona: optionalText,
+  projectHooks: z.record(z.string().min(1), projectHooksSchema).optional(),
   promptTemplates: promptTemplatesSchema.optional(),
   afterTurnVerification: z.record(z.string(), afterTurnVerificationSchema.nullable()).optional(),
   projectTrust: z

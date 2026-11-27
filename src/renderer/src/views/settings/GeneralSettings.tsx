@@ -19,6 +19,7 @@ import { useAgentStore } from "@renderer/stores/agent";
 import type { CommandShell, PublicSettings } from "@shared/contract";
 
 import { ExternalEditorSettings } from "./ExternalEditorSettings";
+import { ProjectHookSettings } from "./ProjectHookSettings";
 import { SettingsGroup, SettingsItem } from "./SettingsGroup";
 
 function ToolEnvironmentForm({
@@ -275,6 +276,7 @@ export function GeneralSettings({
         </div>
       </SettingsGroup>
       <ToolEnvironmentForm settings={settings} isWindows={isWindows} />
+      <ProjectHookSettings projects={settings.projectHooks} shell={settings.commandShell} />
       <ExternalEditorSettings editor={settings.externalEditor} isWindows={isWindows} />
       <NotificationPreferences enabled={settings.notificationsEnabled} />
     </div>

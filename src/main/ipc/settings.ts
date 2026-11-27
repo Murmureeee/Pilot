@@ -10,6 +10,8 @@ import { prepareSettingsInput, toPublicSettings, validateSettingsInput } from ".
 import { updateActiveModel } from "../settings/models";
 import { decryptProviderKey } from "../settings/secrets";
 import { sameToolRule } from "../settings/tool-rules";
+import { normalizeWorkingDirectory } from "../workspace/paths";
+import { getCommandShell } from "../workspace/shell";
 import { handle } from "./transport";
 import type { IpcContext } from "./types";
 
@@ -17,6 +19,18 @@ export function registerSettingsRoutes(
   ctx: Pick<IpcContext, "host" | "skillsDir" | "getSettings" | "saveSettings" | "request">,
 ): void {
   handle(IPC.settingsGet, () => toPublicSettings(ctx.getSettings()));
+  handle(IPC.settingsSetProjectHooks, (_event, directory, shell, commands) => {
+    const current = ctx.getSettings();
+    if (getCommandShell(current.commandShell) !== shell)
+      throw new Error("命令环境已更改。请重新打开设置后保存钩子。");
+    const workingDirectory = normalizeWorkingDirectory(directory);
+    const projectHooks = { ...current.projectHooks };
+    if (Object.keys(commands).length) projectHooks[workingDirectory] = { shell, commands };
+    else delete projectHooks[workingDirectory];
+    const settings = { ...current, projectHooks };
+    ctx.saveSettings(settings);
+    return toPublicSettings(settings);
+  });
   handle(IPC.settingsSetPromptTemplates, (_event, promptTemplates) => {
     const settings = { ...ctx.getSettings(), promptTemplates };
     ctx.saveSettings(settings);

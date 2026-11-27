@@ -1,6 +1,7 @@
 // @env node
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
+import { relative } from "node:path";
 
 import type {
   AgentEvent,
@@ -17,6 +18,9 @@ import type {
   AgentRunEvent,
   ApprovalMode,
   GitChangesView,
+  HookCommands,
+  HookPhase,
+  UiPart,
   ModelFailure,
   ModelRetryProgress,
   PermissionDecision,
@@ -32,7 +36,12 @@ import type {
 } from "@shared/contract";
 import type { ProjectTrustDecision, ProjectTrustRequest } from "@shared/project-config";
 
-import { RUN_SUBTASK_TOOL_NAME } from "../../shared/constants";
+import {
+  HOOK_LABELS,
+  HOOK_TRACE_TOOL,
+  RUN_SUBTASK_TOOL_NAME,
+  TURN_HOOK_TRACE_TOOL,
+} from "../../shared/constants";
 import { visibleMessageText } from "../../shared/mentions";
 import { applyMessageEvent } from "../../shared/message-events";
 import { isWebTool, webSources } from "../../shared/web";
@@ -59,6 +68,7 @@ import type {
 } from "../workspace/types";
 import {
   CONTEXT_COMPACTION_RATIO,
+  HOOK_TIMEOUT_SEC,
   MEMORY_TOOL_INSTRUCTIONS,
   PLAN_MODE_INSTRUCTIONS,
   PROJECT_INSTRUCTIONS_RETRY,
@@ -125,6 +135,8 @@ export class AgentRun {
   private readonly permissions: PermissionManager;
   private readonly approvalMode: ApprovalMode;
   private readonly scheduled: boolean;
+  private readonly hookCommands?: HookCommands;
+  private pendingHook = Promise.resolve();
   private readonly projectScopes: ProjectInstructionScopes;
   private projectTrust?: PendingProjectTrust;
   private projectConfig?: ProjectConfig;
@@ -207,6 +219,17 @@ export class AgentRun {
         store.getMeta(sessionId)?.approvalMode ??
         deps.getSettings().approvalMode ??
         "standard");
+    const hooks = workingDirectory && deps.getSettings().projectHooks?.[workingDirectory];
+    if (
+      hooks &&
+      !this.planning &&
+      this.approvalMode !== "read-only" &&
+      instructions.projectDirectory &&
+      workingDirectory &&
+      relative(instructions.projectDirectory, workingDirectory) === "" &&
+      hooks.shell === environment.commandShell
+    )
+      this.hookCommands = hooks.commands;
     this.permissions = new PermissionManager(
       (request) => {
         this.sendStatus("waiting_approval");
@@ -436,12 +459,80 @@ export class AgentRun {
       () => this.describePermission(context),
     );
     if (!result?.block && !signal?.aborted) {
+      const hook = await this.runHook(
+        "beforeTool",
+        context.assistantMessage,
+        toolCall.name,
+        signal,
+      );
+      signal?.throwIfAborted();
+      if (hook === "error")
+        return {
+          block: true,
+          reason:
+            "The user's before-tool hook failed. Check the hook trace and wait for the user to correct the hook before retrying this operation.",
+        };
       if (action && !this.checkpoint.actions.includes(action)) {
         this.saveCheckpoint({ ...this.checkpoint, actions: [...this.checkpoint.actions, action] });
       }
       this.reportTool("tool_start", toolCall.id, toolCall.name, toolCall.arguments);
     }
     return result;
+  }
+
+  private async runHook(
+    phase: HookPhase,
+    assistant: TimedAssistantMessage,
+    toolName?: string,
+    signal = this.preparation.signal,
+  ): Promise<"success" | "error" | undefined> {
+    const command = this.hookCommands?.[phase];
+    if (!command || signal.aborted) return;
+    const callId = "hook-" + randomUUID();
+    const hookName = phase === "afterTurn" ? TURN_HOOK_TRACE_TOOL : HOOK_TRACE_TOOL;
+    const step = {
+      callId,
+      toolName: hookName,
+      label: HOOK_LABELS[phase],
+      inputSummary: JSON.stringify({ command, tool: toolName }),
+    };
+    let state: "success" | "error" = "success";
+    const run = this.pendingHook.then(async () => {
+      if (signal.aborted) return;
+      this.send({ type: "tool_start", ...step });
+      const started = performance.now();
+      let output: string | undefined;
+      let error: string | undefined;
+      try {
+        const tool = createBashTool(this.deps.environment, undefined, {
+          PILOT_HOOK_EVENT: phase,
+          PILOT_HOOK_TOOL: toolName ?? "",
+        });
+        const result = await this.observeGitCommand(tool).execute(
+          callId,
+          { command, timeoutSec: HOOK_TIMEOUT_SEC },
+          signal,
+        );
+        output = resultText(result);
+      } catch (cause) {
+        state = "error";
+        error = cause instanceof Error ? cause.message : String(cause);
+      }
+      const durationMs = Math.round(performance.now() - started);
+      const trace: Extract<UiPart, { type: "tool" }> = {
+        type: "tool",
+        ...step,
+        state,
+        output,
+        error,
+        durationMs,
+      };
+      assistant.pilotHooks = [...(assistant.pilotHooks ?? []), trace];
+      this.send({ type: "tool_end", callId, state, output, error, durationMs });
+    });
+    this.pendingHook = run.catch(() => {});
+    await run;
+    return state;
   }
 
   private isWritableFileTool(name: string): boolean {
@@ -519,6 +610,11 @@ export class AgentRun {
     const { signal } = this.preparation;
     const unsubscribe = agent.subscribe((event) => this.onAgentEvent(event));
     agent.beforeToolCall = (context, toolSignal) => this.beforeToolCall(context, toolSignal);
+    if (this.hookCommands?.afterTool)
+      agent.afterToolCall = async ({ assistantMessage, toolCall }, toolSignal) => {
+        await this.runHook("afterTool", assistantMessage, toolCall.name, toolSignal);
+        return undefined;
+      };
     const streamFunction = agent.streamFunction;
     agent.transformContext = (messages, requestSignal) =>
       this.prepareContext(messages, streamFunction, requestSignal ?? signal);
@@ -654,6 +750,14 @@ export class AgentRun {
               detail: last.errorMessage ?? "模型返回错误",
             })
           : undefined;
+      if (
+        last?.role === "assistant" &&
+        !failure &&
+        !signal.aborted &&
+        last.stopReason !== "aborted"
+      )
+        await this.runHook("afterTurn", last, undefined, signal);
+      if (this.interruptedForExit) return;
       // Continue from the last user message or tool result when the user retries.
       agent.state.messages = completeToolResults(
         failure ? messages.slice(0, -1) : messages,
@@ -704,6 +808,7 @@ export class AgentRun {
       agent.clearAllQueues();
       unsubscribe();
       agent.beforeToolCall = undefined;
+      agent.afterToolCall = undefined;
       agent.transformContext = undefined;
       agent.streamFunction = streamFunction;
       agent.state.tools = tools;

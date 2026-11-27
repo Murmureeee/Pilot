@@ -2,6 +2,7 @@
 // 双进程共用契约：通道名与数据类型。此文件只允许类型与常量，不得引入运行时依赖。
 import type {
   EXECUTION_APPROVAL_MODES,
+  HOOK_PHASES,
   IMAGE_ATTACHMENT_MIME_TYPES,
   DIAGNOSTIC_EVENTS,
   LOG_LEVELS,
@@ -136,6 +137,7 @@ export const IPC = {
   skillsToggle: "skills:toggle",
   settingsGet: "settings:get",
   settingsSave: "settings:save",
+  settingsSetProjectHooks: "settings:set-project-hooks",
   settingsSetPromptTemplates: "settings:set-prompt-templates",
   settingsSetLogLevel: "settings:set-log-level",
   settingsSetNotificationsEnabled: "settings:set-notifications-enabled",
@@ -1051,6 +1053,14 @@ export type SettingsRecovery =
   | { status: "recovered" | "blocked"; path: string }
   | ({ status: "upgrade" } & StorageUpgrade);
 
+export type HookPhase = (typeof HOOK_PHASES)[number];
+export type HookCommands = Partial<Record<HookPhase, string>>;
+
+export interface ProjectHooks {
+  shell: CommandShell;
+  commands: HookCommands;
+}
+
 export interface PromptTemplate {
   name: string;
   text: string;
@@ -1077,6 +1087,7 @@ export interface PublicSettings {
   autoDownloadUpdates: boolean;
   /** 全局人设/自定义指令（设置页「个性化」编辑） */
   persona: string;
+  projectHooks?: Record<string, ProjectHooks>;
   promptTemplates: PromptTemplate[];
   pluginPromptTemplates?: PromptTemplate[];
   /** 启用的技能 id 列表 */

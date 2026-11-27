@@ -34,6 +34,7 @@ import type {
   ToolApproval,
   UiAgentEvent,
   UiMessage,
+  UiPart,
   UiUserPart,
   VerificationTask,
 } from "@shared/contract";
@@ -373,6 +374,7 @@ export interface SessionIndex {
 }
 
 export type TimedAssistantMessage = AssistantMessage & {
+  pilotHooks?: Extract<UiPart, { type: "tool" }>[];
   pilotThinkingDurations?: Record<number, number>;
   pilotTiming?: Required<AssistantTiming>;
 };

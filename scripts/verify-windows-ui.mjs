@@ -45,6 +45,7 @@ import {
   verifyProjectConfiguration,
   verifyProjectInstructions,
   verifyProjectEntry,
+  verifyProjectHooks,
   verifyQuickMemory,
   verifyRestoredMemory,
   verifyRestoredAfterTurnVerification,
@@ -99,6 +100,8 @@ const backupFile = join(scratch, "Pilot 数据.pilot-backup");
 const parallelProfile = join(scratch, "parallel-profile");
 const worktreeProfile = join(scratch, "worktree-profile");
 const worktreeProject = join(scratch, "Worktree project");
+const hooksProfile = join(scratch, "hooks-profile");
+const hooksProject = join(scratch, "hooks-project");
 const subtaskProfile = join(scratch, "subtask-profile");
 const subtaskProject = join(scratch, "Subtask project");
 const parallelProjects = ["Parallel project A", "Parallel project B", "Parallel project C"].map(
@@ -175,6 +178,12 @@ try {
       verifyRecoveredSchedules(page, model),
     );
   });
+  mkdirSync(hooksProject);
+  await withApp(hooksProfile, async (page, window) => {
+    await runScene("Configure project hooks and restore their traces", () =>
+      verifyProjectHooks(page, window, model, hooksProject),
+    );
+  }, hooksProject);
   mkdirSync(subtaskProject);
   await withApp(subtaskProfile, async (page, window) => {
     await runScene("Delegate read-only research, restore its trace and cancel a planning subtask", () =>

@@ -38,8 +38,13 @@ import type { Settings } from "../src/main/settings/types";
 import * as gitChanges from "../src/main/workspace/git-changes";
 import { previewWorkspaceReference } from "../src/main/workspace/reference";
 import { searchWorkspace } from "../src/main/workspace/search";
+import { getCommandShell } from "../src/main/workspace/shell";
 import type { GitSnapshot } from "../src/main/workspace/types";
-import { MENTION_CONTEXT_HEADING } from "../src/shared/constants";
+import {
+  HOOK_TRACE_TOOL,
+  MENTION_CONTEXT_HEADING,
+  TURN_HOOK_TRACE_TOOL,
+} from "../src/shared/constants";
 import type { ComposerDraft, UiAgentEvent, VerificationTask } from "../src/shared/contract";
 import { promptFromDraft } from "../src/shared/mentions";
 import { fixtureTitle } from "./model-fixture";
@@ -49,6 +54,128 @@ vi.mock("electron", () => ({ safeStorage: {} }));
 function mcpToolSession(tools: Promise<AgentTool[]> = Promise.resolve([])): McpToolSession {
   return { tools: () => tools, policyOf: () => undefined, close: async () => {} };
 }
+
+it.each(["allow", "deny", "block", "read-only"] as const)(
+  "runs only eligible project hooks and restores their results (%s)",
+  async (scenario) => {
+    using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-hooks-"));
+    const project = realpathSync(profile.path);
+    const sessionDir = join(project, "sessions");
+    const shell = getCommandShell();
+    const logCommand =
+      shell === "powershell"
+        ? 'Add-Content -LiteralPath hook.log -Value "$env:PILOT_HOOK_EVENT $env:PILOT_HOOK_TOOL"; Write-Output "hook output"'
+        : 'echo "$PILOT_HOOK_EVENT $PILOT_HOOK_TOOL" >> hook.log; echo "hook output"';
+    const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+    const settings: Settings = {
+      providers: [provider],
+      activeProviderId: provider.id,
+      approvalMode: scenario === "read-only" ? "read-only" : "standard",
+      projectHooks: {
+        [project]: {
+          shell,
+          commands: {
+            beforeTool: scenario === "block" ? logCommand + "; exit 7" : logCommand,
+            afterTool: logCommand,
+            afterTurn: logCommand,
+          },
+        },
+      },
+    };
+    const faux = fauxProvider({ tokensPerSecond: 100_000 });
+    faux.appendResponses([
+      fauxAssistantMessage([
+        fauxToolCall("write_file", { path: "created.txt", content: "fixture" }),
+      ]),
+      fauxAssistantMessage([fauxText("Finished the turn.")]),
+    ]);
+    const catalog = createModels();
+    catalog.setProvider(faux.provider);
+    using resolve = vi.spyOn(models, "resolveModel").mockReturnValue({
+      model: faux.getModel()!,
+      streamFn: (model, context, options) =>
+        fixtureTitle(context) ?? catalog.streamSimple(model, context, options),
+    });
+    const events: UiAgentEvent[] = [];
+    const approvalChecks: boolean[] = [];
+    const host = new AgentHost({
+      getSettings: () => settings,
+      saveSettings: () => {},
+      broadcast: (event) => {
+        events.push(event);
+        if (event.type === "permission_request") {
+          approvalChecks.push(existsSync(join(project, "hook.log")));
+          setTimeout(
+            () =>
+              host.respondPermission(
+                event.run,
+                event.requestId,
+                scenario === "deny" ? "deny" : "once",
+              ),
+            0,
+          );
+        }
+      },
+      store: new SessionStore(sessionDir),
+      skillsDir: join(project, "skills"),
+      mcp: new McpManager(() => settings, "0.0.0"),
+    });
+    const { composerId } = host.openProject(project);
+    await host.prompt("Write the fixture", composerId);
+    expect(resolve).toHaveBeenCalled();
+    expect(approvalChecks).toEqual(scenario === "read-only" ? [] : [false]);
+    expect(existsSync(join(project, "created.txt"))).toBe(scenario === "allow");
+    const snapshots = toUiMessages(new SessionStore(sessionDir).load(composerId), "s");
+    const traces = snapshots
+      .flatMap(({ parts }) => parts)
+      .filter((part) => part.type === "tool")
+      .filter((part) => [HOOK_TRACE_TOOL, TURN_HOOK_TRACE_TOOL].includes(part.toolName));
+    const live = events.filter(
+      (event) =>
+        event.type === "tool_start" &&
+        [HOOK_TRACE_TOOL, TURN_HOOK_TRACE_TOOL].includes(event.toolName),
+    );
+    expect(live).toHaveLength(traces.length);
+    const path = join(project, "hook.log");
+    const log = existsSync(path)
+      ? readFileSync(path, "utf8")
+          .split(/\r?\n/)
+          .map((line) => line.trimEnd())
+          .filter(Boolean)
+      : [];
+    expect(log).toEqual(
+      scenario === "allow"
+        ? ["beforeTool write_file", "afterTool write_file", "afterTurn"]
+        : scenario === "block"
+          ? ["beforeTool write_file", "afterTurn"]
+          : scenario === "deny"
+            ? ["afterTurn"]
+            : [],
+    );
+    expect(traces).toHaveLength(log.length);
+    const turnHooks = traces.filter(({ toolName }) => toolName === TURN_HOOK_TRACE_TOOL);
+    expect(turnHooks).toHaveLength(scenario === "read-only" ? 0 : 1);
+    expect(
+      turnHooks.every(
+        (trace) =>
+          trace.state === "success" &&
+          trace.output?.includes("hook output") &&
+          typeof trace.durationMs === "number",
+      ),
+    ).toBe(true);
+    const failures = traces.filter(({ state }) => state === "error");
+    expect(failures).toHaveLength(scenario === "block" ? 1 : 0);
+    expect(
+      failures.every(
+        (trace) => trace.toolName === HOOK_TRACE_TOOL && trace.error?.includes("exit 7"),
+      ),
+    ).toBe(true);
+    expect(
+      events.some((event) => event.type === "tool_start" && event.toolName === "write_file"),
+    ).toBe(scenario === "allow");
+  },
+  20000,
+);
 
 it("plans with read-only tools, restores the edited plan after restart, and executes with the original mode", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-plan-mode-"));

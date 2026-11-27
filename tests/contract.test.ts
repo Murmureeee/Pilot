@@ -76,6 +76,7 @@ describe("IPC contract", () => {
     expect(IPC.appSetConversationVisible).toBe("app:set-conversation-visible");
     expect(IPC.settingsSetNotificationsEnabled).toBe("settings:set-notifications-enabled");
     expect(IPC.settingsSetExternalEditor).toBe("settings:set-external-editor");
+    expect(IPC.settingsSetProjectHooks).toBe("settings:set-project-hooks");
   });
 
   it("uses the settings namespace for acknowledging a settings recovery", () => {

@@ -173,6 +173,7 @@ function mergeSettingsInput(current: Settings, input: SettingsInput): Settings {
     autoDownloadUpdates: current.autoDownloadUpdates,
     // 人设传 "" 即清空（空串不是 nullish，不会被 ?? 吞掉）；技能启停整表提交
     persona: input.persona ?? current.persona ?? "",
+    projectHooks: current.projectHooks,
     promptTemplates: current.promptTemplates,
     afterTurnVerification: current.afterTurnVerification,
     projectTrust: current.projectTrust,
@@ -219,6 +220,7 @@ export function toPublicSettings(settings: Settings): PublicSettings {
     notificationsEnabled: settings.notificationsEnabled !== false,
     autoDownloadUpdates: settings.autoDownloadUpdates !== false,
     persona: settings.persona ?? "",
+    projectHooks: settings.projectHooks,
     promptTemplates: settings.promptTemplates ?? [],
     pluginPromptTemplates: settings.importedPlugins?.flatMap(({ managed }) =>
       managed?.enabled ? managed.templates : [],

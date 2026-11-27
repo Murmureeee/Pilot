@@ -36,6 +36,7 @@ const bashParams = obj({
 export function createBashTool(
   { workingDirectory, commandShell }: ToolEnvironment,
   startBackground?: (command: string, signal?: AbortSignal) => Promise<TerminalRecord>,
+  commandEnvironment?: NodeJS.ProcessEnv,
 ): AgentTool<typeof bashParams> {
   const powershell = commandShell === "powershell";
   const shellName = powershell ? "PowerShell" : process.platform === "win32" ? "Git Bash" : "Bash";
@@ -70,7 +71,12 @@ export function createBashTool(
         Math.min(params.timeoutSec ?? COMMAND_TIMEOUT_DEFAULT_SEC, COMMAND_TIMEOUT_MAX_SEC),
       );
       const started = performance.now();
-      const child = launchCommand(commandShell, workingDirectory, params.command);
+      const child = launchCommand(
+        commandShell,
+        workingDirectory,
+        params.command,
+        commandEnvironment,
+      );
       const closed = once(child, "close") as Promise<[number | null, NodeJS.Signals | null]>;
       const output = new CommandOutput();
       const collect = (chunk: string): void => {

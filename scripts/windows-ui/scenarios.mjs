@@ -1060,6 +1060,88 @@ export async function verifyRestoredMemory(page, model, project, sessionId) {
   await button(page, "Send").waitFor();
 }
 
+export async function verifyProjectHooks(page, window, model, project) {
+  const beforeCommand = 'Write-Output ("hook before " + $env:PILOT_HOOK_TOOL)';
+  const afterCommand = 'Write-Output ("hook after " + $env:PILOT_HOOK_TOOL)';
+  const turnCommand = 'Write-Output "hook turn"';
+  writeFileSync(join(project, "notes.txt"), "Hook desktop fixture.\n");
+  await page.evaluate(async ({ baseUrl, modelId }) => {
+    await window.pi.settingsSave({
+      providers: [{ id: "hooks", kind: "openai-compatible", name: "Hook fixture", baseUrl, modelId }],
+      activeProviderId: "hooks",
+    });
+  }, { baseUrl: model.baseUrl, modelId: model.modelId });
+  await page.reload();
+  await waitForProjectDraft(page, project);
+
+  const showHooks = async (locale) => {
+    const en = locale.lang === "en";
+    await openSettings(page, locale, en ? "General" : "常规");
+    const trigger = button(page, en ? "Configure hooks…" : "配置钩子…");
+    await trigger.press("Enter");
+    const dialog = page.getByRole("dialog", { name: en ? "Project hooks" : "项目钩子" });
+    await dialog.waitFor();
+    return { dialog, trigger };
+  };
+  let current = locales[0];
+  let minimum = Infinity;
+  for (const size of [wide, narrow]) {
+    await resize(page, window, size);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        const { dialog, trigger } = await showHooks(locale);
+        await assertFits(dialog);
+        minimum = Math.min(minimum, await minimumTextContrast(dialog, "h2, p, label"));
+        await page.keyboard.press("Escape");
+        await dialog.waitFor({ state: "hidden" });
+        await trigger.and(page.locator(":focus")).waitFor();
+      }
+    }
+  }
+  assert.ok(minimum >= 4.5, "Project hook text contrast " + minimum.toFixed(2) + ":1");
+  await resize(page, window, narrow, 1.5);
+  const { dialog, trigger } = await showHooks(current);
+  await dialog.getByRole("textbox", { name: "Before-tool hook" }).fill(beforeCommand);
+  await dialog.getByRole("textbox", { name: "After-tool hook" }).fill(afterCommand);
+  await dialog.getByRole("textbox", { name: "After-turn hook" }).fill(turnCommand);
+  await button(dialog, "Save").press("Enter");
+  await dialog.waitFor({ state: "hidden" });
+  await trigger.and(page.locator(":focus")).waitFor();
+  await page.keyboard.press("Control+l");
+  await resize(page, window, wide);
+
+  await send(page, "Read the Hook desktop fixture.");
+  const first = await model.nextCompletion();
+  sendTool(first, "hook-read", "read_file", { path: "notes.txt" });
+  const afterRead = await model.nextCompletion();
+  assert.match(JSON.stringify(afterRead.input.messages.at(-1)), /Hook desktop fixture/);
+  assert.doesNotMatch(JSON.stringify(afterRead.input.messages), /hook before read_file|hook after read_file/);
+  afterRead.write({ content: "Finished the hook fixture." });
+  afterRead.finish();
+  await button(page, "Send").waitFor();
+  const openTrace = async () => {
+    const activity = page.locator("[data-reply-activity] > [data-slot=trace-collapsible] > [data-slot=trace-collapsible-trigger]").first();
+    await activity.press("Enter");
+    for (const [name, output] of [
+      ["Before-tool hook", "hook before read_file"],
+      ["After-tool hook", "hook after read_file"],
+      ["After-turn hook", "hook turn"],
+    ]) {
+      const line = page.getByRole("button", { name: new RegExp(name) });
+      assert.match(await line.innerText(), /\d+(?:\.\d+)?\s+s\b/i);
+      await line.press("Enter");
+      await page.getByText(output, { exact: true }).waitFor();
+    }
+  };
+  await openTrace();
+  await page.reload();
+  await page.getByText("Finished the hook fixture.", { exact: true }).waitFor();
+  await openTrace();
+  console.log("Hook configuration contrast " + minimum.toFixed(2) + ":1");
+}
+
 const afterTurnCommand = "node check-after-turn.cjs";
 const afterTurnFailure = "The fixture needs fixed.txt";
 const afterTurnSuccess = "The after-turn check passed";

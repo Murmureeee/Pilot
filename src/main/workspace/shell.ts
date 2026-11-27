@@ -23,6 +23,7 @@ export function launchCommand(
   commandShell: CommandShell,
   workingDirectory: string | undefined,
   command: string,
+  environment?: NodeJS.ProcessEnv,
 ): ChildProcessByStdio<null, Readable, Readable> {
   const cwd = createToolPathResolver(workingDirectory)(".");
   const args =
@@ -36,6 +37,7 @@ export function launchCommand(
       : ["--noprofile", "--norc", "-c", command];
   return spawn(shellExecutable(commandShell), args, {
     cwd,
+    env: environment && { ...process.env, ...environment },
     detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,

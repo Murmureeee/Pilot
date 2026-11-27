@@ -30,7 +30,7 @@ import { describeToolScope } from "@renderer/lib/tool-rules";
 import { parseToolFailure, stackDisplayPath } from "@renderer/lib/tool-trace";
 import type { ToolFailure } from "@renderer/lib/types";
 import { selectWorkingDirectory, useAgentStore } from "@renderer/stores/agent";
-import { RUN_SUBTASK_TOOL_NAME } from "@shared/constants";
+import { HOOK_TRACE_TOOL, RUN_SUBTASK_TOOL_NAME, TURN_HOOK_TRACE_TOOL } from "@shared/constants";
 import type { SubtaskTrace, TranscriptLocation, UiPart, WebSource } from "@shared/contract";
 import { toolInput } from "@shared/tool-input";
 import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL, isWebTool, webLink } from "@shared/web";
@@ -39,6 +39,8 @@ import { InlineWorkspaceReference } from "./workspace-reference";
 
 const TOOL_ICONS = {
   bash: TerminalIcon,
+  [HOOK_TRACE_TOOL]: TerminalIcon,
+  [TURN_HOOK_TRACE_TOOL]: TerminalIcon,
   read_file: FileTextIcon,
   write_file: FilePenLineIcon,
   edit_file: FilePenLineIcon,
@@ -232,6 +234,7 @@ export function ToolTrace({
     [failureText],
   );
   const shell = part.toolName === "bash";
+  const hook = part.toolName === HOOK_TRACE_TOOL || part.toolName === TURN_HOOK_TRACE_TOOL;
   const subtask = part.toolName === RUN_SUBTASK_TOOL_NAME;
   const action = [t(part.label, locale), part.subtask?.question ?? input.preview]
     .filter(Boolean)
@@ -243,7 +246,7 @@ export function ToolTrace({
     stopped || interrupted
       ? t(stopped ? "已停止 {0}" : "已中断 {0}", locale, [target])
       : failure
-        ? t("失败 {0}", locale, [subtask ? target : t(failure.summary, locale)])
+        ? t("失败 {0}", locale, [subtask || hook ? target : t(failure.summary, locale)])
         : part.state === "pending"
           ? t("等待执行 {0}", locale, [target])
           : part.state === "running"
@@ -274,9 +277,10 @@ export function ToolTrace({
         {title}
       </TraceTitle>
       {/* 不到一秒的步骤不标耗时，一排零点几秒只是噪音。 */}
-      {part.state === "success" && part.durationMs !== undefined && part.durationMs >= 1000 && (
-        <TraceDescription>{formatDuration(part.durationMs, locale)}</TraceDescription>
-      )}
+      {part.durationMs !== undefined &&
+        (hook || (part.state === "success" && part.durationMs >= 1000)) && (
+          <TraceDescription>{formatDuration(part.durationMs, locale)}</TraceDescription>
+        )}
     </TraceLine>
   );
 
@@ -314,7 +318,7 @@ export function ToolTrace({
                 failure={failure}
                 output={failureText}
                 revealOutput={searchField === "output"}
-                translateFirstLine={isWebTool(part.toolName) || subtask}
+                translateFirstLine={isWebTool(part.toolName) || subtask || hook}
               />
             </div>
           ) : (
@@ -324,10 +328,15 @@ export function ToolTrace({
               </div>
             )
           )}
+          {hook && failure && (
+            <p className="text-xs text-muted-foreground">
+              {t("在常规设置中修正该项目的钩子，再重试。", locale)}
+            </p>
+          )}
           {part.subtask && <SubtaskDetails trace={part.subtask} />}
           {!part.subtask && (failure || output) && showArguments && (
             <ToolDetails
-              title={t(shell ? "命令" : "参数", locale)}
+              title={t(shell || hook ? "命令" : "参数", locale)}
               text={input.details}
               reveal={searchField === "input"}
               field="input"

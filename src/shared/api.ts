@@ -6,6 +6,7 @@ import type {
   AgentSmokeResult,
   AppInfo,
   ComposerDraft,
+  CommandShell,
   DiagnosticEvent,
   FileDiff,
   GitBranchOptions,
@@ -47,6 +48,7 @@ import type {
   ProjectGitHead,
   PromptInput,
   PromptMention,
+  HookCommands,
   PromptTemplate,
   ProviderInput,
   ProviderTestResult,
@@ -276,6 +278,11 @@ export interface PiApi {
   onTerminalEvent(callback: (event: TerminalEvent) => void): () => void;
   settingsGet(): Promise<PublicSettings>;
   settingsSave(input: SettingsInput): Promise<PublicSettings>;
+  settingsSetProjectHooks(
+    directory: string,
+    shell: CommandShell,
+    commands: HookCommands,
+  ): Promise<PublicSettings>;
   settingsSetPromptTemplates(templates: PromptTemplate[]): Promise<PublicSettings>;
   settingsSetLogLevel(level: LogLevel): Promise<void>;
   settingsSetNotificationsEnabled(enabled: boolean): Promise<void>;

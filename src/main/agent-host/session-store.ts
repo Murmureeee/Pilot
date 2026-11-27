@@ -21,7 +21,11 @@ import type {
   UiPart,
 } from "@shared/contract";
 
-import { RUN_SUBTASK_TOOL_NAME } from "../../shared/constants";
+import {
+  HOOK_TRACE_TOOL,
+  RUN_SUBTASK_TOOL_NAME,
+  TURN_HOOK_TRACE_TOOL,
+} from "../../shared/constants";
 import { visibleMessageText } from "../../shared/mentions";
 import { insertCompactionMarker } from "../../shared/message-events";
 import { applyPlanUpdate } from "../../shared/plan";
@@ -48,6 +52,7 @@ import {
 import { readFileChange } from "../workspace/file-changes";
 import { gitDiffReferenceSchema } from "../workspace/reference";
 import { CONVERSATION_INDEX_CACHE_SIZE, CONVERSATION_SEARCH_LIMIT } from "./constants";
+import { savedHookTraces } from "./hooks";
 import { imageAttachmentsSchema, messageImages } from "./image-attachments";
 import { legacyMentionParts } from "./mentions";
 import { completeToolResults } from "./recovery";
@@ -159,6 +164,8 @@ export function messageParts(message: AgentMessage, getToolLabel = labelOf): UiP
       });
     }
   }
+  if (message.role === "assistant")
+    parts.push(...savedHookTraces((message as TimedAssistantMessage).pilotHooks));
   return parts;
 }
 
@@ -190,7 +197,12 @@ export function toUiMessages(
         }),
       });
       for (const part of parts) {
-        if (part.type === "tool") calls.set(part.callId, part);
+        if (
+          part.type === "tool" &&
+          part.toolName !== HOOK_TRACE_TOOL &&
+          part.toolName !== TURN_HOOK_TRACE_TOOL
+        )
+          calls.set(part.callId, part);
       }
     } else if (message.role === "toolResult") {
       if (message.toolName === PLAN_TOOL_NAME) {

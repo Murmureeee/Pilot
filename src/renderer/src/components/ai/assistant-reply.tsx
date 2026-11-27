@@ -15,6 +15,7 @@ import {
 import { formatDuration } from "@renderer/lib/duration";
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { ReplyEntry } from "@renderer/lib/types";
+import { TURN_HOOK_TRACE_TOOL } from "@shared/constants";
 import type { TranscriptLocation, UiMessage } from "@shared/contract";
 import { transcriptPartKey } from "@shared/transcript-search";
 
@@ -63,9 +64,15 @@ export function AssistantReply({
   const changes = entries.flatMap(({ part }) =>
     part.type === "tool" && part.fileChange ? [part.fileChange] : [],
   );
-  const content = entries.filter(({ part }) => part.type !== "plan");
+  const turnHooks = entries.filter(
+    ({ part }) => part.type === "tool" && part.toolName === TURN_HOOK_TRACE_TOOL,
+  );
+  const content = entries.filter(
+    ({ part }) =>
+      part.type !== "plan" && (part.type !== "tool" || part.toolName !== TURN_HOOK_TRACE_TOOL),
+  );
   const activityEnd = content.findLastIndex(({ part }) => part.type !== "text") + 1;
-  const activity = content.slice(0, activityEnd);
+  const activity = [...content.slice(0, activityEnd), ...turnHooks];
   const answer = content.slice(activityEnd);
   const tools = activity.flatMap(({ part }) => (part.type === "tool" ? [part] : []));
   const failed = tools.filter((tool) => tool.state === "error").length;
