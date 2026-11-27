@@ -1,9 +1,10 @@
 // @env node
 import { createHash } from "node:crypto";
 import { lstatSync, readdirSync, realpathSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { SETTINGS_FILE_NAME } from "../constants";
+import { isWithinDirectory } from "../workspace/paths";
 import {
   BACKUP_BYTES_LIMIT,
   BACKUP_EXPORT_PATH,
@@ -75,12 +76,11 @@ export function profileSignature(files: readonly ProfileFile[]): string {
 }
 
 export function checkExportDestination(profile: string, path: string): string {
+  const profileRoot = realpathSync.native(profile);
   const parent = realpathSync.native(dirname(resolve(path)));
   const target = join(parent, basename(path));
   for (const root of [...BACKUP_ROOTS, RESTORE_DIRECTORY]) {
-    const fromRoot = relative(join(profile, root), target);
-    if (fromRoot !== ".." && !fromRoot.startsWith(".." + sep) && !isAbsolute(fromRoot))
-      throw new Error(BACKUP_EXPORT_PATH);
+    if (isWithinDirectory(join(profileRoot, root), target)) throw new Error(BACKUP_EXPORT_PATH);
   }
   return target;
 }

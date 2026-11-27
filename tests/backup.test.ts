@@ -6,6 +6,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -90,6 +91,16 @@ it("does not save a backup inside a data root, including a child whose name star
     "请选择备份数据目录以外的位置",
   );
   expect(checkExportDestination(profile, archive)).toBe(archive);
+});
+
+it("rejects a backup inside a data root when the profile is reached through a directory alias", () => {
+  const alias = join(scratch, "profile-alias");
+  symlinkSync(profile, alias, "junction");
+  mkdirSync(join(profile, "skills"));
+
+  expect(() =>
+    checkExportDestination(alias, join(alias, "skills", "example.pilot-backup")),
+  ).toThrow("请选择备份数据目录以外的位置");
 });
 
 it.each([
