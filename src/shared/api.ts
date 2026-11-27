@@ -158,7 +158,11 @@ export interface PiApi {
   sessionUpdateSettings(composerId: string, input: SessionSettingsInput): Promise<void>;
   sessionSetPlanMode(composerId: string, enabled: boolean): Promise<void>;
   sessionReviewPlan(composerId: string, proposalId: string, decision: PlanDecision): Promise<void>;
-  sessionSelectProject(locale: Locale, sessionId?: string): Promise<Snapshot | null>;
+  sessionSelectProject(
+    locale: Locale,
+    sessionId?: string,
+    target?: "wsl",
+  ): Promise<Snapshot | null>;
   sessionOpenDroppedProject(directory: string): Promise<void>;
   sessionUseRecentProject(directory: string, sessionId?: string): Promise<Snapshot>;
   sessionOpenProjectFolder(directory: string): Promise<void>;

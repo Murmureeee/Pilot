@@ -2,13 +2,17 @@
 import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
-import type { Readable } from "node:stream";
+import type { Readable, Writable } from "node:stream";
 
 import type { CommandShell } from "../../shared/contract";
+import { wslProjectPath } from "../../shared/wsl-project";
 import { createToolPathResolver } from "./paths";
+import { launchWslCommand } from "./wsl";
 
-export function getCommandShell(shell?: CommandShell): CommandShell {
-  return process.platform === "win32" && shell !== "bash" ? "powershell" : "bash";
+export function getCommandShell(shell?: CommandShell, directory?: string | null): CommandShell {
+  return process.platform === "win32" && shell !== "bash" && !wslProjectPath(directory)
+    ? "powershell"
+    : "bash";
 }
 
 export function shellExecutable(shell: CommandShell): string {
@@ -24,8 +28,9 @@ export function launchCommand(
   workingDirectory: string | undefined,
   command: string,
   environment?: NodeJS.ProcessEnv,
-): ChildProcessByStdio<null, Readable, Readable> {
+): ChildProcessByStdio<Writable | null, Readable, Readable> {
   const cwd = createToolPathResolver(workingDirectory)(".");
+  if (wslProjectPath(workingDirectory)) return launchWslCommand(cwd, command, environment);
   const args =
     commandShell === "powershell"
       ? [

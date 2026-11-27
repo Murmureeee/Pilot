@@ -1,12 +1,16 @@
 // @env node
 import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
+
+import { wslProjectPath } from "../../shared/wsl-project";
 
 export function normalizeWorkingDirectory(directory: string): string {
   if (isAbsolute(directory)) {
     try {
-      const canonical = realpathSync(directory);
+      const canonical = wslProjectPath(directory)
+        ? realpathSync.native(directory)
+        : realpathSync(directory);
       if (statSync(canonical).isDirectory()) return canonical;
     } catch {
       // 目录可能在选择后被移走。
@@ -16,6 +20,18 @@ export function normalizeWorkingDirectory(directory: string): string {
 }
 
 export function isWithinDirectory(directory: string, target: string): boolean {
+  const wslDirectory = wslProjectPath(directory);
+  const wslTarget = wslProjectPath(target);
+  if (wslDirectory || wslTarget) {
+    if (
+      !wslDirectory ||
+      !wslTarget ||
+      wslDirectory.distribution.toLowerCase() !== wslTarget.distribution.toLowerCase()
+    )
+      return false;
+    const path = posix.relative(wslDirectory.path, wslTarget.path);
+    return path !== ".." && !path.startsWith("../");
+  }
   const path = relative(directory, target);
   return path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path);
 }
@@ -43,7 +59,7 @@ export function workspacesOverlap(first: string, second: string): boolean {
 
 function resolveExistingParent(path: string): string {
   try {
-    return realpathSync(path);
+    return wslProjectPath(path) ? realpathSync.native(path) : realpathSync(path);
   } catch (error) {
     // 写入可创建新目录；已有但无法解析的链接仍应失败。
     if (
@@ -65,7 +81,8 @@ export function createToolPathResolver(workingDirectory?: string): (path: string
     if (workingDirectory === undefined) return target;
     if (!isWithinDirectory(cwd, target)) throw new Error(`路径超出工作目录: ${target}`);
     const root = normalizeWorkingDirectory(cwd);
-    if (relative(cwd, root) !== "") throw new Error("无法使用该工作目录。");
+    if (!isWithinDirectory(cwd, root) || !isWithinDirectory(root, cwd))
+      throw new Error("无法使用该工作目录。");
     const canonical = resolveExistingParent(target);
     if (!isWithinDirectory(root, canonical)) throw new Error(`路径超出工作目录: ${target}`);
     return canonical;

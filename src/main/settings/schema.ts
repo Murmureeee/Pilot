@@ -65,6 +65,10 @@ const projectHooksSchema = z.strictObject({
 const domain = z.string().regex(WEB_DOMAIN_PATTERN).optional();
 const commandPrefix = z.strictObject({
   shell: z.enum(["powershell", "bash"]),
+  wslDistribution: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9_.-]*$/i)
+    .optional(),
   args: z
     .array(z.string())
     .min(1)

@@ -17,7 +17,7 @@ export function registerTerminalRoutes({
   handle(IPC.sessionOpenTerminal, (_event, composerId, directory, size) => {
     exit.checkWorkAllowed();
     const cwd = host.prepareTerminal(composerId, directory);
-    return terminal.open(composerId, cwd, getCommandShell(getSettings().commandShell), size);
+    return terminal.open(composerId, cwd, getCommandShell(getSettings().commandShell, cwd), size);
   });
   handle(IPC.sessionTerminalOutput, (_event, composerId, id) => {
     host.checkComposerId(composerId);

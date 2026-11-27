@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import type { CommandShell, TerminalSize } from "../../shared/contract";
 import { stopProcessTree } from "../workspace/process";
 import { launchCommand, shellExecutable } from "../workspace/shell";
+import { wslLaunchSpec } from "../workspace/wsl";
 import type { TerminalExit, TerminalProcess } from "./types";
 
 const requireNative = createRequire(__filename);
@@ -24,13 +25,14 @@ export function launchInteractiveShell(
           "[Console]::OutputEncoding = [Console]::InputEncoding = [Text.UTF8Encoding]::new($false)",
         ]
       : ["--noprofile", "--norc", "-i"];
+  const wsl = wslLaunchSpec(cwd, args);
   const { spawn } = requireNative("@lydell/node-pty") as typeof import("@lydell/node-pty");
-  const pty = spawn(shellExecutable(shell), args, {
-    cwd,
+  const pty = spawn(wsl?.executable ?? shellExecutable(shell), wsl?.args ?? args, {
+    cwd: wsl?.cwd ?? cwd,
     cols: size.columns,
     rows: size.rows,
     name: "xterm-256color",
-    env: { ...process.env, TERM: "xterm-256color" },
+    env: { ...process.env, TERM: "xterm-256color", ...(wsl && { WSL_UTF8: "1" }) },
     ...(process.platform === "win32" ? { useConptyDll: true } : {}),
   });
   const completion = Promise.withResolvers<TerminalExit>();

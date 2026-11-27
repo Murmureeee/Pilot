@@ -4,6 +4,7 @@ import { writeFile } from "node:fs/promises";
 import { app, BrowserWindow, dialog, shell } from "electron";
 
 import { IPC, VERIFICATION_KINDS } from "../../shared/contract";
+import { wslProjectPath } from "../../shared/wsl-project";
 import { MemoryChanges } from "../agent-host/memory";
 import { runAgentSmoke } from "../agent-host/smoke";
 import { NATIVE_DIALOG_TITLES } from "../constants";
@@ -20,6 +21,7 @@ import { readProjectGitHead } from "../workspace/git";
 import { previewWorkspaceReference, workspaceFileForEditor } from "../workspace/reference";
 import { searchWorkspace } from "../workspace/search";
 import { getCommandShell } from "../workspace/shell";
+import { firstWslDistribution } from "../workspace/wsl";
 import { handle } from "./transport";
 import type { IpcContext } from "./types";
 
@@ -82,12 +84,15 @@ export function registerAgentRoutes({
     if (decision.type === "execute") exit.checkWorkAllowed();
     void host.reviewPlan(composerId, proposalId, decision);
   });
-  handle(IPC.sessionSelectProject, async (event, locale, sessionId) => {
+  handle(IPC.sessionSelectProject, async (event, locale, sessionId, target) => {
+    const distribution = target === "wsl" ? await firstWslDistribution() : undefined;
     const window = BrowserWindow.fromWebContents(event.sender);
     const title = NATIVE_DIALOG_TITLES[locale][sessionId ? "bindProject" : "openProject"];
     const options = {
       title,
-      defaultPath: host.getWorkingDirectory() ?? app.getPath("home"),
+      defaultPath: distribution
+        ? "\\\\wsl.localhost\\" + distribution + "\\"
+        : (host.getWorkingDirectory() ?? app.getPath("home")),
       properties: ["openDirectory" as const],
     };
     const result = window
@@ -95,7 +100,11 @@ export function registerAgentRoutes({
       : await dialog.showOpenDialog(options);
     const directory = result.canceled ? undefined : result.filePaths[0];
     if (!directory) return null;
-    return sessionId ? host.bindProject(sessionId, directory) : host.openProject(directory);
+    if (distribution && !wslProjectPath(directory))
+      throw new Error("请选择 WSL 发行版中的项目目录。");
+    return sessionId
+      ? host.bindProject(sessionId, directory)
+      : host.openProject(directory, distribution ? "reveal" : undefined);
   });
   handle(IPC.sessionUseRecentProject, (_event, directory, sessionId) =>
     host.useRecentProject(directory, sessionId),
@@ -292,7 +301,7 @@ export function registerAgentRoutes({
       commands: { ...state.commands, ...commands },
       project: {
         directory,
-        shell: getCommandShell(settings.commandShell),
+        shell: getCommandShell(settings.commandShell, directory),
         afterTurn: saved === undefined ? declared : (saved ?? undefined),
         afterTurnSource: saved === undefined && declared ? "project" : undefined,
         afterTurnOverride: saved !== undefined && Boolean(config.afterTurn),
@@ -343,7 +352,7 @@ export function registerAgentRoutes({
       ...command,
       sessionId,
       task,
-      shell: getCommandShell(settings.commandShell),
+      shell: getCommandShell(settings.commandShell, command.workingDirectory),
     });
   });
   handle(IPC.sessionStopVerification, (_event, composerId, runId) =>

@@ -154,6 +154,13 @@ export function TopBar({
                 disabled={choosingProject}
                 onRun={() => void selectProject()}
               />
+              {navigator.userAgent.includes("Windows") && (
+                <Item
+                  label={t("打开 WSL 项目…", locale)}
+                  disabled={choosingProject}
+                  onRun={() => void selectProject({ target: "wsl" })}
+                />
+              )}
               <Item
                 label={t("搜索…", locale)}
                 shortcut="Ctrl+K"

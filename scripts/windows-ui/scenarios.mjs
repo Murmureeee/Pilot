@@ -4115,6 +4115,52 @@ async function dropLocalFiles(page, files, target = editor(page), onOver) {
   }
 }
 
+export async function verifyWslProject(page, app, model, directory) {
+  await page.evaluate(async ({ baseUrl, modelId }) => {
+    await window.pi.settingsSave({
+      providers: [{ id: "wsl", kind: "openai-compatible", name: "WSL fixture", baseUrl, modelId }],
+      activeProviderId: "wsl",
+    });
+  }, { baseUrl: model.baseUrl, modelId: model.modelId });
+  await page.reload();
+  await app.evaluate(({ dialog }, folder) => {
+    const original = dialog.showOpenDialog;
+    dialog.showOpenDialog = async (_window, options) => {
+      dialog.showOpenDialog = original;
+      if (!options.properties.includes("openDirectory") || !/^\\\\wsl\.localhost\\/i.test(options.defaultPath))
+        throw new Error("Expected directory selection in a WSL distribution");
+      return { canceled: false, filePaths: [folder] };
+    };
+  }, directory);
+  await button(page, "应用菜单").press("Enter");
+  await page.getByRole("menuitem", { name: "打开 WSL 项目…", exact: true }).click();
+  await waitForProjectDraft(page, directory);
+  await page.locator("main header").getByText(basename(directory), { exact: true }).waitFor();
+  await editor(page).fill("Run a command in the selected WSL project.");
+  await editor(page).press("Enter");
+  const first = await model.nextCompletion();
+  sendTool(first, "wsl-command", "bash", { command: "pwd; cat readme.txt" });
+  const approval = page.locator("[data-permission-card]");
+  await approval.getByText(/WSL · /).waitFor();
+  await button(approval, "本次允许").press("Enter");
+  const next = await model.nextCompletion();
+  const output = next.input.messages.at(-1).content;
+  const distribution = directory.split("\\")[3];
+  const path = "/" + directory.split("\\").slice(4).join("/");
+  assert.ok(output.includes(path));
+  assert.ok(output.includes("wsl fixture"));
+  next.write({ content: "The WSL project command finished." });
+  next.finish();
+  await waitForIdle(page);
+  const { sessionId } = await page.evaluate(() => window.pi.getSnapshot());
+  await page.reload();
+  await page.getByText("The WSL project command finished.", { exact: true }).waitFor();
+  const restored = await page.evaluate(() => window.pi.getSnapshot());
+  assert.equal(restored.sessionId, sessionId);
+  assert.equal(restored.sessions.find(({ id }) => id === sessionId)?.workingDirectory, directory);
+  assert.ok(distribution && path.length > 1);
+}
+
 export async function verifyProjectEntry(page, window, app, fixture) {
   const { electron, repository, profile, caller, firstProject, secondProject } = fixture;
   const localFolder = join(firstProject, "reference-folder");

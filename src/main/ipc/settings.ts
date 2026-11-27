@@ -24,7 +24,7 @@ export function registerSettingsRoutes(
   handle(IPC.settingsGet, () => toPublicSettings(ctx.getSettings()));
   handle(IPC.settingsSetProjectHooks, (_event, directory, shell, commands) => {
     const current = ctx.getSettings();
-    if (getCommandShell(current.commandShell) !== shell)
+    if (getCommandShell(current.commandShell, directory) !== shell)
       throw new Error("命令环境已更改。请重新打开设置后保存钩子。");
     const workingDirectory = normalizeWorkingDirectory(directory);
     const projectHooks = { ...current.projectHooks };

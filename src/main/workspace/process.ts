@@ -6,9 +6,19 @@ import { promisify } from "node:util";
 import { TASKKILL_TIMEOUT_MS } from "./constants";
 
 const exec = promisify(execFile);
+const wslProcesses = new WeakSet<ChildProcess>();
+
+export function registerWslProcess(child: ChildProcess): void {
+  wslProcesses.add(child);
+  child.stdin?.on("error", () => {});
+}
 
 /** On Unix the caller must spawn the command as a process group leader. */
 export async function stopProcessTree(child: ChildProcess): Promise<void> {
+  if (wslProcesses.has(child)) {
+    child.stdin?.end();
+    return;
+  }
   const pid = child.pid;
   if (pid === undefined) return;
 

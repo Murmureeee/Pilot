@@ -24,8 +24,9 @@ export function describeToolScope(rule: ToolRule, locale: Locale): string {
   if (rule.toolName === "bash") {
     const { commandPrefix } = rule;
     if (!commandPrefix) return t("旧命令授权已停用。下次运行时可重新授权。", locale);
-    const shell =
-      commandPrefix.shell === "bash" && !navigator.userAgent.includes("Windows")
+    const shell = commandPrefix.wslDistribution
+      ? "WSL · " + commandPrefix.wslDistribution
+      : commandPrefix.shell === "bash" && !navigator.userAgent.includes("Windows")
         ? "Bash"
         : COMMAND_SHELL_LABELS[commandPrefix.shell];
     return t("以 {1} 开头的 {0} 命令", locale, [shell, formatCommandPrefix(commandPrefix)]);

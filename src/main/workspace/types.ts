@@ -7,6 +7,12 @@ import type {
   GitWorktreeRemainder,
 } from "@shared/contract";
 
+export interface WslLaunch {
+  executable: string;
+  args: string[];
+  cwd: string;
+}
+
 export interface GitWorktreeInspection {
   signature: string;
   ancestor: string;

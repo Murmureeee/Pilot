@@ -65,6 +65,7 @@ import {
   verifyUnsentDraft,
   verifyVersionedStorage,
   verifyWebTools,
+  verifyWslProject,
 } from "./windows-ui/scenarios.mjs";
 
 const require = createRequire(import.meta.url);
@@ -190,6 +191,15 @@ try {
       verifyPagePreview(page, app),
     );
   }, commandProject);
+  if (process.env.PILOT_TEST_WSL_DIRECTORY) {
+    const wslProfile = join(scratch, "wsl-profile");
+    const wslProject = realpathSync.native(process.env.PILOT_TEST_WSL_DIRECTORY);
+    await withApp(wslProfile, async (page, _window, app) => {
+      await runScene("Open a WSL project and run a command in its Linux directory", () =>
+        verifyWslProject(page, app, model, wslProject),
+      );
+    });
+  }
   mkdirSync(subtaskProject);
   await withApp(subtaskProfile, async (page, window) => {
     await runScene("Delegate read-only research, restore its trace and cancel a planning subtask", () =>

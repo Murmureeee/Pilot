@@ -604,6 +604,7 @@ export interface ToolApproval {
 
 export interface CommandPrefix {
   shell: CommandShell;
+  wslDistribution?: string;
   args: string[];
 }
 

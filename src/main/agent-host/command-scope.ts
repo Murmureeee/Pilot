@@ -286,9 +286,11 @@ export function commandPrefixMatches(
   prefix: CommandPrefix,
   shell: CommandShell,
   args: ShellArgument[],
+  wslDistribution?: string,
 ): boolean {
   return (
     prefix.shell === shell &&
+    prefix.wslDistribution?.toLowerCase() === wslDistribution?.toLowerCase() &&
     Boolean(prefix.args[0]) &&
     prefix.args.every((arg, index) => arg === args[index])
   );

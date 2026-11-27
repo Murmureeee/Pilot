@@ -18,6 +18,7 @@ import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { selectProjectDirectory, useAgentStore } from "@renderer/stores/agent";
 import { HOOK_COMMAND_LIMIT, HOOK_LABELS, HOOK_PHASES } from "@shared/constants";
 import type { CommandShell, HookCommands, ProjectHooks } from "@shared/contract";
+import { wslShellLabel } from "@shared/wsl-project";
 
 import { SettingsGroup } from "./SettingsGroup";
 
@@ -41,7 +42,7 @@ export function ProjectHookSettings({
           key={directory}
           directory={directory}
           saved={projects?.[directory]}
-          shell={shell}
+          shell={wslShellLabel(directory) ? "bash" : shell}
         />
       ) : (
         <p className="text-xs text-muted-foreground">{t("打开项目后可配置钩子。", locale)}</p>
@@ -123,7 +124,9 @@ function HookDialog({
             {t("保存后，命令将在当前项目的后续执行回合中自动运行。", locale)}
           </DialogDescription>
           <p className="text-xs wrap-anywhere text-muted-foreground">{directory}</p>
-          <p className="text-xs text-muted-foreground">{COMMAND_SHELL_LABELS[shell]}</p>
+          <p className="text-xs text-muted-foreground">
+            {wslShellLabel(directory) ?? COMMAND_SHELL_LABELS[shell]}
+          </p>
         </DialogHeader>
         <form className="grid min-w-0 gap-4" onSubmit={(event) => void save(event)}>
           <p className="text-xs leading-5 text-muted-foreground">

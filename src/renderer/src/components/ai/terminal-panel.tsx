@@ -24,11 +24,16 @@ import { DEFAULT_TERMINAL_SIZE, TERMINAL_STATUS_LABELS } from "@renderer/lib/con
 import { showFeedback, showFeedbackError } from "@renderer/lib/feedback";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { TerminalRecord } from "@shared/contract";
+import { wslShellLabel } from "@shared/wsl-project";
 
 import { TerminalViewport, terminalText } from "./terminal-viewport";
 
 function terminalName(record: TerminalRecord): string {
-  return record.command ?? (record.shell === "powershell" ? "PowerShell" : "Bash");
+  return (
+    record.command ??
+    wslShellLabel(record.workingDirectory) ??
+    (record.shell === "powershell" ? "PowerShell" : "Bash")
+  );
 }
 
 function setRecord(

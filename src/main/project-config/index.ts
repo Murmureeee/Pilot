@@ -21,6 +21,7 @@ import type {
 import { VERIFICATION_KINDS } from "../../shared/contract";
 import { PROJECT_CONFIG_FILE } from "../../shared/project-config";
 import { isWebTool, WEB_DOMAIN_PATTERN } from "../../shared/web";
+import { wslProjectPath } from "../../shared/wsl-project";
 import { normalizeImportedMcp } from "../external-import/mcp";
 import { object } from "../external-import/sources";
 import { verificationCommandSchema } from "../settings/schema";
@@ -252,9 +253,15 @@ export function revokeProjectTrust(settings: Settings, directory: string): Setti
 }
 
 export function projectToolRules(config: ProjectConfig, shell: CommandShell): ToolRule[] {
+  const wslDistribution = wslProjectPath(config.directory)?.distribution;
   return config.rules.flatMap((rule): ToolRule[] => {
     if ("command" in rule)
-      return [{ toolName: rule.tool, commandPrefix: { shell, args: rule.command } }];
+      return [
+        {
+          toolName: rule.tool,
+          commandPrefix: { shell, args: rule.command, ...(wslDistribution && { wslDistribution }) },
+        },
+      ];
     if ("path" in rule) return [{ toolName: rule.tool, pathPrefix: rule.path }];
     return [{ toolName: rule.tool, domain: rule.domain }];
   });
@@ -289,7 +296,7 @@ export function projectConfigInfo(
   config = loadProjectConfig(directory),
 ): ProjectConfigInfo {
   return {
-    ...summarizeProjectConfig(config, getCommandShell(settings.commandShell)),
+    ...summarizeProjectConfig(config, getCommandShell(settings.commandShell, directory)),
     trust: projectTrustState(settings, config),
     hasSavedTrust: Boolean(settings.projectTrust?.[directory]),
     revision: revisionOf(config),
@@ -339,7 +346,7 @@ export function afterTurnVerificationFor(
     const config = loadProjectConfig(directory);
     return config.fingerprint === projectFingerprint &&
       projectTrustState(settings, config) === "trusted"
-      ? afterTurnOf(config, getCommandShell(settings.commandShell))
+      ? afterTurnOf(config, getCommandShell(settings.commandShell, directory))
       : undefined;
   } catch {
     return undefined;

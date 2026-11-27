@@ -78,6 +78,14 @@ export const EN_MESSAGES: Record<string, string> = {
   "有 {0} 个会话无法读取。修复会话存储或升级 Pilot 后刷新。":
     "Could not read {0} chats. Fix session storage or upgrade Pilot, then refresh.",
   // 窗口菜单与侧栏
+  "打开 WSL 项目…": "Open WSL project…",
+  "WSL 项目需要 Windows。": "WSL projects require Windows.",
+  "无法读取 WSL 发行版。请检查 Windows 的 WSL 安装。":
+    "Could not list WSL distributions. Check the WSL installation on Windows.",
+  "未找到可用的 WSL 发行版。请先安装用于开发的发行版。":
+    "No WSL distribution is available. Install a distribution for development first.",
+  "请选择 WSL 发行版中的项目目录。": "Select a project directory inside a WSL distribution.",
+  "无法识别 WSL 项目路径。": "Could not recognize the WSL project path.",
   项目钩子: "Project hooks",
   工具调用前钩子: "Before-tool hook",
   工具调用后钩子: "After-tool hook",

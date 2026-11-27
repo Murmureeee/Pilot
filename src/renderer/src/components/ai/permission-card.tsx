@@ -31,6 +31,7 @@ import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { describeToolScope } from "@renderer/lib/tool-rules";
 import { useAgentStore } from "@renderer/stores/agent";
 import type { PermissionDecision, PermissionRequest, RunRef } from "@shared/contract";
+import { wslShellLabel } from "@shared/wsl-project";
 
 import { PermissionPreview } from "./permission-preview";
 
@@ -177,9 +178,10 @@ export function PermissionCard({
             {request.commandShell && (
               <p className="text-xs text-muted-foreground">
                 {t("命令环境", locale)}{" "}
-                {request.commandShell === "bash" && !navigator.userAgent.includes("Windows")
-                  ? "Bash"
-                  : COMMAND_SHELL_LABELS[request.commandShell]}
+                {wslShellLabel(request.workingDirectory) ??
+                  (request.commandShell === "bash" && !navigator.userAgent.includes("Windows")
+                    ? "Bash"
+                    : COMMAND_SHELL_LABELS[request.commandShell])}
               </p>
             )}
             {request.danger && (

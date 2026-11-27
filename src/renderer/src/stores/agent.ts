@@ -410,13 +410,13 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     await window.pi.sessionNew();
   },
 
-  selectProject: async ({ sessionId, directory } = {}) => {
+  selectProject: async ({ sessionId, directory, target } = {}) => {
     if (get().choosingProject) return;
     set({ choosingProject: true, projectError: null });
     try {
       const snapshot = directory
         ? await window.pi.sessionUseRecentProject(directory, sessionId)
-        : await window.pi.sessionSelectProject(currentLocale(), sessionId);
+        : await window.pi.sessionSelectProject(currentLocale(), sessionId, target);
       if (!snapshot) return;
       set({ view: "chat" });
     } catch (error) {

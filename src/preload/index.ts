@@ -84,8 +84,8 @@ const api: PiApi = {
     ipcRenderer.invoke(IPC.sessionSetPlanMode, composerId, enabled),
   sessionReviewPlan: (composerId, proposalId, decision) =>
     ipcRenderer.invoke(IPC.sessionReviewPlan, composerId, proposalId, decision),
-  sessionSelectProject: (locale, sessionId) =>
-    ipcRenderer.invoke(IPC.sessionSelectProject, locale, sessionId),
+  sessionSelectProject: (locale, sessionId, target) =>
+    ipcRenderer.invoke(IPC.sessionSelectProject, locale, sessionId, target),
   sessionOpenDroppedProject: (directory) =>
     ipcRenderer.invoke(IPC.sessionOpenDroppedProject, directory),
   sessionUseRecentProject: (directory, sessionId) =>

@@ -6,6 +6,7 @@ import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { bool, int, obj, opt, str } from "@earendil-works/pi-schema";
 
 import type { TerminalRecord } from "../../../shared/contract";
+import { wslShellLabel } from "../../../shared/wsl-project";
 import { stopProcessTree } from "../../workspace/process";
 import { launchCommand } from "../../workspace/shell";
 import {
@@ -39,7 +40,9 @@ export function createBashTool(
   commandEnvironment?: NodeJS.ProcessEnv,
 ): AgentTool<typeof bashParams> {
   const powershell = commandShell === "powershell";
-  const shellName = powershell ? "PowerShell" : process.platform === "win32" ? "Git Bash" : "Bash";
+  const shellName =
+    wslShellLabel(workingDirectory) ??
+    (powershell ? "PowerShell" : process.platform === "win32" ? "Git Bash" : "Bash");
   return {
     name: "bash",
     label: TOOL_LABELS.bash,

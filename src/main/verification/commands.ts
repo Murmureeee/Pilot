@@ -9,9 +9,11 @@ import {
   type VerificationKind,
   type VerificationResult,
 } from "../../shared/contract";
+import { wslProjectPath } from "../../shared/wsl-project";
 import { readFileSnapshot } from "../workspace/file-changes";
 import { createToolPathResolver } from "../workspace/paths";
 import { shellExecutable } from "../workspace/shell";
+import { launchWslCommand } from "../workspace/wsl";
 import {
   PACKAGE_MANAGER_LOCKS,
   VERIFICATION_REPAIR_OUTPUT_LIMIT,
@@ -69,6 +71,7 @@ export function launchVerification({
   shell,
 }: VerificationRequest): ChildProcessWithoutNullStreams {
   const cwd = createToolPathResolver(workingDirectory)(".");
+  if (wslProjectPath(workingDirectory)) return launchWslCommand(cwd, command);
   const args =
     shell === "powershell"
       ? [

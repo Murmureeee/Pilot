@@ -13,6 +13,7 @@ import type {
 } from "@shared/contract";
 
 import { isWebTool } from "../../shared/web";
+import { wslProjectPath } from "../../shared/wsl-project";
 import { webTarget } from "../web/targets";
 import { createToolPathResolver, isWithinDirectory } from "../workspace/paths";
 import { getCommandShell } from "../workspace/shell";
@@ -143,12 +144,13 @@ export class PermissionManager {
       );
       if (toolName === "bash") {
         const { commandShell: shell } = environment;
+        const wslDistribution = wslProjectPath(environment.workingDirectory)?.distribution;
         const commands = command === undefined ? undefined : parseCommandScope(command, shell);
         if (
           commands?.every((words) =>
             [...rules, ...projectRules].some(
               ({ commandPrefix }) =>
-                commandPrefix && commandPrefixMatches(commandPrefix, shell, words),
+                commandPrefix && commandPrefixMatches(commandPrefix, shell, words, wslDistribution),
             ),
           )
         )
@@ -156,7 +158,14 @@ export class PermissionManager {
 
         // A single approval creates one prefix. Combined commands can use existing rules for every part.
         if (commands?.length === 1 && commands[0].every((word) => word !== null)) {
-          rule = { toolName, commandPrefix: { shell, args: commands[0] } };
+          rule = {
+            toolName,
+            commandPrefix: {
+              shell,
+              args: commands[0],
+              ...(wslDistribution && { wslDistribution }),
+            },
+          };
         }
       } else {
         if (

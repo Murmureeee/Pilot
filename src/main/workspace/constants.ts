@@ -16,6 +16,24 @@ export const GIT_BRANCH_REF_PREFIX = "refs/heads/";
 export const WORKTREE_PATCH_PREVIEW_LIMIT = 100_000;
 export const WORKTREE_UNAVAILABLE = "工作树已移除或无法访问。请检查工作树目录。";
 export const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+export const WSL_LIST_TIMEOUT_MS = 8000;
+
+// Closing the launcher input stops the Linux group even while wsl.exe stays connected.
+export const WSL_COMMAND_SUPERVISOR = [
+  "set -m",
+  "exec 3<&0",
+  'PILOT_HOOK_EVENT="$2" PILOT_HOOK_TOOL="$3" /bin/bash --noprofile --norc -c "$1" </dev/null &',
+  "pid=$!",
+  '(IFS= read -r <&3 || kill -KILL -- "-$pid" 2>/dev/null) &',
+  "watcher=$!",
+  "status=0",
+  'wait "$pid" 2>/dev/null || status=$?',
+  'kill -KILL -- "-$pid" 2>/dev/null || :',
+  'kill "$watcher" 2>/dev/null || :',
+  'wait "$watcher" 2>/dev/null || :',
+  'exit "$status"',
+].join("\n");
+
 export const TASKKILL_TIMEOUT_MS = 5_000;
 
 export const CODE_EDITOR_PRESETS = {

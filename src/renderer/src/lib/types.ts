@@ -324,6 +324,7 @@ export type GitBranchFeedback =
   | { kind: "pull-request"; url: string };
 
 export interface ProjectSelection {
+  target?: "wsl";
   sessionId?: string;
   directory?: string;
 }

@@ -21,6 +21,7 @@ import {
   type VerificationKind,
   type VerificationProject,
 } from "@shared/contract";
+import { wslShellLabel } from "@shared/wsl-project";
 
 import { ProjectConfigSource } from "./project-config-details";
 
@@ -106,7 +107,7 @@ export function VerificationSettingsDialog({
             </div>
             <div className="grid gap-0.5">
               <dt className="text-muted-foreground">Shell</dt>
-              <dd>{COMMAND_SHELL_LABELS[shell]}</dd>
+              <dd>{wslShellLabel(project.directory) ?? COMMAND_SHELL_LABELS[shell]}</dd>
             </div>
           </dl>
           {project.afterTurnSource === "project" && <ProjectConfigSource />}

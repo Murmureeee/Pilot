@@ -271,7 +271,11 @@ const inputs = {
       z.strictObject({ type: z.enum(["execute", "discard"]) }),
     ]),
   ]),
-  [IPC.sessionSelectProject]: z.tuple([z.enum(SUPPORTED_LOCALES), z.uuid().optional()]),
+  [IPC.sessionSelectProject]: z.tuple([
+    z.enum(SUPPORTED_LOCALES),
+    z.uuid().optional(),
+    z.literal("wsl").optional(),
+  ]),
   [IPC.sessionOpenDroppedProject]: z.tuple([nonBlank.refine((value) => !value.includes("\0"))]),
   [IPC.sessionUseRecentProject]: z.tuple([nonBlank, z.uuid().optional()]),
   [IPC.sessionOpenProjectFolder]: z.tuple([nonBlank]),

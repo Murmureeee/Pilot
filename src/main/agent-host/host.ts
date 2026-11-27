@@ -455,7 +455,7 @@ export class AgentHost {
     const instructions = this.loadInstructions(settings, workingDirectory, skills, meta);
     const toolEnvironment: ToolEnvironment = {
       workingDirectory,
-      commandShell: getCommandShell(settings.commandShell),
+      commandShell: getCommandShell(settings.commandShell, workingDirectory),
     };
 
     const cached = this.cachedAgent;
