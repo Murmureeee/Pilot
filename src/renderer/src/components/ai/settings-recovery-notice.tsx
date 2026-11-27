@@ -4,9 +4,38 @@ import { useState, type JSX } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
+import { APP_LINKS } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
-import type { SettingsRecovery } from "@shared/contract";
+import type { SettingsRecovery, StorageUpgrade } from "@shared/contract";
+
+export function StorageUpgradeNotice({ issue }: { issue: StorageUpgrade }): JSX.Element {
+  const locale = useLocale();
+  const release = APP_LINKS[1];
+  return (
+    <Alert variant="destructive" className="bg-background">
+      <AlertTriangleIcon aria-hidden="true" />
+      <AlertTitle>{t("需要新版 Pilot", locale)}</AlertTitle>
+      <AlertDescription className="col-start-2 grid gap-1">
+        <p>
+          {t("此数据文件使用格式版本 {0}。原文件已保留，请升级 Pilot 后继续。", locale, [
+            issue.version,
+          ])}
+        </p>
+        <p className="wrap-anywhere select-text">{issue.path}</p>
+        <Button
+          size="sm"
+          variant="outline"
+          nativeButton={false}
+          className="mt-1 justify-self-start"
+          render={<a href={release.href} target="_blank" rel="noreferrer" />}
+        >
+          {t(release.label, locale)}
+        </Button>
+      </AlertDescription>
+    </Alert>
+  );
+}
 
 async function openSettingsFolder(): Promise<void> {
   const error = await window.pi.openPath("settings");
@@ -32,6 +61,8 @@ export function SettingsRecoveryNotice({ recovery }: { recovery: SettingsRecover
       setPending(false);
     }
   }
+
+  if (recovery.status === "upgrade") return <StorageUpgradeNotice issue={recovery} />;
 
   return (
     <Alert variant={blocked ? "destructive" : "warning"} aria-busy={pending}>

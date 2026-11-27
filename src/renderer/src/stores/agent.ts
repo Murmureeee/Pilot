@@ -22,6 +22,7 @@ import type {
   SessionSettingsInput,
   SettingsInput,
   Snapshot,
+  StorageUpgrade,
   ThinkingLevel,
   ToolRule,
   UiAgentEvent,
@@ -39,6 +40,7 @@ type View = "chat" | "settings";
 
 interface AgentStore extends AgentUiState {
   settings: PublicSettings | null;
+  sessionStorageUpgrade?: StorageUpgrade;
   composerId: string | null;
   composerDraft: ComposerDraft;
   draftImages: ImageAttachment[];
@@ -80,7 +82,7 @@ interface AgentStore extends AgentUiState {
   newSession(): Promise<void>;
   selectProject(selection?: ProjectSelection): Promise<void>;
   /** record=false 用于前进/后退（不重复入栈） */
-  loadSession(id: string, record?: boolean, focus?: boolean): Promise<void>;
+  loadSession(id: string, record?: boolean, focus?: boolean): Promise<boolean>;
   /** 手动重命名会话（titleCustom 保护，自动标题不再覆盖） */
   renameSession(id: string, title: string): Promise<void>;
   /** 置顶/取消置顶（在当前项目分组内） */
@@ -238,6 +240,7 @@ function sessionSnapshot(
     | "composerDraft"
     | "draftImages"
     | "settings"
+    | "sessionStorageUpgrade"
   > {
   return {
     sessionId: snapshot.sessionId,
@@ -258,6 +261,7 @@ function sessionSnapshot(
     interruptedRun: snapshot.interruptedRun,
     failedRun: snapshot.failedRun,
     settings: snapshot.settings,
+    sessionStorageUpgrade: snapshot.sessionStorageUpgrade,
     error: snapshot.error,
     usage: snapshot.usage,
     contextTokens: snapshot.contextTokens,
@@ -423,25 +427,33 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   },
 
   loadSession: async (id, record = true, focus = false) => {
-    await window.pi.sessionLoad(id, record);
-    if (focus && get().sessionId === id)
-      set((state) => ({ revealRequest: state.revealRequest + 1 }));
+    try {
+      const snapshot = await window.pi.sessionLoad(id, record);
+      if (focus && get().sessionId === id)
+        set((state) => ({ revealRequest: state.revealRequest + 1 }));
+      return snapshot.sessionId === id;
+    } catch (error) {
+      showFeedbackError("无法打开聊天。", error);
+      return false;
+    }
   },
 
   navBack: async () => {
     const { nav } = get();
     const id = peekNav(nav, "back");
     if (!id) return;
-    set({ nav: moveNav(nav, "back") });
-    await get().loadSession(id, false);
+    if ((await get().loadSession(id, false)) && get().nav === nav) {
+      set({ nav: moveNav(nav, "back") });
+    }
   },
 
   navForward: async () => {
     const { nav } = get();
     const id = peekNav(nav, "forward");
     if (!id) return;
-    set({ nav: moveNav(nav, "forward") });
-    await get().loadSession(id, false);
+    if ((await get().loadSession(id, false)) && get().nav === nav) {
+      set({ nav: moveNav(nav, "forward") });
+    }
   },
 
   renameSession: async (id, title) => {
@@ -474,8 +486,12 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   },
 
   forkSession: async (id) => {
-    const sessions = await window.pi.sessionFork(id);
-    set({ sessions });
+    try {
+      const sessions = await window.pi.sessionFork(id);
+      set({ sessions });
+    } catch (error) {
+      showFeedbackError("无法分叉聊天。", error);
+    }
   },
 
   /** 会话全文复制到剪贴板（侧栏右键「复制」） */

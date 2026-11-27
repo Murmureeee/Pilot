@@ -1651,6 +1651,15 @@ export const EN_MESSAGES: Record<string, string> = {
   打开文件夹: "Open folder",
   "设置文件损坏，已恢复默认设置": "Default settings restored after file corruption",
   暂时无法恢复设置文件: "Could not recover the settings file",
+  "需要新版 Pilot": "A newer version of Pilot is required",
+  "此数据文件使用格式版本 {0}。原文件已保留，请升级 Pilot 后继续。":
+    "This file uses format version {0}. Pilot preserved the original file. Update Pilot to continue.",
+  "此数据文件来自较新版 Pilot。请升级 Pilot 后重试。":
+    "This file is from a newer version of Pilot. Update Pilot and try again.",
+  "聊天记录的格式头损坏。请还原文件后重试。":
+    "The chat transcript header is damaged. Restore the file and try again.",
+  "无法打开聊天。": "Could not open the chat.",
+  "无法分叉聊天。": "Could not fork the chat.",
   "当前使用默认设置。请恢复原文件的访问权限后重试。":
     "Pilot is using default settings. Restore access to the original file and try again.",
   "请重新配置模型提供方、密钥和授权规则。":

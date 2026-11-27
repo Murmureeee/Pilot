@@ -1,5 +1,5 @@
 // @env node
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { LogLevel, PublicSettings, SettingsInput } from "@shared/contract";
@@ -15,8 +15,9 @@ import {
 import { hasSavedModel, isOpenAiProvider } from "../../shared/providers";
 import { selectThinkingLevel } from "../../shared/thinking";
 import { automaticModelCapabilities } from "../agent-host/model-capabilities";
-import { SETTINGS_FILE_NAME, SETTINGS_SAVE_BLOCKED } from "../constants";
+import { SETTINGS_FILE_NAME, SETTINGS_FORMAT_VERSION, SETTINGS_SAVE_BLOCKED } from "../constants";
 import { backupCorruptFile } from "../corrupt-file";
+import { NewerFormatError, writeStorageAtomic } from "../storage-format";
 import { normalizeWorkingDirectory } from "../workspace/paths";
 import { findGitBash, getCommandShell } from "../workspace/shell";
 import { pruneMcpOAuth } from "./mcp";
@@ -34,11 +35,12 @@ function readSettingsFile(path: string): Buffer | undefined {
   }
 }
 
-function writeJsonAtomic(path: string, value: unknown): void {
-  // NFR-4：临时文件 + rename 原子写，崩溃不丢已确认数据
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, JSON.stringify(value, null, 2), { encoding: "utf8", flush: true });
-  renameSync(tmp, path);
+function writeSettings(path: string, settings: Settings): void {
+  const { recoveryBlocked: _blocked, upgradeRequired: _upgrade, ...data } = settings;
+  writeStorageAtomic(
+    path,
+    JSON.stringify({ ...data, formatVersion: SETTINGS_FORMAT_VERSION }, null, 2),
+  );
 }
 
 /** 首次启动默认配置：内置 faux 测试 provider，开箱即可体验流式对话（真实 provider 在设置页添加） */
@@ -57,7 +59,7 @@ function recoverSettings(path: string): Settings {
   try {
     const recoveredFrom = backupCorruptFile(path);
     const settings = { ...defaultSettings(), recoveredFrom };
-    writeJsonAtomic(path, settings);
+    writeSettings(path, settings);
     return settings;
   } catch {
     return { ...defaultSettings(), recoveryBlocked: path };
@@ -73,7 +75,13 @@ export function loadSettings(dir: string): Settings {
     return { ...defaultSettings(), recoveryBlocked: path };
   }
   if (!saved) return defaultSettings();
-  const data = parseSettings(saved);
+  let data: Settings | undefined;
+  try {
+    data = parseSettings(saved, path);
+  } catch (error) {
+    if (!(error instanceof NewerFormatError)) throw error;
+    return { ...defaultSettings(), upgradeRequired: { path: error.path, version: error.version } };
+  }
   if (!data) return recoverSettings(path);
   const thinkingLevels = enabledThinkingLevels(data.thinkingLevels);
   return {
@@ -90,6 +98,9 @@ export function loadSettings(dir: string): Settings {
 
 export function saveSettings(dir: string, settings: Settings): void {
   const path = join(dir, SETTINGS_FILE_NAME);
+  if (settings.upgradeRequired) {
+    throw new NewerFormatError(settings.upgradeRequired.path, settings.upgradeRequired.version);
+  }
   let existing: Buffer | undefined;
   try {
     existing = readSettingsFile(path);
@@ -97,10 +108,10 @@ export function saveSettings(dir: string, settings: Settings): void {
     throw new Error(SETTINGS_SAVE_BLOCKED);
   }
   // 文件可能在本次读取设置后损坏或暂时失去访问权限。
-  if (settings.recoveryBlocked || (existing && !parseSettings(existing))) {
+  if (settings.recoveryBlocked || (existing && !parseSettings(existing, path))) {
     throw new Error(SETTINGS_SAVE_BLOCKED);
   }
-  writeJsonAtomic(path, pruneMcpOAuth(settings));
+  writeSettings(path, pruneMcpOAuth(settings));
 }
 
 export async function prepareSettingsInput(
@@ -172,6 +183,7 @@ function mergeSettingsInput(current: Settings, input: SettingsInput): Settings {
     pluginMarketplaces: current.pluginMarketplaces,
     recoveredFrom: current.recoveredFrom,
     recoveryBlocked: current.recoveryBlocked,
+    upgradeRequired: current.upgradeRequired,
   };
 }
 
@@ -212,9 +224,11 @@ export function toPublicSettings(settings: Settings): PublicSettings {
       managed?.enabled ? managed.templates : [],
     ),
     skillsEnabled: settings.skillsEnabled ?? [],
-    recovery: recoveryPath
-      ? { status: settings.recoveryBlocked ? "blocked" : "recovered", path: recoveryPath }
-      : undefined,
+    recovery: settings.upgradeRequired
+      ? { status: "upgrade", ...settings.upgradeRequired }
+      : recoveryPath
+        ? { status: settings.recoveryBlocked ? "blocked" : "recovered", path: recoveryPath }
+        : undefined,
   };
 }
 

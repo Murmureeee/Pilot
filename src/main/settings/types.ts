@@ -8,6 +8,7 @@ import type {
   PromptTemplate,
   ProviderFields,
   SessionModelSelection,
+  StorageUpgrade,
   ThinkingLevel,
   ToolRule,
 } from "../../shared/contract";
@@ -75,4 +76,5 @@ export interface Settings {
   recoveredFrom?: string;
   /** 只在内存中保留，供用户修复文件访问后重试。 */
   recoveryBlocked?: string;
+  upgradeRequired?: StorageUpgrade;
 }

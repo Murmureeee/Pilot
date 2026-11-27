@@ -3,7 +3,10 @@ import { useEffect, useRef, useState, type JSX } from "react";
 
 import { ExternalImportSettings } from "@renderer/components/ai/external-import-settings";
 import { McpSettings } from "@renderer/components/ai/mcp-settings";
-import { SettingsRecoveryNotice } from "@renderer/components/ai/settings-recovery-notice";
+import {
+  SettingsRecoveryNotice,
+  StorageUpgradeNotice,
+} from "@renderer/components/ai/settings-recovery-notice";
 import { SETTINGS_SECTION_DESCRIPTIONS, SETTINGS_SECTION_LABELS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
@@ -22,6 +25,7 @@ import { SkillSettings } from "./settings/SkillSettings";
 
 export function SettingsView(): JSX.Element {
   const settings = useAgentStore((s) => s.settings);
+  const sessionStorageUpgrade = useAgentStore((s) => s.sessionStorageUpgrade);
   const locale = useLocale();
   const section = useAgentStore((s) => s.settingsSection);
   const composerId = useAgentStore((s) => s.composerId);
@@ -59,6 +63,7 @@ export function SettingsView(): JSX.Element {
         </header>
 
         {settings?.recovery && <SettingsRecoveryNotice recovery={settings.recovery} />}
+        {sessionStorageUpgrade && <StorageUpgradeNotice issue={sessionStorageUpgrade} />}
 
         {/* Keep in-progress edits when the settings page changes. */}
         <div hidden={section !== "general"} className="min-w-0">

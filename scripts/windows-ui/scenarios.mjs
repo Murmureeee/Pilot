@@ -515,6 +515,138 @@ export async function verifyCredentialMigration(page, app, profile, model) {
   }
 }
 
+export function seedStorageProfiles(legacy, newer) {
+  mkdirSync(join(legacy, "sessions"), { recursive: true });
+  mkdirSync(join(newer, "sessions"), { recursive: true });
+  const legacyId = "48687a06-2cb0-43a1-a627-9752f1621f1b";
+  const newerId = "7a6c4360-bb48-4cbd-ae92-b515fdd9ce8b";
+  const legacyTranscript = JSON.stringify({
+    role: "user", content: "Unversioned transcript", timestamp: 1,
+  }) + "\n";
+  const newerTranscript = '{"formatVersion":99,"type":"pilot_transcript"}\n{"future":true}\n';
+  const newerSettings = '{"formatVersion":99,"futureSettings":{}}';
+  const newerIndex = '{"formatVersion":98,"futureIndex":{}}';
+  writeFileSync(join(legacy, "settings.json"), JSON.stringify({
+    providers: [{ id: "faux-default", kind: "faux", name: "Faux 测试", modelId: "faux-default" }],
+    activeProviderId: "faux-default",
+    persona: "Keep this setting",
+  }));
+  writeFileSync(join(legacy, "sessions", "index.json"), JSON.stringify({
+    sessions: [
+      { id: legacyId, title: "Legacy chat", titleCustom: true, createdAt: 1, updatedAt: 1 },
+      { id: newerId, title: "Newer chat", createdAt: 2, updatedAt: 2 },
+    ],
+  }));
+  writeFileSync(join(legacy, "sessions", legacyId + ".jsonl"), legacyTranscript);
+  writeFileSync(join(legacy, "sessions", legacyId + ".draft.json"), JSON.stringify(["Existing draft"]));
+  writeFileSync(join(legacy, "sessions", newerId + ".jsonl"), newerTranscript);
+  writeFileSync(join(newer, "settings.json"), newerSettings);
+  writeFileSync(join(newer, "sessions", "index.json"), newerIndex);
+  return { legacyId, newerId, legacyTranscript, newerTranscript, newerSettings, newerIndex };
+}
+
+export async function verifyVersionedStorage(page, profile, fixture) {
+  const { legacyId, newerId, legacyTranscript, newerTranscript } = fixture;
+  const data = join(profile, "sessions");
+  const legacyPath = join(data, legacyId + ".jsonl");
+  const newerPath = join(data, newerId + ".jsonl");
+  const settingsPath = join(profile, "settings.json");
+  const indexPath = join(data, "index.json");
+  await button(page, /^Legacy chat/).click();
+  await page.getByText("Unversioned transcript", { exact: true }).waitFor();
+  await editor(page).getByText("Existing draft", { exact: true }).waitFor();
+  assert.equal(readFileSync(legacyPath, "utf8"), legacyTranscript);
+  assert.equal(JSON.parse(readFileSync(settingsPath, "utf8")).formatVersion, undefined);
+
+  const newerChat = button(page, /^Newer chat/);
+  await newerChat.press("Enter");
+  await page.locator("[data-feedback-bar]").getByText("此数据文件来自较新版 Pilot。请升级 Pilot 后重试。", { exact: true }).waitFor();
+  assert.equal((await page.evaluate(() => window.pi.getSnapshot())).sessionId, legacyId);
+  await newerChat.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "分叉", exact: true }).click();
+  await page.locator("[data-feedback-bar]").getByText("无法分叉聊天。", { exact: true }).waitFor();
+  await assert.rejects(page.evaluate((id) => window.pi.sessionDelete(id), newerId), /升级 Pilot/);
+  assert.equal(readFileSync(newerPath, "utf8"), newerTranscript);
+
+  await page.evaluate(async (id) => {
+    await window.pi.settingsSetLogLevel("warn");
+    await window.pi.sessionSaveDraft(id, ["Saved draft"]);
+  }, legacyId);
+  assert.deepEqual(JSON.parse(readFileSync(join(data, legacyId + ".draft.json"), "utf8")), {
+    formatVersion: 1, entries: ["Saved draft"],
+  });
+  const savedSettings = JSON.parse(readFileSync(settingsPath, "utf8"));
+  assert.equal(savedSettings.formatVersion, 1);
+  assert.equal(savedSettings.persona, "Keep this setting");
+  await send(page, "Versioned follow-up");
+  await page.getByText(/faux.*Versioned follow-up/i).waitFor();
+  await waitForIdle(page);
+  const [header] = readFileSync(legacyPath, "utf8").split("\n");
+  assert.deepEqual(JSON.parse(header), { type: "pilot_transcript", formatVersion: 1 });
+  assert.equal(JSON.parse(readFileSync(indexPath, "utf8")).formatVersion, 1);
+}
+
+export async function verifyStorageUpgradeNotice(page, window, app, profile, fixture) {
+  const settingsPath = join(profile, "settings.json");
+  const indexPath = join(profile, "sessions", "index.json");
+  const snapshot = await page.evaluate(() => window.pi.getSnapshot());
+  assert.deepEqual(snapshot.settings.recovery, { status: "upgrade", path: settingsPath, version: 99 });
+  assert.deepEqual(snapshot.sessionStorageUpgrade, { path: indexPath, version: 98 });
+  await assert.rejects(page.evaluate(() => window.pi.settingsSetLogLevel("debug")), /升级 Pilot/);
+  assert.equal(await editor(page).count(), 0);
+  const labels = [
+    { title: "需要新版 Pilot", link: "全部版本" },
+    { title: "A newer version of Pilot is required", link: "All releases" },
+  ];
+  let current = locales[0];
+  let contrast = Infinity;
+  for (const [index, locale] of locales.entries()) {
+    const { title, link } = labels[index];
+    for (const theme of ["light", "dark"]) {
+      await openSettings(page, current, current.appearance);
+      if (locale !== current) {
+        await page.locator("#settings-language").click();
+        await page.getByRole("option", { name: locale.name, exact: true }).click();
+      }
+      await button(page.getByRole("group", { name: locale.theme }), locale[theme]).click();
+      current = locale;
+      await page.waitForFunction((dark) => document.documentElement.classList.contains("dark") === dark, theme === "dark");
+      const alerts = page.getByRole("alert").filter({ hasText: title });
+      await alerts.first().waitFor();
+      assert.equal(await alerts.count(), 2);
+      await page.keyboard.press("Control+l");
+      for (const size of [wide, narrow]) {
+        await resize(page, window, size);
+        for (const alert of await alerts.all()) {
+          await alert.scrollIntoViewIfNeeded();
+          await assertFits(alert);
+          contrast = Math.min(contrast, await minimumTextContrast(alert, '[data-slot="alert-title"], p'));
+          const upgrade = alert.getByText(link, { exact: true });
+          assert.equal(await upgrade.getAttribute("href"), "https://github.com/Murmureeee/Pilot/releases");
+        }
+      }
+    }
+  }
+  assert.ok(contrast >= 4.5, "Upgrade notice text contrast " + contrast.toFixed(2) + ":1");
+  console.log("Upgrade notice text minimum contrast " + contrast.toFixed(2) + ":1");
+  await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0].webContents.setWindowOpenHandler(({ url }) => {
+      globalThis.pilotVersionLink = url;
+      return { action: "deny" };
+    });
+  });
+  await page.getByText("All releases", { exact: true }).first().press("Enter");
+  const end = performance.now() + 3_000;
+  while (!(await app.evaluate(() => globalThis.pilotVersionLink)) && performance.now() < end) {
+    await delay(50);
+  }
+  assert.equal(await app.evaluate(() => globalThis.pilotVersionLink), "https://github.com/Murmureeee/Pilot/releases");
+  assert.equal(readFileSync(settingsPath, "utf8"), fixture.newerSettings);
+  assert.equal(readFileSync(indexPath, "utf8"), fixture.newerIndex);
+  assert.ok(!readdirSync(profile).some((name) => name.startsWith("settings.corrupt-")));
+  assert.deepEqual(readdirSync(join(profile, "sessions")), ["index.json"]);
+}
+
 async function verifyReviewLayout(page, locale, overlay) {
   const trigger = page.locator("#review-trigger");
   await trigger.click();

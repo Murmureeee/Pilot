@@ -15,6 +15,7 @@ import { startModelFixture } from "./windows-ui/model.mjs";
 import { startMcpOAuthFixture } from "./windows-ui/mcp-oauth.mjs";
 import {
   prepareTerminalExit,
+  seedStorageProfiles,
   verifyAgentMemory,
   verifyAfterTurnVerification,
   verifyApprovals,
@@ -56,8 +57,10 @@ import {
   verifySearchAndExport,
   verifySettings,
   verifyStreamingReply,
+  verifyStorageUpgradeNotice,
   verifySubtasks,
   verifyUnsentDraft,
+  verifyVersionedStorage,
   verifyWebTools,
 } from "./windows-ui/scenarios.mjs";
 
@@ -160,6 +163,8 @@ const discoveryProfile = join(scratch, "discovery-profile");
 const projectConfigProfile = join(scratch, "project-config-profile");
 const oauthProfile = join(scratch, "mcp-oauth-profile");
 const diagnosticsProfile = join(scratch, "diagnostics-profile");
+const legacyStorageProfile = join(scratch, "legacy-storage-profile");
+const newerStorageProfile = join(scratch, "newer-storage-profile");
 const parallelProfile = join(scratch, "parallel-profile");
 const worktreeProfile = join(scratch, "worktree-profile");
 const worktreeProject = join(scratch, "Worktree project");
@@ -440,6 +445,17 @@ try {
     );
     await runScene("Read legacy credentials and preserve concurrent saves through key storage delays", () =>
       verifyCredentialMigration(page, app, diagnosticsProfile, model),
+    );
+  });
+  const storage = seedStorageProfiles(legacyStorageProfile, newerStorageProfile);
+  await withApp(legacyStorageProfile, async (page) => {
+    await runScene("Migrate legacy settings and chats and preserve an unsupported transcript", () =>
+      verifyVersionedStorage(page, legacyStorageProfile, storage),
+    );
+  });
+  await withApp(newerStorageProfile, async (page, window, app) => {
+    await runScene("Show the upgrade notice and preserve newer settings and the session index", () =>
+      verifyStorageUpgradeNotice(page, window, app, newerStorageProfile, storage),
     );
   });
 } finally {

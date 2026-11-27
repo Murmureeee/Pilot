@@ -15,6 +15,7 @@ import {
   toUiMessages,
 } from "../src/main/agent-host/session-store";
 import type { CheckpointAppend, RunCheckpoint } from "../src/main/agent-host/types";
+import { SESSION_FORMAT_VERSION } from "../src/main/constants";
 
 vi.mock("node:fs", { spy: true });
 
@@ -37,6 +38,130 @@ function runningCheckpoint(dir: string, changes: Partial<RunCheckpoint> = {}): R
 }
 
 describe("SessionStore", () => {
+  it("loads legacy chats and drafts, then versions them on the next write", () => {
+    const { dir } = makeStore();
+    const id = "legacy-chat";
+    const pending = "48687a06-2cb0-43a1-a627-9752f1621f1b";
+    const message = { role: "user", content: "Old transcript", timestamp: 1 } as const;
+    const oldIndex = JSON.stringify({
+      sessions: [{ id, title: "Old title", createdAt: 1, updatedAt: 1, pinned: true }],
+    });
+    const oldTranscript = ' { "role": "user", "content": "Old transcript", "timestamp": 1 }\n';
+    const indexPath = join(dir, "index.json");
+    const transcriptPath = join(dir, id + ".jsonl");
+    const draftPath = join(dir, id + ".draft.json");
+    const pendingPath = join(dir, "new-chat-drafts.json");
+    writeFileSync(indexPath, oldIndex);
+    writeFileSync(transcriptPath, oldTranscript);
+    writeFileSync(draftPath, JSON.stringify(["Existing draft"]));
+    writeFileSync(pendingPath, JSON.stringify([{ id: pending, draft: ["Unsent"], settings: {} }]));
+
+    const store = new SessionStore(dir);
+    expect(store.load(id)).toEqual([message]);
+    expect(store.loadDraft(id)).toEqual(["Existing draft"]);
+    expect(store.newChatDraft()).toMatchObject({ id: pending, draft: ["Unsent"] });
+    expect(fs.readFileSync(indexPath, "utf8")).toBe(oldIndex);
+    expect(fs.readFileSync(transcriptPath, "utf8")).toBe(oldTranscript);
+    const checkpoint = runningCheckpoint(dir, { startIndex: 1 });
+    store.startCheckpoint(id, [message], checkpoint);
+    const saved = fs.readFileSync(transcriptPath, "utf8");
+    const firstBreak = saved.indexOf("\n");
+    expect(JSON.parse(saved.slice(0, firstBreak))).toEqual({
+      type: "pilot_transcript",
+      formatVersion: SESSION_FORMAT_VERSION,
+    });
+    expect(saved.slice(firstBreak + 1)).toMatch(/^ \{ "role": "user"/);
+    expect(saved.slice(firstBreak + 1)).toContain(oldTranscript);
+    store.appendCheckpoint(id, [], checkpoint);
+    expect(fs.readFileSync(transcriptPath, "utf8").startsWith(saved)).toBe(true);
+    store.saveDraft(id, ["Edited draft"]);
+    store.saveNewChatDraft({ id: pending, draft: ["Edited unsent"], settings: {} });
+    for (const path of [indexPath, draftPath, pendingPath]) {
+      expect(JSON.parse(fs.readFileSync(path, "utf8")).formatVersion).toBe(SESSION_FORMAT_VERSION);
+    }
+    const reopened = new SessionStore(dir);
+    expect(reopened.getMeta(id)).toMatchObject({ pinned: true, lastRunResult: "interrupted" });
+    expect(reopened.load(id)).toEqual([message]);
+    expect(reopened.loadDraft(id)).toEqual(["Edited draft"]);
+    expect(reopened.newChatDraft()?.draft).toEqual(["Edited unsent"]);
+  });
+
+  it("preserves a newer index as written and leaves existing session files intact", () => {
+    const { store, dir } = makeStore();
+    const { id } = store.create();
+    const indexPath = join(dir, "index.json");
+    const transcriptPath = join(dir, id + ".jsonl");
+    const message = { role: "user", content: "Existing chat", timestamp: 1 } as const;
+    store.save(id, [message]);
+    const transcript = fs.readFileSync(transcriptPath, "utf8");
+    const version = SESSION_FORMAT_VERSION + 1;
+    const future = JSON.stringify({ sessions: { unsupported: true }, formatVersion: version });
+    writeFileSync(indexPath, future);
+    const reopened = new SessionStore(dir);
+
+    expect(reopened.storageUpgrade()).toEqual({ path: indexPath, version });
+    expect(reopened.list()).toEqual([]);
+    expect(() => reopened.create()).toThrow(/升级 Pilot/);
+    expect(() => reopened.remove(id)).toThrow(/升级 Pilot/);
+    expect(() => store.rename(id, "Stale rename")).toThrow(/升级 Pilot/);
+    expect(store.getMeta(id)?.title).toBe("Existing chat");
+    expect(() => store.save(id, [message])).toThrow(/升级 Pilot/);
+    expect(fs.readFileSync(indexPath, "utf8")).toBe(future);
+    expect(fs.readFileSync(transcriptPath, "utf8")).toBe(transcript);
+    expect(fs.readdirSync(dir).sort()).toEqual([id + ".jsonl", "index.json"].sort());
+  });
+
+  it("refuses to open, append, replace or delete a newer transcript and can search other chats", () => {
+    const { store, dir } = makeStore();
+    const { id } = store.create();
+    const active = runningCheckpoint(dir);
+    const message = { role: "user", content: "search marker", timestamp: 1 } as const;
+    store.startCheckpoint(id, [message], active);
+    const other = store.create();
+    store.save(other.id, [message]);
+    expect(store.searchTranscripts("search marker").hits).toHaveLength(2);
+    const path = join(dir, id + ".jsonl");
+    const version = SESSION_FORMAT_VERSION + 1;
+    const bytes =
+      JSON.stringify({ type: "pilot_transcript", formatVersion: version }) + "\nnewer record\n";
+    writeFileSync(path, bytes);
+
+    expect(() => store.assertSessionFormat(id)).toThrow(/升级 Pilot/);
+    expect(() => store.read(id)).toThrow(/升级 Pilot/);
+    expect(() => store.appendCheckpoint(id, [], active)).toThrow(/升级 Pilot/);
+    expect(() => store.writeTranscript(id, [], undefined, null, [], { tasks: [] })).toThrow(
+      /升级 Pilot/,
+    );
+    expect(() => store.remove(id)).toThrow(/升级 Pilot/);
+    expect(store.searchTranscripts("search marker").hits.map(({ sessionId }) => sessionId)).toEqual(
+      [other.id],
+    );
+    expect(fs.readFileSync(path, "utf8")).toBe(bytes);
+    expect(new SessionStore(dir).list().map((session) => session.id)).toContain(id);
+  });
+
+  it("protects drafts and attachments with unsupported versions from clearing and replacement", () => {
+    const { store, dir } = makeStore();
+    const { id } = store.create();
+    store.saveDraft(id, ["Kept draft"]);
+    const draft = join(dir, id + ".draft.json");
+    const images = join(dir, id + ".draft-images.json");
+    const future = JSON.stringify({ formatVersion: SESSION_FORMAT_VERSION + 1, entries: [{}] });
+    writeFileSync(images, future);
+    expect(() => store.clearDraft(id)).toThrow(/升级 Pilot/);
+    expect(() => store.saveDraftImages(id, [])).toThrow(/升级 Pilot/);
+    expect(() => store.remove(id)).toThrow(/升级 Pilot/);
+    expect(JSON.parse(fs.readFileSync(draft, "utf8")).entries).toEqual(["Kept draft"]);
+    expect(fs.readFileSync(images, "utf8")).toBe(future);
+
+    const pending = join(dir, "new-chat-drafts.json");
+    writeFileSync(pending, future);
+    const reopened = new SessionStore(dir);
+    expect(reopened.storageUpgrade()).toMatchObject({ path: pending });
+    expect(() => reopened.saveNewChatDraft({ id, draft: [], settings: {} })).toThrow(/升级 Pilot/);
+    expect(fs.readFileSync(pending, "utf8")).toBe(future);
+  });
+
   it("persists a generated title only while the completed run and automatic title still match", () => {
     const { store, dir } = makeStore();
     const session = store.create();

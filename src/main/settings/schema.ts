@@ -13,6 +13,8 @@ import {
 import { VERIFICATION_KINDS, type ExternalEditor } from "../../shared/contract";
 import { isMcpOAuthCallbackUrl } from "../../shared/mcp";
 import { WEB_DOMAIN_PATTERN } from "../../shared/web";
+import { SETTINGS_FILE_NAME, SETTINGS_FORMAT_VERSION } from "../constants";
+import { formatVersion } from "../storage-format";
 import { normalizeModelCatalog } from "./models";
 import type { Settings } from "./types";
 
@@ -167,6 +169,7 @@ const importedPlugin = z.looseObject({
 });
 
 const storedSettings = z.looseObject({
+  formatVersion: z.number().optional(),
   providers: z.array(provider),
   activeProviderId: z.string().default(""),
   auxiliaryModel: z
@@ -232,13 +235,20 @@ const storedSettings = z.looseObject({
     .optional(),
   recoveredFrom: optionalText,
   recoveryBlocked: z.never().optional(),
+  upgradeRequired: z.never().optional(),
 }) satisfies z.ZodType<Settings>;
 
-export function parseSettings(bytes: Buffer): Settings | undefined {
+export function parseSettings(bytes: Buffer, path = SETTINGS_FILE_NAME): Settings | undefined {
+  let raw: unknown;
   try {
-    const result = storedSettings.safeParse(JSON.parse(bytes.toString("utf8")));
-    return result.success ? result.data : undefined;
+    raw = JSON.parse(bytes.toString("utf8"));
   } catch {
     return undefined;
+  }
+  if (formatVersion(raw, SETTINGS_FORMAT_VERSION, path) === undefined) return;
+  const result = storedSettings.safeParse(raw);
+  if (result.success) {
+    const { formatVersion: _formatVersion, ...settings } = result.data;
+    return settings;
   }
 }

@@ -9,7 +9,8 @@ import {
   type SessionMeta,
   type SessionSettings,
 } from "../../shared/contract";
-import { SESSION_FILE_ID } from "../constants";
+import { SESSION_FILE_ID, SESSION_FORMAT_VERSION } from "../constants";
+import { formatVersion, parseStoredJson } from "../storage-format";
 import { GIT_OBJECT_ID } from "../workspace/constants";
 import type { NewChatDraft, SessionIndex } from "./types";
 
@@ -58,8 +59,7 @@ const newChatDraft = z.object({
   workingDirectory: optionalText,
 }) satisfies z.ZodType<NewChatDraft>;
 
-export function parseNewChatDrafts(text: string): NewChatDraft[] {
-  const raw: unknown = JSON.parse(text);
+export function parseNewChatDrafts(raw: unknown): NewChatDraft[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((value) => {
     const entry = newChatDraft.safeParse(value);
@@ -68,6 +68,7 @@ export function parseNewChatDrafts(text: string): NewChatDraft[] {
 }
 
 const indexFields = z.looseObject({
+  formatVersion: z.number().optional(),
   sessions: z.unknown().optional(),
   recentProjects: z.unknown().optional(),
   worktrees: z.unknown().optional(),
@@ -83,17 +84,23 @@ const worktreeRecord = z.object({
   removed: z.literal(true).optional(),
 }) satisfies z.ZodType<ManagedWorktree>;
 
-export function parseSessionIndex(text: string): { index: SessionIndex; damaged: boolean } {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch {
+export function parseSessionIndex(
+  text: string,
+  path: string,
+): { index: SessionIndex; damaged: boolean } {
+  const raw = parseStoredJson(text);
+  if (formatVersion(raw, SESSION_FORMAT_VERSION, path) === undefined)
     return { index: { sessions: [] }, damaged: true };
-  }
   const result = indexFields.safeParse(raw);
   if (!result.success) return { index: { sessions: [] }, damaged: true };
 
-  const { sessions, recentProjects, worktrees, ...otherFields } = result.data;
+  const {
+    formatVersion: _formatVersion,
+    sessions,
+    recentProjects,
+    worktrees,
+    ...otherFields
+  } = result.data;
   let damaged = !Array.isArray(sessions);
   const valid = new Map<string, SessionMeta>();
   for (const candidate of Array.isArray(sessions) ? sessions : []) {

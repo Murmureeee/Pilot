@@ -17,7 +17,10 @@ import { PermissionCard } from "@renderer/components/ai/permission-card";
 import { PlanBar } from "@renderer/components/ai/plan-card";
 import { PlanReviewCard } from "@renderer/components/ai/plan-review-card";
 import { ProjectTrustCard } from "@renderer/components/ai/project-trust-card";
-import { SettingsRecoveryNotice } from "@renderer/components/ai/settings-recovery-notice";
+import {
+  SettingsRecoveryNotice,
+  StorageUpgradeNotice,
+} from "@renderer/components/ai/settings-recovery-notice";
 import { InlineWorkspaceReference } from "@renderer/components/ai/workspace-reference";
 import { Bubble, BubbleContent } from "@renderer/components/ui/bubble";
 import { Button } from "@renderer/components/ui/button";
@@ -97,6 +100,9 @@ export function ChatView({
   const error = useAgentStore((s) => s.error);
   const projectError = useAgentStore((s) => s.projectError);
   const settings = useAgentStore((s) => s.settings);
+  const sessionStorageUpgrade = useAgentStore((s) => s.sessionStorageUpgrade);
+  const composerUnavailable =
+    settings?.recovery?.status === "upgrade" || (sessionStorageUpgrade && !sessionId);
   const setView = useAgentStore((s) => s.setView);
   const rows = useMemo(() => chatRows(messages), [messages]);
   const term = find?.query ?? "";
@@ -175,6 +181,11 @@ export function ChatView({
       {settings?.recovery && (
         <div className="workspace-column shrink-0 pt-4 pb-2">
           <SettingsRecoveryNotice recovery={settings.recovery} />
+        </div>
+      )}
+      {sessionStorageUpgrade && (
+        <div className="workspace-column shrink-0 pt-4 pb-2">
+          <StorageUpgradeNotice issue={sessionStorageUpgrade} />
         </div>
       )}
       {find && (
@@ -349,7 +360,7 @@ export function ChatView({
           isEmpty ? "my-auto gap-6 pt-7 pb-[clamp(1.5rem,12vh,6rem)]" : "gap-2 pt-1.5 pb-4",
         )}
       >
-        {isEmpty && (
+        {isEmpty && !composerUnavailable && (
           <h1 className="text-center text-[clamp(1.375rem,2.5vw,1.75rem)] leading-tight font-semibold tracking-tight text-balance">
             {t("我们要做什么？", locale)}
           </h1>
@@ -448,7 +459,7 @@ export function ChatView({
           />
         )}
         <Activity mode={dockBlocked ? "hidden" : "visible"}>
-          {composerId && (
+          {composerId && !composerUnavailable && (
             <Composer
               key={composerId}
               composerId={composerId}
@@ -460,7 +471,7 @@ export function ChatView({
             />
           )}
         </Activity>
-        {isEmpty && !dockBlocked && !interruptedRun && (
+        {isEmpty && !dockBlocked && !interruptedRun && !composerUnavailable && (
           <HomeStart
             projectDirectory={projectDirectory}
             workingDirectory={workingDirectory}
@@ -469,7 +480,7 @@ export function ChatView({
           />
         )}
       </div>
-      {isEmpty && (
+      {isEmpty && !composerUnavailable && (
         <OnboardingDialog open={onboardingOpen} onClose={() => setOnboardingOpen(false)} />
       )}
     </div>

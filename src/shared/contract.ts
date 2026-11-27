@@ -1031,11 +1031,15 @@ type PublicProvider = Omit<ProviderFields, "models"> & {
   models: PublicModelCatalogEntry[];
 };
 
-/** 成功时为备份路径，受阻时为原设置文件路径。 */
-export interface SettingsRecovery {
-  status: "recovered" | "blocked";
+export interface StorageUpgrade {
   path: string;
+  version: number;
 }
+
+/** 成功时为备份路径，受阻时为原设置文件路径。 */
+export type SettingsRecovery =
+  | { status: "recovered" | "blocked"; path: string }
+  | ({ status: "upgrade" } & StorageUpgrade);
 
 export interface PromptTemplate {
   name: string;
@@ -1111,6 +1115,7 @@ export interface Snapshot {
   pendingProjectTrust: ProjectTrustRequest | null;
   error: string | null;
   settings: PublicSettings;
+  sessionStorageUpgrade?: StorageUpgrade;
   usage: UsageTotals & { costTotal: number };
   /** 当前模型的上下文窗口大小（未知 = null，状态栏不显示占用） */
   contextWindow: number | null;

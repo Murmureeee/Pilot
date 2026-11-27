@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { SETTINGS_FORMAT_VERSION } from "../src/main/constants";
 import {
   loadSettings,
   prepareSettingsInput,
@@ -121,6 +122,57 @@ it("keeps a project's after-turn command and shell through ordinary settings sav
 });
 
 describe("settings recovery", () => {
+  it("migrates unversioned settings on save while preserving credentials and authorization rules", () => {
+    using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-settings-version-"));
+    const path = join(profile.path, "settings.json");
+    const initial = {
+      activeProviderId: "example",
+      providers: [
+        {
+          id: "example",
+          kind: "openai-compatible",
+          name: "Example",
+          baseUrl: "https://example.test/v1",
+          modelId: "sample",
+          apiKey: "fixture-ciphertext",
+        },
+      ],
+      toolRules: [{ toolName: "read_file" }],
+    };
+    const bytes = JSON.stringify(initial);
+    fs.writeFileSync(path, bytes);
+
+    const loaded = loadSettings(profile.path);
+    expect(fs.readFileSync(path, "utf8")).toBe(bytes);
+    expect(loaded.providers[0].apiKey).toBe("fixture-ciphertext");
+    saveSettings(profile.path, { ...loaded, logLevel: "warn" });
+    expect(JSON.parse(fs.readFileSync(path, "utf8"))).toMatchObject({
+      ...initial,
+      formatVersion: SETTINGS_FORMAT_VERSION,
+      logLevel: "warn",
+    });
+    expect(toPublicSettings(loadSettings(profile.path)).recovery).toBeUndefined();
+  });
+
+  it("does not recover, replace or back up newer settings even when the payload is unrecognized", () => {
+    using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-settings-version-"));
+    const path = join(profile.path, "settings.json");
+    const stale = loadSettings(profile.path);
+    const version = SETTINGS_FORMAT_VERSION + 1;
+    const bytes = JSON.stringify({
+      formatVersion: version,
+      newerSettings: { models: ["fixture"] },
+    });
+    fs.writeFileSync(path, bytes);
+
+    const loaded = loadSettings(profile.path);
+    expect(toPublicSettings(loaded).recovery).toEqual({ status: "upgrade", path, version });
+    expect(() => saveSettings(profile.path, loaded)).toThrow(/升级 Pilot/);
+    expect(() => saveSettings(profile.path, stale)).toThrow(/升级 Pilot/);
+    expect(fs.readFileSync(path, "utf8")).toBe(bytes);
+    expect(fs.readdirSync(profile.path)).toEqual(["settings.json"]);
+  });
+
   it.each([
     Buffer.from('{"providers":[{"apiKey":"saved"}'),
     Buffer.from('{"providers":[null],"activeProviderId":"saved"}'),

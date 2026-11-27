@@ -1,20 +1,7 @@
 // @env node
 // 会话持久化：每个会话一个 JSONL 文件，另存 index.json 元数据索引。
 import { randomUUID } from "node:crypto";
-import {
-  appendFileSync,
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readdirSync,
-  readFileSync,
-  readSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
@@ -29,6 +16,7 @@ import type {
   SessionRunResult,
   SessionSearchResults,
   SessionSettings,
+  StorageUpgrade,
   UiMessage,
   UiPart,
 } from "@shared/contract";
@@ -44,17 +32,31 @@ import {
   SESSION_DRAFT_EXTENSION,
   SESSION_DRAFT_IMAGES_EXTENSION,
   SESSION_FILE_ID,
+  SESSION_FORMAT_VERSION,
   SESSION_INDEX_SAVE_BLOCKED,
   SESSION_TRANSCRIPT_EXTENSION,
 } from "../constants";
 import { backupCorruptFile } from "../corrupt-file";
 import { toolRuleSchema } from "../settings/schema";
+import {
+  formatVersion,
+  NewerFormatError,
+  parseStoredJson,
+  readStoredText,
+  writeStorageAtomic,
+} from "../storage-format";
 import { readFileChange } from "../workspace/file-changes";
 import { gitDiffReferenceSchema } from "../workspace/reference";
 import { CONVERSATION_INDEX_CACHE_SIZE, CONVERSATION_SEARCH_LIMIT } from "./constants";
 import { imageAttachmentsSchema, messageImages } from "./image-attachments";
 import { legacyMentionParts } from "./mentions";
 import { completeToolResults } from "./recovery";
+import {
+  headerVersion,
+  sessionEntries,
+  transcriptHeader,
+  transcriptPrefix,
+} from "./session-format";
 import { parseNewChatDrafts, parseSessionIndex } from "./session-index";
 import { readSubtaskTrace } from "./subtask-record";
 import { labelOf } from "./tools";
@@ -239,6 +241,8 @@ export function toUiMessages(
 export class SessionStore {
   private indexBackupPending = false;
   private index: SessionIndex = { sessions: [] };
+  private indexUpgrade?: NewerFormatError;
+  private draftsUpgrade?: NewerFormatError;
   private newChatDrafts: NewChatDraft[];
   private readonly checkpoints = new Map<string, RunCheckpoint | null>();
   private readonly gitChanges = new Map<string, SavedGitChanges | null>();
@@ -254,14 +258,25 @@ export class SessionStore {
   }
 
   private readIndex(): SessionIndex {
+    const path = this.indexPath();
     let text: string | undefined;
     try {
-      text = readFileSync(this.indexPath(), "utf-8");
-    } catch (error) {
-      this.indexBackupPending = (error as NodeJS.ErrnoException).code !== "ENOENT";
+      text = readStoredText(path);
+    } catch {
+      this.indexBackupPending = true;
     }
-    const { index, damaged } =
-      text === undefined ? { index: { sessions: [] }, damaged: false } : parseSessionIndex(text);
+    let parsed: ReturnType<typeof parseSessionIndex>;
+    try {
+      parsed =
+        text === undefined
+          ? { index: { sessions: [] }, damaged: false }
+          : parseSessionIndex(text, path);
+    } catch (error) {
+      if (!(error instanceof NewerFormatError)) throw error;
+      this.indexUpgrade = error;
+      return { sessions: [] };
+    }
+    const { index, damaged } = parsed;
     for (const meta of index.sessions) {
       if (
         meta.lastRunResult === "interrupted" ||
@@ -305,7 +320,13 @@ export class SessionStore {
         statSync(this.filePath(id), { throwIfNoEntry: false }) ??
         statSync(this.draftPath(id), { throwIfNoEntry: false });
       if (!file) continue;
-      const { messages, checkpoint, gitChanges } = this.read(id);
+      let record: SessionRecord | undefined;
+      try {
+        record = this.read(id);
+      } catch (error) {
+        if (!(error instanceof NewerFormatError)) console.warn("[session] 暂时无法读取聊天记录。");
+      }
+      const { messages = [], checkpoint, gitChanges } = record ?? {};
       const started = (messages[0] ?? checkpoint?.pending?.[0])?.timestamp;
       const workingDirectory = checkpoint?.workingDirectory ?? gitChanges?.workingDirectory;
       sessions.set(id, {
@@ -336,9 +357,33 @@ export class SessionStore {
   }
 
   private writeIndex(index = this.index): void {
+    const path = this.indexPath();
+    this.checkIndexFormat();
     this.backUpIndexIfNeeded();
-    writeJsonAtomic(this.indexPath(), index);
+    writeStorageAtomic(
+      path,
+      JSON.stringify({ ...index, formatVersion: SESSION_FORMAT_VERSION }, null, 2),
+    );
     this.index = index;
+  }
+
+  private checkIndexFormat(): void {
+    if (this.indexUpgrade) throw this.indexUpgrade;
+    const path = this.indexPath();
+    formatVersion(parseStoredJson(readStoredText(path)), SESSION_FORMAT_VERSION, path);
+  }
+
+  storageUpgrade(): StorageUpgrade | undefined {
+    const problem = this.indexUpgrade ?? this.draftsUpgrade;
+    if (problem) return { path: problem.path, version: problem.version };
+  }
+
+  assertSessionFormat(id: string): void {
+    if (this.indexUpgrade) throw this.indexUpgrade;
+    const path = this.filePath(id);
+    headerVersion(transcriptPrefix(path), path);
+    this.readDraftEntries(this.draftPath(id));
+    this.readDraftEntries(this.draftImagesPath(id));
   }
 
   private indexPath(): string {
@@ -350,19 +395,14 @@ export class SessionStore {
   }
 
   private hasCheckpointHeader(id: string): boolean {
-    // Older settled failures start with a checkpoint. Read the header before opening the transcript.
-    let fd: number | undefined;
+    // Older settled failures have no result in the index.
     try {
-      fd = openSync(this.filePath(id), "r");
-      const prefix = Buffer.alloc(40);
-      const size = readSync(fd, prefix, 0, prefix.length, 0);
-      return /^\{"type":"pilot_(run_checkpoint|checkpoint_append)"/.test(
-        prefix.toString("utf8", 0, size),
-      );
+      const path = this.filePath(id);
+      const prefix = transcriptPrefix(path);
+      const offset = headerVersion(prefix, path) ? prefix.indexOf("\n") + 1 : 0;
+      return /^\{"type":"pilot_(run_checkpoint|checkpoint_append)"/.test(prefix.slice(offset));
     } catch {
       return false;
-    } finally {
-      if (fd !== undefined) closeSync(fd);
     }
   }
 
@@ -375,9 +415,11 @@ export class SessionStore {
   }
 
   private readNewChatDrafts(): NewChatDraft[] {
+    if (this.indexUpgrade) return [];
     try {
-      return parseNewChatDrafts(readFileSync(join(this.dir, NEW_CHAT_DRAFTS_FILE), "utf-8"));
-    } catch {
+      return parseNewChatDrafts(this.readDraftEntries(join(this.dir, NEW_CHAT_DRAFTS_FILE)));
+    } catch (error) {
+      if (error instanceof NewerFormatError) this.draftsUpgrade = error;
       return [];
     }
   }
@@ -396,8 +438,19 @@ export class SessionStore {
   }
 
   private writeNewChatDrafts(drafts: NewChatDraft[]): void {
-    writeJsonAtomic(join(this.dir, NEW_CHAT_DRAFTS_FILE), drafts);
+    this.checkDraftCollection();
+    writeSessionEntries(join(this.dir, NEW_CHAT_DRAFTS_FILE), drafts);
     this.newChatDrafts = drafts;
+  }
+
+  private checkDraftCollection(): void {
+    if (this.indexUpgrade) throw this.indexUpgrade;
+    if (this.draftsUpgrade) throw this.draftsUpgrade;
+    this.readDraftEntries(join(this.dir, NEW_CHAT_DRAFTS_FILE));
+  }
+
+  private readDraftEntries(path: string): unknown {
+    return sessionEntries(parseStoredJson(readStoredText(path)), path);
   }
 
   private removeNewChatDraft(id: string): void {
@@ -407,36 +460,48 @@ export class SessionStore {
 
   loadDraft(id: string): ComposerDraft {
     try {
-      const draft: unknown = JSON.parse(readFileSync(this.draftPath(id), "utf-8"));
-      return Array.isArray(draft) ? (draft as ComposerDraft) : [];
-    } catch {
-      return this.newChatDrafts.find((draft) => draft.id === id)?.draft ?? [];
+      const path = this.draftPath(id);
+      const text = readStoredText(path);
+      if (text !== undefined) {
+        const draft = sessionEntries(JSON.parse(text), path);
+        return Array.isArray(draft) ? (draft as ComposerDraft) : [];
+      }
+    } catch (error) {
+      if (error instanceof NewerFormatError) throw error;
     }
+    return this.newChatDrafts.find((draft) => draft.id === id)?.draft ?? [];
   }
 
   saveDraft(id: string, draft: ComposerDraft): void {
     const path = this.draftPath(id);
-    if (draft.length) writeJsonAtomic(path, draft);
+    if (this.indexUpgrade) throw this.indexUpgrade;
+    this.readDraftEntries(path);
+    if (this.newChatDrafts.some((entry) => entry.id === id)) this.checkDraftCollection();
+    if (draft.length) writeSessionEntries(path, draft);
     else rmSync(path, { force: true });
     this.removeNewChatDraft(id);
   }
 
   loadDraftImages(id: string): ImageAttachment[] {
     try {
-      const stored: unknown = JSON.parse(readFileSync(this.draftImagesPath(id), "utf-8"));
+      const stored = this.readDraftEntries(this.draftImagesPath(id));
       return imageAttachmentsSchema.safeParse(stored).data ?? [];
-    } catch {
+    } catch (error) {
+      if (error instanceof NewerFormatError) throw error;
       return [];
     }
   }
 
   saveDraftImages(id: string, images: ImageAttachment[]): void {
     const path = this.draftImagesPath(id);
-    if (images.length) writeJsonAtomic(path, images);
+    if (this.indexUpgrade) throw this.indexUpgrade;
+    this.readDraftEntries(path);
+    if (images.length) writeSessionEntries(path, images);
     else rmSync(path, { force: true });
   }
 
   clearDraft(id: string): void {
+    this.readDraftEntries(this.draftImagesPath(id));
     this.saveDraft(id, []);
     this.saveDraftImages(id, []);
   }
@@ -550,15 +615,7 @@ export class SessionStore {
 
   /** 会话级人设/指令覆盖（null 或空白 = 清除，回落全局 persona） */
   setPersonaOverride(id: string, persona: string | null): SessionMeta | null {
-    const meta = this.index.sessions.find((s) => s.id === id);
-    if (!meta) return null;
-    if (persona === null || persona.trim().length === 0) {
-      delete meta.personaOverride;
-    } else {
-      meta.personaOverride = persona.trim();
-    }
-    this.writeIndex();
-    return meta;
+    return this.updateMeta(id, { personaOverride: persona?.trim() || undefined });
   }
 
   create(
@@ -566,6 +623,8 @@ export class SessionStore {
     id: string = randomUUID(),
     settings?: SessionSettings,
   ): SessionMeta {
+    this.assertSessionFormat(id);
+    if (!this.getMeta(id)) this.checkDraftCollection();
     const meta: SessionMeta = {
       ...settings,
       id,
@@ -608,13 +667,7 @@ export class SessionStore {
 
   /** 手动重命名：置 titleCustom，之后的自动标题不再覆盖 */
   rename(id: string, title: string): SessionMeta | null {
-    const meta = this.index.sessions.find((s) => s.id === id);
-    if (!meta) return null;
-    meta.title = title;
-    meta.titleCustom = true;
-    meta.updatedAt = Date.now();
-    this.writeIndex();
-    return meta;
+    return this.updateMeta(id, { title, titleCustom: true, updatedAt: Date.now() });
   }
 
   saveGeneratedTitle(id: string, runId: string, title: string): boolean {
@@ -637,29 +690,30 @@ export class SessionStore {
 
   /** 置顶/取消置顶（渲染层在同一项目内优先展示） */
   setPinned(id: string, pinned: boolean): SessionMeta | null {
-    const meta = this.index.sessions.find((s) => s.id === id);
-    if (!meta) return null;
-    meta.pinned = pinned;
-    this.writeIndex();
-    return meta;
+    return this.updateMeta(id, { pinned });
   }
 
   /** 归档/取消归档（主列表隐藏 ↔ 已归档分区） */
   setArchived(id: string, archived: boolean): SessionMeta | null {
-    const meta = this.index.sessions.find((s) => s.id === id);
-    if (!meta) return null;
-    meta.archived = archived;
-    this.writeIndex();
-    return meta;
+    return this.updateMeta(id, { archived });
   }
 
   /** 标记/清除未读（打开会话时由 host 清除） */
   setUnread(id: string, unread: boolean): SessionMeta | null {
-    const meta = this.index.sessions.find((s) => s.id === id);
+    const meta = this.getMeta(id);
     if (!meta) return null;
     if (Boolean(meta.unread) === unread) return meta;
-    meta.unread = unread;
-    this.writeIndex();
+    return this.updateMeta(id, { unread });
+  }
+
+  private updateMeta(id: string, changes: Partial<SessionMeta>): SessionMeta | null {
+    const previous = this.getMeta(id);
+    if (!previous) return null;
+    const meta = { ...previous, ...changes };
+    this.writeIndex({
+      ...this.index,
+      sessions: this.index.sessions.map((session) => (session.id === id ? meta : session)),
+    });
     return meta;
   }
 
@@ -731,7 +785,14 @@ export class SessionStore {
         worktree?.projectDirectory !== project
       )
         continue;
-      for (const match of findTranscript(this.indexedTranscript(id), query)) {
+      let segments: ReturnType<typeof transcriptSegments>;
+      try {
+        segments = this.indexedTranscript(id);
+      } catch (error) {
+        if (error instanceof NewerFormatError) continue;
+        throw error;
+      }
+      for (const match of findTranscript(segments, query)) {
         if (hits.length === CONVERSATION_SEARCH_LIMIT) return { hits, hasMore: true };
         hits.push({ sessionId: id, ...match });
       }
@@ -741,6 +802,10 @@ export class SessionStore {
 
   private indexedTranscript(id: string): ReturnType<typeof transcriptSegments> {
     const cached = this.transcriptIndex.get(id);
+    if (cached) {
+      const path = this.filePath(id);
+      headerVersion(transcriptPrefix(path), path);
+    }
     const segments =
       cached ??
       transcriptSegments(toUiMessages(this.load(id), "s", undefined, this.compactions(id)));
@@ -765,6 +830,9 @@ export class SessionStore {
 
   /** 删除：移除转录文件与索引项（文件不存在也照常清索引） */
   remove(id: string): void {
+    this.checkIndexFormat();
+    this.assertSessionFormat(id);
+    if (this.newChatDrafts.some((draft) => draft.id === id)) this.checkDraftCollection();
     this.backUpIndexIfNeeded();
     const path = this.filePath(id);
     if (existsSync(path)) rmSync(path, { force: true });
@@ -775,8 +843,7 @@ export class SessionStore {
     this.messageHistories.delete(id);
     this.transcriptWrites.delete(id);
     this.transcriptIndex.delete(id);
-    this.index.sessions = this.index.sessions.filter((s) => s.id !== id);
-    this.writeIndex();
+    this.writeIndex({ ...this.index, sessions: this.index.sessions.filter((s) => s.id !== id) });
   }
 
   load(id: string): AgentMessage[] {
@@ -817,8 +884,11 @@ export class SessionStore {
   }
 
   read(id: string): SessionRecord {
+    if (this.indexUpgrade) throw this.indexUpgrade;
     const path = this.filePath(id);
-    const lines = existsSync(path) ? readFileSync(path, "utf-8").split("\n") : [];
+    const text = readStoredText(path) ?? "";
+    const lines = text.split("\n");
+    const start = headerVersion(text, path) ? 1 : 0;
     const messages: AgentMessage[] = [];
     let checkpoint: RunCheckpoint | undefined;
     let gitChanges: SavedGitChanges | undefined;
@@ -826,7 +896,7 @@ export class SessionStore {
     const messageHistory: MessageHistory = { tasks: [] };
     const completedTools = new Map<string, ToolResultMessage>();
     for (const [index, line] of lines.entries()) {
-      if (!line.trim()) continue;
+      if (index < start || !line.trim()) continue;
       try {
         const value = JSON.parse(line) as
           | RunCheckpoint
@@ -882,6 +952,7 @@ export class SessionStore {
     checkpoint: RunCheckpoint,
     settings?: SessionSettings,
   ): void {
+    this.checkIndexFormat();
     const state = this.transcriptWriteState(id);
     if (
       !state.appendable ||
@@ -902,6 +973,9 @@ export class SessionStore {
     checkpoint: RunCheckpoint,
     completedTool?: ToolResultMessage,
   ): void {
+    if (this.indexUpgrade) throw this.indexUpgrade;
+    const path = this.filePath(id);
+    const version = headerVersion(transcriptPrefix(path), path);
     this.transcriptIndex.delete(id);
     const state = this.transcriptWriteState(id);
     if (!state.appendable) throw new Error("无法保存任务进度。");
@@ -912,10 +986,13 @@ export class SessionStore {
       completedTool,
     };
     try {
-      appendFileSync(this.filePath(id), JSON.stringify(record) + "\n", {
-        encoding: "utf8",
-        flush: true,
-      });
+      const line = JSON.stringify(record) + "\n";
+      if (!version) {
+        // Insert the first version header without rewriting the meaning of existing records.
+        writeStorageAtomic(path, transcriptHeader + (readStoredText(path) ?? "") + line);
+      } else {
+        appendFileSync(path, line, { encoding: "utf8", flush: true });
+      }
     } catch (error) {
       // Replacing the file before writing again prevents replaying an uncertain append.
       this.transcriptWrites.set(id, { ...state, appendable: false });
@@ -943,6 +1020,7 @@ export class SessionStore {
     settlement?: SessionRunSettlement,
     compactions?: SavedCompaction[],
   ): SessionMeta {
+    this.checkIndexFormat();
     const history = this.messageHistory(id);
     const { messageRange, task, result } = settlement ?? {};
     const next =
@@ -966,6 +1044,7 @@ export class SessionStore {
   }
 
   finishMessageRollback(id: string, record: SessionRecord, endIndex: number): void {
+    this.assertSessionFormat(id);
     const tasks = record.messageHistory.tasks.filter((task) => task.endIndex <= endIndex);
     const compactions = record.compactions.filter(({ cutoff }) => cutoff <= endIndex);
     if (!this.getMeta(id)) throw new Error("找不到该会话。");
@@ -1032,6 +1111,9 @@ export class SessionStore {
     compactions = this.compactions(id),
     messageHistory = this.messageHistory(id),
   ): void {
+    if (this.indexUpgrade) throw this.indexUpgrade;
+    const path = this.filePath(id);
+    headerVersion(transcriptPrefix(path), path);
     this.transcriptIndex.delete(id);
     const git = gitChanges?.checkpoint;
     const tasks = git
@@ -1050,11 +1132,8 @@ export class SessionStore {
       ...compactions,
       ...messages,
     ];
-    const path = this.filePath(id);
-    const tmp = `${path}.tmp`;
     const contents = records.map((record) => JSON.stringify(record) + "\n").join("");
-    writeFileSync(tmp, contents, { encoding: "utf-8", flush: true });
-    renameSync(tmp, path);
+    writeStorageAtomic(path, transcriptHeader + contents);
     this.checkpoints.set(id, checkpoint ?? null);
     this.gitChanges.set(id, gitChanges);
     this.contextCompactions.set(id, compactions);
@@ -1134,8 +1213,9 @@ function sessionTitle(messages: AgentMessage[], checkpoint?: RunCheckpoint): str
     : "新会话";
 }
 
-function writeJsonAtomic(path: string, value: unknown): void {
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, JSON.stringify(value, null, 2), "utf-8");
-  renameSync(tmp, path);
+function writeSessionEntries(path: string, entries: unknown[]): void {
+  writeStorageAtomic(
+    path,
+    JSON.stringify({ formatVersion: SESSION_FORMAT_VERSION, entries }, null, 2),
+  );
 }

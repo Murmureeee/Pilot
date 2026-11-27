@@ -71,6 +71,7 @@ import { hasSavedModel, resolveSessionModel, selectedCatalogModel } from "../../
 import { toPublicSettings } from "../settings";
 import { decryptSecret } from "../settings/secrets";
 import type { ProviderConfig, Settings } from "../settings/types";
+import { NewerFormatError } from "../storage-format";
 import { EDITOR_LINE_UNAVAILABLE, WORKTREE_UNAVAILABLE } from "../workspace/constants";
 import { readFileChange, restoreFileChange } from "../workspace/file-changes";
 import { relativeGitPath } from "../workspace/git";
@@ -430,6 +431,10 @@ export class AgentHost {
   ): SessionAgent {
     this.checkWorkspaceAvailable(workingDirectory);
     const settings = this.deps.getSettings();
+    if (settings.upgradeRequired) {
+      throw new NewerFormatError(settings.upgradeRequired.path, settings.upgradeRequired.version);
+    }
+    this.deps.store.assertSessionFormat(this.composerId);
     const selection = resolveSessionModel(settings, this.currentSettings.model);
     const provider = selection && settings.providers.find((p) => p.id === selection.providerId);
     if (!selection || !provider) throw new Error("尚未配置 provider，请先到设置页添加");
@@ -1093,6 +1098,7 @@ export class AgentHost {
 
   loadSession(id: string, record = true): Snapshot {
     if (!this.deps.store.getMeta(id)) return this.getSnapshot();
+    this.deps.store.assertSessionFormat(id);
     if (this.sessionId !== id) {
       this.deps.store.setUnread(id, false);
       this.switchSession(id);
@@ -1102,6 +1108,7 @@ export class AgentHost {
 
   revealSession(id: string): void {
     if (!this.deps.store.getMeta(id)) return;
+    this.deps.store.assertSessionFormat(id);
     if (this.sessionId !== id) this.switchSession(id);
     this.publishSnapshot("reveal");
   }
@@ -1981,6 +1988,7 @@ export class AgentHost {
       pendingProjectTrust: ownRun?.pendingProjectTrust ?? null,
       error: view?.error ?? null,
       settings,
+      sessionStorageUpgrade: this.deps.store.storageUpgrade(),
       usage: view ? { ...view.usage } : transcriptUsage(storedMessages, compactions),
       contextWindow: ownRun && view ? view.contextWindow : (configured?.contextWindow ?? null),
       contextTokens: view
