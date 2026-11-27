@@ -6,6 +6,18 @@
 
 ### 2026-11-27
 
+- **里程碑 9 验收。** 按工程规范顺序通过格式化、两套类型检查、oxlint、66 个 Vitest 文件共 682 项、knip、三段构建、Electron 冒烟和开发版挂载。冒烟返回 `ok:true`，开发版出现 `[renderer] [app] mounted`，无未捕获异常。Windows 全桌面 57 个场景与专项 3 个场景均通过。复跑时修复了调度通道注册、WSL 测试的系统程序引用和桌面脚本的异步等待，Git worktree 集成用例时限调整为 20 秒。核对了设置页和审查页签位置、状态颜色、本地化标签、错误恢复、键盘操作和焦点回还。独立配置、测试进程、项目夹具、临时工作树、翻译工具和 WSL 镜像已清理。[Windows 验收](../scripts/verify-windows-ui.mjs) · [专项验收](../scripts/verify-windows-milestone-9-desktop.mjs) · [提交 c58bd98](https://github.com/Murmureeee/Pilot/commit/c58bd98)
+
+- **本地调度与恢复。** Windows 隔离桌面创建并编辑一次性任务，实测立即运行、准确到期、独立只读会话、任务重复提交拦截及历史定位。重启复核错过和中断记录，随后从历史重跑并删除任务。用 Vitest 复核每日与每周频率、唤醒、时钟回拨去重、长时间补记和夏令时。调度对话框通过简中、英语、繁中、亮暗主题、1100 × 750、720 × 480 及窄窗 150% 缩放检查。[提交 daa2209](https://github.com/Murmureeee/Pilot/commit/daa2209) · [提交 1bbda6b](https://github.com/Murmureeee/Pilot/commit/1bbda6b)
+
+- **项目钩子与用量统计。** PowerShell 实测工具调用前后和回合结束的命令，回看实际输出和耗时，重载后轨迹保留。钩子配置覆盖中英文、亮暗主题及宽窄窗口，最低文字对比度 5.67:1。用量统计核对按本地日期、项目与模型汇总、分叉去重和键盘切换分组。[提交 17f91ab](https://github.com/Murmureeee/Pilot/commit/17f91ab) · [提交 4044de4](https://github.com/Murmureeee/Pilot/commit/4044de4)
+
+- **托盘、全局快捷键与页面预览。** 在 Windows 复核关闭窗口后留驻、显式退出和重启恢复。系统将 `Ctrl+Shift+Space` 从测试窗口投递给已隐藏的 Pilot，主窗口恢复并聚焦输入区。预览页签实测本机页面、跨源请求和重定向拦截、独立浏览环境、截图与控制台错误随草稿发送，并复核宽窄、亮暗和中英文布局。[提交 73a1f25](https://github.com/Murmureeee/Pilot/commit/73a1f25) · [提交 1a3dcc8](https://github.com/Murmureeee/Pilot/commit/1a3dcc8)
+
+- **WSL、繁体中文与网页资料。** 临时 Ubuntu Base 24.04.4 在 WSL 2 上验证带中文和空格的项目路径、目录绑定与重载、发行版范围审批、Bash 的输出和退出码、验证命令、交互 PTY 和子进程清理。桌面场景使用原生目录选择器的受控返回值。繁中切换、重启及 Windows 原生选择器的标题通过检查。网页资料验证了实际章节锚点、点击定位和导出，引用文字最低对比度 5.67:1。[提交 cc62f60](https://github.com/Murmureeee/Pilot/commit/cc62f60) · [提交 bb9623b](https://github.com/Murmureeee/Pilot/commit/bb9623b) · [提交 6a55b01](https://github.com/Murmureeee/Pilot/commit/6a55b01)
+
+- **平台待验。** 本轮使用 Windows 桌面和真实 WSL 2。原生 Linux 和 macOS 桌面上的托盘、快捷键、预览及繁中原生对话框需要对应平台。调度的唤醒和夏令时用受控时钟复核，真实硬件睡眠恢复待补验。[路线图第 9 节](./PLAN.md#9-定时任务与生态扩展)
+
 - **MIT 许可证与签名申请准备。** Pilot 的原创代码采用 MIT。中英文首页公开许可证、Windows 签名政策和隐私说明，后续发行草稿自动带上签名政策链接。八步验证通过，61 个 Vitest 文件共 652 项。Electron 冒烟返回 `ok: true`，开发版正常挂载且无未捕获异常。已从 Windows 打包产物核对 MIT 正文与包元数据，并验证发行说明可保留原文且追加签名政策链接。[MIT 许可证](../LICENSE) · [Code signing policy](./CODE_SIGNING.md) · [Privacy policy](./PRIVACY.md)
 
 - **跨平台原生目录选择。** 在 Ubuntu 24.04 的 Xvfb 桌面操作已安装 Debian 包的 GTK 目录选择框，点击「打开」并核对含空格的路径。Apple Silicon 的 macOS 15 runner 从 DMG 安装，使用原生键盘事件导航到含中文和空格的目录，再确认返回路径。两边都核对了取消结果。Linux 同时复验 AppImage 原位升级和 Debian 安装、升级、卸载、重装。macOS 同时复验 DMG 安装、钥匙串凭据回读和新版 ZIP 下载。脚本结束后核对隔离配置、程序副本和更新缓存的清理。[Linux 验收](https://github.com/Murmureeee/Pilot/actions/runs/45990165712/job/140475665370) · [macOS 验收](https://github.com/Murmureeee/Pilot/actions/runs/45990165712/job/140475664985) · [提交 88fb429](https://github.com/Murmureeee/Pilot/commit/88fb42931108f2d5dafa6d9c721b12079e08a7ee)
