@@ -13,6 +13,13 @@ describe("IPC contract", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
+  it("separates scheduled task maintenance from execution", () => {
+    expect(IPC.scheduledTasksList).toBe("settings:scheduled-tasks-list");
+    expect(IPC.scheduledTasksSave).toBe("settings:scheduled-tasks-save");
+    expect(IPC.scheduledTasksRun).toBe("settings:scheduled-tasks-run");
+    expect(IPC.scheduledTasksDelete).toBe("settings:scheduled-tasks-delete");
+  });
+
   it("declares separate routes for resolving drops and saving draft images", () => {
     expect(IPC.agentResolveDroppedPaths).toBe("agent:resolve-dropped-paths");
     expect(IPC.sessionSaveDraftImages).toBe("session:save-draft-images");

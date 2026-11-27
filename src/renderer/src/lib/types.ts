@@ -160,6 +160,7 @@ export type WorkspaceReferenceLoad =
   | { reference: WorkspaceReferenceTab; error: string };
 
 export type SettingsSection =
+  | "scheduledTasks"
   | "general"
   | "appearance"
   | "permissions"

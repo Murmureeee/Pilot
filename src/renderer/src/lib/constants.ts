@@ -52,6 +52,7 @@ export const SESSION_STATUS_LABELS: Record<SessionRowStatus, string> = {
 };
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
+  scheduledTasks: "定时任务",
   general: "常规",
   appearance: "外观",
   permissions: "权限",
@@ -67,6 +68,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
 };
 
 export const SETTINGS_SECTION_DESCRIPTIONS: Record<SettingsSection, string> = {
+  scheduledTasks: "管理 Pilot 运行期间执行的只读任务。",
   general: "管理输入方式、桌面通知和 Agent 默认的工作环境。",
   appearance: "主题和界面语言。",
   permissions: "决定 Agent 写入文件、运行命令和调用 MCP 工具前是否需要你确认。",
@@ -90,6 +92,7 @@ export const EXTERNAL_EDITOR_LABELS: Record<ExternalEditor["kind"], string> = {
 
 // 分区内设置项的名称，供导航搜索匹配；新增设置项时同步补上。
 export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[]> = {
+  scheduledTasks: ["调度", "立即运行", "执行记录"],
   general: [
     "发送方式",
     "Enter",
@@ -349,6 +352,7 @@ export const DIAGNOSTIC_EVENT_LABELS: Record<DiagnosticEventName, string> = {
   "agent-error": "Agent 运行失败",
   "exit-failed": "应用退出失败",
   "window-state-save-failed": "窗口状态保存失败",
+  "scheduled-task-storage": "定时任务存储失败",
   "sleep-blocker-start-failed": "阻止休眠失败",
   "sleep-blocker-stop-failed": "恢复休眠失败",
   "show-project-entry-error": "项目打开提示失败",

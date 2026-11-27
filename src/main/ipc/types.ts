@@ -17,6 +17,7 @@ import type { McpManager } from "../agent-host/mcp";
 import type { ProfileBackup } from "../backup";
 import type { DesktopExit } from "../desktop-exit";
 import type { DiagnosticLog } from "../diagnostics";
+import type { ScheduledTasks } from "../scheduled-tasks";
 import type { Settings } from "../settings/types";
 import type { TerminalManager } from "../terminal";
 import type { DesktopUpdater } from "../updater";
@@ -42,6 +43,7 @@ export type RendererEvents = {
 };
 
 export interface IpcContext {
+  scheduledTasks: ScheduledTasks;
   settingsDir: string;
   sessionsDir: string;
   skillsDir: string;

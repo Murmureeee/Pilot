@@ -41,6 +41,7 @@ export const DIAGNOSTIC_EVENTS = {
     "agent-error",
     "exit-failed",
     "window-state-save-failed",
+    "scheduled-task-storage",
     "sleep-blocker-start-failed",
     "sleep-blocker-stop-failed",
     "show-project-entry-error",

@@ -30,6 +30,11 @@ const api: PiApi = {
   runAgentSmoke: () => ipcRenderer.invoke(IPC.runAgentSmoke),
   getAppInfo: () => ipcRenderer.invoke(IPC.appInfo),
   menuAction: (action: MenuAction) => ipcRenderer.invoke(IPC.menuAction, action),
+  scheduledTasksList: () => ipcRenderer.invoke(IPC.scheduledTasksList),
+  scheduledTasksSave: (input, id) => ipcRenderer.invoke(IPC.scheduledTasksSave, input, id ?? null),
+  scheduledTasksDelete: (id) => ipcRenderer.invoke(IPC.scheduledTasksDelete, id),
+  scheduledTasksRun: (id, retryId) =>
+    ipcRenderer.invoke(IPC.scheduledTasksRun, id, retryId ?? null),
   openPath: (target: OpenPathTarget) => ipcRenderer.invoke(IPC.appOpenPath, target),
   diagnosticEvents: () => ipcRenderer.invoke(IPC.appDiagnosticEvents),
   exportDiagnostics: (locale: Locale) => ipcRenderer.invoke(IPC.appExportDiagnostics, locale),

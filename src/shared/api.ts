@@ -89,6 +89,16 @@ import type { McpOAuthRef, McpServerInfo, McpServerInput } from "./mcp";
 import type { ProjectConfigInfo, ProjectTrustDecision } from "./project-config";
 
 export interface PiApi {
+  scheduledTasksList(): Promise<import("./scheduled-tasks").ScheduledTask[]>;
+  scheduledTasksSave(
+    input: import("./scheduled-tasks").ScheduledTaskInput,
+    id?: string,
+  ): Promise<import("./scheduled-tasks").ScheduledTask[]>;
+  scheduledTasksDelete(id: string): Promise<import("./scheduled-tasks").ScheduledTask[]>;
+  scheduledTasksRun(
+    id: string,
+    retryId?: string,
+  ): Promise<import("./scheduled-tasks").ScheduledTask[]>;
   ping(request: PingRequest): Promise<PingResponse>;
   runAgentSmoke(): Promise<AgentSmokeResult>;
   getAppInfo(): Promise<AppInfo>;

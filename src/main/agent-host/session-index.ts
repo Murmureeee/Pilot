@@ -44,6 +44,7 @@ const sessionMeta = z.looseObject({
     .object({ taskId: z.string(), agentRunId: optionalText, title: optionalText })
     .optional(),
   lastRunResult: z.enum(SESSION_RUN_RESULTS).optional().catch(undefined),
+  scheduled: z.literal(true).optional().catch(undefined),
   titleCustom: z.boolean().optional(),
   titleGenerated: z.literal(true).optional().catch(undefined),
   pinned: z.boolean().optional(),

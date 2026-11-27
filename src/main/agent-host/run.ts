@@ -124,6 +124,7 @@ export class AgentRun {
   private readonly completion = Promise.withResolvers<void>();
   private readonly permissions: PermissionManager;
   private readonly approvalMode: ApprovalMode;
+  private readonly scheduled: boolean;
   private readonly projectScopes: ProjectInstructionScopes;
   private projectTrust?: PendingProjectTrust;
   private projectConfig?: ProjectConfig;
@@ -199,11 +200,13 @@ export class AgentRun {
       store.startCheckpoint(sessionId, agent.state.messages, this.checkpoint, deps.settingsOnStart);
     this.savedMessageCount = agent.state.messages.length;
     if (clearDraftFor !== undefined) store.clearDraft(clearDraftFor);
-    this.approvalMode =
-      deps.approvedPlanMode ??
-      store.getMeta(sessionId)?.approvalMode ??
-      deps.getSettings().approvalMode ??
-      "standard";
+    this.scheduled = store.getMeta(sessionId)?.scheduled === true;
+    this.approvalMode = this.scheduled
+      ? "read-only"
+      : (deps.approvedPlanMode ??
+        store.getMeta(sessionId)?.approvalMode ??
+        deps.getSettings().approvalMode ??
+        "standard");
     this.permissions = new PermissionManager(
       (request) => {
         this.sendStatus("waiting_approval");
@@ -564,7 +567,7 @@ export class AgentRun {
         await this.prepareProject(projectDirectory);
       // Loading MCP tools can start a stdio server before any tool call is made.
       let externalTools: AgentTool[] = [];
-      if (!this.planning && !signal.aborted) {
+      if (!this.scheduled && !this.planning && !signal.aborted) {
         this.mcpSession = this.deps.mcp.openToolSession(
           directory,
           this.projectConfig ? projectMcpServers(this.projectConfig) : [],
@@ -584,7 +587,11 @@ export class AgentRun {
         return;
       }
       // pi takes a snapshot of these tool declarations when starting the prompt.
-      const available = this.planning ? tools.filter(({ name }) => isReadOnly(name)) : tools;
+      const available = this.scheduled
+        ? tools.filter(({ name }) => name === "read_file" || name === "glob" || name === "grep")
+        : this.planning
+          ? tools.filter(({ name }) => isReadOnly(name))
+          : tools;
       const localTools = available.map((tool) => {
         if (tool.name === "bash") {
           const bash = terminal
@@ -605,13 +612,14 @@ export class AgentRun {
           return this.guardApprovedFile(tool);
         return tool;
       });
-      if (this.planning) localTools.push(proposePlanTool);
-      else {
+      if (!this.scheduled && this.planning) localTools.push(proposePlanTool);
+      else if (!this.scheduled) {
         localTools.push(proposeMemoryTool);
         if (terminal) localTools.push(...createBackgroundTools(terminal, run));
       }
-      if (!this.planning && webRequests) localTools.push(...createWebTools(webRequests));
-      if (directory) {
+      if (!this.scheduled && !this.planning && webRequests)
+        localTools.push(...createWebTools(webRequests));
+      if (!this.scheduled && directory) {
         localTools.push(
           createSubtaskTool({
             parent: agent,

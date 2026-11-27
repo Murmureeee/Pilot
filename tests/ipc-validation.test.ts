@@ -28,6 +28,21 @@ const settings: SettingsInput = {
 };
 
 const valid: Record<IpcChannel, unknown[]> = {
+  [IPC.scheduledTasksList]: [],
+  [IPC.scheduledTasksSave]: [
+    {
+      title: "Daily check",
+      prompt: "Summarize README",
+      directory: "C:/project",
+      frequency: "daily",
+      start: "2026-11-28T07:30",
+      timeZone: "Asia/Shanghai",
+      paused: false,
+    },
+    null,
+  ],
+  [IPC.scheduledTasksDelete]: [sessionId],
+  [IPC.scheduledTasksRun]: [sessionId, null],
   [IPC.ping]: [{ payload: "hello" }],
   [IPC.runAgentSmoke]: [],
   [IPC.appInfo]: [],

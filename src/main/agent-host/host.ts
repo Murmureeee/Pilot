@@ -385,6 +385,7 @@ export class AgentHost {
       settings.skillsEnabled ?? [],
       workingDirectory,
     ),
+    session = this.getCurrentSession(),
   ): AgentInstructions {
     const application = [BASE_SYSTEM_PROMPT, PROJECT_INSTRUCTION_PRIORITY];
     if (workingDirectory) {
@@ -394,13 +395,13 @@ export class AgentHost {
     }
 
     const context: string[] = [];
-    const linkedDirectory = this.sessionId ? this.getProjectDirectory() : workingDirectory;
+    const linkedDirectory = session ? session.workingDirectory : workingDirectory;
     const projectDirectory = linkedDirectory === workingDirectory ? linkedDirectory : undefined;
     const project = loadProjectInstructions(projectDirectory);
     if (project.body && "path" in project.source)
       context.push(`## Project instructions (${basename(project.source.path)})\n\n${project.body}`);
 
-    const chatInstructions = this.getCurrentSession()?.personaOverride?.trim();
+    const chatInstructions = session?.personaOverride?.trim();
     const custom = chatInstructions || settings.persona?.trim();
     if (custom) {
       context.push(
@@ -428,22 +429,24 @@ export class AgentHost {
   private ensureAgent(
     workingDirectory: string | undefined,
     skills?: readonly SkillMeta[],
+    sessionId = this.composerId,
   ): SessionAgent {
     this.checkWorkspaceAvailable(workingDirectory);
     const settings = this.deps.getSettings();
     if (settings.upgradeRequired) {
       throw new NewerFormatError(settings.upgradeRequired.path, settings.upgradeRequired.version);
     }
-    this.deps.store.assertSessionFormat(this.composerId);
-    const selection = resolveSessionModel(settings, this.currentSettings.model);
+    this.deps.store.assertSessionFormat(sessionId);
+    const meta = this.deps.store.getMeta(sessionId);
+    const sessionSettings = meta ?? this.currentSettings;
+    const selection = resolveSessionModel(settings, sessionSettings.model);
     const provider = selection && settings.providers.find((p) => p.id === selection.providerId);
     if (!selection || !provider) throw new Error("尚未配置 provider，请先到设置页添加");
     const active = { ...provider, modelId: selection.modelId };
     const entry = active.models?.find(({ id }) => id === active.modelId);
 
     if (workingDirectory) createToolPathResolver(workingDirectory)(".");
-    const sessionId = this.composerId;
-    const instructions = this.loadInstructions(settings, workingDirectory, skills);
+    const instructions = this.loadInstructions(settings, workingDirectory, skills, meta);
     const toolEnvironment: ToolEnvironment = {
       workingDirectory,
       commandShell: getCommandShell(settings.commandShell),
@@ -493,7 +496,7 @@ export class AgentHost {
       getApiKey: () => apiKey,
     });
 
-    if (!this.sessionId) this.startSession(workingDirectory);
+    if (!meta && !this.sessionId) this.startSession(workingDirectory);
     const compactions = this.deps.store.compactions(sessionId);
     view.messages = toUiMessages(agent.state.messages, "s", undefined, compactions);
     // id 计数只数 UI 可见消息（user/assistant），与事件侧计数保持一致
@@ -509,7 +512,7 @@ export class AgentHost {
       tools,
       view,
     };
-    this.cachedAgent = session;
+    if (this.sessionId === sessionId) this.cachedAgent = session;
     return session;
   }
 
@@ -592,6 +595,8 @@ export class AgentHost {
     const changes: SessionSettings = {};
     if (input.model !== undefined) changes.model = input.model ?? undefined;
     if (input.approvalMode !== undefined) {
+      if (this.getCurrentSession()?.scheduled && input.approvalMode !== "read-only")
+        throw new Error("定时任务会话固定使用只读权限。");
       const planMode = this.currentSettings.planMode;
       if (planMode?.proposal) throw new Error("请先确认或放弃此计划。");
       changes.approvalMode = input.approvalMode ?? undefined;
@@ -658,6 +663,31 @@ export class AgentHost {
       approvedPlanMode: planMode.executionMode,
       settingsOnStart: { planMode: undefined },
     });
+  }
+
+  async runScheduledTask(
+    id: string,
+    title: string,
+    workingDirectory: string,
+    text: string,
+  ): Promise<"success" | "interrupted"> {
+    this.requireRunSlot(workingDirectory);
+    createToolPathResolver(workingDirectory)(".");
+    const { store } = this.deps;
+    store.create(workingDirectory, id, { approvalMode: "read-only" }, { title });
+    this.sendSessions();
+    const agent = this.ensureAgent(workingDirectory, [], id);
+    await this.beginRun(agent, {
+      initialMessage: { role: "user", content: text, timestamp: Date.now() },
+      planning: false,
+    });
+    const outcome = store.getMeta(id)?.lastRunResult;
+    if (outcome === "interrupted" || outcome === "stopped") return "interrupted";
+    if (outcome !== "success")
+      throw new Error(
+        store.checkpoint(id)?.failure?.detail ?? "定时任务执行失败。请查看会话后重试。",
+      );
+    return "success";
   }
 
   /** 运行中 = 插话（steer），空闲 = 发起新一轮 */
@@ -849,7 +879,7 @@ export class AgentHost {
       throw new Error("此聊天有未完成的撤销。请重新打开「回到此处」。");
     const sessionRules = this.sessionRules.get(sessionId) ?? [];
     this.sessionRules.set(sessionId, sessionRules);
-    const session = this.getCurrentSession();
+    const session = this.deps.store.getMeta(sessionId);
     const sessionMode = session?.planMode;
     const planning = options.planning ?? Boolean(sessionMode);
     const auxiliaryModel = this.resolveAuxiliaryModel(provider);
@@ -884,6 +914,7 @@ export class AgentHost {
         const directory = run.state.workingDirectory;
         if (
           completedTask &&
+          !session?.scheduled &&
           !planning &&
           directory &&
           this.deps.store.getMeta(sessionId)?.workingDirectory === directory
@@ -901,7 +932,7 @@ export class AgentHost {
       agent: sessionAgent,
       workspace: workspaceRoot(environment.workingDirectory),
     });
-    this.cachedAgent = undefined;
+    if (this.cachedAgent?.sessionId === sessionId) this.cachedAgent = undefined;
     return run.start();
   }
 

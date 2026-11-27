@@ -622,13 +622,16 @@ export class SessionStore {
     workingDirectory?: string,
     id: string = randomUUID(),
     settings?: SessionSettings,
+    automation?: { title: string },
   ): SessionMeta {
     this.assertSessionFormat(id);
     if (!this.getMeta(id)) this.checkDraftCollection();
     const meta: SessionMeta = {
       ...settings,
       id,
-      title: "新会话",
+      title: automation?.title ?? "新会话",
+      titleCustom: automation ? true : undefined,
+      scheduled: automation ? true : undefined,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       workingDirectory,

@@ -12,6 +12,10 @@ import type { ProjectTrustRequest } from "./project-config";
 
 export const IPC = {
   ping: "app:ping",
+  scheduledTasksList: "settings:scheduled-tasks-list",
+  scheduledTasksSave: "settings:scheduled-tasks-save",
+  scheduledTasksDelete: "settings:scheduled-tasks-delete",
+  scheduledTasksRun: "settings:scheduled-tasks-run",
   runAgentSmoke: "agent:smoke-run",
   appInfo: "app:info",
   menuAction: "app:menu-action",
@@ -655,6 +659,7 @@ export type SessionRunResult = (typeof SESSION_RUN_RESULTS)[number];
 
 export interface SessionMeta extends SessionSettings {
   worktree?: ManagedWorktree;
+  scheduled?: true;
   id: string;
   title: string;
   createdAt: number;

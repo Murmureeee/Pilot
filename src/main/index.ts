@@ -45,6 +45,7 @@ import {
   projectEntryArgument,
   projectEntryFromInstance,
 } from "./project-entry";
+import { ScheduledTasks } from "./scheduled-tasks";
 import { getLogLevel, loadSettings, saveSettings } from "./settings";
 import type { Settings } from "./settings/types";
 import { createSleepBlocker } from "./sleep-blocker";
@@ -324,7 +325,18 @@ function startDesktop(): (entry: ProjectEntry) => void {
     reportError: (action) => log.write("warn", "main", `task-notification-${action}`),
   });
   app.once("will-quit", () => notifications.dispose());
+  const scheduledTasks = new ScheduledTasks({
+    file: join(userData, "scheduled-tasks.json"),
+    run: (task, id) => {
+      exit.checkWorkAllowed();
+      return host.runScheduledTask(id, task.title, task.directory, task.prompt);
+    },
+    reportError: () => log.write("warn", "main", "scheduled-task-storage"),
+  });
+  scheduledTasks.start();
+  app.once("will-quit", () => scheduledTasks.stop());
   registerIpc({
+    scheduledTasks,
     settingsDir: userData,
     sessionsDir,
     skillsDir,

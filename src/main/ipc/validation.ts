@@ -17,6 +17,7 @@ import {
 import { IPC, VERIFICATION_KINDS } from "../../shared/contract";
 import { MCP_REGISTRY_MIN_QUERY } from "../../shared/discovery";
 import { imageAttachmentsSchema } from "../agent-host/image-attachments";
+import { scheduledTaskInput } from "../scheduled-tasks/schema";
 import {
   afterTurnVerificationSchema,
   externalEditorSchema,
@@ -445,6 +446,10 @@ const inputs = {
   [IPC.settingsSetThinkingLevel]: z.tuple([z.enum(THINKING_LEVELS)]),
   [IPC.settingsRevokeToolRule]: z.tuple([toolRuleSchema.extend({ toolName: id }).strict()]),
   [IPC.settingsDismissRecovery]: none,
+  [IPC.scheduledTasksList]: none,
+  [IPC.scheduledTasksSave]: z.tuple([scheduledTaskInput, z.uuid().nullable()]),
+  [IPC.scheduledTasksDelete]: session,
+  [IPC.scheduledTasksRun]: z.tuple([z.uuid(), z.uuid().nullable()]),
   [IPC.settingsMcpList]: none,
   [IPC.settingsMcpSave]: z.tuple([mcpServer]),
   [IPC.settingsMcpReconnect]: z.tuple([z.uuid()]),

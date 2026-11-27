@@ -20,6 +20,7 @@ import { GeneralSettings } from "./settings/GeneralSettings";
 import { PermissionSettings } from "./settings/PermissionSettings";
 import { PersonalizationSettings } from "./settings/PersonalizationSettings";
 import { ProviderSettings } from "./settings/ProviderSettings";
+import { ScheduledTaskSettings } from "./settings/ScheduledTaskSettings";
 import { ShortcutSettings } from "./settings/ShortcutSettings";
 import { SkillSettings } from "./settings/SkillSettings";
 
@@ -90,6 +91,7 @@ export function SettingsView(): JSX.Element {
         </div>
 
         {section === "shortcuts" && <ShortcutSettings />}
+        {section === "scheduledTasks" && <ScheduledTaskSettings />}
 
         {section === "archived" && <ArchivedSettings />}
 

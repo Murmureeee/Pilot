@@ -4,6 +4,7 @@ import {
   ArchiveIcon,
   BlocksIcon,
   BotIcon,
+  CalendarClockIcon,
   DownloadIcon,
   HardDriveIcon,
   InfoIcon,
@@ -40,6 +41,7 @@ const SETTINGS_NAV: {
       { id: "providers", icon: BotIcon },
       { id: "persona", icon: UserRoundIcon },
       { id: "shortcuts", icon: KeyboardIcon },
+      { id: "scheduledTasks", icon: CalendarClockIcon },
     ],
   },
   {
