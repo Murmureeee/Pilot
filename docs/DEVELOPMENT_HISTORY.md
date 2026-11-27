@@ -6,6 +6,8 @@
 
 ### 2026-11-27
 
+- **Pilot v0.7.0 发布。** 延续现有发行渠道，GitHub Releases 提供 Windows x64 安装包、blockmap 与更新清单，以及 Linux x64 AppImage、Debian `.deb` 与更新清单。Windows 通过完整桌面套件、新装、HTTPS 更新及卸载验证。Linux 两种安装包通过启动和升级验收。发布后核对两个公开更新清单均指向 `v0.7.0`。Windows 通过公开 HTTPS 从 pi Desktop `0.1.0` 更新到 `0.7.0`，校验安装包 SHA-512，并核对会话、设置、语言、主题与启用的技能保留。卸载重装也保留升级后的数据。构建版性能复测的冷启动中位数为 792.4 毫秒，文字增量渲染 P95 为 33.5 毫秒。隔离配置、测试进程和下载副本已清理。Windows 正式签名和 macOS 公证仍待完成。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.7.0) · [发布验收](https://github.com/Murmureeee/Pilot/actions/runs/46024454143) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/46027641545) · [发布提交 b7e8530](https://github.com/Murmureeee/Pilot/commit/b7e8530)
+
 - **里程碑 9 验收。** 按工程规范顺序通过格式化、两套类型检查、oxlint、66 个 Vitest 文件共 682 项、knip、三段构建、Electron 冒烟和开发版挂载。冒烟返回 `ok:true`，开发版出现 `[renderer] [app] mounted`，无未捕获异常。Windows 全桌面 57 个场景与专项 3 个场景均通过。复跑时修复了调度通道注册、WSL 测试的系统程序引用和桌面脚本的异步等待，Git worktree 集成用例时限调整为 20 秒。核对了设置页和审查页签位置、状态颜色、本地化标签、错误恢复、键盘操作和焦点回还。独立配置、测试进程、项目夹具、临时工作树、翻译工具和 WSL 镜像已清理。[Windows 验收](../scripts/verify-windows-ui.mjs) · [专项验收](../scripts/verify-windows-milestone-9-desktop.mjs) · [提交 c58bd98](https://github.com/Murmureeee/Pilot/commit/c58bd98)
 
 - **本地调度与恢复。** Windows 隔离桌面创建并编辑一次性任务，实测立即运行、准确到期、独立只读会话、任务重复提交拦截及历史定位。重启复核错过和中断记录，随后从历史重跑并删除任务。用 Vitest 复核每日与每周频率、唤醒、时钟回拨去重、长时间补记和夏令时。调度对话框通过简中、英语、繁中、亮暗主题、1100 × 750、720 × 480 及窄窗 150% 缩放检查。[提交 daa2209](https://github.com/Murmureeee/Pilot/commit/daa2209) · [提交 1bbda6b](https://github.com/Murmureeee/Pilot/commit/1bbda6b)
