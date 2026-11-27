@@ -3,7 +3,7 @@ import { constants, existsSync } from "node:fs";
 import { chmod, copyFile, mkdtemp, realpath, rename, rmdir, stat, unlink } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 
-import { app, shell } from "electron";
+import { app, autoUpdater as nativeUpdater, shell } from "electron";
 import { AppImageUpdater, DebUpdater, autoUpdater, type AppUpdater } from "electron-updater";
 
 import type { UpdateStatus } from "@shared/contract";
@@ -34,6 +34,24 @@ async function replaceAppImage(installed: string, downloaded: string): Promise<s
   return target;
 }
 
+async function prepareMacInstallation(): Promise<void> {
+  // Squirrel checks the replacement app's signature when it reads the ZIP from MacUpdater.
+  const { promise, resolve, reject } = Promise.withResolvers<void>();
+  const ready = (): void => resolve();
+  const unavailable = (): void => reject(new Error(UPDATE_NOT_READY_MESSAGE));
+  nativeUpdater.once("update-downloaded", ready);
+  nativeUpdater.once("error", reject);
+  nativeUpdater.once("update-not-available", unavailable);
+  try {
+    nativeUpdater.checkForUpdates();
+    await promise;
+  } finally {
+    nativeUpdater.removeListener("update-downloaded", ready);
+    nativeUpdater.removeListener("error", reject);
+    nativeUpdater.removeListener("update-not-available", unavailable);
+  }
+}
+
 export class DesktopUpdater {
   private status: UpdateStatus = { state: "unavailable" };
   private readonly updater?: AppUpdater;
@@ -49,7 +67,9 @@ export class DesktopUpdater {
   ) {
     if (
       !app.isPackaged ||
-      (process.platform !== "win32" && process.platform !== "linux") ||
+      (process.platform !== "win32" &&
+        process.platform !== "linux" &&
+        process.platform !== "darwin") ||
       !existsSync(join(process.resourcesPath, "app-update.yml"))
     ) {
       log.write("debug", "updater", "unavailable");
@@ -90,7 +110,9 @@ export class DesktopUpdater {
     });
     updater.on("error", (error) => {
       // Checks and downloads report errors through their promises. Installation uses this event.
-      if (this.status.state === "installing") this.setStatus({ state: "error" }, error);
+      if (process.platform !== "darwin" && this.status.state === "installing") {
+        this.setStatus({ state: "error" }, error);
+      }
     });
   }
 
@@ -196,6 +218,15 @@ export class DesktopUpdater {
         app.quit();
       } catch (error) {
         this.setStatus({ state: "error", reason: "appimage-install" }, error);
+        return false;
+      }
+    } else if (process.platform === "darwin") {
+      try {
+        await prepareMacInstallation();
+        allowQuit();
+        nativeUpdater.quitAndInstall();
+      } catch (error) {
+        this.setStatus({ state: "error" }, error);
         return false;
       }
     } else {

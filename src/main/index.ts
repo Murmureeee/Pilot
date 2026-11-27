@@ -85,12 +85,15 @@ function createWindow(log: DiagnosticLog, stateFile: string): BrowserWindow {
     title: APP_NAME,
     backgroundColor: "#ffffff",
     ...iconOptions,
-    // 无边框自定义标题栏：保留系统原生窗控按钮（Win11 风格 overlay），标题区由应用绘制
     titleBarStyle: "hidden",
-    titleBarOverlay: {
-      ...TITLE_BAR_OVERLAY_COLORS[nativeTheme.shouldUseDarkColors ? "dark" : "light"],
-      height: WINDOW_TITLE_BAR_HEIGHT,
-    },
+    ...(process.platform === "darwin"
+      ? { titleBarOverlay: true, trafficLightPosition: { x: 12, y: 12 } }
+      : {
+          titleBarOverlay: {
+            ...TITLE_BAR_OVERLAY_COLORS[nativeTheme.shouldUseDarkColors ? "dark" : "light"],
+            height: WINDOW_TITLE_BAR_HEIGHT,
+          },
+        }),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,

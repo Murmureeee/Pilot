@@ -14,6 +14,7 @@
     "knip": "knip",
     "lint": "oxlint src tests && pnpm format:check",
     "package:linux": "pnpm build && node scripts/package-linux.mjs",
+    "package:mac": "pnpm build && node scripts/package-mac.mjs",
     "package:win": "pnpm build && node scripts/package-win.mjs",
     "postinstall": "node scripts/restore-electron.mjs",
     "preview": "electron-vite preview",

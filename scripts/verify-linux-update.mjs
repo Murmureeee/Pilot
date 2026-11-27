@@ -1,18 +1,24 @@
 // @env node
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { createReadStream } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
-
 import { chromium } from "playwright-core";
 
+import { expectUpdateState as expectState, hash, openUpdate, verifyProjectShell, waitFor } from "./verify-posix-desktop.mjs";
+
 const baselineVersion = "0.0.1";
+const usePackageManager = process.argv.includes("--install-deb");
+if (usePackageManager) {
+  assert.equal(process.env.RUNNER_ENVIRONMENT, "github-hosted", "Use a disposable hosted runner for system installation");
+}
+const installedDeb = "/opt/Pilot/pilot";
+const fixtureScript = "scripts/linux-package-fixture.sh";
+let installedFixture = false;
 const { version } = JSON.parse(await readFile("package.json", "utf8"));
 const appImageName = (value) => "pilot-" + value + "-linux-x86_64.AppImage";
 const debName = (value) => "pilot-" + value + "-linux-amd64.deb";
@@ -21,15 +27,10 @@ const release = resolve("dist");
 const scratch = await mkdtemp(join(tmpdir(), "pilot-linux-update-"));
 const baseline = join(scratch, "baseline");
 const tools = join(scratch, "tools");
+const project = join(scratch, "Pilot 项目");
 const openedLocation = join(scratch, "opened-location.txt");
 let feedDirectory = baseline;
 const children = [];
-
-async function hash(path) {
-  const digest = createHash("sha512");
-  for await (const chunk of createReadStream(path)) digest.update(chunk);
-  return digest.digest("base64");
-}
 
 async function serveUpdate(request, response) {
   const path = new URL(request.url, "http://127.0.0.1").pathname;
@@ -56,30 +57,6 @@ const feed = createServer((request, response) => {
   void serveUpdate(request, response).catch((error) => response.destroy(error));
 });
 
-async function waitFor(label, check, timeout = 25_000) {
-  const end = performance.now() + timeout;
-  do {
-    const result = await check();
-    if (result) return result;
-    await delay(120);
-  } while (performance.now() < end);
-  throw new Error("Timed out waiting for " + label);
-}
-
-function status(page) {
-  return page.evaluate(() => window.pi.getUpdateStatus());
-}
-
-async function expectState(page, expected) {
-  return waitFor(expected, async () => {
-    const state = await status(page);
-    if (state.state === "error" && expected !== "error") {
-      throw new Error("Unexpected update error: " + JSON.stringify(state));
-    }
-    return state.state === expected && state;
-  });
-}
-
 async function connect(profile) {
   const portFile = join(profile, "DevToolsActivePort");
   return waitFor("the desktop window", async () => {
@@ -98,7 +75,7 @@ async function connect(profile) {
   });
 }
 
-async function launch(executable, profile, cache) {
+async function launch(executable, profile, cache, directory) {
   const child = spawn(
     executable,
     [
@@ -106,6 +83,7 @@ async function launch(executable, profile, cache) {
       "--remote-debugging-port=0",
       "--remote-debugging-address=127.0.0.1",
       "--user-data-dir=" + profile,
+      ...(directory ? ["--open-project=" + directory] : []),
     ],
     {
       detached: true,
@@ -113,6 +91,7 @@ async function launch(executable, profile, cache) {
       env: {
         ...process.env,
         APPIMAGE_EXTRACT_AND_RUN: "1",
+        GTK_USE_PORTAL: "0",
         PATH: tools + ":" + process.env.PATH,
         PILOT_TEST_OPENED_LOCATION: openedLocation,
         TMPDIR: scratch,
@@ -132,15 +111,6 @@ function closeApp(page) {
   return page.evaluate(() => {
     setTimeout(() => void window.pi.menuAction("quit"), 100);
   });
-}
-
-async function openUpdate(page) {
-  await page.getByRole("button", { name: "应用菜单", exact: true }).focus();
-  await page.keyboard.press("Enter");
-  await page.getByRole("menuitem", { name: "检查更新…", exact: true }).press("Enter");
-  const dialog = page.getByRole("dialog", { name: "软件更新", exact: true });
-  await dialog.waitFor();
-  return dialog;
 }
 
 function downloadPath(cache, name) {
@@ -203,26 +173,35 @@ async function verifyAppImage() {
 async function verifyDeb() {
   feedDirectory = baseline;
   const unpacked = join(scratch, "deb");
-  execFileSync("bash", [
-    "-c",
-    'exec dpkg-deb -x "$1" "$2"',
-    "unpack-test-package",
-    join(baseline, debName(baselineVersion)),
-    unpacked,
-  ]);
+  const originalPackage = join(baseline, debName(baselineVersion));
+  const executable = usePackageManager ? installedDeb : join(unpacked, "opt/Pilot/pilot");
+  if (usePackageManager) {
+    execFileSync("bash", [fixtureScript, "check-absent"], { stdio: "inherit" });
+    installedFixture = true;
+    installDeb(originalPackage, baselineVersion);
+  } else {
+    execFileSync("bash", [fixtureScript, "unpack", originalPackage, unpacked]);
+  }
   assert.equal(
-    (await readFile(join(unpacked, "opt/Pilot/resources/package-type"), "utf8")).trim(),
+    (await readFile(join(dirname(executable), "resources/package-type"), "utf8")).trim(),
     "deb",
   );
   const profile = join(scratch, "deb-profile");
   const cache = join(scratch, "deb-cache");
-  const { browser, page } = await launch(join(unpacked, "opt/Pilot/pilot"), profile, cache);
+  const draft = "Debian draft saved before upgrading.";
+  const { browser, page } = await launch(executable, profile, cache, project);
+  const received = downloadPath(cache, debName(version));
   try {
     await expectState(page, "current");
+    await verifyProjectShell(page, project);
+    if (usePackageManager) await verifyLinuxPicker(page);
+    await page.locator("[data-composer-editor]").fill(draft);
+    await waitFor("the saved Debian draft", async () =>
+      (await page.evaluate(() => window.pi.getSnapshot())).composerDraft.includes(draft),
+    );
     feedDirectory = release;
     const dialog = await openUpdate(page);
     assert.equal((await expectState(page, "package-ready")).version, version);
-    const received = downloadPath(cache, debName(version));
     assert.equal(await hash(received), await hash(join(release, debName(version))));
     await dialog.getByText(/请用系统包管理器安装/).waitFor();
     await dialog.getByRole("button", { name: "打开下载位置", exact: true }).press("Enter");
@@ -240,6 +219,60 @@ async function verifyDeb() {
   } finally {
     await browser.close();
   }
+  if (usePackageManager) {
+    installDeb(received, version);
+    await verifyInstalledDeb(profile, cache, draft);
+    purgeDeb();
+    await assert.rejects(stat(installedDeb), { code: "ENOENT" });
+    installDeb(join(release, debName(version)), version);
+    await verifyInstalledDeb(profile, cache, draft);
+    console.log("Debian package manager installed, upgraded, purged and reinstalled Pilot with its draft intact");
+  }
+}
+
+async function verifyLinuxPicker(page) {
+  const directory = join(scratch, "selected");
+  await mkdir(directory);
+  await page.evaluate(() => {
+    void window.pi.pickWorkingDirectory("zh").then((path) => { globalThis.pilotPickedDirectory = path; });
+  });
+  const windowId = await waitFor("the GTK directory picker", () => {
+    const search = spawnSync("bash", [fixtureScript, "picker-window"], {
+      encoding: "utf8",
+    });
+    assert.ifError(search.error);
+    return search.status === 0 && search.stdout.trim().split("\n").at(-1);
+  });
+  execFileSync("bash", [fixtureScript, "select-directory", windowId, directory]);
+  const picked = await waitFor("the selected native directory", () =>
+    page.evaluate(() => globalThis.pilotPickedDirectory),
+  );
+  assert.equal(await realpath(picked), await realpath(directory));
+  console.log("Verified the GTK directory picker selected an existing folder");
+}
+
+function installDeb(file, expectedVersion) {
+  execFileSync("bash", [fixtureScript, "install", file, expectedVersion], {
+    stdio: "inherit",
+  });
+}
+
+function purgeDeb() {
+  execFileSync("bash", [fixtureScript, "purge"], { stdio: "inherit" });
+}
+
+async function verifyInstalledDeb(profile, cache, draft) {
+  const { browser, page } = await launch(installedDeb, profile, cache, project);
+  try {
+    assert.equal((await page.evaluate(() => window.pi.getAppInfo())).version, version);
+    await waitFor("the restored Debian draft", async () =>
+      (await page.evaluate(() => window.pi.getSnapshot())).composerDraft.includes(draft),
+    );
+    await closeApp(page);
+    await waitFor("the installed Debian application to exit", () => !browser.isConnected());
+  } finally {
+    await browser.close();
+  }
 }
 
 async function closeFixture() {
@@ -254,11 +287,17 @@ async function closeFixture() {
     if (child.exitCode === null && child.signalCode === null && child.pid)
       await once(child, "exit");
   }
-  await rm(scratch, { recursive: true, force: true });
+  try {
+    if (installedFixture) purgeDeb();
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
 }
 
 try {
   await mkdir(tools);
+  await mkdir(project);
+  await writeFile(join(project, "marker.txt"), "Pilot project fixture\n");
   await writeFile(
     join(tools, "xdg-open"),
     '#!/bin/sh\nprintf "%s\\n%s\\n" "$(pwd -P)" "$1" > "$PILOT_TEST_OPENED_LOCATION"\n',

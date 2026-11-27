@@ -82,7 +82,7 @@ export function registerAppRoutes(
     ctx.onConversationVisibilityChanged();
   });
   handle(IPC.appSetTitlebarTheme, (event, theme) => {
-    // 无边框窗口的原生窗控颜色跟随主题（Linux 无 titleBarOverlay，静默忽略）
+    if (process.platform === "darwin") return;
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
     const dark = theme === "dark" || (theme === "system" && nativeTheme.shouldUseDarkColors);

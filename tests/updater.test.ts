@@ -2,6 +2,7 @@
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 
+import { autoUpdater as nativeUpdater } from "electron";
 import {
   autoUpdater,
   type AppUpdater,
@@ -16,7 +17,16 @@ import { DesktopUpdater } from "../src/main/updater";
 import type { UpdateStatus } from "../src/shared/contract";
 
 vi.mock("node:fs", { spy: true });
-vi.mock("electron", () => ({ app: { isPackaged: true } }));
+vi.mock("electron", async () => {
+  const { EventEmitter } = await import("node:events");
+  return {
+    app: { isPackaged: true },
+    autoUpdater: Object.assign(new EventEmitter(), {
+      checkForUpdates: vi.fn<() => void>(),
+      quitAndInstall: vi.fn<() => void>(),
+    }),
+  };
+});
 vi.mock("electron-updater", async () => {
   const { EventEmitter } = await import("node:events");
   return {
@@ -53,20 +63,25 @@ function createUpdater(autoDownload = true): DesktopUpdater {
   );
 }
 
-beforeEach(() => {
+function emulatePlatform(platform: "win32" | "darwin"): void {
   vi.stubGlobal(
     "process",
     Object.create(process, {
-      platform: { value: "win32" },
+      platform: { value: platform },
       resourcesPath: { value: tmpdir() },
     }),
   );
+}
+
+beforeEach(() => {
+  emulatePlatform("win32");
   vi.mocked(existsSync).mockReturnValue(true);
   checkForUpdates.mockResolvedValue(release("0.7.0"));
 });
 
 afterEach(() => {
   autoUpdater.removeAllListeners();
+  nativeUpdater.removeAllListeners();
   vi.resetAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
@@ -175,4 +190,40 @@ it("starts one manual download and can check again after a download failure", as
   checkForUpdates.mockResolvedValue(release("0.6.0", false));
   expect(await updater.check()).toEqual({ state: "current" });
   expect(checkForUpdates).toHaveBeenCalledTimes(2);
+});
+
+it("waits for macOS to validate the update before allowing quit", async () => {
+  emulatePlatform("darwin");
+  const updater = createUpdater();
+  await updater.check();
+  autoUpdater.emit("update-downloaded", {
+    ...release("0.7.0").updateInfo,
+    downloadedFile: "Pilot.zip",
+  });
+  const allowQuit = vi.fn<() => void>();
+  const installing = updater.install(allowQuit);
+  expect(nativeUpdater.checkForUpdates).toHaveBeenCalledOnce();
+  expect(allowQuit).not.toHaveBeenCalled();
+  nativeUpdater.emit("update-downloaded");
+  expect(await installing).toBe(true);
+  expect(allowQuit).toHaveBeenCalledOnce();
+  expect(nativeUpdater.quitAndInstall).toHaveBeenCalledOnce();
+});
+
+it("keeps Pilot open and cleans up macOS listeners when native install rejects an update", async () => {
+  emulatePlatform("darwin");
+  const updater = createUpdater();
+  await updater.check();
+  autoUpdater.emit("update-downloaded", {
+    ...release("0.7.0").updateInfo,
+    downloadedFile: "Pilot.zip",
+  });
+  const allowQuit = vi.fn<() => void>();
+  const installing = updater.install(allowQuit);
+  nativeUpdater.emit("error", new Error("Fixture signature rejected"));
+  expect(await installing).toBe(false);
+  expect(updater.getStatus()).toEqual({ state: "error" });
+  expect(allowQuit).not.toHaveBeenCalled();
+  expect(nativeUpdater.quitAndInstall).not.toHaveBeenCalled();
+  expect(nativeUpdater.listenerCount("update-downloaded")).toBe(0);
 });

@@ -20,6 +20,10 @@ $files = @(
   "pilot-${version}-linux-x86_64.AppImage"
   "pilot-${version}-linux-amd64.deb"
 )
+if ($env:PILOT_RELEASE_INCLUDE_MACOS -eq 'true') {
+  $macArchive = "pilot-${version}-mac-arm64.zip"
+  $files += @("pilot-${version}-mac-arm64.dmg", $macArchive, "$macArchive.blockmap", 'latest-mac.yml')
+}
 $expected = @{}
 foreach ($file in $files) {
   $item = Get-Item -LiteralPath (Join-Path $directory $file)
@@ -48,6 +52,18 @@ foreach ($file in @("pilot-${version}-linux-x86_64.AppImage", "pilot-${version}-
   $digest = [Convert]::ToBase64String([Convert]::FromHexString($sha512))
   $entry = '(?m)^\s*- url: ' + [regex]::Escape($file) + '\r?\n[ \t]+sha512: ' + [regex]::Escape($digest) + '\s*$'
   if ($linuxManifest -notmatch $entry) { throw "The Linux update manifest is missing the checksum for $file." }
+}
+if ($macArchive) {
+  $macManifest = Get-Content -Raw -LiteralPath $expected['latest-mac.yml'].Path
+  if ($macManifest -notmatch ('(?m)^version: ' + [regex]::Escape($version) + '\s*$')) {
+    throw 'The macOS update manifest does not match the release version.'
+  }
+  foreach ($file in @($macArchive, "pilot-${version}-mac-arm64.dmg")) {
+    $sha512 = (Get-FileHash -Algorithm SHA512 -LiteralPath $expected[$file].Path).Hash
+    $digest = [Convert]::ToBase64String([Convert]::FromHexString($sha512))
+    $entry = '(?m)^\s*- url: ' + [regex]::Escape($file) + '\r?\n[ \t]+sha512: ' + [regex]::Escape($digest) + '\s*$'
+    if ($macManifest -notmatch $entry) { throw "The macOS update manifest is missing the checksum for $file." }
+  }
 }
 
 function Find-PilotRelease {

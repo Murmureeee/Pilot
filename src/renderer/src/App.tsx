@@ -455,7 +455,7 @@ export default function App(): JSX.Element {
 
   return (
     <div className="grid h-screen grid-cols-[max-content_minmax(0,1fr)] grid-rows-[var(--app-titlebar-height)_minmax(0,1fr)] overflow-hidden bg-window-frame text-foreground">
-      <div className="app-drag flex items-center px-3">
+      <div className="app-drag flex items-center pr-3 pl-[calc(env(titlebar-area-x,0px)_+_0.75rem)]">
         <TopBar
           collapsed={sidebarCollapsed}
           onToggleSidebar={togglePanel}

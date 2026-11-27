@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       build_test_packages:
-        description: Build Windows and Linux test packages for Actions
+        description: Build Windows, Linux and macOS test packages for Actions
         type: boolean
         default: false
       verify_installation:
@@ -19,6 +19,10 @@ on:
         default: false
       prepare_release:
         description: Verify Windows and Linux packages and prepare a GitHub release draft
+        type: boolean
+        default: false
+      include_macos_release:
+        description: Include signed and notarized Apple Silicon assets when preparing a release
         type: boolean
         default: false
       verify_published_update:
@@ -301,14 +305,14 @@ jobs:
 
       - name: Start both Linux packages in isolated profiles
         run: |
-          if ! command -v xvfb-run >/dev/null || ! command -v xauth >/dev/null; then
+          if ! command -v xvfb-run >/dev/null || ! command -v xauth >/dev/null || ! command -v xdotool >/dev/null; then
             sudo apt-get update
-            sudo apt-get install -y xvfb xauth
+            sudo apt-get install -y xvfb xauth xdotool
           fi
           bash scripts/verify-linux-package.sh
 
       - name: Verify Linux package updates
-        run: xvfb-run -a node scripts/verify-linux-update.mjs
+        run: xvfb-run -a node scripts/verify-linux-update.mjs --install-deb
 
       - name: Stage verified Linux packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -322,9 +326,89 @@ jobs:
           retention-days: 7
           compression-level: 0
 
+  macos:
+    if: inputs.build_test_packages || (inputs.prepare_release && inputs.include_macos_release)
+    runs-on: macos-15
+    timeout-minutes: 40
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      artifact: ${{ steps.package.outputs.artifact }}
+    env:
+      ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+      PILOT_UPDATE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/latest/download/
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26.13.0'
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: '11.21.0'
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test on macOS
+        run: pnpm exec vitest --run
+
+      - name: Build and verify macOS test packages
+        if: '!inputs.prepare_release || !inputs.include_macos_release'
+        run: |
+          test "$(uname -m)" = arm64
+          pnpm package:mac
+          node scripts/verify-macos-package.mjs
+
+      - name: Build, notarize and verify signed macOS release packages
+        if: github.ref == 'refs/heads/main' && inputs.prepare_release && inputs.include_macos_release
+        env:
+          PILOT_MAC_SIGNED: 'true'
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          test "$(uname -m)" = arm64
+          test -n "$APPLE_API_KEY_BASE64"
+          export APPLE_API_KEY
+          APPLE_API_KEY=$(mktemp "$RUNNER_TEMP/pilot-notary.XXXXXX")
+          trap 'rm -f -- "$APPLE_API_KEY"' EXIT
+          chmod 600 "$APPLE_API_KEY"
+          printf '%s' "$APPLE_API_KEY_BASE64" | base64 -D > "$APPLE_API_KEY"
+          unset APPLE_API_KEY_BASE64
+          pnpm package:mac
+          node scripts/verify-macos-package.mjs
+
+      - name: Resolve macOS artifacts
+        id: package
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "artifact=Pilot-macos-arm64-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+
+      - name: Stage verified Mac packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.package.outputs.artifact }}
+          path: |
+            dist/pilot-${{ steps.package.outputs.version }}-mac-arm64.dmg
+            dist/pilot-${{ steps.package.outputs.version }}-mac-arm64.zip
+            dist/pilot-${{ steps.package.outputs.version }}-mac-arm64.zip.blockmap
+            dist/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
   release-draft:
-    if: github.ref == 'refs/heads/main' && inputs.prepare_release
-    needs: [windows, linux]
+    if: >-
+      !cancelled() && github.ref == 'refs/heads/main' && inputs.prepare_release &&
+      needs.windows.result == 'success' && needs.linux.result == 'success' &&
+      (!inputs.include_macos_release || needs.macos.result == 'success')
+    needs: [windows, linux, macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -348,11 +432,24 @@ jobs:
         env:
           WINDOWS_VERSION: ${{ needs.windows.outputs.version }}
           LINUX_VERSION: ${{ needs.linux.outputs.version }}
-        run: test "$WINDOWS_VERSION" = "$LINUX_VERSION"
+          MACOS_VERSION: ${{ needs.macos.outputs.version }}
+          INCLUDE_MACOS: ${{ inputs.include_macos_release }}
+        run: |
+          test "$WINDOWS_VERSION" = "$LINUX_VERSION"
+          if [ "$INCLUDE_MACOS" = true ]; then
+            test "$WINDOWS_VERSION" = "$MACOS_VERSION"
+          fi
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: inputs.include_macos_release
+        with:
+          name: ${{ needs.macos.outputs.artifact }}
+          path: ${{ runner.temp }}/pilot-release
 
       - name: Prepare and verify the GitHub release draft
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           PILOT_RELEASE_VERSION: ${{ needs.windows.outputs.version }}
+          PILOT_RELEASE_INCLUDE_MACOS: ${{ inputs.include_macos_release }}
         run: ./scripts/draft-release.ps1

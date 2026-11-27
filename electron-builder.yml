@@ -12,6 +12,13 @@ extraResources:
 npmRebuild: false
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
+mac:
+  category: public.app-category.developer-tools
+  icon: resources/icon.png
+  artifactName: ${name}-${version}-mac-${arch}.${ext}
+  target:
+    - dmg
+    - zip
 win:
   target: nsis
   icon: resources/icon.ico
