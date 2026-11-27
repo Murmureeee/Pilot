@@ -6,6 +6,10 @@
 
 ### 2026-11-27
 
+- **跨平台原生目录选择。** 在 Ubuntu 24.04 的 Xvfb 桌面操作已安装 Debian 包的 GTK 目录选择框，点击「打开」并核对含空格的路径。Apple Silicon 的 macOS 15 runner 从 DMG 安装，使用原生键盘事件导航到含中文和空格的目录，再确认返回路径。两边都核对了取消结果。Linux 同时复验 AppImage 原位升级和 Debian 安装、升级、卸载、重装。macOS 同时复验 DMG 安装、钥匙串凭据回读和新版 ZIP 下载。脚本结束后核对隔离配置、程序副本和更新缓存的清理。[Linux 验收](https://github.com/Murmureeee/Pilot/actions/runs/45990165712/job/140475665370) · [macOS 验收](https://github.com/Murmureeee/Pilot/actions/runs/45990165712/job/140475664985) · [提交 88fb429](https://github.com/Murmureeee/Pilot/commit/88fb42931108f2d5dafa6d9c721b12079e08a7ee)
+
+- **备份导出路径回归。** 导出前按真实目录比较配置根和目标位置。Windows 短路径和目录联接指向本机数据目录时，也会拒绝保存备份。回归用例核对数据目录外的目的地返回规范路径。本机八步验证与远端 Windows CI 通过，61 个 Vitest 文件共 652 项、52 个桌面场景通过，冒烟返回 `ok: true`，开发版正常挂载。性能复测的冷启动中位数为 770.9 ms，120 个文字增量的渲染 P95 为 33.6 ms，500 条消息的滚动帧间隔 P95 为 16.7 ms。切换会话 60 次后，回收后的渲染进程 JS 堆从 26.4 MiB 增至 27.3 MiB。测试进程和临时配置已清理。[Windows CI](https://github.com/Murmureeee/Pilot/actions/runs/45988356142/job/140469595591) · [提交 781c314](https://github.com/Murmureeee/Pilot/commit/781c31468124c64c884fa02206c80802e834179b) · [提交 a609bb9](https://github.com/Murmureeee/Pilot/commit/a609bb99cfd741bd13e76efab64d3f46d8336ccd)
+
 - **数据备份与恢复。** 在「存储与诊断」导出和选择备份包。预览并排显示本机与备份包的数据及需重新配置的凭据数量。确认后重启恢复，替换中断时回滚。自动化场景模拟原生文件选择结果，并在验证重启请求和应用正常退出后启动测试实例。实测了导出取消、损坏备份、取消恢复、预览过期、原配置恢复和全新配置导入。原配置保留可解密的新旧密文，全新配置提示重新填写失效密钥或登录，并停用缺少凭据的 MCP 服务。预览通过中英文、亮暗主题、1100 × 750 和 720 × 480 的组合验收，核对了键盘操作和取消后焦点回到入口。[备份设计](./DESIGN.md#212-设置视图) · [提交 846fb15](https://github.com/Murmureeee/Pilot/commit/846fb15d5e61ad161441a23d2ab27f0e143fc7dd)
 
 - **性能与回归。** Windows x64 的 Electron Vite 构建产物用固定夹具复测。3 次冷启动到输入就绪的中位数为 772.3 ms，最大 801.8 ms。120 个文字增量到渲染的 P95 为 33.8 ms，最大 34.9 ms。500 条消息滚动的 180 个帧间隔 P95 为 16.8 ms。两条会话切换 60 次后，垃圾回收后的渲染进程 JS 堆从 26.4 MiB 增至 27.1 MiB，渲染进程工作集从 194.6 MiB 增至 211.5 MiB，主进程工作集从 156.7 MiB 增至 169.2 MiB。两个模块分别提交后按顺序通过八步验证，61 个 Vitest 文件共 651 项、52 个 Windows 桌面场景通过。Electron 冒烟返回 `ok: true`，开发版挂载且无未捕获异常。核对时没有残留的测试进程或临时目录。[性能脚本](../scripts/verify-windows-performance.mjs) · [提交 db1969b](https://github.com/Murmureeee/Pilot/commit/db1969bfaea1f41e52b33c11e324ab3268f0b40a)
