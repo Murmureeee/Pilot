@@ -12,6 +12,14 @@ const labels = {
     summary: "上下文摘要",
     image: "图片附件",
   },
+  "zh-TW": {
+    user: "使用者",
+    assistant: "助理",
+    thinking: "思考",
+    plan: "工作計畫",
+    summary: "上下文摘要",
+    image: "圖片附件",
+  },
   en: {
     user: "User",
     assistant: "Assistant",

@@ -22,6 +22,7 @@ import {
   LOG_LEVEL_LABELS,
 } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
+import { LOCALE_DETAILS } from "@shared/constants";
 import type { DiagnosticEvent, Locale } from "@shared/contract";
 
 function EventRow({
@@ -78,7 +79,7 @@ export function DiagnosticEvents(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const title = t("诊断事件", locale);
-  const date = new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en", {
+  const date = new Intl.DateTimeFormat(LOCALE_DETAILS[locale].htmlLang, {
     dateStyle: "short",
     timeStyle: "medium",
   });

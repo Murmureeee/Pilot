@@ -19,6 +19,7 @@ import {
 import type { Locale } from "@shared/contract";
 import type { McpOAuthInfo } from "@shared/mcp";
 
+import { LOCALE_DETAILS } from "../../../../shared/constants";
 import { APP_NAME } from "../../../../shared/constants";
 import { isLoopbackHost } from "../../../../shared/mcp";
 import { mcpConnectionBinding } from "../../../settings/mcp";
@@ -77,16 +78,19 @@ function bearerChallenge(value: string | null): OAuthChallenge | undefined {
   return !value || /^\s*Bearer(?:\s|$)/i.test(value) ? parseWwwAuthenticate(value) : undefined;
 }
 
+const OAUTH_CALLBACK_COPY = {
+  zh: { success: "已收到授权响应。请返回 Pilot。", error: "授权未完成。请返回 Pilot 重试。" },
+  "zh-TW": { success: "已收到授權回應。請返回 Pilot。", error: "授權未完成。請返回 Pilot 重試。" },
+  en: {
+    success: "Authorization received. Return to Pilot.",
+    error: "Authorization failed. Return to Pilot to try again.",
+  },
+} satisfies Record<Locale, { success: string; error: string }>;
+
 function callbackPage(locale: Locale, { ok }: OAuthCallbackPage): string {
-  const label =
-    locale === "zh"
-      ? ok
-        ? "已收到授权响应。请返回 Pilot。"
-        : "授权未完成。请返回 Pilot 重试。"
-      : ok
-        ? "Authorization received. Return to Pilot."
-        : "Authorization failed. Return to Pilot to try again.";
-  return `<!doctype html><html lang="${locale}"><meta charset="utf-8"><title>Pilot</title><p>${label}</p></html>`;
+  const copy = OAUTH_CALLBACK_COPY[locale];
+  const label = ok ? copy.success : copy.error;
+  return `<!doctype html><html lang="${LOCALE_DETAILS[locale].htmlLang}"><meta charset="utf-8"><title>Pilot</title><p>${label}</p></html>`;
 }
 
 function browserSignInError(error: unknown, timedOut: boolean): Error {

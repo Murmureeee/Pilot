@@ -85,10 +85,11 @@ export const DIAGNOSTIC_EVENTS = {
   ],
 } as const;
 
-export const SUPPORTED_LOCALES = ["zh", "en"] as const;
+export const SUPPORTED_LOCALES = ["zh", "zh-TW", "en"] as const;
 export const DEFAULT_LOCALE = SUPPORTED_LOCALES[0];
 export const LOCALE_DETAILS = {
-  zh: { label: "中文", htmlLang: "zh-CN" },
+  zh: { label: "简体中文", htmlLang: "zh-CN" },
+  "zh-TW": { label: "繁體中文", htmlLang: "zh-TW" },
   en: { label: "English", htmlLang: "en" },
 } as const satisfies Record<
   (typeof SUPPORTED_LOCALES)[number],

@@ -12,6 +12,7 @@ import {
 } from "@renderer/components/ui/dialog";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import { useAgentStore } from "@renderer/stores/agent";
+import { LOCALE_DETAILS } from "@shared/constants";
 import type { ScheduledTask } from "@shared/scheduled-tasks";
 
 import { FREQUENCY_LABELS, RUN_LABELS, TRIGGER_LABELS } from "./scheduled-task-copy";
@@ -30,7 +31,10 @@ export function ScheduledTaskSettings(): JSX.Element {
   const focus = useRef<HTMLButtonElement>(null);
   const create = useRef<HTMLButtonElement>(null);
   const revision = useRef(0);
-  const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" });
+  const dateFormat = new Intl.DateTimeFormat(LOCALE_DETAILS[locale].htmlLang, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 
   useEffect(() => {
     if (pending || editor || removing) return;

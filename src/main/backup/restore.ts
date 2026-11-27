@@ -2,7 +2,7 @@
 import { lstatSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { DEFAULT_LOCALE } from "../../shared/constants";
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "../../shared/constants";
 import { parseStoredJson, readStoredText, writeStorageAtomic } from "../storage-format";
 import { validCredentialCounts } from "./archive";
 import { BACKUP_INVALID, BACKUP_ROOTS, RESTORE_DIRECTORY, RESTORE_STATE } from "./constants";
@@ -12,6 +12,10 @@ function readState(path: string): RestoreState | undefined {
   const text = readStoredText(path);
   if (text === undefined) return;
   const state = parseStoredJson(text);
+  const locale =
+    state && typeof state === "object" && "locale" in state
+      ? SUPPORTED_LOCALES.find((entry) => entry === state.locale)
+      : undefined;
   if (
     state &&
     typeof state === "object" &&
@@ -22,12 +26,11 @@ function readState(path: string): RestoreState | undefined {
       state.phase === "rolling-back" ||
       state.phase === "applied" ||
       state.phase === "rolled-back") &&
-    "locale" in state &&
-    (state.locale === "zh" || state.locale === "en") &&
+    locale &&
     "credentials" in state &&
     validCredentialCounts(state.credentials)
   )
-    return { phase: state.phase, locale: state.locale, credentials: state.credentials };
+    return { phase: state.phase, locale, credentials: state.credentials };
   throw new Error(BACKUP_INVALID);
 }
 

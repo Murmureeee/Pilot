@@ -27,6 +27,7 @@ import { t, useLocale } from "@renderer/lib/i18n";
 import { relativeTime } from "@renderer/lib/relative-time";
 import type { SessionRowStatus } from "@renderer/lib/types";
 import { useAgentStore } from "@renderer/stores/agent";
+import { LOCALE_DETAILS } from "@shared/constants";
 import type { SessionMeta } from "@shared/contract";
 
 const ROW_ACTION =
@@ -110,7 +111,11 @@ export function SessionRow({
               )}
               data-session-id={session.id}
               aria-current={current ? "page" : undefined}
-              title={session.title + "\n" + new Date(session.updatedAt).toLocaleString(locale)}
+              title={
+                session.title +
+                "\n" +
+                new Date(session.updatedAt).toLocaleString(LOCALE_DETAILS[locale].htmlLang)
+              }
             >
               <SessionStatusMark status={status} />
               {session.pinned && !session.archived && (

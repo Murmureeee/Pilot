@@ -37,6 +37,13 @@ export const BACKUP_COPY = {
     blocked: "暂时无法还原本机数据。请恢复以下目录的访问权限后重启 Pilot。",
     close: "关闭",
   },
+  "zh-TW": {
+    export: "匯出 Pilot 資料備份",
+    open: "選擇 Pilot 備份檔",
+    failed: "無法從備份還原",
+    blocked: "暫時無法還原本機資料。請恢復以下目錄的存取權限後重新啟動 Pilot。",
+    close: "關閉",
+  },
   en: {
     export: "Export Pilot data backup",
     open: "Choose a Pilot backup",

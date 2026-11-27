@@ -43,6 +43,9 @@ export const EN_MESSAGES: Record<string, string> = {
   "找不到可重跑的执行记录。": "This run is no longer available to retry.",
   "定时任务会话固定使用只读权限。": "Scheduled task chats use read-only permissions.",
   "定时任务执行失败。请查看会话后重试。": "The scheduled task failed. Review its chat, then retry.",
+  "{0} 小时前": "{0} hours ago",
+  "{0} 分钟前": "{0} minutes ago",
+  刷新: "Refresh",
   // 桌面后台
   后台运行: "Background activity",
   桌面后台功能不可用: "Desktop background activity unavailable",

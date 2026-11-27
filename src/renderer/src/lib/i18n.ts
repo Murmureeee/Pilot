@@ -5,6 +5,7 @@ import { initReactI18next, useTranslation } from "react-i18next";
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "../../../shared/constants";
 import type { Locale } from "../../../shared/contract";
 import { EN_MESSAGES } from "./locales/en";
+import { ZH_TW_MESSAGES } from "./locales/zh-TW";
 
 const LOCALE_STORAGE_KEY = "pilot-locale";
 const LEGACY_LOCALE_STORAGE_KEY = "pi-locale";
@@ -12,9 +13,11 @@ const i18n = createInstance();
 void i18n.use(initReactI18next).init({
   lng: DEFAULT_LOCALE,
   fallbackLng: DEFAULT_LOCALE,
+  load: "currentOnly",
   supportedLngs: [...SUPPORTED_LOCALES],
   resources: {
     zh: { translation: {} },
+    "zh-TW": { translation: ZH_TW_MESSAGES },
     en: { translation: EN_MESSAGES },
   } satisfies Record<Locale, { translation: Record<string, string> }>,
   initAsync: false,

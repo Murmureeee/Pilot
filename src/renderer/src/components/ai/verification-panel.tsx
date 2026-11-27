@@ -27,7 +27,7 @@ import {
   selectWorkspaceRun,
   useAgentStore,
 } from "@renderer/stores/agent";
-import { VERIFICATION_COMMAND_LIMIT } from "@shared/constants";
+import { LOCALE_DETAILS, VERIFICATION_COMMAND_LIMIT } from "@shared/constants";
 import {
   VERIFICATION_KINDS,
   type VerificationKind,
@@ -515,7 +515,7 @@ export function VerificationPanel({
                       <span>{t(VERIFICATION_LABELS[run.kind], locale)}</span>
                       <VerificationStatusText run={run} />
                       <span className="truncate text-xs text-muted-foreground">
-                        {new Date(run.startedAt).toLocaleString(locale === "en" ? "en" : "zh-CN", {
+                        {new Date(run.startedAt).toLocaleString(LOCALE_DETAILS[locale].htmlLang, {
                           dateStyle: "short",
                           timeStyle: "medium",
                         })}

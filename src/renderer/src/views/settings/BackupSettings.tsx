@@ -12,6 +12,7 @@ import {
 } from "@renderer/components/ui/dialog";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { BackupContents, BackupPreview } from "@shared/backup";
+import { LOCALE_DETAILS } from "@shared/constants";
 
 import { SettingsGroup, SettingsItem } from "./SettingsGroup";
 
@@ -81,7 +82,7 @@ export function BackupSettings(): JSX.Element {
   const formatValue = (value: boolean | number): string =>
     typeof value === "boolean"
       ? t(value ? "有" : "无", locale)
-      : new Intl.NumberFormat(locale).format(value);
+      : new Intl.NumberFormat(LOCALE_DETAILS[locale].htmlLang).format(value);
 
   return (
     <SettingsGroup id="settings-backup" title={t("数据备份与恢复", locale)}>

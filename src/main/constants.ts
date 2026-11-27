@@ -3,6 +3,7 @@ import type { Locale } from "../shared/contract";
 
 export const DESKTOP_BACKGROUND_COPY = {
   zh: { open: "打开 Pilot", quit: "退出 Pilot" },
+  "zh-TW": { open: "開啟 Pilot", quit: "結束 Pilot" },
   en: { open: "Open Pilot", quit: "Quit Pilot" },
 } satisfies Record<Locale, { open: string; quit: string }>;
 
@@ -46,6 +47,13 @@ export const RENDERER_RECOVERY_MESSAGES = {
     detail: "重新加载界面后可以接着使用当前会话。正在运行的任务会继续。",
     reload: "重新加载",
   },
+  "zh-TW": {
+    unresponsive: "Pilot 介面沒有回應",
+    crashed: "Pilot 介面程序已結束",
+    outOfMemory: "Pilot 介面記憶體不足",
+    detail: "重新載入介面後可繼續使用目前的對話。執行中的工作會繼續。",
+    reload: "重新載入",
+  },
   en: {
     unresponsive: "Pilot is not responding",
     crashed: "The Pilot interface process exited",
@@ -76,6 +84,19 @@ export const NATIVE_EXIT_MESSAGES = {
     failedDetail: "部分运行未能停止或保存。请重试或在设置中查看日志。",
     back: "返回 Pilot",
   },
+  "zh-TW": {
+    quit: { title: "結束 Pilot？", accept: "停止並結束" },
+    closeWindow: { title: "關閉 Pilot 視窗？", accept: "停止並關閉" },
+    update: { title: "安裝更新並重新啟動 Pilot？", accept: "停止並更新" },
+    agent: "有工作正在執行。",
+    verification: "有驗證指令正在執行。",
+    terminal: "有終端機或背景指令正在執行。",
+    detail: "繼續會停止執行中的操作並儲存目前的進度。",
+    cancel: "取消",
+    failed: "無法完成結束操作",
+    failedDetail: "部分工作無法停止或儲存。請重試或在設定中檢視記錄。",
+    back: "返回 Pilot",
+  },
   en: {
     quit: { title: "Quit Pilot?", accept: "Stop and quit" },
     closeWindow: { title: "Close the Pilot window?", accept: "Stop and close" },
@@ -103,6 +124,17 @@ export const NATIVE_DIALOG_TITLES = {
     bindProject: "关联项目",
     exportMarkdown: "导出 Markdown",
     exportDiagnostics: "导出脱敏诊断",
+  },
+  "zh-TW": {
+    skill: "選擇技能資料夾（須包含 SKILL.md）",
+    importProject: "選擇匯入來源專案",
+    pluginDirectory: "選擇外掛資料夾",
+    pluginZip: "選擇外掛 ZIP 壓縮檔",
+    workingDirectory: "選擇工具工作目錄",
+    openProject: "開啟專案",
+    bindProject: "連結專案",
+    exportMarkdown: "匯出 Markdown",
+    exportDiagnostics: "匯出去識別化診斷資料",
   },
   en: {
     skill: "Choose a skill folder containing SKILL.md",
@@ -135,6 +167,11 @@ export const PROJECT_ENTRY_ERROR = {
     message: "无法打开项目",
     detail: "请选择一个可访问的文件夹，或在终端运行 pilot <目录>。",
     close: "关闭",
+  },
+  "zh-TW": {
+    message: "無法開啟專案",
+    detail: "請選擇一個可存取的資料夾，或在終端機執行 pilot <目錄>。",
+    close: "關閉",
   },
   en: {
     message: "Could not open the project",

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { NATIVE_DIALOG_TITLES, NATIVE_EXIT_MESSAGES } from "../src/main/constants";
+import { parseIpcArgs } from "../src/main/ipc/validation";
 import { formatDuration } from "../src/renderer/src/lib/duration";
 import {
   currentLocale,
@@ -9,7 +11,11 @@ import {
   t,
   watchLocale,
 } from "../src/renderer/src/lib/i18n";
+import { EN_MESSAGES } from "../src/renderer/src/lib/locales/en";
+import { ZH_TW_MESSAGES } from "../src/renderer/src/lib/locales/zh-TW";
 import { relativeTime } from "../src/renderer/src/lib/relative-time";
+import { LOCALE_DETAILS } from "../src/shared/constants";
+import { IPC } from "../src/shared/contract";
 
 describe("interface language", () => {
   it("translates labels and preserves unknown text", () => {
@@ -37,6 +43,25 @@ describe("interface language", () => {
     expect(t("退出 {0}", "en", ["$5 {0}"])).toBe("Quit $5 {0}");
   });
 
+  it("uses the shared language for native prompts and Traditional Chinese UI copy", () => {
+    expect(Object.keys(EN_MESSAGES).filter((key) => !Object.hasOwn(ZH_TW_MESSAGES, key))).toEqual(
+      [],
+    );
+    expect(LOCALE_DETAILS["zh-TW"].htmlLang).toBe("zh-TW");
+    expect(parseIpcArgs(IPC.appSetLocale, ["zh-TW"])).toEqual(["zh-TW"]);
+    expect(NATIVE_DIALOG_TITLES["zh-TW"].openProject).toBe("開啟專案");
+    expect(NATIVE_EXIT_MESSAGES["zh-TW"].quit.accept).toBe("停止並結束");
+    expect(t("搜索设置", "zh-TW")).toBe("搜尋設定");
+    expect(t("复制代码", "zh-TW")).toBe("複製程式碼");
+    expect(relativeTime(0, "zh-TW", 120_000)).toBe("2 分鐘前");
+    expect(
+      localizeError(
+        "Error invoking remote method 'settings:save': Error: 无法使用该工作目录。",
+        "zh-TW",
+      ),
+    ).toBe("無法使用該工作目錄。");
+  });
+
   it("formats step durations by length", () => {
     expect(formatDuration(40, "zh")).toBe("0.1 秒");
     expect(formatDuration(3_240, "zh")).toBe("3.2 秒");
@@ -59,10 +84,14 @@ describe("interface language", () => {
       setLocale("zh");
       expect(currentLocale()).toBe("zh");
       expect(values.get("pilot-locale")).toBe("zh");
+      setLocale("zh-TW");
+      expect(values.get("pilot-locale")).toBe("zh-TW");
+      restoreLocale();
+      expect(currentLocale()).toBe("zh-TW");
       values.set("pilot-locale", "unknown");
       restoreLocale();
       expect(currentLocale()).toBe("zh");
-      expect(reportLocale.mock.calls).toEqual([["en"], ["zh"], ["zh"]]);
+      expect(reportLocale.mock.calls).toEqual([["en"], ["zh"], ["zh-TW"], ["zh-TW"], ["zh"]]);
     } finally {
       unwatch();
       vi.unstubAllGlobals();

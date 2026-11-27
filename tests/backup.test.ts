@@ -177,8 +177,8 @@ it("applies only a confirmed backup and replaces absent roots without touching o
   expect(existsSync(stage)).toBe(false);
 
   put(join(incoming, "settings.json"), "from backup");
-  armRestore(stage, { phase: "pending", locale: "en", credentials });
-  expect(applyPendingBackup(profile)).toEqual({ status: "applied", locale: "en", credentials });
+  armRestore(stage, { phase: "pending", locale: "zh-TW", credentials });
+  expect(applyPendingBackup(profile)).toEqual({ status: "applied", locale: "zh-TW", credentials });
   expect(readFileSync(join(profile, "settings.json"), "utf8")).toBe("from backup");
   expect(readFileSync(join(profile, "logs", "pilot.log"), "utf8")).toBe("separate");
   expect(existsSync(join(profile, "skills"))).toBe(false);

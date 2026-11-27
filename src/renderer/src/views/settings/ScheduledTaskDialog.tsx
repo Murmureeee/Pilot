@@ -21,6 +21,7 @@ import {
 } from "@renderer/components/ui/select";
 import { Textarea } from "@renderer/components/ui/textarea";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
+import { LOCALE_DETAILS } from "@shared/constants";
 import {
   nextScheduledTime,
   SCHEDULE_FREQUENCIES,
@@ -70,7 +71,10 @@ export function ScheduledTaskDialog({ task, returnFocus, onSave, onClose }: Prop
   } catch {
     // An incomplete date or time zone has no preview.
   }
-  const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" });
+  const dateFormat = new Intl.DateTimeFormat(LOCALE_DETAILS[locale].htmlLang, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 
   const pickDirectory = async (): Promise<void> => {
     setError(null);

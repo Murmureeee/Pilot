@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { t, useLocale } from "@renderer/lib/i18n";
+import { LOCALE_DETAILS } from "@shared/constants";
 import type { Snapshot } from "@shared/contract";
 import type { UsageReport } from "@shared/usage";
 
@@ -61,15 +62,16 @@ export function UsageSettings(): JSX.Element {
     };
   }, [request]);
 
-  const count = new Intl.NumberFormat(locale);
-  const cost = new Intl.NumberFormat(locale, {
+  const language = LOCALE_DETAILS[locale].htmlLang;
+  const count = new Intl.NumberFormat(language);
+  const cost = new Intl.NumberFormat(language, {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 6,
     minimumFractionDigits: 2,
     currencyDisplay: "code",
   });
-  const date = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
+  const date = new Intl.DateTimeFormat(language, { dateStyle: "medium" });
   const rows = report?.[group] ?? [];
   const isLoading = completed !== request;
 

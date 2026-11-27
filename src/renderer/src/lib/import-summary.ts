@@ -1,6 +1,7 @@
 // @env browser
 import type { Locale } from "@shared/contract";
 
+import { LOCALE_DETAILS } from "../../../shared/constants";
 import { t } from "./i18n";
 
 export function importSummary(
@@ -16,5 +17,7 @@ export function importSummary(
     parts.push(t(plugins === 1 ? "1 组插件组件" : "{0} 组插件组件", locale, [plugins]));
   if (templates > 0)
     parts.push(t(templates === 1 ? "1 个提示词模板" : "{0} 个提示词模板", locale, [templates]));
-  return new Intl.ListFormat(locale, { type: "conjunction" }).format(parts);
+  return new Intl.ListFormat(LOCALE_DETAILS[locale].htmlLang, { type: "conjunction" }).format(
+    parts,
+  );
 }

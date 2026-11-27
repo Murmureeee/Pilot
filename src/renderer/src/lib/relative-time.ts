@@ -2,6 +2,7 @@
 // 相对时间格式化（命令面板会话列表用）。
 import type { Locale } from "@shared/contract";
 
+import { LOCALE_DETAILS } from "../../../shared/constants";
 import { t } from "./i18n";
 
 const englishRelative = new Intl.RelativeTimeFormat("en");
@@ -17,8 +18,8 @@ export function relativeTime(timestamp: number, locale: Locale, now: number = Da
     const count = Math.floor(diff / (hours ? hour : minute));
     return locale === "en"
       ? englishRelative.format(-count, hours ? "hour" : "minute")
-      : `${count} ${hours ? "小时" : "分钟"}前`;
+      : t(hours ? "{0} 小时前" : "{0} 分钟前", locale, [count]);
   }
   if (diff < 2 * day) return t("昨天", locale);
-  return new Date(timestamp).toLocaleDateString(locale);
+  return new Date(timestamp).toLocaleDateString(LOCALE_DETAILS[locale].htmlLang);
 }

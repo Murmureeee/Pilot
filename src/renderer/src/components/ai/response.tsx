@@ -9,7 +9,7 @@ import {
   type StreamdownTranslations,
 } from "streamdown";
 
-import { useLocale } from "@renderer/lib/i18n";
+import { t, useLocale } from "@renderer/lib/i18n";
 import { remarkWorkspaceLinks, workspaceLinkFromHref } from "@renderer/lib/workspace-links";
 
 import { InlineWorkspaceReference } from "./workspace-reference";
@@ -28,7 +28,7 @@ function MarkdownLink(props: ComponentProps<"a"> & ExtraProps): JSX.Element {
 
 const MARKDOWN_COMPONENTS = { a: MarkdownLink };
 
-const ZH_TRANSLATIONS: Partial<StreamdownTranslations> = {
+const ZH_TRANSLATIONS = {
   close: "关闭",
   copied: "已复制",
   copyCode: "复制代码",
@@ -57,7 +57,11 @@ const ZH_TRANSLATIONS: Partial<StreamdownTranslations> = {
   viewFullscreen: "全屏显示",
   zoomIn: "放大",
   zoomOut: "缩小",
-};
+} satisfies Partial<StreamdownTranslations>;
+
+const ZH_TW_TRANSLATIONS = Object.fromEntries(
+  Object.entries(ZH_TRANSLATIONS).map(([key, message]) => [key, t(message, "zh-TW")]),
+);
 
 export const Response = memo(function Response({ content }: { content: string }): JSX.Element {
   const locale = useLocale();
@@ -65,7 +69,9 @@ export const Response = memo(function Response({ content }: { content: string })
     <Streamdown
       components={MARKDOWN_COMPONENTS}
       remarkPlugins={MARKDOWN_PLUGINS}
-      translations={locale === "zh" ? ZH_TRANSLATIONS : undefined}
+      translations={
+        locale === "en" ? undefined : locale === "zh" ? ZH_TRANSLATIONS : ZH_TW_TRANSLATIONS
+      }
     >
       {content}
     </Streamdown>

@@ -32,7 +32,7 @@ const templateText = "Check {{file}} against {{rule}} and summarize {{file}}.";
 const locales = [
   {
     lang: "zh-CN",
-    name: "中文",
+    name: "简体中文",
     settings: "设置",
     appearance: "外观",
     theme: "主题",
