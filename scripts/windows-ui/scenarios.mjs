@@ -3994,7 +3994,7 @@ export async function verifyCommandsAndTemplates(page, app, model, originalProje
 
   await choosePalette(page, "theme-light", /^Switch theme/);
   await page.waitForFunction(() => !document.documentElement.classList.contains("dark"));
-  await choosePalette(page, "locale-zh", /^Switch language/);
+  await choosePalette(page, "简体中文", /^Switch language\s+简体中文$/, "Actions");
   await page.waitForFunction(() => document.documentElement.lang === "zh-CN");
   await choosePalette(page, "locale-en", /^切换语言/);
   await page.waitForFunction(() => document.documentElement.lang === "en");
