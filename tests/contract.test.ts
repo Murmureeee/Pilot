@@ -68,6 +68,11 @@ describe("IPC contract", () => {
     expect(IPC.settingsSetAutoDownloadUpdates).toBe("settings:set-auto-download-updates");
   });
 
+  it("separates desktop background preference reads from updates", () => {
+    expect(IPC.settingsDesktopBackground).toBe("settings:desktop-background");
+    expect(IPC.settingsSetDesktopBackground).toBe("settings:set-desktop-background");
+  });
+
   it("uses a dedicated settings route for reading persisted usage", () => {
     expect(IPC.settingsUsageReport).toBe("settings:usage-report");
   });

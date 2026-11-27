@@ -63,6 +63,8 @@ export interface Settings {
   externalEditor?: ExternalEditor;
   logLevel?: LogLevel;
   notificationsEnabled?: boolean;
+  closeToTray?: boolean;
+  globalComposerShortcut?: boolean;
   autoDownloadUpdates?: boolean;
   persona?: string;
   projectHooks?: Record<string, ProjectHooks>;

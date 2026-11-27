@@ -38,6 +38,7 @@ export class DesktopExit {
     window.on("close", (event) => {
       if (this.stage === "exiting" || this.stage === "closing-window") return;
       event.preventDefault();
+      if (this.stage === "idle" && this.deps.hideToTray?.(window)) return;
       void this.request(process.platform === "darwin" ? "closeWindow" : "quit", window);
     });
   }

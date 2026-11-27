@@ -43,6 +43,22 @@ export const EN_MESSAGES: Record<string, string> = {
   "找不到可重跑的执行记录。": "This run is no longer available to retry.",
   "定时任务会话固定使用只读权限。": "Scheduled task chats use read-only permissions.",
   "定时任务执行失败。请查看会话后重试。": "The scheduled task failed. Review its chat, then retry.",
+  // 桌面后台
+  后台运行: "Background activity",
+  桌面后台功能不可用: "Desktop background activity unavailable",
+  关闭窗口时留在托盘: "Keep in tray on close",
+  "关闭窗口后继续任务。从托盘打开窗口或退出 Pilot。":
+    "Keep tasks running after closing the window. Open or quit Pilot from the tray.",
+  全局快捷键: "Global shortcut",
+  "从其他应用按 {0} 打开 Pilot 并聚焦输入区。":
+    "Press {0} in other apps to open Pilot and focus the composer.",
+  "全局唤起 Pilot（需启用）": "Show Pilot globally (enable in settings)",
+  "全局快捷键设置…": "Global shortcut settings…",
+  "无法读取后台运行设置。请重试。": "Could not load background preferences. Try again.",
+  "无法创建系统托盘图标。请检查桌面环境是否支持托盘，再重新开启。":
+    "Could not create the tray icon. Check that the desktop supports a tray, then enable it again.",
+  "无法注册全局快捷键。请检查系统快捷键或其他应用的占用，再重新开启。":
+    "Could not register the global shortcut. Check system shortcuts and other apps, then enable it again.",
   // 用量统计
   用量统计: "Usage",
   "按天、项目和模型查看已保存的 token 和费用。":

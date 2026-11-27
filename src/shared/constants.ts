@@ -49,6 +49,7 @@ export const DIAGNOSTIC_EVENTS = {
     "previous-run-interrupted",
     "uncaught-exception",
     "agent-error",
+    "desktop-background-unavailable",
     "exit-failed",
     "window-state-save-failed",
     "scheduled-task-storage",

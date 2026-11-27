@@ -1,6 +1,16 @@
 // @env node
 import type { Locale } from "../shared/contract";
 
+export const DESKTOP_BACKGROUND_COPY = {
+  zh: { open: "打开 Pilot", quit: "退出 Pilot" },
+  en: { open: "Open Pilot", quit: "Quit Pilot" },
+} satisfies Record<Locale, { open: string; quit: string }>;
+
+export const DESKTOP_BACKGROUND_ERRORS = {
+  closeToTray: "无法创建系统托盘图标。请检查桌面环境是否支持托盘，再重新开启。",
+  globalComposerShortcut: "无法注册全局快捷键。请检查系统快捷键或其他应用的占用，再重新开启。",
+} as const;
+
 export const WINDOWS_APP_ID = "dev.pilot.app";
 export const LEGACY_USER_DATA_DIRECTORIES = ["pi Desktop", "pi-desktop"] as const;
 export const SESSION_TRANSCRIPT_EXTENSION = ".jsonl";

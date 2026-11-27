@@ -197,6 +197,9 @@ const api: PiApi = {
   },
   settingsGet: () => ipcRenderer.invoke(IPC.settingsGet),
   settingsUsageReport: () => ipcRenderer.invoke(IPC.settingsUsageReport),
+  settingsDesktopBackground: () => ipcRenderer.invoke(IPC.settingsDesktopBackground),
+  settingsSetDesktopBackground: (setting, enabled) =>
+    ipcRenderer.invoke(IPC.settingsSetDesktopBackground, setting, enabled),
   settingsSave: (input: SettingsInput) => ipcRenderer.invoke(IPC.settingsSave, input),
   settingsSetProjectHooks: (directory, shell, commands) =>
     ipcRenderer.invoke(IPC.settingsSetProjectHooks, directory, shell, commands),

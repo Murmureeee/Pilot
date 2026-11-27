@@ -438,6 +438,11 @@ const inputs = {
   [IPC.skillsToggle]: z.tuple([z.uuid(), mentionId, z.boolean()]),
   [IPC.settingsGet]: none,
   [IPC.settingsUsageReport]: none,
+  [IPC.settingsDesktopBackground]: none,
+  [IPC.settingsSetDesktopBackground]: z.tuple([
+    z.enum(["closeToTray", "globalComposerShortcut"]),
+    z.boolean(),
+  ]),
   [IPC.settingsSave]: z.tuple([settings]),
   [IPC.settingsSetProjectHooks]: z.tuple([
     nonBlank,

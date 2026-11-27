@@ -56,6 +56,7 @@ export function registerAppRoutes(
     | "updater"
     | "exit"
     | "onConversationVisibilityChanged"
+    | "background"
   >,
 ): void {
   handle(IPC.ping, (_event, request): PingResponse => {
@@ -95,7 +96,10 @@ export function registerAppRoutes(
     await writeFile(result.filePath, JSON.stringify(report, null, 2) + "\n", { mode: 0o600 });
     return true;
   });
-  handle(IPC.appSetLocale, (event, locale) => setRendererLocale(event.sender, locale));
+  handle(IPC.appSetLocale, (event, locale) => {
+    setRendererLocale(event.sender, locale);
+    ctx.background.updateTrayMenu();
+  });
   handle(IPC.appSetConversationVisible, (event, visible) => {
     setConversationVisible(event.sender, visible);
     ctx.onConversationVisibilityChanged();

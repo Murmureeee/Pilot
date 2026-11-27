@@ -170,6 +170,8 @@ function mergeSettingsInput(current: Settings, input: SettingsInput): Settings {
     externalEditor: current.externalEditor,
     logLevel: current.logLevel,
     notificationsEnabled: current.notificationsEnabled,
+    closeToTray: current.closeToTray,
+    globalComposerShortcut: current.globalComposerShortcut,
     autoDownloadUpdates: current.autoDownloadUpdates,
     // 人设传 "" 即清空（空串不是 nullish，不会被 ?? 吞掉）；技能启停整表提交
     persona: input.persona ?? current.persona ?? "",

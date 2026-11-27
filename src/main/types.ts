@@ -1,9 +1,11 @@
 // @env node
 import type { BrowserWindow, Rectangle, Session } from "electron";
 
+import type { Locale } from "../shared/contract";
 import type { AgentHost } from "./agent-host/host";
 import type { McpManager } from "./agent-host/mcp";
 import type { DiagnosticLog } from "./diagnostics";
+import type { Settings } from "./settings/types";
 import type { TerminalManager } from "./terminal";
 import type { DesktopUpdater } from "./updater";
 import type { VerificationManager } from "./verification";
@@ -13,11 +15,22 @@ export type ExitStage = "idle" | "confirming" | "stopping" | "closing-window" | 
 
 export interface DesktopExitDependencies {
   getWindow(): BrowserWindow | undefined;
+  hideToTray?(window: BrowserWindow): boolean;
   host: Pick<AgentHost, "hasActiveRun" | "stopForExit">;
   verification: Pick<VerificationManager, "hasActiveRuns" | "stopAll">;
   terminal: Pick<TerminalManager, "hasActiveProcesses" | "stopAll">;
   mcp: Pick<McpManager, "close">;
   updater: Pick<DesktopUpdater, "getStatus" | "install">;
+  log: Pick<DiagnosticLog, "write">;
+}
+
+export interface DesktopBackgroundDependencies {
+  iconPath: string;
+  getSettings(): Settings;
+  saveSettings(settings: Settings): void;
+  reveal(): BrowserWindow | undefined;
+  focusComposer(): void;
+  getLocale(): Locale;
   log: Pick<DiagnosticLog, "write">;
 }
 

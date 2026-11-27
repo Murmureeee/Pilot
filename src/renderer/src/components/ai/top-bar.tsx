@@ -30,6 +30,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
+import { openWorkbenchSettings } from "@renderer/hooks/use-workbench-commands";
 import { COMPOSER_SHORTCUTS, REVIEW_SHORTCUTS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { canBack, canForward } from "@renderer/lib/nav";
@@ -39,6 +40,7 @@ import { activateReview } from "@renderer/stores/review";
 import { useUpdateStore } from "@renderer/stores/update";
 import { APP_NAME } from "@shared/constants";
 import type { AppInfo, MenuAction } from "@shared/contract";
+import { GLOBAL_COMPOSER_SHORTCUT_LABEL } from "@shared/desktop-background";
 
 function Item({
   label,
@@ -226,6 +228,11 @@ export function TopBar({
                 <DropdownMenuSubTrigger>{t("输入框", locale)}</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="min-w-56">
                   <DropdownMenuGroup>
+                    <Item
+                      label={t("全局快捷键设置…", locale)}
+                      shortcut={GLOBAL_COMPOSER_SHORTCUT_LABEL}
+                      onRun={() => openWorkbenchSettings("general")}
+                    />
                     {(Object.keys(COMPOSER_SHORTCUTS) as ComposerShortcut[])
                       .filter((id) => id !== "find-chat")
                       .map((id) => (

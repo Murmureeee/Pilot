@@ -30,13 +30,16 @@ export function registerAgentRoutes({
   saveSettings,
   exit,
   mcp,
+  background,
 }: Pick<
   IpcContext,
-  "host" | "verification" | "getSettings" | "saveSettings" | "exit" | "mcp"
+  "host" | "verification" | "getSettings" | "saveSettings" | "exit" | "mcp" | "background"
 >): void {
   const memory = new MemoryChanges({ getSettings, saveSettings });
   handle(IPC.runAgentSmoke, () => runAgentSmoke());
-  handle(IPC.agentGetSnapshot, () => host.publishSnapshot());
+  handle(IPC.agentGetSnapshot, (event) =>
+    host.publishSnapshot(background.rendererReady(event.sender) ? "reveal" : undefined),
+  );
   handle(IPC.agentSearchWorkspace, (_event, query, expectedDirectory) => {
     if (expectedDirectory !== undefined) host.checkWorkingDirectory(expectedDirectory);
     return searchWorkspace(host.getWorkingDirectory(), query);

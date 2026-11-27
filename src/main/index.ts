@@ -36,6 +36,7 @@ import {
   WINDOW_STATE_FILE_NAME,
   WINDOW_TITLE_BAR_HEIGHT,
 } from "./constants";
+import { DesktopBackground } from "./desktop-background";
 import { DesktopExit } from "./desktop-exit";
 import { DiagnosticLog, errorDetails } from "./diagnostics";
 import { logRendererConsole } from "./diagnostics/renderer";
@@ -85,9 +86,7 @@ async function runSmoke(): Promise<void> {
 const CSP =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'";
 
-function createWindow(log: DiagnosticLog, stateFile: string): BrowserWindow {
-  const iconDir = isDev ? join(app.getAppPath(), "resources") : process.resourcesPath;
-  const iconPath = join(iconDir, "icon.png");
+function createWindow(log: DiagnosticLog, stateFile: string, iconPath: string): BrowserWindow {
   const iconOptions = existsSync(iconPath) ? { icon: iconPath } : {};
   const state = loadWindowState(stateFile);
 
@@ -189,6 +188,10 @@ function startDesktop(): (entry: ProjectEntry) => void {
   const skillsDir = join(userData, "skills");
   const logsDir = join(userData, "logs");
   const windowState = join(userData, WINDOW_STATE_FILE_NAME);
+  const iconPath = join(
+    isDev ? join(app.getAppPath(), "resources") : process.resourcesPath,
+    "icon.png",
+  );
   const getSettings = (): ReturnType<typeof loadSettings> => loadSettings(userData);
   const initialSettings = getSettings();
   const log = new DiagnosticLog(logsDir, getLogLevel(initialSettings));
@@ -301,6 +304,7 @@ function startDesktop(): (entry: ProjectEntry) => void {
   let mainWindow: BrowserWindow | undefined;
   const exit = new DesktopExit({
     getWindow: () => mainWindow,
+    hideToTray: (window) => background.hideWindow(window),
     host,
     verification,
     terminal,
@@ -353,6 +357,24 @@ function startDesktop(): (entry: ProjectEntry) => void {
     powerMonitor.removeListener("resume", resumeSchedules);
     scheduledTasks.stop();
   });
+  const background = new DesktopBackground({
+    iconPath,
+    getSettings,
+    saveSettings: persistSettings,
+    reveal: () => {
+      if (exit.isExiting()) return undefined;
+      const window = getMainWindow();
+      revealWindow(window);
+      return window;
+    },
+    focusComposer: () => host.publishSnapshot("reveal"),
+    getLocale: () =>
+      mainWindow && !mainWindow.isDestroyed()
+        ? getRendererLocale(mainWindow.webContents)
+        : DEFAULT_LOCALE,
+    log,
+  });
+  app.once("will-quit", () => background.dispose());
   registerIpc({
     scheduledTasks,
     settingsDir: userData,
@@ -370,13 +392,14 @@ function startDesktop(): (entry: ProjectEntry) => void {
     verification,
     terminal,
     exit,
+    background,
     backup: new ProfileBackup(userData),
     backupResult: restored ? { status: restored.status, credentials: restored.credentials } : null,
     isDev,
   });
   const getMainWindow = (): BrowserWindow => {
     if (!mainWindow || mainWindow.isDestroyed()) {
-      mainWindow = createWindow(log, windowState);
+      mainWindow = createWindow(log, windowState, iconPath);
       exit.watchWindow(mainWindow);
       notifications.watchWindow(mainWindow);
     }
@@ -386,6 +409,7 @@ function startDesktop(): (entry: ProjectEntry) => void {
     if (!exit.isExiting()) getMainWindow();
   });
   getMainWindow();
+  background.start();
 
   updater.startPeriodicChecks();
   return (entry) => {

@@ -16,7 +16,10 @@ import { handle } from "./transport";
 import type { IpcContext } from "./types";
 
 export function registerSettingsRoutes(
-  ctx: Pick<IpcContext, "host" | "skillsDir" | "getSettings" | "saveSettings" | "request">,
+  ctx: Pick<
+    IpcContext,
+    "host" | "skillsDir" | "getSettings" | "saveSettings" | "request" | "background"
+  >,
 ): void {
   handle(IPC.settingsGet, () => toPublicSettings(ctx.getSettings()));
   handle(IPC.settingsSetProjectHooks, (_event, directory, shell, commands) => {
@@ -32,6 +35,10 @@ export function registerSettingsRoutes(
     return toPublicSettings(settings);
   });
   handle(IPC.settingsUsageReport, () => ctx.host.usageReport());
+  handle(IPC.settingsDesktopBackground, () => ctx.background.state());
+  handle(IPC.settingsSetDesktopBackground, (_event, setting, enabled) =>
+    ctx.background.set(setting, enabled),
+  );
   handle(IPC.settingsSetPromptTemplates, (_event, promptTemplates) => {
     const settings = { ...ctx.getSettings(), promptTemplates };
     ctx.saveSettings(settings);

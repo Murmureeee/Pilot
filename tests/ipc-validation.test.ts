@@ -197,6 +197,8 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.settingsGet]: [],
   [IPC.settingsSetProjectHooks]: ["E:/project", "bash", { beforeTool: "git status" }],
   [IPC.settingsUsageReport]: [],
+  [IPC.settingsDesktopBackground]: [],
+  [IPC.settingsSetDesktopBackground]: ["closeToTray", true],
   [IPC.settingsSetPromptTemplates]: [[{ name: "audit", text: "Review {{file}}." }]],
   [IPC.settingsSave]: [settings],
   [IPC.settingsSetLogLevel]: ["debug"],

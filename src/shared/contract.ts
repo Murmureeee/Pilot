@@ -137,6 +137,8 @@ export const IPC = {
   skillsToggle: "skills:toggle",
   settingsGet: "settings:get",
   settingsUsageReport: "settings:usage-report",
+  settingsDesktopBackground: "settings:desktop-background",
+  settingsSetDesktopBackground: "settings:set-desktop-background",
   settingsSave: "settings:save",
   settingsSetProjectHooks: "settings:set-project-hooks",
   settingsSetPromptTemplates: "settings:set-prompt-templates",

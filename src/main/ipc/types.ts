@@ -15,6 +15,7 @@ import type {
 import type { AgentHost } from "../agent-host/host";
 import type { McpManager } from "../agent-host/mcp";
 import type { ProfileBackup } from "../backup";
+import type { DesktopBackground } from "../desktop-background";
 import type { DesktopExit } from "../desktop-exit";
 import type { DiagnosticLog } from "../diagnostics";
 import type { ScheduledTasks } from "../scheduled-tasks";
@@ -59,6 +60,7 @@ export interface IpcContext {
   verification: VerificationManager;
   terminal: TerminalManager;
   exit: DesktopExit;
+  background: DesktopBackground;
   backup: ProfileBackup;
   backupResult: BackupRestoreResult | null;
   isDev: boolean;

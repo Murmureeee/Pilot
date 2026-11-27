@@ -78,6 +78,7 @@ import type {
   WorkspaceReferencePreview,
   WorkspaceReferenceRequest,
 } from "./contract";
+import type { DesktopBackgroundSetting, DesktopBackgroundState } from "./desktop-background";
 import type { McpRegistryPage, PluginMarketplace, PluginMarketplaceSource } from "./discovery";
 import type {
   ExternalImportKind,
@@ -279,6 +280,11 @@ export interface PiApi {
   onTerminalEvent(callback: (event: TerminalEvent) => void): () => void;
   settingsGet(): Promise<PublicSettings>;
   settingsUsageReport(): Promise<UsageReport>;
+  settingsDesktopBackground(): Promise<DesktopBackgroundState>;
+  settingsSetDesktopBackground(
+    setting: DesktopBackgroundSetting,
+    enabled: boolean,
+  ): Promise<DesktopBackgroundState>;
   settingsSave(input: SettingsInput): Promise<PublicSettings>;
   settingsSetProjectHooks(
     directory: string,

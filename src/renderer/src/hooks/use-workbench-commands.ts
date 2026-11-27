@@ -55,6 +55,7 @@ import {
   SUPPORTED_LOCALES,
 } from "@shared/constants";
 import { VERIFICATION_KINDS, type PromptTemplate, type ThemeSetting } from "@shared/contract";
+import { GLOBAL_COMPOSER_SHORTCUT_LABEL } from "@shared/desktop-background";
 
 const shortcutIcons = {
   "focus-composer": LocateFixedIcon,
@@ -320,6 +321,13 @@ export function useWorkbenchCommands({
       });
   }
 
+  commands.push({
+    id: "global-composer-shortcut-settings",
+    label: "全局快捷键设置…",
+    shortcut: GLOBAL_COMPOSER_SHORTCUT_LABEL,
+    icon: LocateFixedIcon,
+    run: () => openWorkbenchSettings("general"),
+  });
   for (const shortcut of Object.keys(COMPOSER_SHORTCUTS) as ComposerShortcut[]) {
     if (!shortcuts[shortcut]) continue;
     const { label, keys } = COMPOSER_SHORTCUTS[shortcut];

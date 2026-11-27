@@ -215,6 +215,8 @@ const storedSettings = z.looseObject({
   externalEditor: externalEditorSchema.optional().catch(undefined),
   logLevel: z.enum(LOG_LEVELS).optional().catch(undefined),
   notificationsEnabled: z.boolean().optional().catch(undefined),
+  closeToTray: z.boolean().optional().catch(undefined),
+  globalComposerShortcut: z.boolean().optional().catch(undefined),
   autoDownloadUpdates: z.boolean().optional().catch(undefined),
   persona: optionalText,
   projectHooks: z.record(z.string().min(1), projectHooksSchema).optional(),

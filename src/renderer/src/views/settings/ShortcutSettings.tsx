@@ -5,6 +5,7 @@ import { SHORTCUT_GROUPS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
 import { loadSendKey } from "@renderer/lib/preferences";
 import type { ShortcutGroup } from "@renderer/lib/types";
+import { GLOBAL_COMPOSER_SHORTCUT_LABEL } from "@shared/desktop-background";
 
 import { SettingsGroup } from "./SettingsGroup";
 
@@ -14,6 +15,7 @@ export function ShortcutSettings(): JSX.Element {
   const sendItems: ShortcutGroup["items"] = [
     { label: "发送消息", keys: modEnter ? "Ctrl+Enter" : "Enter" },
     { label: "换行", keys: modEnter ? "Enter" : "Shift+Enter" },
+    { label: "全局唤起 Pilot（需启用）", keys: GLOBAL_COMPOSER_SHORTCUT_LABEL },
   ];
 
   return (
