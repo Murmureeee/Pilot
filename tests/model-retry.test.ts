@@ -1,5 +1,5 @@
 // @env node
-import { mkdirSync, mkdtempDisposableSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempDisposableSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
@@ -176,7 +176,7 @@ it("aborts the scheduled backoff without another request", async () => {
 });
 
 it("reopens an exhausted task and continues from its saved tool result", async () => {
-  using fixture = mkdtempDisposableSync(join(tmpdir(), "pilot-model-retry-"));
+  using fixture = mkdtempDisposableSync(join(realpathSync(tmpdir()), "pilot-model-retry-"));
   const directory = join(fixture.path, "project");
   mkdirSync(directory);
   const sessions = join(fixture.path, "sessions");

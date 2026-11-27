@@ -1,5 +1,11 @@
 // @env node
-import { existsSync, mkdtempDisposableSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempDisposableSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -24,7 +30,7 @@ function isRunning(pid: number): boolean {
 }
 
 it("retains the same bounded head and tail for successful and failed output", async () => {
-  using fixture = mkdtempDisposableSync(join(tmpdir(), "pilot-command-output-"));
+  using fixture = mkdtempDisposableSync(join(realpathSync(tmpdir()), "pilot-command-output-"));
   const tool = createBashTool({ workingDirectory: fixture.path, commandShell: getCommandShell() });
   const original = `START\n${"D".repeat(150_000)}\nEND`;
   writeFileSync(
@@ -66,7 +72,7 @@ describe.each(shells)("%s command process tree", (commandShell) => {
   ] as const)(
     "ends the command and its descendant on %s",
     async (action, timeoutSec, reason) => {
-      using fixture = mkdtempDisposableSync(join(tmpdir(), "pilot-command-tree-"));
+      using fixture = mkdtempDisposableSync(join(realpathSync(tmpdir()), "pilot-command-tree-"));
       const tool = createBashTool({ workingDirectory: fixture.path, commandShell });
       const pidPath = (role: string): string => join(fixture.path, `${role}.pid`);
       writeFileSync(

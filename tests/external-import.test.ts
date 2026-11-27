@@ -342,7 +342,7 @@ describe("external import selection", () => {
   });
 
   it("applies Claude Code project precedence and resolves a bundled stdio server from the copied plugin", () => {
-    using fixture = mkdtempDisposableSync(join(tmpdir(), "pi-claude-import-"));
+    using fixture = mkdtempDisposableSync(join(realpathSync(tmpdir()), "pi-claude-import-"));
     const paths = locations(fixture.path);
     const project = paths.workspace!;
     const plugin = join(paths.claudeHome, "plugins/cache/official/sample/3.0.0");
@@ -422,7 +422,7 @@ describe("external import selection", () => {
 
 describe("plugin package installation", () => {
   it("reviews a Git revision, installs a Claude Code plugin disabled and replaces it after reviewing changes", async () => {
-    using fixture = mkdtempDisposableSync(join(tmpdir(), "pi-package-git-"));
+    using fixture = mkdtempDisposableSync(join(realpathSync(tmpdir()), "pi-package-git-"));
     const paths = locations(fixture.path);
     const root = join(fixture.path, "local repository");
     execFileSync("git", ["init", "-q", "--template=", root]);

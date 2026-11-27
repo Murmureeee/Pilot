@@ -45,7 +45,7 @@ export async function verifyProjectShell(page, directory) {
     return snapshot.draftWorkingDirectory === directory && snapshot.composerId;
   });
   const terminal = await page.evaluate(
-    ([id, path]) => window.pi.sessionOpenTerminal(id, path, { cols: 80, rows: 24 }),
+    ([id, path]) => window.pi.sessionOpenTerminal(id, path, { columns: 80, rows: 24 }),
     [id, directory],
   );
   assert.equal(terminal.shell, "bash");

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,7 +15,7 @@ import {
 import type { Settings } from "../src/main/settings/types";
 
 function makeTempDir(): string {
-  return mkdtempSync(join(tmpdir(), "pilot-test-"));
+  return mkdtempSync(join(realpathSync(tmpdir()), "pilot-test-"));
 }
 
 function cleanup(dir: string): void {
