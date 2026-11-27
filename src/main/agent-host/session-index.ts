@@ -5,10 +5,12 @@ import { EXECUTION_APPROVAL_MODES, PLAN_PROPOSAL_MAX_LENGTH } from "../../shared
 import {
   SESSION_RUN_RESULTS,
   type ComposerDraft,
+  type ManagedWorktree,
   type SessionMeta,
   type SessionSettings,
 } from "../../shared/contract";
 import { SESSION_FILE_ID } from "../constants";
+import { GIT_OBJECT_ID } from "../workspace/constants";
 import type { NewChatDraft, SessionIndex } from "./types";
 
 const optionalText = z.string().optional();
@@ -68,7 +70,18 @@ export function parseNewChatDrafts(text: string): NewChatDraft[] {
 const indexFields = z.looseObject({
   sessions: z.unknown().optional(),
   recentProjects: z.unknown().optional(),
+  worktrees: z.unknown().optional(),
 });
+
+const worktreeRecord = z.object({
+  id: z.uuid(),
+  projectDirectory: z.string().min(1),
+  directory: z.string().min(1),
+  branch: z.string().min(1),
+  baseBranch: z.string().min(1),
+  baseCommit: z.string().regex(GIT_OBJECT_ID),
+  removed: z.literal(true).optional(),
+}) satisfies z.ZodType<ManagedWorktree>;
 
 export function parseSessionIndex(text: string): { index: SessionIndex; damaged: boolean } {
   let raw: unknown;
@@ -80,7 +93,7 @@ export function parseSessionIndex(text: string): { index: SessionIndex; damaged:
   const result = indexFields.safeParse(raw);
   if (!result.success) return { index: { sessions: [] }, damaged: true };
 
-  const { sessions, recentProjects, ...otherFields } = result.data;
+  const { sessions, recentProjects, worktrees, ...otherFields } = result.data;
   let damaged = !Array.isArray(sessions);
   const valid = new Map<string, SessionMeta>();
   for (const candidate of Array.isArray(sessions) ? sessions : []) {
@@ -98,8 +111,22 @@ export function parseSessionIndex(text: string): { index: SessionIndex; damaged:
   if (recentProjects !== undefined) {
     damaged ||= !Array.isArray(recentProjects) || projects?.length !== recentProjects.length;
   }
+  const records = new Map<string, ManagedWorktree>();
+  if (worktrees !== undefined) {
+    damaged ||= !Array.isArray(worktrees);
+    for (const record of Array.isArray(worktrees) ? worktrees : []) {
+      const parsed = worktreeRecord.safeParse(record);
+      if (!parsed.success || records.has(parsed.data.id)) damaged = true;
+      else records.set(parsed.data.id, parsed.data);
+    }
+  }
   return {
-    index: { ...otherFields, sessions: [...valid.values()], recentProjects: projects },
+    index: {
+      ...otherFields,
+      sessions: [...valid.values()],
+      recentProjects: projects,
+      ...(worktrees !== undefined && { worktrees: [...records.values()] }),
+    },
     damaged,
   };
 }

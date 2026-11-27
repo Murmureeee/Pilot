@@ -13,6 +13,8 @@ export const GIT_COMMIT_TIMEOUT_MS = 60_000;
 export const GIT_REMOTE_READ_TIMEOUT_MS = 20_000;
 export const GIT_PUBLISH_TIMEOUT_MS = 60_000;
 export const GIT_BRANCH_REF_PREFIX = "refs/heads/";
+export const WORKTREE_PATCH_PREVIEW_LIMIT = 100_000;
+export const WORKTREE_UNAVAILABLE = "工作树已移除或无法访问。请检查工作树目录。";
 export const GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 export const TASKKILL_TIMEOUT_MS = 5_000;
 

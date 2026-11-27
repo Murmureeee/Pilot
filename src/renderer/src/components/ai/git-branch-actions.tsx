@@ -1,6 +1,6 @@
 // @env browser
 import { CheckIcon, GitBranchIcon, GitPullRequestIcon, UploadIcon } from "lucide-react";
-import { useId, useRef, useState, type JSX } from "react";
+import { useId, useRef, useState, type JSX, type ReactNode } from "react";
 
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -27,10 +27,12 @@ export function GitBranchActions({
   composerId,
   disabled,
   onBranchChanged,
+  otherActions,
 }: {
   composerId: string;
   disabled: boolean;
   onBranchChanged(): void;
+  otherActions?: ReactNode;
 }): JSX.Element {
   const locale = useLocale();
   const id = useId();
@@ -171,6 +173,7 @@ export function GitBranchActions({
           <GitPullRequestIcon data-icon="inline-start" aria-hidden="true" />
           {t("创建 PR…", locale)}
         </Button>
+        {otherActions}
       </div>
       {feedback && (
         <div

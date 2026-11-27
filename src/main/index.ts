@@ -210,6 +210,9 @@ function startDesktop(): (entry: ProjectEntry) => void {
   );
   const host = new AgentHost({
     store,
+    worktreesDir: join(userData, "worktrees"),
+    hasWorkspaceProcesses: (directory) =>
+      terminal.hasActiveProcesses(directory) || verification.hasActiveRuns(directory),
     getSettings,
     saveSettings: persistSettings,
     broadcast: (event) => {

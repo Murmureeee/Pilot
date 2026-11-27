@@ -18,6 +18,14 @@ describe("IPC contract", () => {
     expect(IPC.sessionSaveDraftImages).toBe("session:save-draft-images");
   });
 
+  it("separates worktree discovery, creation, review, and confirmation", () => {
+    expect(IPC.sessionGitWorktrees).toBe("session:git-worktrees");
+    expect(IPC.sessionCreateGitWorktree).toBe("session:create-git-worktree");
+    expect(IPC.sessionPreviewGitWorktree).toBe("session:preview-git-worktree");
+    expect(IPC.sessionApplyGitWorktree).toBe("session:apply-git-worktree");
+    expect(IPC.sessionPreviewWorktreeArchive).toBe("session:preview-worktree-archive");
+  });
+
   it("prefixes channels with a domain namespace", () => {
     for (const name of [
       ...Object.values(IPC),

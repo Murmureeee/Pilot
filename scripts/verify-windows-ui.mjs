@@ -26,6 +26,7 @@ import {
   verifyFirstRun,
   verifyGitAnnotations,
   verifyGitPublishing,
+  verifyGitWorktrees,
   verifyImageConversation,
   verifyImageDraft,
   verifyInstructionSourceLayouts,
@@ -156,6 +157,8 @@ const discoveryProfile = join(scratch, "discovery-profile");
 const projectConfigProfile = join(scratch, "project-config-profile");
 const oauthProfile = join(scratch, "mcp-oauth-profile");
 const parallelProfile = join(scratch, "parallel-profile");
+const worktreeProfile = join(scratch, "worktree-profile");
+const worktreeProject = join(scratch, "Worktree project");
 const parallelProjects = ["Parallel project A", "Parallel project B", "Parallel project C"].map(
   (name) => join(scratch, name),
 );
@@ -217,6 +220,19 @@ try {
     scripts: { test: 'node -e "console.log(123456789)"' },
   }));
   model = await startModelFixture();
+  mkdirSync(worktreeProject);
+  execFileSync("git", ["init", "-q", "--template=", "--initial-branch=main"], { cwd: worktreeProject });
+  execFileSync("git", ["config", "user.name", "Pilot Desktop Test"], { cwd: worktreeProject });
+  execFileSync("git", ["config", "user.email", "pilot@example.invalid"], { cwd: worktreeProject });
+  execFileSync("git", ["config", "core.autocrlf", "false"], { cwd: worktreeProject });
+  writeFileSync(join(worktreeProject, "initial.txt"), "Baseline\n");
+  execFileSync("git", ["add", "initial.txt"], { cwd: worktreeProject });
+  execFileSync("git", ["-c", "commit.gpgSign=false", "commit", "-qm", "Fixture baseline"], { cwd: worktreeProject });
+  await withApp(worktreeProfile, async (page, window) => {
+    await runScene("Create parallel worktrees, merge one, and archive and discard the other", () =>
+      verifyGitWorktrees(page, window, model, worktreeProject),
+    );
+  }, worktreeProject);
   for (const directory of parallelProjects) {
     mkdirSync(directory);
     execFileSync("git", ["init", "-q", "--template="], { cwd: directory });

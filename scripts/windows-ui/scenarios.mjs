@@ -1530,6 +1530,145 @@ async function waitForProjectDraft(page, directory) {
   }, directory);
 }
 
+export async function verifyGitWorktrees(page, window, model, project) {
+  const snapshot = () => page.evaluate(() => window.pi.getSnapshot());
+  await page.evaluate(async ({ baseUrl, modelId }) => {
+    await window.pi.settingsSave({
+      providers: [{ id: "worktree-model", kind: "openai-compatible", name: "Worktree fixture",
+        baseUrl, modelId, models: [{ id: modelId, name: "Worktree test model" }] }],
+      activeProviderId: "worktree-model",
+    });
+    await window.pi.settingsSetNotificationsEnabled(false);
+  }, { baseUrl: model.baseUrl, modelId: model.modelId });
+  await page.reload();
+  await waitForProjectDraft(page, project);
+  const dialog = page.locator("[data-worktree-dialog]");
+  const card = page.locator("[data-permission-card]");
+  const show = async (locale = locales[1]) => {
+    const trigger = button(page, locale.lang === "en" ? "Worktrees…" : "工作树…");
+    if (!(await trigger.isVisible())) await page.keyboard.press("Control+Shift+d");
+    await trigger.click();
+    await dialog.getByRole("combobox", { name: locale.lang === "en" ? "Base branch" : "基准分支" })
+      .getByText("main", { exact: true }).waitFor();
+    return trigger;
+  };
+  let current = locales[0];
+  let contrast = Infinity;
+  for (const [size, zoom] of [[wide, 1], [narrow, 1], [narrow, 1.5]]) {
+    await resize(page, window, size, zoom);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        const trigger = await show(locale);
+        await assertFits(dialog);
+        await assertFits(button(dialog, locale.lang === "en" ? "Create worktree" : "创建工作树"));
+        contrast = Math.min(contrast, await minimumTextContrast(dialog, "h2, p, label"));
+        await page.keyboard.press("Escape");
+        await dialog.waitFor({ state: "hidden" });
+        await trigger.and(page.locator(":focus")).waitFor();
+      }
+    }
+  }
+  assert.ok(contrast >= 4.5, "Worktree dialog contrast " + contrast.toFixed(2) + ":1");
+  console.log("Worktree dialog minimum contrast " + contrast.toFixed(2) + ":1");
+  await resize(page, window, wide);
+
+  const create = async (branch) => {
+    await show();
+    await dialog.getByRole("textbox", { name: "Task branch name", exact: true }).fill(branch);
+    await button(dialog, "Create worktree").press("Enter");
+    await dialog.waitFor({ state: "hidden" });
+    await editor(page).and(page.locator(":focus")).waitFor();
+    const state = await snapshot();
+    assert.equal(state.sessionId, null);
+    assert.equal(state.worktree.projectDirectory, project);
+    assert.equal(state.worktree.branch, branch);
+    assert.equal(state.worktree.baseBranch, "main");
+    return state.worktree;
+  };
+  const first = await create("codex/desktop-one");
+  await send(page, "First worktree change");
+  sendTool(await model.nextCompletion(), "worktree-a", "write_file", {
+    path: "result.txt", content: "First worktree",
+  });
+  await card.waitFor();
+  const a = (await snapshot()).sessionId;
+  const second = await create("codex/desktop-two");
+  assert.notEqual(first.directory, second.directory);
+  await send(page, "Second worktree change");
+  sendTool(await model.nextCompletion(), "worktree-b", "write_file", {
+    path: "result.txt", content: "Second worktree",
+  });
+  await card.waitFor();
+  const b = (await snapshot()).sessionId;
+  const runs = (await snapshot()).activeRuns;
+  assert.deepEqual(runs.map(({ workingDirectory, status }) => [workingDirectory, status]), [
+    [first.directory, "waiting_approval"], [second.directory, "waiting_approval"],
+  ]);
+  const approve = async (reply) => {
+    await button(card, "Allow once").press("Enter");
+    const completion = await model.nextCompletion();
+    completion.write({ content: reply });
+    completion.finish();
+    await page.getByText(reply, { exact: true }).waitFor();
+    await page.waitForFunction(async () => (await window.pi.getSnapshot()).status === "idle");
+  };
+  await approve("Second worktree complete.");
+  await page.locator('[data-session-id="' + a + '"]').click();
+  await approve("First worktree complete.");
+  assert.equal(readFileSync(join(first.directory, "result.txt"), "utf8"), "First worktree");
+  assert.equal(readFileSync(join(second.directory, "result.txt"), "utf8"), "Second worktree");
+  assert.ok(!existsSync(join(project, "result.txt")));
+  assert.deepEqual((await snapshot()).recentProjects, [project]);
+
+  execFileSync("git", ["add", "result.txt"], { cwd: second.directory });
+  execFileSync("git", ["-c", "commit.gpgSign=false", "commit", "-qm", "Second worktree result"], { cwd: second.directory });
+  await show();
+  const review = (branch) => button(dialog.getByRole("listitem").filter({ hasText: branch }), "Review worktree…");
+  await review(second.branch).press("Enter");
+  await dialog.locator("pre").getByText(/\+Second worktree/).waitFor();
+  await button(dialog, "Merge into main").press("Enter");
+  await dialog.getByRole("status").filter({ hasText: "Task branch merged." }).waitFor();
+  assert.equal(readFileSync(join(project, "result.txt"), "utf8"), "Second worktree");
+  await dialog.getByRole("button", { name: "Close", exact: true, disabled: false }).press("Enter");
+  await dialog.waitFor({ state: "hidden" });
+  await page.keyboard.press("Escape");
+  const row = page.locator('[data-session-id="' + a + '"]');
+  await row.hover();
+  await button(row.locator(".."), "Archive chat").click();
+  const archive = page.locator("[data-worktree-archive]");
+  await archive.getByText("result.txt", { exact: true }).waitFor();
+  await assertFits(archive);
+  await button(archive, "Archive chat").press("Enter");
+  await archive.waitFor({ state: "hidden" });
+  assert.equal((await snapshot()).sessions.find(({ id }) => id === a).archived, true);
+  assert.ok(existsSync(first.directory));
+
+  await page.evaluate((directory) => window.pi.sessionUseRecentProject(directory), project);
+  await waitForProjectDraft(page, project);
+  await show();
+  await review(first.branch).press("Enter");
+  await dialog.getByText("result.txt", { exact: true }).waitFor();
+  await button(dialog, "Discard changes and remove").press("Enter");
+  await dialog.getByRole("status").filter({ hasText: "Worktree removed." }).waitFor();
+  assert.equal((await snapshot()).sessions.find((item) => item.id === a)?.worktree?.removed, true);
+  assert.ok(!existsSync(first.directory));
+  assert.ok(existsSync(second.directory));
+  assert.equal((await snapshot()).sessions.find(({ id }) => id === b).worktree.branch, second.branch);
+  assert.equal(execFileSync("git", ["rev-parse", first.branch], { cwd: project, encoding: "utf8" }).trim(),
+    first.baseCommit);
+  await dialog.getByRole("button", { name: "Close", exact: true, disabled: false }).press("Enter");
+  await dialog.waitFor({ state: "hidden" });
+  await page.reload();
+  await waitForProjectDraft(page, project);
+  await editor(page).waitFor();
+  await show();
+  await button(dialog.getByRole("listitem").filter({ hasText: second.branch }), "Open chat").press("Enter");
+  await page.getByText("Second worktree complete.", { exact: true }).waitFor();
+  assert.equal((await snapshot()).sessionId, b);
+}
+
 export async function verifyParallelSessions(page, window, app, model, projects, scratch) {
   const [projectA, projectB, projectC] = projects;
   const script = join(scratch, "parallel-mcp.cjs");

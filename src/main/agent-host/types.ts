@@ -15,6 +15,7 @@ import type {
   GitChangesView,
   ContextCompaction,
   MessageRollbackPreview,
+  ManagedWorktree,
   ModelFailure,
   ModelRetryProgress,
   PermissionDecision,
@@ -77,6 +78,8 @@ export interface HostDeps {
   skillsDir: string;
   mcp: McpManager;
   terminal?: TerminalManager;
+  worktreesDir?: string;
+  hasWorkspaceProcesses?: (directory: string) => boolean;
   request?: typeof globalThis.fetch;
   webRequests?: WebRequests;
 }
@@ -104,6 +107,13 @@ export interface RunningSession {
   run: AgentRun;
   agent: SessionAgent;
   workspace: string;
+}
+
+export interface WorktreeOperationPreview {
+  composerId: string;
+  token: string;
+  worktree: ManagedWorktree;
+  signature: string;
 }
 
 export interface TextModelRequest {
@@ -341,6 +351,7 @@ export interface ShellPipeline {
 }
 
 export interface SessionIndex {
+  worktrees?: ManagedWorktree[];
   sessions: SessionMeta[];
   recentProjects?: string[];
 }

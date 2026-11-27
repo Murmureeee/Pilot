@@ -27,6 +27,7 @@ import {
   toolRuleSchema,
   verificationCommandSchema,
 } from "../settings/schema";
+import { GIT_OBJECT_ID } from "../workspace/constants";
 import { gitDiffReferenceSchema } from "../workspace/reference";
 import type { IpcChannel } from "./types";
 
@@ -274,6 +275,19 @@ const inputs = {
     nonBlank.refine((value) => !value.includes("\0")),
   ]),
   [IPC.sessionGitBranches]: session,
+  [IPC.sessionGitWorktrees]: session,
+  [IPC.sessionCreateGitWorktree]: z.tuple([
+    z.uuid(),
+    z.strictObject({
+      branch: gitBranchName,
+      baseBranch: gitBranchName,
+      baseCommit: z.string().regex(GIT_OBJECT_ID),
+    }),
+  ]),
+  [IPC.sessionOpenGitWorktree]: sessionChange,
+  [IPC.sessionPreviewGitWorktree]: sessionChange,
+  [IPC.sessionApplyGitWorktree]: z.tuple([z.uuid(), z.uuid(), z.enum(["merge", "remove"])]),
+  [IPC.sessionPreviewWorktreeArchive]: session,
   [IPC.sessionSwitchGitBranch]: z.tuple([
     z.uuid(),
     z.uuid(),

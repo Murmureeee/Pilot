@@ -5,6 +5,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { ChatHeader } from "@renderer/components/ai/chat-header";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
 import { FeedbackBar } from "@renderer/components/ai/feedback-bar";
+import { WorktreeArchiveDialog } from "@renderer/components/ai/git-worktree-dialog";
 import { ProjectDropTarget } from "@renderer/components/ai/project-drop-target";
 import { PromptTemplateDialog } from "@renderer/components/ai/prompt-template-dialog";
 import { ReviewChanges } from "@renderer/components/ai/review-changes";
@@ -75,6 +76,7 @@ export default function App(): JSX.Element {
   const composerId = useAgentStore((s) => s.composerId);
   const workingDirectory = useAgentStore(selectWorkingDirectory);
   const projectDirectory = useAgentStore(selectProjectDirectory);
+  const worktreeArchiveSession = useAgentStore((state) => state.worktreeArchiveSession);
   const locale = useLocale();
   const setPaletteOpen = useAgentStore((s) => s.setPaletteOpen);
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth);
@@ -600,6 +602,9 @@ export default function App(): JSX.Element {
       </div>
 
       <CommandPalette commands={commands} onOpenChatFind={openChatFind} />
+      {worktreeArchiveSession && (
+        <WorktreeArchiveDialog key={worktreeArchiveSession} sessionId={worktreeArchiveSession} />
+      )}
       {templateRequest && (
         <PromptTemplateDialog request={templateRequest} onClose={() => setTemplateRequest(null)} />
       )}

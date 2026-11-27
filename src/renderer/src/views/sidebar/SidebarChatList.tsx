@@ -12,7 +12,7 @@ import { t, useLocale } from "@renderer/lib/i18n";
 import { loadCollapsedProjects, saveCollapsedProjects } from "@renderer/lib/preferences";
 import { projectParents, sessionRowStatus } from "@renderer/lib/sidebar";
 import { referenceName } from "@renderer/lib/workspace-links";
-import { selectProjectDirectory, useAgentStore } from "@renderer/stores/agent";
+import { selectProjectGroup, useAgentStore } from "@renderer/stores/agent";
 import type { SessionMeta } from "@shared/contract";
 
 import { ProjectRow } from "./ProjectRow";
@@ -26,7 +26,7 @@ export function SidebarChatList(): JSX.Element {
   const sessions = useAgentStore((s) => s.sessions);
   const sessionId = useAgentStore((s) => s.sessionId);
   const recentProjects = useAgentStore((s) => s.recentProjects);
-  const projectDirectory = useAgentStore(selectProjectDirectory);
+  const projectDirectory = useAgentStore(selectProjectGroup);
   const choosingProject = useAgentStore((s) => s.choosingProject);
   const activeRuns = useAgentStore((s) => s.activeRuns);
   const interruptedRun = useAgentStore((s) => s.interruptedRun);
@@ -42,21 +42,22 @@ export function SidebarChatList(): JSX.Element {
     const regular = sessions.filter((session) => !session.archived);
     const sessionsByProject = Map.groupBy(
       regular.toSorted((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))),
-      (session) => session.workingDirectory ?? null,
+      (session) => session.worktree?.projectDirectory ?? session.workingDirectory ?? null,
     );
     const recent = new Set(recentProjects);
     const remainingProjects = [
       ...new Set(
-        regular.flatMap(({ workingDirectory }) =>
-          workingDirectory && !recent.has(workingDirectory) ? [workingDirectory] : [],
-        ),
+        regular.flatMap(({ workingDirectory, worktree }) => {
+          const directory = worktree?.projectDirectory ?? workingDirectory;
+          return directory && !recent.has(directory) ? [directory] : [];
+        }),
       ),
     ];
     return {
       active: sessionsByProject,
       archived: Map.groupBy(
         sessions.filter((session) => session.archived),
-        (session) => session.workingDirectory ?? null,
+        (session) => session.worktree?.projectDirectory ?? session.workingDirectory ?? null,
       ),
       otherProjects: remainingProjects,
       parents: projectParents([...recentProjects, ...remainingProjects]),

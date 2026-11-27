@@ -125,6 +125,20 @@ export function registerAgentRoutes({
     host.commitGit(composerId, token, message),
   );
   handle(IPC.sessionGitBranches, (_event, composerId) => host.gitBranches(composerId));
+  handle(IPC.sessionGitWorktrees, (_event, composerId) => host.gitWorktrees(composerId));
+  handle(IPC.sessionCreateGitWorktree, (_event, composerId, request) => {
+    exit.checkWorkAllowed();
+    return host.createWorktree(composerId, request);
+  });
+  handle(IPC.sessionOpenGitWorktree, (_event, composerId, id) => host.openWorktree(composerId, id));
+  handle(IPC.sessionPreviewGitWorktree, (_event, composerId, id) =>
+    host.previewWorktree(composerId, id),
+  );
+  handle(IPC.sessionApplyGitWorktree, (_event, composerId, token, action) => {
+    exit.checkWorkAllowed();
+    return host.applyGitWorktree(composerId, token, action);
+  });
+  handle(IPC.sessionPreviewWorktreeArchive, (_event, id) => host.previewWorktreeArchive(id));
   handle(IPC.sessionSwitchGitBranch, (_event, composerId, token, request) => {
     exit.checkWorkAllowed();
     return host.switchGitBranch(composerId, token, request);
@@ -334,7 +348,9 @@ export function registerAgentRoutes({
   );
   handle(IPC.sessionRerunVerification, (_event, composerId, runId) => {
     exit.checkWorkAllowed();
-    return verification.rerun(verificationRef(composerId, runId));
+    const ref = verificationRef(composerId, runId);
+    host.checkWorkspaceAvailable(verification.result(ref).workingDirectory);
+    return verification.rerun(ref);
   });
   handle(IPC.sessionRepairVerification, (_event, composerId, runId, locale) => {
     exit.checkWorkAllowed();

@@ -1,7 +1,8 @@
 // @env node
 // Agent 宿主负责会话选择、Agent 缓存和工作区审查。
 import { randomUUID } from "node:crypto";
-import { basename } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { basename, relative } from "node:path";
 
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
@@ -26,8 +27,14 @@ import type {
   GitRollbackPreview,
   GitRollbackSelection,
   GitStageSelection,
+  GitWorktreeAction,
+  GitWorktreeCreate,
+  GitWorktreeOptions,
+  GitWorktreeRemainder,
+  GitWorktreeReview,
   ImageAttachment,
   Locale,
+  ManagedWorktree,
   MessageBranchAction,
   MessageRollbackPreview,
   PermissionDecision,
@@ -64,7 +71,7 @@ import { hasSavedModel, resolveSessionModel, selectedCatalogModel } from "../../
 import { toPublicSettings } from "../settings";
 import { decryptSecret } from "../settings/secrets";
 import type { ProviderConfig, Settings } from "../settings/types";
-import { EDITOR_LINE_UNAVAILABLE } from "../workspace/constants";
+import { EDITOR_LINE_UNAVAILABLE, WORKTREE_UNAVAILABLE } from "../workspace/constants";
 import { readFileChange, restoreFileChange } from "../workspace/file-changes";
 import { relativeGitPath } from "../workspace/git";
 import {
@@ -90,6 +97,16 @@ import {
   replaceGitWorktreeFile,
   sameGitFile,
 } from "../workspace/git-review-files";
+import {
+  applyWorktreeAction,
+  createGitWorktree,
+  gitWorktreeProject,
+  inspectGitWorktree,
+  planNewWorktree,
+  readWorktreeOptions,
+  verifyLinkedWorktree,
+  worktreePatch,
+} from "../workspace/git-worktrees";
 import {
   createToolPathResolver,
   normalizeWorkingDirectory,
@@ -143,6 +160,7 @@ import type {
   SavedGitChanges,
   SessionAgent,
   TextModelRequest,
+  WorktreeOperationPreview,
 } from "./types";
 
 const BASE_SYSTEM_PROMPT = `You are a helpful assistant running inside ${APP_NAME}.`;
@@ -168,6 +186,8 @@ export class AgentHost {
   private gitBranchOperation?: GitBranchOperation;
   private gitBranchPreviewRequest = 0;
   private applyingGitSelection = false;
+  private worktreePreview?: WorktreeOperationPreview;
+  private worktreeMutation: string[] = [];
   private readonly sessionRules = new Map<string, ToolRule[]>();
   private readonly deletingSessions = new Set<string>();
   private sessionId: string | null = null;
@@ -269,6 +289,10 @@ export class AgentHost {
     return this.sessionId
       ? this.getCurrentSession()?.workingDirectory
       : this.newChatDraft.workingDirectory;
+  }
+
+  private get currentWorktree(): ManagedWorktree | undefined {
+    return this.deps.store.worktreeAt(this.getProjectDirectory());
   }
 
   getWorkingDirectory(): string | undefined {
@@ -404,6 +428,7 @@ export class AgentHost {
     workingDirectory: string | undefined,
     skills?: readonly SkillMeta[],
   ): SessionAgent {
+    this.checkWorkspaceAvailable(workingDirectory);
     const settings = this.deps.getSettings();
     const selection = resolveSessionModel(settings, this.currentSettings.model);
     const provider = selection && settings.providers.find((p) => p.id === selection.providerId);
@@ -497,6 +522,7 @@ export class AgentHost {
     this.checkComposerId(composerId);
     if (this.getWorkingDirectory() !== expectedDirectory)
       throw new Error("工作目录已变更，请重新打开终端。");
+    this.checkWorkspaceAvailable(expectedDirectory);
     const cwd = createToolPathResolver(expectedDirectory)(".");
     if (!this.sessionId) this.deps.store.saveNewChatDraft(this.newChatDraft);
     return cwd;
@@ -517,6 +543,7 @@ export class AgentHost {
     if (expectedDirectory !== undefined) {
       if (workingDirectory !== expectedDirectory)
         throw new Error("工作目录已变更，请重新打开验证。");
+      this.checkWorkspaceAvailable(expectedDirectory);
       if (!this.sessionId) this.deps.store.saveNewChatDraft(this.newChatDraft);
     }
     const sessionId = this.sessionId;
@@ -1090,6 +1117,7 @@ export class AgentHost {
     this.gitBranchOperation = undefined;
     this.gitBranchPreviewRequest++;
     this.messageRollback = undefined;
+    this.worktreePreview = undefined;
     this.sessionId = id;
     if (!id) this.newChatDraft = draft ?? this.emptyDraft();
   }
@@ -1306,6 +1334,7 @@ export class AgentHost {
       throw new Error("正在更新 Git，请稍后重试。");
     const directory = this.getWorkingDirectory();
     if (!directory) throw new Error("请先选择工作目录。");
+    this.checkWorkspaceAvailable(directory);
     if (this.currentRun || this.workspaceRuns(directory).length)
       throw new Error("请等待当前工作区的任务结束后再更新 Git。");
     return directory;
@@ -1376,6 +1405,185 @@ export class AgentHost {
       const { plan, options } = await readGitBranches(directory);
       return { action: { kind: "branch", plan }, preview: options };
     });
+  }
+
+  checkWorkspaceAvailable(directory: string | undefined): void {
+    if (!directory) return;
+    const worktree = this.deps.store.worktreeAt(directory);
+    if (worktree?.removed || (worktree && !existsSync(directory)))
+      throw new Error(WORKTREE_UNAVAILABLE);
+    if (
+      this.worktreeMutation.length &&
+      this.worktreeMutation.some((path) => workspacesOverlap(path, workspaceRoot(directory)))
+    )
+      throw new Error("正在更新工作树，请稍后重试。");
+  }
+
+  private async worktreeProject(composerId: string): Promise<string> {
+    this.checkComposerId(composerId);
+    const directory = this.getWorkingDirectory();
+    const project = this.currentWorktree?.projectDirectory ?? directory;
+    if (!project) throw new Error("请先选择工作目录。");
+    const root = await gitWorktreeProject(project);
+    this.checkComposerId(composerId);
+    this.checkWorkingDirectory(directory ?? null);
+    return root;
+  }
+
+  private async managedWorktree(composerId: string, id: string): Promise<ManagedWorktree> {
+    const root = await this.worktreeProject(composerId);
+    const worktree = this.deps.store
+      .projectWorktrees(root)
+      .find((record) => record.id === id && !record.removed);
+    const { worktreesDir } = this.deps;
+    if (
+      !worktree ||
+      !worktreesDir ||
+      !existsSync(worktreesDir) ||
+      relative(realpathSync.native(worktreesDir), worktree.directory) !== worktree.id
+    )
+      throw new Error(WORKTREE_UNAVAILABLE);
+    return worktree;
+  }
+
+  async gitWorktrees(composerId: string): Promise<GitWorktreeOptions> {
+    try {
+      const root = await this.worktreeProject(composerId);
+      return await readWorktreeOptions(
+        root,
+        this.deps.store.projectWorktrees(root).filter(({ removed }) => !removed),
+      );
+    } catch (error) {
+      throw gitActionError(error);
+    }
+  }
+
+  async createWorktree(composerId: string, request: GitWorktreeCreate): Promise<Snapshot> {
+    const { worktreesDir, store } = this.deps;
+    if (!worktreesDir) throw new Error(WORKTREE_UNAVAILABLE);
+    const project = await this.worktreeProject(composerId);
+    if (this.applyingGitSelection || this.applyingGitRollback)
+      throw new Error("正在更新 Git，请稍后重试。");
+    this.applyingGitSelection = true;
+    try {
+      const worktree = await planNewWorktree(project, worktreesDir, request);
+      this.checkComposerId(composerId);
+      store.saveWorktree(worktree);
+      try {
+        await createGitWorktree(worktree);
+      } catch (error) {
+        if (!existsSync(worktree.directory)) store.forgetWorktree(worktree.id);
+        throw error;
+      }
+      const draft = this.projectDraft(worktree.directory);
+      store.saveNewChatDraft(draft);
+      if (this.composerId === composerId) {
+        this.switchSession(null, draft);
+        return this.publishSnapshot("reveal");
+      }
+      return this.publishSnapshot();
+    } catch (error) {
+      throw gitActionError(error);
+    } finally {
+      this.applyingGitSelection = false;
+    }
+  }
+
+  async openWorktree(composerId: string, id: string): Promise<Snapshot> {
+    const worktree = await this.managedWorktree(composerId, id);
+    await verifyLinkedWorktree(worktree);
+    this.checkComposerId(composerId);
+    this.checkWorkspaceAvailable(worktree.directory);
+    if (this.currentWorktree?.id === id) return this.publishSnapshot("reveal");
+    const session = this.deps.store
+      .list()
+      .find((meta) => meta.worktree?.id === id && !meta.archived);
+    if (session) {
+      this.deps.store.setUnread(session.id, false);
+      this.switchSession(session.id);
+    } else {
+      const draft = this.projectDraft(worktree.directory);
+      this.deps.store.saveNewChatDraft(draft);
+      this.switchSession(null, draft);
+    }
+    return this.publishSnapshot("reveal");
+  }
+
+  async previewWorktree(composerId: string, id: string): Promise<GitWorktreeReview> {
+    try {
+      const worktree = await this.managedWorktree(composerId, id);
+      const inspection = await inspectGitWorktree(worktree);
+      const patch = await worktreePatch(inspection);
+      this.checkComposerId(composerId);
+      const token = randomUUID();
+      this.worktreePreview = { token, composerId, worktree, signature: inspection.signature };
+      return {
+        ...inspection.remainder,
+        ...patch,
+        token,
+        mergeBlock: inspection.mergeBlock,
+        removeBlock: inspection.removeBlock,
+      };
+    } catch (error) {
+      throw gitActionError(error);
+    }
+  }
+
+  async previewWorktreeArchive(sessionId: string): Promise<GitWorktreeRemainder> {
+    const { store } = this.deps;
+    const worktree = store.worktreeAt(store.getMeta(sessionId)?.workingDirectory);
+    if (!worktree) throw new Error(WORKTREE_UNAVAILABLE);
+    try {
+      return (await inspectGitWorktree(worktree)).remainder;
+    } catch {
+      return { worktree, head: "", changes: [], omittedChanges: 0, commits: 0, unavailable: true };
+    }
+  }
+
+  async applyGitWorktree(
+    composerId: string,
+    token: string,
+    action: GitWorktreeAction,
+  ): Promise<void> {
+    this.checkComposerId(composerId);
+    if (this.applyingGitSelection || this.applyingGitRollback)
+      throw new Error("正在更新 Git，请稍后重试。");
+    const preview = this.worktreePreview;
+    const stale = "工作树或基准分支已变更。请重新预览。";
+    if (preview?.token !== token || preview.composerId !== composerId) throw new Error(stale);
+    const { worktree, signature } = preview;
+    const paths =
+      action === "merge" ? [worktree.directory, worktree.projectDirectory] : [worktree.directory];
+    const checkWorkspaceIdle = (): void => {
+      this.checkComposerId(composerId);
+      if (
+        paths.some(
+          (directory) =>
+            this.workspaceRuns(directory).length || this.deps.hasWorkspaceProcesses?.(directory),
+        )
+      )
+        throw new Error("请先停止相关工作区的任务、验证和终端，再重试。");
+    };
+    checkWorkspaceIdle();
+    this.worktreePreview = undefined;
+    this.applyingGitSelection = true;
+    this.worktreeMutation = paths;
+    try {
+      const current = await inspectGitWorktree(worktree);
+      if (signature !== current.signature) throw new Error(stale);
+      await applyWorktreeAction(current, action, checkWorkspaceIdle);
+      if (action === "remove") {
+        this.deps.store.saveWorktree({ ...worktree, removed: true });
+        if (!this.sessionId && this.currentWorktree?.id === worktree.id)
+          this.switchSession(null, this.projectDraft(worktree.projectDirectory));
+      }
+      this.publishSnapshot();
+    } catch (error) {
+      throw gitActionError(error);
+    } finally {
+      this.worktreeMutation = [];
+      this.applyingGitSelection = false;
+    }
   }
 
   async switchGitBranch(
@@ -1753,6 +1961,7 @@ export class AgentHost {
       draftImages: this.deps.store.loadDraftImages(this.composerId),
       draftSettings: this.sessionId ? {} : this.newChatDraft.settings,
       draftWorkingDirectory: this.sessionId ? null : (this.newChatDraft.workingDirectory ?? null),
+      worktree: this.currentWorktree,
       sessions,
       recentProjects: this.deps.store.listRecentProjects(sessions),
       messages:

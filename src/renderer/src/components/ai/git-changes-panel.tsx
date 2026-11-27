@@ -28,6 +28,7 @@ import { GitAnnotationEditor, GitAnnotationQueue } from "./git-annotations";
 import { GitBranchActions } from "./git-branch-actions";
 import { GitCommitDialog } from "./git-commit-dialog";
 import { GitCheckpointFilePreview, GitDiffPreview } from "./git-diff-preview";
+import { GitWorktreeDialog } from "./git-worktree-dialog";
 
 function GitChangeRow({
   change,
@@ -246,6 +247,9 @@ export function GitChangesPanel({
             key={composerId + ":" + workingDirectory}
             composerId={composerId}
             disabled={busy || staging}
+            otherActions={
+              <GitWorktreeDialog composerId={composerId} onChanged={refreshSelection} />
+            }
             onBranchChanged={() => {
               setExpanded(undefined);
               setStageError("");

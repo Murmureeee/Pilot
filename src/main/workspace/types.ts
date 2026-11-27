@@ -1,5 +1,20 @@
 // @env node
-import type { FileChangeSummary, FileDiff, GitChange, GitRollbackConflict } from "@shared/contract";
+import type {
+  FileChangeSummary,
+  FileDiff,
+  GitChange,
+  GitRollbackConflict,
+  GitWorktreeRemainder,
+} from "@shared/contract";
+
+export interface GitWorktreeInspection {
+  signature: string;
+  ancestor: string;
+  target: string | null;
+  remainder: GitWorktreeRemainder;
+  mergeBlock?: string;
+  removeBlock?: string;
+}
 
 export interface GitCommandOptions {
   index?: string;

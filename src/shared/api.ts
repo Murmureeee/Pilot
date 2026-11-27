@@ -22,6 +22,11 @@ import type {
   GitRollbackPreview,
   GitRollbackSelection,
   GitStageSelection,
+  GitWorktreeAction,
+  GitWorktreeCreate,
+  GitWorktreeOptions,
+  GitWorktreeRemainder,
+  GitWorktreeReview,
   ExternalEditor,
   ImageAttachment,
   Locale,
@@ -141,6 +146,16 @@ export interface PiApi {
   ): Promise<GitCommitPreview>;
   sessionCommitGit(composerId: string, token: string, message: string): Promise<GitCommitResult>;
   sessionGitBranches(composerId: string): Promise<GitBranchOptions>;
+  sessionGitWorktrees(composerId: string): Promise<GitWorktreeOptions>;
+  sessionCreateGitWorktree(composerId: string, request: GitWorktreeCreate): Promise<Snapshot>;
+  sessionOpenGitWorktree(composerId: string, id: string): Promise<Snapshot>;
+  sessionPreviewGitWorktree(composerId: string, id: string): Promise<GitWorktreeReview>;
+  sessionApplyGitWorktree(
+    composerId: string,
+    token: string,
+    action: GitWorktreeAction,
+  ): Promise<void>;
+  sessionPreviewWorktreeArchive(id: string): Promise<GitWorktreeRemainder>;
   sessionSwitchGitBranch(
     composerId: string,
     token: string,

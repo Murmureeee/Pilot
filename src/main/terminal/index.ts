@@ -11,6 +11,7 @@ import type {
   TerminalRecord,
   TerminalSize,
 } from "../../shared/contract";
+import { workspaceRoot, workspacesOverlap } from "../workspace/paths";
 import {
   TERMINAL_BACKLOG_LIMIT,
   TERMINAL_FINISHED_LIMIT,
@@ -35,8 +36,13 @@ export class TerminalManager {
     return this.starts;
   }
 
-  hasActiveProcesses(): boolean {
-    return [...this.entries.values()].some(({ process }) => process !== null);
+  hasActiveProcesses(directory?: string): boolean {
+    const root = directory && workspaceRoot(directory);
+    return [...this.entries.values()].some(
+      ({ process, record }) =>
+        process !== null &&
+        (!root || workspacesOverlap(root, workspaceRoot(record.workingDirectory))),
+    );
   }
 
   list(composerId: string): TerminalRecord[] {

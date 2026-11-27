@@ -15,7 +15,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
@@ -24,6 +24,7 @@ import type {
   ComposerDraft,
   ImageAttachment,
   Locale,
+  ManagedWorktree,
   SessionMeta,
   SessionRunResult,
   SessionSearchResults,
@@ -382,6 +383,7 @@ export class SessionStore {
     return this.newChatDrafts.findLast(
       (draft) =>
         !this.getMeta(draft.id) &&
+        !this.worktreeAt(draft.workingDirectory)?.removed &&
         (directory === undefined || (draft.workingDirectory ?? null) === directory),
     );
   }
@@ -443,7 +445,39 @@ export class SessionStore {
         const result = checkpointResult(this.checkpoints.get(meta.id) ?? undefined);
         return result === meta.lastRunResult ? meta : { ...meta, lastRunResult: result };
       })
+      .map((meta) => {
+        const worktree = this.worktreeAt(meta.workingDirectory);
+        return worktree ? { ...meta, worktree } : meta;
+      })
       .sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  worktreeAt(directory: string | undefined): ManagedWorktree | undefined {
+    return directory !== undefined
+      ? this.index.worktrees?.find((worktree) => relative(worktree.directory, directory) === "")
+      : undefined;
+  }
+
+  projectWorktrees(directory: string): ManagedWorktree[] {
+    return (this.index.worktrees ?? []).filter(
+      (worktree) => relative(worktree.projectDirectory, directory) === "",
+    );
+  }
+
+  saveWorktree(worktree: ManagedWorktree): void {
+    const worktrees = (this.index.worktrees ?? []).filter(({ id }) => id !== worktree.id);
+    this.writeIndex({
+      ...this.index,
+      worktrees: [...worktrees, worktree],
+      recentProjects: this.projectOpened(worktree.projectDirectory),
+    });
+  }
+
+  forgetWorktree(id: string): void {
+    this.writeIndex({
+      ...this.index,
+      worktrees: this.index.worktrees?.filter((record) => record.id !== id),
+    });
   }
 
   listRecentProjects(sessions = this.list()): string[] {
@@ -451,8 +485,8 @@ export class SessionStore {
     return this.index.recentProjects === undefined
       ? [
           ...new Set(
-            sessions.flatMap(({ workingDirectory }) =>
-              workingDirectory ? [workingDirectory] : [],
+            sessions.flatMap(({ workingDirectory, worktree }) =>
+              workingDirectory ? [worktree?.projectDirectory ?? workingDirectory] : [],
             ),
           ),
         ]
@@ -462,7 +496,9 @@ export class SessionStore {
   hasProject(workingDirectory: string): boolean {
     return (
       this.index.recentProjects?.includes(workingDirectory) === true ||
-      this.index.sessions.some((session) => session.workingDirectory === workingDirectory)
+      this.index.sessions.some(
+        (session) => this.projectOf(session.workingDirectory) === workingDirectory,
+      )
     );
   }
 
@@ -484,8 +520,13 @@ export class SessionStore {
   }
 
   rememberProject(workingDirectory: string): void {
-    if (this.index.recentProjects?.[0] === workingDirectory) return;
-    this.writeIndex({ ...this.index, recentProjects: this.projectOpened(workingDirectory) });
+    const project = this.projectOf(workingDirectory) ?? workingDirectory;
+    if (this.index.recentProjects?.[0] === project) return;
+    this.writeIndex({ ...this.index, recentProjects: this.projectOpened(project) });
+  }
+
+  private projectOf(directory: string | undefined): string | undefined {
+    return this.worktreeAt(directory)?.projectDirectory ?? directory;
   }
 
   /** 单个会话元数据（host 组装 systemPrompt 时读会话级人设覆盖） */
@@ -534,7 +575,7 @@ export class SessionStore {
       ...this.index,
       sessions: [...this.index.sessions, meta],
       recentProjects: workingDirectory
-        ? this.projectOpened(workingDirectory)
+        ? this.projectOpened(this.projectOf(workingDirectory) ?? workingDirectory)
         : this.index.recentProjects,
     });
     return meta;
@@ -558,7 +599,7 @@ export class SessionStore {
       sessions: this.index.sessions.map((session) =>
         session.id === id ? { ...session, workingDirectory } : session,
       ),
-      recentProjects: this.projectOpened(workingDirectory),
+      recentProjects: this.projectOpened(this.projectOf(workingDirectory) ?? workingDirectory),
     });
   }
 
@@ -680,8 +721,13 @@ export class SessionStore {
   searchTranscripts(query: string, project?: string | null): SessionSearchResults {
     const hits: SessionSearchResults["hits"] = [];
     if (!query.trim()) return { hits, hasMore: false };
-    for (const { id, workingDirectory } of this.list()) {
-      if (project !== undefined && (workingDirectory ?? null) !== project) continue;
+    for (const { id, workingDirectory, worktree } of this.list()) {
+      if (
+        project !== undefined &&
+        (workingDirectory ?? null) !== project &&
+        worktree?.projectDirectory !== project
+      )
+        continue;
       for (const match of findTranscript(this.indexedTranscript(id), query)) {
         if (hits.length === CONVERSATION_SEARCH_LIMIT) return { hits, hasMore: true };
         hits.push({ sessionId: id, ...match });

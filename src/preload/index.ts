@@ -90,6 +90,16 @@ const api: PiApi = {
   sessionCommitGit: (composerId, token, message) =>
     ipcRenderer.invoke(IPC.sessionCommitGit, composerId, token, message),
   sessionGitBranches: (composerId) => ipcRenderer.invoke(IPC.sessionGitBranches, composerId),
+  sessionGitWorktrees: (composerId) => ipcRenderer.invoke(IPC.sessionGitWorktrees, composerId),
+  sessionCreateGitWorktree: (composerId, request) =>
+    ipcRenderer.invoke(IPC.sessionCreateGitWorktree, composerId, request),
+  sessionOpenGitWorktree: (composerId, id) =>
+    ipcRenderer.invoke(IPC.sessionOpenGitWorktree, composerId, id),
+  sessionPreviewGitWorktree: (composerId, id) =>
+    ipcRenderer.invoke(IPC.sessionPreviewGitWorktree, composerId, id),
+  sessionApplyGitWorktree: (composerId, token, action) =>
+    ipcRenderer.invoke(IPC.sessionApplyGitWorktree, composerId, token, action),
+  sessionPreviewWorktreeArchive: (id) => ipcRenderer.invoke(IPC.sessionPreviewWorktreeArchive, id),
   sessionSwitchGitBranch: (composerId, token, request) =>
     ipcRenderer.invoke(IPC.sessionSwitchGitBranch, composerId, token, request),
   sessionPreviewGitPush: (composerId) => ipcRenderer.invoke(IPC.sessionPreviewGitPush, composerId),

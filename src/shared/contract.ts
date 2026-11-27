@@ -49,6 +49,12 @@ export const IPC = {
   sessionPreviewGitCommit: "session:preview-git-commit",
   sessionCommitGit: "session:commit-git",
   sessionGitBranches: "session:git-branches",
+  sessionGitWorktrees: "session:git-worktrees",
+  sessionCreateGitWorktree: "session:create-git-worktree",
+  sessionOpenGitWorktree: "session:open-git-worktree",
+  sessionPreviewGitWorktree: "session:preview-git-worktree",
+  sessionApplyGitWorktree: "session:apply-git-worktree",
+  sessionPreviewWorktreeArchive: "session:preview-worktree-archive",
   sessionSwitchGitBranch: "session:switch-git-branch",
   sessionPreviewGitPush: "session:preview-git-push",
   sessionPushGit: "session:push-git",
@@ -604,6 +610,7 @@ export const SESSION_RUN_RESULTS = ["success", "failed", "stopped", "interrupted
 export type SessionRunResult = (typeof SESSION_RUN_RESULTS)[number];
 
 export interface SessionMeta extends SessionSettings {
+  worktree?: ManagedWorktree;
   id: string;
   title: string;
   createdAt: number;
@@ -631,6 +638,49 @@ export interface GitBranchOptions {
   head: ProjectGitHead | null;
   branches: string[];
 }
+
+export interface ManagedWorktree {
+  id: string;
+  projectDirectory: string;
+  directory: string;
+  branch: string;
+  baseBranch: string;
+  baseCommit: string;
+  removed?: true;
+}
+
+export interface GitWorktreeOptions {
+  projectDirectory: string;
+  currentBranch: string | null;
+  defaultBranchName: string;
+  branches: { name: string; commit: string }[];
+  worktrees: ManagedWorktree[];
+}
+
+export interface GitWorktreeCreate {
+  branch: string;
+  baseBranch: string;
+  baseCommit: string;
+}
+
+export interface GitWorktreeRemainder {
+  worktree: ManagedWorktree;
+  head: string;
+  commits: number;
+  changes: { path: string; status: string }[];
+  omittedChanges: number;
+  unavailable?: true;
+}
+
+export interface GitWorktreeReview extends GitWorktreeRemainder {
+  token: string;
+  patch: string;
+  patchTruncated: boolean;
+  mergeBlock?: string;
+  removeBlock?: string;
+}
+
+export type GitWorktreeAction = "merge" | "remove";
 
 export type GitBranchRequest = { kind: "create" | "switch"; branch: string };
 
@@ -1008,6 +1058,7 @@ export interface Snapshot {
   draftImages: ImageAttachment[];
   draftSettings: SessionSettings;
   draftWorkingDirectory: string | null;
+  worktree?: ManagedWorktree;
   sessions: SessionMeta[];
   recentProjects: string[];
   messages: UiMessage[];

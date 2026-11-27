@@ -9,6 +9,7 @@ import type {
   VerificationStatus,
 } from "@shared/contract";
 
+import { workspaceRoot, workspacesOverlap } from "../workspace/paths";
 import { stopProcessTree } from "../workspace/process";
 import { launchVerification, verificationCommands } from "./commands";
 import { VERIFICATION_OUTPUT_LIMIT, VERIFICATION_UPDATE_INTERVAL_MS } from "./constants";
@@ -213,8 +214,12 @@ export class VerificationManager {
     this.history.remove(sessionId);
   }
 
-  hasActiveRuns(): boolean {
-    return this.active.size > 0;
+  hasActiveRuns(directory?: string): boolean {
+    if (!directory) return this.active.size > 0;
+    const root = workspaceRoot(directory);
+    return [...this.active.values()].some(({ result }) =>
+      workspacesOverlap(root, workspaceRoot(result.workingDirectory)),
+    );
   }
 
   async stopAll(): Promise<void> {

@@ -43,7 +43,7 @@ export function ProjectChip({
   const bindTo = useAgentStore(selectProjectBinding);
   const openFolderPicker = (): void => void selectProject({ sessionId: bindTo });
   const title =
-    projectDirectory ??
+    (projectDirectory && (workingDirectory ?? projectDirectory)) ??
     (workingDirectory
       ? t("未选择项目，当前使用默认工作目录 {0}", locale, [workingDirectory])
       : t("未选择项目", locale));
@@ -102,7 +102,7 @@ export function ProjectChip({
               key={directory}
               title={directory}
               onClick={() => {
-                if (directory !== projectDirectory)
+                if (directory !== projectDirectory || directory !== workingDirectory)
                   void selectProject({ sessionId: bindTo, directory });
               }}
               className="items-start gap-2.5 py-2"

@@ -8,6 +8,7 @@ import type {
   ExternalEditor,
   ImageAttachment,
   LogLevel,
+  ManagedWorktree,
   MenuAction,
   PermissionDecision,
   PlanMode,
@@ -43,6 +44,9 @@ interface AgentStore extends AgentUiState {
   draftImages: ImageAttachment[];
   draftSettings: SessionSettings;
   draftWorkingDirectory: string | null;
+  worktree?: ManagedWorktree;
+  worktreeArchiveSession: string | null;
+  dismissWorktreeArchive(): void;
   choosingProject: boolean;
   projectError: string | null;
   view: View;
@@ -185,6 +189,12 @@ export function selectProjectDirectory(
   return state.draftWorkingDirectory;
 }
 
+export function selectProjectGroup(
+  state: Pick<AgentStore, "sessionId" | "draftWorkingDirectory" | "sessions" | "worktree">,
+): string | null {
+  return state.worktree?.projectDirectory ?? selectProjectDirectory(state);
+}
+
 export function selectProjectBinding(state: AgentStore): string | undefined {
   if (selectProjectDirectory(state)) return undefined;
   const hasDraft =
@@ -221,6 +231,7 @@ function sessionSnapshot(
   Pick<
     AgentStore,
     | "draftWorkingDirectory"
+    | "worktree"
     | "draftSettings"
     | "composerId"
     | "composerDraft"
@@ -236,6 +247,7 @@ function sessionSnapshot(
       snapshot.composerId === current.composerId ? current.draftImages : snapshot.draftImages,
     draftSettings: snapshot.draftSettings,
     draftWorkingDirectory: snapshot.draftWorkingDirectory,
+    worktree: snapshot.worktree,
     sessions: snapshot.sessions,
     recentProjects: snapshot.recentProjects,
     messages: snapshot.messages,
@@ -263,6 +275,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   draftImages: [],
   draftSettings: {},
   draftWorkingDirectory: null,
+  worktreeArchiveSession: null,
+  dismissWorktreeArchive: () => set({ worktreeArchiveSession: null }),
   choosingProject: false,
   projectError: null,
   view: "chat",
@@ -440,6 +454,11 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   },
 
   setSessionArchived: async (id, archived) => {
+    const worktree = get().sessions.find((session) => session.id === id)?.worktree;
+    if (archived && worktree && !worktree.removed) {
+      set({ worktreeArchiveSession: id });
+      return;
+    }
     try {
       await window.pi.sessionArchive(id, archived);
       showFeedback(archived ? "聊天已归档" : "聊天已恢复");

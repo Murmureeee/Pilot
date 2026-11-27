@@ -1030,6 +1030,66 @@ export const EN_MESSAGES: Record<string, string> = {
   "原路径 {0}": "Previous path {0}",
   任务期间移出清单: "Cleared during the task",
   "当前目录没有 Git 工作树": "This folder has no Git worktree",
+  "工作树…": "Worktrees…",
+  并行工作树: "Parallel worktrees",
+  项目工作树: "Project worktrees",
+  "基准分支 {0}": "Base branch {0}",
+  任务分支名称: "Task branch name",
+  创建工作树: "Create worktree",
+  "请先在原项目创建一次提交。": "Create a commit in the original project first.",
+  打开聊天: "Open chat",
+  "审查工作树…": "Review worktree…",
+  返回工作树: "Back to worktrees",
+  "正在处理工作树…": "Working with Git…",
+  "任务分支 {0} 从 {1} 创建。": "Task branch {0} was created from {1}.",
+  "{0} 项提交尚未合并到基准分支。": "{0} commits to merge into the base branch.",
+  剩余文件: "Remaining files",
+  "另有 {0} 项文件。": "{0} more files.",
+  "没有剩余的本地文件改动。": "The worktree has no remaining local changes.",
+  已提交差异: "Committed diff",
+  "差异超过预览上限。可在工作树中查看完整差异。":
+    "The diff exceeds the preview limit. Review the full diff in the worktree.",
+  "合并到 {0}": "Merge into {0}",
+  丢弃改动并移除: "Discard changes and remove",
+  移除工作树: "Remove worktree",
+  "移除会删除工作树目录及其中的本地文件。任务分支和聊天记录会保留。":
+    "Removing the worktree deletes its folder and local files. The task branch and chat history are retained.",
+  "任务分支已合并。": "Task branch merged.",
+  "工作树已移除。": "Worktree removed.",
+  归档工作树聊天: "Archive worktree chat",
+  "归档「{0}」后，工作树中的文件和分支仍保留。":
+    "Archiving “{0}” keeps the worktree files and branch.",
+  确认归档: "Archive chat",
+  "工作树当前无法访问。请从原项目检查目录。":
+    "The worktree is unavailable. Check its folder from the original project.",
+  "工作树已移除或无法访问。请检查工作树目录。":
+    "The worktree was removed or is unavailable. Check its directory.",
+  "基准分支已变更。请刷新分支列表后重试。":
+    "The base branch changed. Refresh the branch list and try again.",
+  "工作树存放目录与当前仓库重叠。请使用独立的应用数据目录。":
+    "The worktree storage overlaps this repository. Use a separate app data directory.",
+  "此工作树已锁定。请先用 Git 解锁。": "This worktree is locked. Unlock it with Git first.",
+  "工作树中还有 Git 操作。请先完成或取消该操作。":
+    "A Git operation is in progress in the worktree. Finish or cancel it first.",
+  "无法核对工作树改动。请在终端审查后重试。":
+    "The worktree changes could not be verified. Review them in the terminal and try again.",
+  "工作树的分支已切换。请切回任务分支后重试。":
+    "The worktree branch changed. Switch back to the task branch and try again.",
+  "请先提交工作树中的改动并结束 Git 操作。":
+    "Commit the worktree changes and finish any Git operation first.",
+  "找不到基准分支。请恢复该分支后重试。": "The base branch is missing. Restore it and try again.",
+  "请在原项目中检出基准分支后重试。":
+    "Check out the base branch in the original project and try again.",
+  "请先处理原项目的未提交改动或正在进行的 Git 操作。":
+    "Resolve uncommitted changes or any Git operation in the original project first.",
+  "任务提交已在基准分支中。": "The base branch already contains the task commits.",
+  "发现合并冲突。请在任务分支解决冲突后重新预览。":
+    "The merge has conflicts. Resolve them on the task branch and refresh the preview.",
+  "工作树或基准分支已变更。请重新预览。":
+    "The worktree or base branch changed. Refresh the preview.",
+  "请先停止相关工作区的任务、验证和终端，再重试。":
+    "Stop the tasks, validations, and terminals in the affected workspaces, then try again.",
+  "正在更新工作树，请稍后重试。": "Git is updating this worktree. Try again in a moment.",
   "无法读取 Git 变更": "Could not read Git changes",
   任务检查点: "Task checkpoint",
   任务变更记录: "Task change history",
