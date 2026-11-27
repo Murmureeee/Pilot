@@ -19,6 +19,7 @@ import { createServer } from "node:net";
 import { createServer as createHttpsServer } from "node:https";
 import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { readWindowsPublishers, verifyWindowsSignatures } from "./verify-windows-signing.mjs";
 import { stopProcessTree } from "./windows-process.mjs";
 
 const legacyName = "pi Desktop";
@@ -58,10 +59,14 @@ function installedExecutable(directory) {
   return [pilotExeName, legacyExeName].find((name) => existsSync(join(directory, name)));
 }
 
+function installedUninstaller(directory, executable) {
+  return join(directory, `Uninstall ${basename(executable, ".exe")}.exe`);
+}
+
 async function uninstall(directory) {
   const exe = installedExecutable(directory);
   if (!exe) return;
-  const uninstaller = join(directory, `Uninstall ${basename(exe, ".exe")}.exe`);
+  const uninstaller = installedUninstaller(directory, exe);
   assert.ok(existsSync(uninstaller), "The installation must create an uninstaller");
   // NSIS normally relaunches from a temporary location and exits before it removes the install registration.
   const uninstallerCopy = join(root, "uninstall.exe");
@@ -213,6 +218,37 @@ async function sendTurn(evaluate, prompt) {
   return saved;
 }
 
+async function verifyRestoredProfile(evaluate, saved, version, profile, prefix) {
+  await verifyApp(evaluate, "Pilot", version, profile);
+  const restored = await evaluate(async (id, storagePrefix) => {
+    const snapshot = await window.pi.sessionLoad(id);
+    return {
+      snapshot,
+      transcript: await window.pi.sessionCopy(id),
+      skills: await window.pi.skillsList(snapshot.composerId),
+      locale: localStorage.getItem(`${storagePrefix}-locale`),
+      theme: localStorage.getItem(`${storagePrefix}-theme`),
+    };
+  }, saved.sessionId, prefix);
+  assert.equal(
+    restored.snapshot.sessions.find(({ id }) => id === saved.sessionId)?.title,
+    sessionTitle,
+  );
+  assert.equal(restored.transcript, saved.transcript);
+  assert.equal(restored.snapshot.settings.approvalMode, "read-only");
+  assert.equal(restored.snapshot.settings.persona, persona);
+  assert.equal(restored.locale, "en");
+  assert.equal(restored.theme, "dark");
+  await waitFor("the restored English interface", () =>
+    evaluate(() => document.documentElement.lang === "en"),
+  );
+  await waitFor("the restored dark theme", () =>
+    evaluate(() => document.documentElement.classList.contains("dark")),
+  );
+  assert.equal(restored.skills.find(({ id }) => id === skillId)?.enabled, true);
+  assert.equal(readFileSync(join(profile, skillPath), "utf8"), skillBody);
+}
+
 function removeTestDirectory(directory) {
   if (!existsSync(directory)) return;
   assert.equal(realpathSync.native(directory).toLowerCase(), directory.toLowerCase());
@@ -339,6 +375,23 @@ try {
     assert.match(config, /^updaterCacheDirName: pilot-updater\r?$/m);
   }
   if (publishedFeed) verifyPublishedFeed(cleanInstall);
+  const publishers = readWindowsPublishers(cleanInstall);
+  if (publishers.length || process.env.WIN_CSC_LINK) {
+    verifyWindowsSignatures([
+      candidateInstaller,
+      join(cleanInstall, candidateExe),
+      installedUninstaller(cleanInstall, candidateExe),
+    ], publishers);
+    console.log("Verified the installer, application and uninstaller signatures.");
+    if (feed) {
+      assert.throws(() => verifyWindowsSignatures([legacyInstaller], publishers), /NotSigned/);
+      assert.throws(
+        () => verifyWindowsSignatures([candidateInstaller], ["CN=Unexpected test publisher"]),
+        /does not match the expected publisher/,
+      );
+      console.log("Signature checks rejected an unsigned installer and a different publisher.");
+    }
+  }
   const expectedHash = createHash("sha256")
     .update(readFileSync(join(cleanInstall, archive)))
     .digest("hex");
@@ -463,44 +516,26 @@ try {
   await delay(1_000);
   if (!legacyCandidate) assert.equal(installedExecutable(legacyInstall), undefined);
   assert.equal(installedExecutable(upgradeInstall), candidateExe);
-  await withApp(upgradeInstall, async (evaluate) => {
-    await verifyApp(evaluate, "Pilot", candidateVersion, cleanProfile);
-    const restored = await evaluate(async (id, prefix) => {
-      const snapshot = await window.pi.sessionLoad(id);
-      return {
-        snapshot,
-        transcript: await window.pi.sessionCopy(id),
-        skills: await window.pi.skillsList(snapshot.composerId),
-        locale: localStorage.getItem(`${prefix}-locale`),
-        theme: localStorage.getItem(`${prefix}-theme`),
-      };
-    }, original.sessionId, legacyCandidate ? "pi" : "pilot");
-    assert.equal(
-      restored.snapshot.sessions.find(({ id }) => id === original.sessionId)?.title,
-      sessionTitle,
-    );
-    assert.equal(restored.transcript, original.transcript);
-    assert.equal(restored.snapshot.settings.approvalMode, "read-only");
-    assert.equal(restored.snapshot.settings.persona, persona);
-    assert.equal(restored.locale, "en");
-    assert.equal(restored.theme, "dark");
-    await waitFor("the restored English interface", () =>
-      evaluate(() => document.documentElement.lang === "en"),
-    );
-    await waitFor("the restored dark theme", () =>
-      evaluate(() => document.documentElement.classList.contains("dark")),
-    );
-    assert.equal(restored.skills.find(({ id }) => id === skillId)?.enabled, true);
-    assert.equal(readFileSync(join(cleanProfile, skillPath), "utf8"), skillBody);
+  const storagePrefix = legacyCandidate ? "pi" : "pilot";
+  const upgraded = await withApp(upgradeInstall, async (evaluate) => {
+    await verifyRestoredProfile(evaluate, original, candidateVersion, cleanProfile, storagePrefix);
     const continued = await sendTurn(evaluate, "This is the first turn after upgrading");
     assert.equal(continued.sessionId, original.sessionId);
     await waitForUpdate(evaluate, "current");
+    const transcript = await evaluate((id) => window.pi.sessionCopy(id), continued.sessionId);
+    return { sessionId: continued.sessionId, transcript };
   });
   if (!legacyCandidate) assert.ok(!existsSync(legacyProfile), "The old profile must move to Pilot");
   await uninstall(upgradeInstall);
   console.log(
     `${legacyName} ${legacyVersion} to Pilot ${candidateVersion} preserved the transcript, settings, language, theme, and enabled skill.`,
   );
+  runInstaller(resolve(candidateInstaller), root);
+  await withApp(upgradeInstall, (evaluate) =>
+    verifyRestoredProfile(evaluate, upgraded, candidateVersion, cleanProfile, storagePrefix),
+  );
+  await uninstall(upgradeInstall);
+  console.log("Uninstalling and reinstalling preserved the upgraded profile.");
   if (!publishedFeed) {
     runInstaller(resolve(legacyInstaller), root, ["/S", `/D=${customInstall}`]);
     assert.equal(installedExecutable(customInstall), legacyExeName);

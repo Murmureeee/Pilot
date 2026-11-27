@@ -126,24 +126,16 @@ jobs:
           $manifest | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath 'package.json' -Encoding utf8
           pnpm package:win
 
-      - name: Build the Pilot upgrade candidate
+      - name: Verify fresh install, signed HTTPS update and uninstall
         if: inputs.verify_installation || inputs.prepare_release
         id: candidate
         env:
           PILOT_UPDATE_URL: ${{ env.PILOT_UPDATE_TEST_URL }}
-        run: |
-          $manifest = Get-Content -Raw -LiteralPath 'package.json' | ConvertFrom-Json
-          pnpm package:win
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          "version=$($manifest.version)" >> $env:GITHUB_OUTPUT
-
-      - name: Verify fresh install, HTTPS update and uninstall
-        if: inputs.verify_installation || inputs.prepare_release
-        env:
-          PILOT_CANDIDATE_VERSION: ${{ steps.candidate.outputs.version }}
+          ELECTRON_BUILDER_OFFLINE: 'true'
         run: |
           $certDir = Join-Path $env:RUNNER_TEMP ('pilot-update-tls-' + [guid]::NewGuid())
           $certificate = $null
+          $signer = $null
           New-Item -Path $certDir -ItemType Directory | Out-Null
           try {
             $certificate = New-SelfSignedCertificate -Subject 'CN=Pilot update acceptance' -TextExtension '2.5.29.17={text}IPAddress=127.0.0.1' -KeyExportPolicy Exportable -NotAfter (Get-Date).AddHours(2) -CertStoreLocation 'Cert:\CurrentUser\My'
@@ -153,11 +145,35 @@ jobs:
             $password = ConvertTo-SecureString $env:PILOT_UPDATE_TEST_PASSPHRASE -AsPlainText -Force
             Export-Certificate -Cert $certificate -FilePath $env:PILOT_UPDATE_TEST_CERT | Out-Null
             Export-PfxCertificate -Cert $certificate -FilePath $env:PILOT_UPDATE_TEST_PFX -Password $password | Out-Null
-            node scripts/verify-windows-installation.mjs '.pilot-baseline/dist/release/pi-desktop-0.1.0-x64-setup.exe' "dist/release/pilot-${env:PILOT_CANDIDATE_VERSION}-x64-setup.exe" $env:PILOT_CANDIDATE_VERSION
+
+            $signer = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Pilot installer acceptance, O=Pilot Test' -KeyExportPolicy Exportable -NotAfter (Get-Date).AddHours(2) -CertStoreLocation 'Cert:\CurrentUser\My'
+            $signerCert = Join-Path $certDir 'signer.cer'
+            Export-Certificate -Cert $signer -FilePath $signerCert | Out-Null
+            Import-Certificate -FilePath $signerCert -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+            $env:WIN_CSC_LINK = Join-Path $certDir 'signer.pfx'
+            $env:WIN_CSC_KEY_PASSWORD = [guid]::NewGuid().ToString()
+            Write-Output "::add-mask::$env:WIN_CSC_KEY_PASSWORD"
+            $signingPassword = ConvertTo-SecureString $env:WIN_CSC_KEY_PASSWORD -AsPlainText -Force
+            Export-PfxCertificate -Cert $signer -FilePath $env:WIN_CSC_LINK -Password $signingPassword | Out-Null
+            $env:PILOT_WINDOWS_PUBLISHER = $signer.Subject
+
+            $version = (Get-Content -Raw -LiteralPath 'package.json' | ConvertFrom-Json).version
+            pnpm package:win
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $installer = "dist/release/pilot-$version-x64-setup.exe"
+            node scripts/verify-windows-signing.mjs $installer 'dist/release/win-unpacked'
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            node scripts/verify-windows-installation.mjs '.pilot-baseline/dist/release/pi-desktop-0.1.0-x64-setup.exe' $installer $version
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            "version=$version" >> $env:GITHUB_OUTPUT
           } finally {
+            if ($signer) {
+              $trustedSigner = "Cert:\CurrentUser\Root\$($signer.Thumbprint)"
+              if (Test-Path -LiteralPath $trustedSigner) { Remove-Item -LiteralPath $trustedSigner }
+              Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($signer.Thumbprint)" -DeleteKey
+            }
             if ($certificate) { Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -DeleteKey }
-            foreach ($file in @('server.cer', 'server.pfx')) {
+            foreach ($file in @('server.cer', 'server.pfx', 'signer.cer', 'signer.pfx')) {
               $certFile = Join-Path $certDir $file
               if (Test-Path -LiteralPath $certFile) { Remove-Item -LiteralPath $certFile }
             }
@@ -211,11 +227,18 @@ jobs:
         env:
           PILOT_UPDATE_URL: ${{ env.PILOT_RELEASE_UPDATE_URL }}
           PILOT_CANDIDATE_VERSION: ${{ steps.candidate.outputs.version }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          PILOT_WINDOWS_PUBLISHER: ${{ vars.PILOT_WINDOWS_PUBLISHER }}
         run: |
           pnpm package:win
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $config = Get-Content -Raw -LiteralPath 'dist/release/win-unpacked/resources/app-update.yml'
           if ($config -notmatch ('(?m)^url: ' + [regex]::Escape($env:PILOT_UPDATE_URL) + '\s*$')) { throw 'The build is missing its GitHub Releases URL.' }
+          if ($env:WIN_CSC_LINK) {
+            node scripts/verify-windows-signing.mjs "dist/release/pilot-${env:PILOT_CANDIDATE_VERSION}-x64-setup.exe" 'dist/release/win-unpacked'
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
           "name=Pilot-release-${env:GITHUB_RUN_ID}-${env:GITHUB_RUN_ATTEMPT}" >> $env:GITHUB_OUTPUT
 
       - name: Stage installer, blockmap and update manifest

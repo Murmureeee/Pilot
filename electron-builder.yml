@@ -15,6 +15,8 @@ electronDownload:
 win:
   target: nsis
   icon: resources/icon.ico
+  signtoolOptions:
+    signingHashAlgorithms: [sha256]
 nsis:
   # The installed product must keep its registry key across the app ID change.
   guid: 9a907120-d156-5094-b3fe-beb35bfd5735
