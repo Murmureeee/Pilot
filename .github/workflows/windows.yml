@@ -145,11 +145,15 @@ jobs:
             $password = ConvertTo-SecureString $env:PILOT_UPDATE_TEST_PASSPHRASE -AsPlainText -Force
             Export-Certificate -Cert $certificate -FilePath $env:PILOT_UPDATE_TEST_CERT | Out-Null
             Export-PfxCertificate -Cert $certificate -FilePath $env:PILOT_UPDATE_TEST_PFX -Password $password | Out-Null
+            Write-Output 'Loopback HTTPS certificate prepared.'
 
             $signer = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Pilot installer acceptance, O=Pilot Test' -KeyExportPolicy Exportable -NotAfter (Get-Date).AddHours(2) -CertStoreLocation 'Cert:\CurrentUser\My'
             $signerCert = Join-Path $certDir 'signer.cer'
             Export-Certificate -Cert $signer -FilePath $signerCert | Out-Null
-            Import-Certificate -FilePath $signerCert -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+            # The disposable runner has no desktop prompt for adding a user-trusted root.
+            certutil.exe -f -addstore Root $signerCert | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw 'Could not trust the temporary signing certificate on the runner.' }
+            Write-Output 'Temporary code-signing certificate trusted on the runner.'
             $env:WIN_CSC_LINK = Join-Path $certDir 'signer.pfx'
             $env:WIN_CSC_KEY_PASSWORD = [guid]::NewGuid().ToString()
             Write-Output "::add-mask::$env:WIN_CSC_KEY_PASSWORD"
@@ -168,7 +172,7 @@ jobs:
             "version=$version" >> $env:GITHUB_OUTPUT
           } finally {
             if ($signer) {
-              $trustedSigner = "Cert:\CurrentUser\Root\$($signer.Thumbprint)"
+              $trustedSigner = "Cert:\LocalMachine\Root\$($signer.Thumbprint)"
               if (Test-Path -LiteralPath $trustedSigner) { Remove-Item -LiteralPath $trustedSigner }
               Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($signer.Thumbprint)" -DeleteKey
             }
