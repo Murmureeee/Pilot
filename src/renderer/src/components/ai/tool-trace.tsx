@@ -31,10 +31,11 @@ import { parseToolFailure, stackDisplayPath } from "@renderer/lib/tool-trace";
 import type { ToolFailure } from "@renderer/lib/types";
 import { selectWorkingDirectory, useAgentStore } from "@renderer/stores/agent";
 import { HOOK_TRACE_TOOL, RUN_SUBTASK_TOOL_NAME, TURN_HOOK_TRACE_TOOL } from "@shared/constants";
-import type { SubtaskTrace, TranscriptLocation, UiPart, WebSource } from "@shared/contract";
+import type { SubtaskTrace, TranscriptLocation, UiPart } from "@shared/contract";
 import { toolInput } from "@shared/tool-input";
-import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL, isWebTool, webLink } from "@shared/web";
+import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL, isWebTool } from "@shared/web";
 
+import { WebSourceLinks } from "./web-source-links";
 import { InlineWorkspaceReference } from "./workspace-reference";
 
 const TOOL_ICONS = {
@@ -50,32 +51,6 @@ const TOOL_ICONS = {
   [WEB_SEARCH_TOOL]: SearchIcon,
   [RUN_SUBTASK_TOOL_NAME]: ListTreeIcon,
 } satisfies Record<string, typeof TerminalIcon>;
-
-function SourceLinks({ sources }: { sources: WebSource[] }): JSX.Element {
-  const locale = useLocale();
-  return (
-    <ul aria-label={t("网页来源", locale)} data-tool-sources className="grid min-w-0 gap-2">
-      {sources.map((source) => {
-        const url = webLink(source.url);
-        if (!url) return null;
-        return (
-          <li key={url.href} className="flex min-w-0 flex-col gap-0.5">
-            <a
-              href={url.href}
-              target="_blank"
-              rel="noreferrer"
-              title={url.href}
-              className="w-fit max-w-full rounded-sm text-xs wrap-anywhere text-brand underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {source.title}
-            </a>
-            <bdi className="text-xs wrap-anywhere text-muted-foreground">{url.hostname}</bdi>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
 
 function ToolOutput({ text }: { text: string }): JSX.Element {
   return (
@@ -311,7 +286,7 @@ export function ToolTrace({
               )}
             </div>
           )}
-          {sources && <SourceLinks sources={sources} />}
+          {sources && <WebSourceLinks sources={sources} tool />}
           {failure ? (
             <div data-transcript-field="output">
               <FailureDetails

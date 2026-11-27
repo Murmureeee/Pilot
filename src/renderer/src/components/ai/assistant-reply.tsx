@@ -1,5 +1,5 @@
 // @env browser
-import { ListTreeIcon, LoaderCircleIcon } from "lucide-react";
+import { GlobeIcon, ListTreeIcon, LoaderCircleIcon } from "lucide-react";
 import { useState, type JSX } from "react";
 
 import {
@@ -16,7 +16,7 @@ import { formatDuration } from "@renderer/lib/duration";
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { ReplyEntry } from "@renderer/lib/types";
 import { TURN_HOOK_TRACE_TOOL } from "@shared/constants";
-import type { TranscriptLocation, UiMessage } from "@shared/contract";
+import type { TranscriptLocation, UiMessage, WebSource } from "@shared/contract";
 import { transcriptPartKey } from "@shared/transcript-search";
 
 import { FileChangesCard } from "./file-changes-card";
@@ -26,6 +26,7 @@ import { PlanCard } from "./plan-card";
 import { Response } from "./response";
 import { ThinkingBlock } from "./thinking-block";
 import { ToolTrace } from "./tool-trace";
+import { WebSourceLinks } from "./web-source-links";
 
 export function AssistantReply({
   messages,
@@ -81,6 +82,12 @@ export function AssistantReply({
     !live &&
     tools.length > 0 &&
     answer.some(({ part }) => part.type === "text" && part.text.trim());
+  const sources = new Map<string, WebSource>();
+  if (summarized) {
+    for (const tool of tools)
+      for (const source of tool.sources ?? [])
+        if (!sources.has(source.url) || source.section) sources.set(source.url, source);
+  }
   let summary = "";
   if (summarized) {
     const end = messages.at(-1)?.timing;
@@ -175,6 +182,23 @@ export function AssistantReply({
               )}
             </div>
           ),
+      )}
+      {sources.size > 0 && (
+        <Trace data-reply-sources>
+          <TraceCollapsible>
+            <TraceCollapsibleTrigger>
+              <TraceLine>
+                <TraceIcon>
+                  <GlobeIcon />
+                </TraceIcon>
+                <TraceTitle>{t("网页来源（{0}）", locale, [sources.size])}</TraceTitle>
+              </TraceLine>
+            </TraceCollapsibleTrigger>
+            <TraceCollapsibleContent>
+              <WebSourceLinks sources={[...sources.values()]} />
+            </TraceCollapsibleContent>
+          </TraceCollapsible>
+        </Trace>
       )}
       {changes.length > 0 && (
         <FileChangesCard

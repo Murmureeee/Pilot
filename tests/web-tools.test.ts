@@ -164,7 +164,7 @@ it("extracts the page text, decodes entities, drops page chrome and caps model c
 });
 
 it("extracts organic search hits, unwraps result URLs and handles empty or unavailable searches", () => {
-  const link = "https://www.example.com/article?view=full";
+  const link = "https://www.example.com/article?view=full#usage";
   const row = (title: string, url: string, css = ""): string =>
     '<div class="result ' +
     css +
@@ -190,4 +190,20 @@ it("extracts organic search hits, unwraps result URLs and handles empty or unava
   expect(webSources({ webSources: [...hits, { url: "file:///tmp/example" }] })).toEqual([
     { url: link, title: "Example docs" },
   ]);
+});
+
+it("returns precise links to visible headings and to the requested target", () => {
+  const page = document(
+    '<title>Project guide</title><main><h2 id="安装">Installation</h2><p id="prerequisite">Requires Pilot</p>' +
+      '<h2 id="hidden" hidden>Hidden section</h2><p>' +
+      "x".repeat(WEB_PAGE_TEXT_LIMIT) +
+      '</p><h2 id="omitted">Outside the excerpt</h2></main>',
+  );
+  const sections = pageContent(page, "#prerequisite").sections;
+  expect(sections).toEqual([
+    { title: "Project guide", section: "Requires Pilot", url: pageUrl + "#prerequisite" },
+    { title: "Project guide", section: "Installation", url: pageUrl + "#%E5%AE%89%E8%A3%85" },
+  ]);
+  expect(webSources({ webSources: [...sections, sections[0]] })).toEqual(sections);
+  expect(pageContent(page, "#missing").sections).toEqual([sections[1]]);
 });

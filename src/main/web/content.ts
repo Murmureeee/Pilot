@@ -2,7 +2,7 @@
 import { loadBuffer } from "cheerio";
 
 import type { WebSource } from "../../shared/contract";
-import { WEB_SOURCE_LIMIT } from "../../shared/web";
+import { WEB_SOURCE_LIMIT, webLink } from "../../shared/web";
 import {
   WEB_EMPTY_PAGE,
   WEB_PAGE_TEXT_LIMIT,
@@ -36,13 +36,26 @@ function decodeText(document: WebDocument): string {
   return decoder.decode(document.bytes);
 }
 
-export function pageContent(document: WebDocument): {
+function fragmentId(fragment: string): string {
+  try {
+    return decodeURIComponent(fragment.slice(1));
+  } catch {
+    return "";
+  }
+}
+
+export function pageContent(
+  document: WebDocument,
+  requestedFragment = "",
+): {
   source: WebSource;
+  sections: WebSource[];
   text: string;
   truncated: boolean;
 } {
   let title = "";
   let text: string;
+  const sections: WebSource[] = [];
   if (document.contentType.toLowerCase().startsWith("text/plain")) {
     text = clean(decodeText(document));
   } else {
@@ -56,11 +69,41 @@ export function pageContent(document: WebDocument): {
     $("p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, div, tr, br").append("\n");
     $("td, th").append(" ");
     const primary = $("main, [role=main], article").first();
-    text = clean(primary.text()) || clean($("body").text());
+    const body = clean(primary.text()) ? primary : $("body");
+    text = clean(body.text());
+    const visibleText = text.slice(0, WEB_PAGE_TEXT_LIMIT);
+    const requestedId = fragmentId(requestedFragment);
+    const elements = body.find("[id], a[name]").addBack("[id]").toArray();
+    const requested = requestedId
+      ? elements.find(
+          (element) => ($(element).attr("id") ?? $(element).attr("name")) === requestedId,
+        )
+      : undefined;
+    const headings = elements.filter((element) => $(element).is("h1, h2, h3, h4, h5, h6"));
+    const seen = new Set<string>();
+    for (const element of requested ? [requested, ...headings] : headings) {
+      const target = $(element);
+      const id = target.attr("id") ?? target.attr("name");
+      const section = clean(target.text()).slice(0, 200);
+      if (!id || seen.has(id) || (element !== requested && !visibleText.includes(section)))
+        continue;
+      if (!section && element !== requested) continue;
+      const link = new URL(document.url);
+      link.hash = encodeURIComponent(id);
+      if (!webLink(link.href)) continue;
+      seen.add(id);
+      sections.push({
+        title: title || document.url.hostname,
+        url: link.href,
+        section: section || id,
+      });
+      if (sections.length >= WEB_SOURCE_LIMIT - 1) break;
+    }
   }
   if (!text) throw new Error(WEB_EMPTY_PAGE);
   return {
     source: { title: title || document.url.hostname, url: document.url.href },
+    sections,
     text: text.slice(0, WEB_PAGE_TEXT_LIMIT).replace(/[\ud800-\udbff]$/, ""),
     truncated: document.truncated || text.length > WEB_PAGE_TEXT_LIMIT,
   };
@@ -72,7 +115,10 @@ function resultUrl(value: string, base: URL): string | undefined {
   const wrapper =
     [base.hostname, "duckduckgo.com"].includes(link.hostname) && link.pathname === "/l/";
   try {
-    return publicWebUrl(wrapper ? (link.searchParams.get("uddg") ?? "") : link.href).href;
+    const target = wrapper ? (link.searchParams.get("uddg") ?? "") : link.href;
+    const url = publicWebUrl(target);
+    url.hash = webLink(target)?.hash ?? "";
+    return webLink(url.href)?.href;
   } catch {
     return undefined;
   }

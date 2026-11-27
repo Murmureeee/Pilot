@@ -275,6 +275,7 @@ describe("SessionStore", () => {
         [
           fauxText("**已完成**"),
           fauxToolCall("bash", { command: "Write-Output fixture" }, { id: "fixture" }),
+          fauxToolCall("web_fetch", { url: "https://example.com/guide" }, { id: "sources" }),
         ],
         { timestamp: 2 },
       ),
@@ -285,6 +286,19 @@ describe("SessionStore", () => {
         content: [{ type: "text", text: fence + "\nfixture\n" + fence }],
         isError: false,
         timestamp: 3,
+      },
+      {
+        role: "toolResult",
+        toolCallId: "sources",
+        toolName: "web_fetch",
+        content: [{ type: "text", text: "Source excerpt" }],
+        details: {
+          webSources: [
+            { title: "Guide", url: "https://example.com/guide#setup", section: "Install [Pilot]" },
+          ],
+        },
+        isError: false,
+        timestamp: 4,
       },
     ];
     store.save(id, messages);
@@ -298,6 +312,8 @@ describe("SessionStore", () => {
       "## 助手",
       "**已完成**",
       "Write-Output fixture",
+      "#### 网页来源",
+      "- [Guide / Install \\[Pilot\\]](<https://example.com/guide#setup>)",
     ])
       expect(markdown).toContain(expected);
     expect(markdown).toContain(fence + "\x60text\n" + fence + "\nfixture\n" + fence);

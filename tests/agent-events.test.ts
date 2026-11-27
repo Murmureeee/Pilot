@@ -352,7 +352,10 @@ describe("agent-events adapter", () => {
       toolName: "web_fetch",
       label: "读取网页",
     });
-    const sources = [{ title: "Guide", url: "https://example.com/guide" }];
+    const sources = [
+      { title: "Guide", url: "https://example.com/guide" },
+      { title: "Guide", section: "Installation", url: "https://example.com/guide#installation" },
+    ];
     const next = applyRunEvent(state, {
       type: "tool_end",
       callId: "web-1",

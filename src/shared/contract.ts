@@ -393,7 +393,7 @@ export type UiPart =
       subtask?: SubtaskTrace;
     });
 
-export type WebSource = { title: string; url: string };
+export type WebSource = { title: string; url: string; section?: string };
 
 export interface AssistantTiming {
   runId: string;

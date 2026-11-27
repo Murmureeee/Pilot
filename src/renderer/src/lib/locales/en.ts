@@ -1030,6 +1030,7 @@ export const EN_MESSAGES: Record<string, string> = {
   网页地址: "Page address",
   搜索词: "Search terms",
   网页来源: "Web sources",
+  "网页来源（{0}）": "Web sources ({0})",
   "仅域名 {0}": "Only {0}",
   "此联网授权缺少有效域名。请重新授权。":
     "This web permission needs a valid domain. Approve it again.",

@@ -2,6 +2,7 @@
 import type { Locale, UiMessage, UiPart } from "@shared/contract";
 
 import { toolInput } from "../../shared/tool-input";
+import { webLink } from "../../shared/web";
 
 const labels = {
   zh: {
@@ -11,6 +12,7 @@ const labels = {
     plan: "任务计划",
     summary: "上下文摘要",
     image: "图片附件",
+    sources: "网页来源",
   },
   "zh-TW": {
     user: "使用者",
@@ -19,6 +21,7 @@ const labels = {
     plan: "工作計畫",
     summary: "上下文摘要",
     image: "圖片附件",
+    sources: "網頁來源",
   },
   en: {
     user: "User",
@@ -27,6 +30,7 @@ const labels = {
     plan: "Plan",
     summary: "Context summary",
     image: "Image attachment",
+    sources: "Web sources",
   },
 } as const;
 
@@ -86,6 +90,13 @@ function assistantParts(parts: readonly UiPart[], locale: Locale): string[] {
       if (input.trim()) blocks.push(codeBlock(input));
       const output = part.output?.trim() || part.error;
       if (output) blocks.push(codeBlock(output));
+      const sources = (part.sources ?? []).flatMap((source) => {
+        const url = webLink(source.url);
+        if (!url) return [];
+        const title = source.section ? source.title + " / " + source.section : source.title;
+        return ["- [" + heading(title) + "](<" + url.href + ">)"];
+      });
+      if (sources.length) blocks.push("#### " + words.sources, sources.join("\n"));
     }
   }
   return blocks;

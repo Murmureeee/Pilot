@@ -1421,6 +1421,7 @@ export async function verifyInstructionSourceLayouts(page, window, sessionId) {
 
 export async function verifyWebTools(page, window, app, model) {
   const firstUrl = "https://docs.pilot.example/guide";
+  const sectionUrl = firstUrl + "#fixture";
   const otherUrl = "https://other.pilot.example/latest";
   const searchQuery = "Pilot public web fixture";
   await app.evaluate(({ app, session, shell }, { firstUrl, otherUrl }) => {
@@ -1444,7 +1445,7 @@ export async function verifyWebTools(page, window, app, model) {
       requests.push({ host, path: url.pathname, query: url.searchParams.get("q") });
       if (url.pathname === "/redirect")
         return { statusCode: 302, headers: { location: otherUrl }, body: Readable.from([]) };
-      const body = "<title>Pilot fixture guide</title><nav>fixture navigation</nav><main><p>Fixture body</p><p>" +
+      const body = '<title>Pilot fixture guide</title><nav>fixture navigation</nav><main><h2 id="fixture">Fixture section</h2><p>Fixture body</p><p>' +
         "z".repeat(13_000) + "</p></main><script>fixture script</script>";
       return { statusCode: 200, headers: { "content-type": "text/html; charset=utf-8" }, body: Readable.from([Buffer.from(body)]) };
     };
@@ -1460,7 +1461,7 @@ export async function verifyWebTools(page, window, app, model) {
     };
     const oldOpen = shell.openExternal;
     shell.openExternal = async (url, options) => {
-      if (url === firstUrl) opened.push(url);
+      if (url === firstUrl || url === firstUrl + "#fixture") opened.push(url);
       else return oldOpen(url, options);
     };
   }, { firstUrl, otherUrl });
@@ -1511,6 +1512,7 @@ export async function verifyWebTools(page, window, app, model) {
   await grant.press("Enter");
   const read = await model.nextCompletion();
   const text = read.input.messages.at(-1).content;
+  assert.ok(text.includes(sectionUrl));
   assert.match(text, /Fixture body[\s\S]*Page text truncated/);
   assert.doesNotMatch(text, /fixture navigation|fixture script|z{12001}/);
   const { toolRules } = await page.evaluate(() => window.pi.settingsGet());
@@ -1537,6 +1539,33 @@ export async function verifyWebTools(page, window, app, model) {
 
   await page.reload();
   await page.getByText("The web source fixture is complete.", { exact: true }).waitFor();
+  const replySources = page.locator("[data-reply-sources]").last();
+  let sourceContrast = Infinity;
+  for (const [size, zoom] of [[wide, 1], [narrow, 1], [narrow, 1.5]]) {
+    await resize(page, window, size, zoom);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        const trigger = button(replySources, /^(Web sources \(|网页来源（)/);
+        await trigger.press("Enter");
+        const section = replySources.getByRole("link", { name: "Fixture section", exact: true }).first();
+        await section.scrollIntoViewIfNeeded();
+        await assertFits(section);
+        sourceContrast = Math.min(sourceContrast, await minimumTextContrast(replySources, "a, bdi"));
+        assert.equal(await section.getAttribute("href"), sectionUrl);
+        await trigger.press("Enter");
+      }
+    }
+  }
+  assert.ok(sourceContrast >= 4.5, "External source text meets contrast requirements");
+  console.log("External source text minimum contrast " + sourceContrast.toFixed(2) + ":1");
+  await resize(page, window, wide);
+  await button(replySources, /^Web sources \(/).press("Enter");
+  const section = replySources.getByRole("link", { name: "Fixture section", exact: true }).first();
+  await assertFits(section);
+  assert.equal(await section.getAttribute("href"), sectionUrl);
+  await section.press("Enter");
   const activity = page.locator("[data-reply-activity]").last();
   await button(activity, /^(Worked for|Steps taken:)/).press("Enter");
   await button(activity, new RegExp("^Search the web " + searchQuery)).press("Enter");
@@ -1545,7 +1574,7 @@ export async function verifyWebTools(page, window, app, model) {
   assert.equal(await source.getAttribute("href"), firstUrl);
   await source.press("Enter");
   await page.waitForFunction(() => document.querySelector("[data-tool-sources] a") === document.activeElement);
-  assert.deepEqual((await receipts()).opened, [firstUrl]);
+  assert.deepEqual((await receipts()).opened, [sectionUrl, firstUrl]);
 
   await openSettings(page, locales[1], "Permissions");
   const row = page.locator(".settings-row").filter({ hasText: "Only docs.pilot.example" });
