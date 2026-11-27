@@ -309,27 +309,36 @@ async function selectAppearance(page, current, locale, theme, focusTarget = "[da
   await page.waitForFunction((target) => document.activeElement?.matches(target), focusTarget);
 }
 
-export async function verifyDiagnostics(page, window, app, profile, scratch) {
-  const secret = "pilot-diagnostic-fixture-credential";
+const diagnosticSecret = "pilot-diagnostic-fixture-credential";
+const diagnosticTime = "2020-01-02T03:04:05.000Z";
+
+export function seedDiagnosticProfile(profile) {
   const record = {
-    time: new Date().toISOString(),
+    time: diagnosticTime,
     level: "error",
     source: "renderer",
     event: "process-gone",
     reason: "crashed",
     code: 7,
-    path: secret,
-    details: { message: secret },
-    version: secret,
+    path: diagnosticSecret,
+    details: { message: diagnosticSecret },
+    version: diagnosticSecret,
   };
   const files = join(profile, "logs");
+  mkdirSync(files);
   const line = JSON.stringify(record) + "\n";
-  appendFileSync(join(files, "pilot.log"), line.repeat(225));
-  writeFileSync(join(files, "pilot.log.1"), JSON.stringify({ ...record, code: 8, reason: secret }) + "\n");
+  writeFileSync(join(files, "pilot.log"), line.repeat(225));
+  writeFileSync(join(files, "pilot.log.1"), JSON.stringify({ ...record, code: 8, reason: diagnosticSecret }) + "\n");
+}
+
+export async function verifyDiagnostics(page, window, app, profile, scratch) {
   const events = await page.evaluate(() => window.pi.diagnosticEvents());
   assert.equal(events.length, 200);
-  assert.equal(events[0].reason, "crashed");
-  assert.ok(!JSON.stringify(events).includes(secret));
+  const crash = events.find(({ time, source, event, code }) =>
+    time === diagnosticTime && source === "renderer" && event === "process-gone" && code === 7,
+  );
+  assert.equal(crash?.reason, "crashed");
+  assert.ok(!JSON.stringify(events).includes(diagnosticSecret));
 
   const labels = [
     { section: "存储与诊断", open: "查看事件", title: "诊断事件", event: "进程退出", refresh: "刷新事件" },
@@ -399,21 +408,22 @@ export async function verifyDiagnostics(page, window, app, profile, scratch) {
   await save.waitFor();
   assert.equal(await page.getByText("已导出脱敏诊断。", { exact: true }).count(), 0);
   assert.ok(!existsSync(target));
-  await choose(files);
+  await choose(join(profile, "logs"));
   await save.click();
   await page.getByRole("alert").getByText(/无法导出诊断/).waitFor();
   await choose(target);
   await save.click();
   await page.getByText("已导出脱敏诊断。", { exact: true }).waitFor();
   const json = readFileSync(target, "utf8");
-  assert.ok(!json.includes(secret));
+  assert.ok(!json.includes(diagnosticSecret));
   assert.ok(!json.includes(profile));
   const { runtime, events: saved } = JSON.parse(json);
   assert.equal(runtime.platform, "win32");
   assert.match(runtime.electron, /^\d+\.\d+\.\d+$/);
   assert.match(runtime.node, /^\d+\.\d+\.\d+$/);
-  assert.equal(saved.filter(({ reason }) => reason === "crashed").length, 225);
-  assert.ok(saved.some(({ code, reason }) => code === 8 && reason === undefined));
+  const fixtureEvents = saved.filter(({ time }) => time === diagnosticTime);
+  assert.equal(fixtureEvents.filter(({ code, reason }) => code === 7 && reason === "crashed").length, 225);
+  assert.ok(fixtureEvents.some(({ code, reason }) => code === 8 && reason === undefined));
 }
 
 export async function verifyCredentialMigration(page, app, profile, model) {

@@ -13,6 +13,7 @@ import { verifyPagePreview } from "./windows-ui/page-preview.mjs";
 import {
   prepareTerminalExit,
   seedBackupProfile,
+  seedDiagnosticProfile,
   seedStorageProfiles,
   verifyAgentMemory,
   verifyAfterTurnVerification,
@@ -407,6 +408,7 @@ try {
       verifyRestoredMcpOAuth(page, app, model, oauthFixture, oauthProfile, oauthServer, oauthProject),
     );
   });
+  seedDiagnosticProfile(diagnosticsProfile);
   await withApp(diagnosticsProfile, async (page, window, app) => {
     await runScene("Read and export redacted diagnostic events across layouts", () =>
       verifyDiagnostics(page, window, app, diagnosticsProfile, scratch),
