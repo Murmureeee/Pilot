@@ -68,6 +68,10 @@ describe("IPC contract", () => {
     expect(IPC.settingsSetAutoDownloadUpdates).toBe("settings:set-auto-download-updates");
   });
 
+  it("uses a dedicated settings route for reading persisted usage", () => {
+    expect(IPC.settingsUsageReport).toBe("settings:usage-report");
+  });
+
   it("uses the settings namespace for the diagnostic log level", () => {
     expect(IPC.settingsSetLogLevel).toBe("settings:set-log-level");
   });

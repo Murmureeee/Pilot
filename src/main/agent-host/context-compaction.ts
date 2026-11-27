@@ -333,17 +333,17 @@ export async function compactContext({
         signal,
       };
       const currentModel = { model, stream, apiKey };
-      const result = await summarizeHistory({
-        ...request,
-        ...(auxiliaryModel ?? currentModel),
-      }).catch((error: unknown) => {
+      let selected = auxiliaryModel ?? currentModel;
+      const result = await summarizeHistory({ ...request, ...selected }).catch((error: unknown) => {
         signal?.throwIfAborted();
         if (!auxiliaryModel) throw error;
-        return summarizeHistory({ ...request, ...currentModel });
+        selected = currentModel;
+        return summarizeHistory({ ...request, ...selected });
       });
       record.cutoff = keep;
       record.summary = result.summary;
       record.usage = result.usage;
+      record.usageModel = { provider: selected.model.provider, model: selected.model.id };
     }
   }
   if (

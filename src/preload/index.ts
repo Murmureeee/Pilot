@@ -196,6 +196,7 @@ const api: PiApi = {
     return () => ipcRenderer.removeListener(TERMINAL_EVENT_CHANNEL, listener);
   },
   settingsGet: () => ipcRenderer.invoke(IPC.settingsGet),
+  settingsUsageReport: () => ipcRenderer.invoke(IPC.settingsUsageReport),
   settingsSave: (input: SettingsInput) => ipcRenderer.invoke(IPC.settingsSave, input),
   settingsSetProjectHooks: (directory, shell, commands) =>
     ipcRenderer.invoke(IPC.settingsSetProjectHooks, directory, shell, commands),

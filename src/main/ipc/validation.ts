@@ -437,6 +437,7 @@ const inputs = {
   [IPC.skillsImport]: z.tuple([z.enum(SUPPORTED_LOCALES), z.uuid()]),
   [IPC.skillsToggle]: z.tuple([z.uuid(), mentionId, z.boolean()]),
   [IPC.settingsGet]: none,
+  [IPC.settingsUsageReport]: none,
   [IPC.settingsSave]: z.tuple([settings]),
   [IPC.settingsSetProjectHooks]: z.tuple([
     nonBlank,

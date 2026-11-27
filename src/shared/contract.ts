@@ -136,6 +136,7 @@ export const IPC = {
   skillsImport: "skills:import",
   skillsToggle: "skills:toggle",
   settingsGet: "settings:get",
+  settingsUsageReport: "settings:usage-report",
   settingsSave: "settings:save",
   settingsSetProjectHooks: "settings:set-project-hooks",
   settingsSetPromptTemplates: "settings:set-prompt-templates",

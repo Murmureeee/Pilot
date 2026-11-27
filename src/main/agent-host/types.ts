@@ -215,6 +215,8 @@ export interface PreparedMessageRollback {
 export interface SavedCompaction extends ContextCompaction {
   type: "pilot_context_compaction";
   timestamp: number;
+  usageModel?: { provider: string; model: string };
+  usageProject?: string | null;
   cutoff: number;
   trimBefore: number;
   toolOutputLimit: number;
@@ -373,10 +375,18 @@ export interface SessionIndex {
   recentProjects?: string[];
 }
 
+export interface TranscriptUsageSource {
+  project: string | null;
+  model: string | null;
+  provider: string | null;
+}
+
 export type TimedAssistantMessage = AssistantMessage & {
   pilotHooks?: Extract<UiPart, { type: "tool" }>[];
   pilotThinkingDurations?: Record<number, number>;
   pilotTiming?: Required<AssistantTiming>;
+  pilotUsageProject?: string | null;
+  pilotUsageId?: string;
 };
 
 export interface PreparedPrompt {

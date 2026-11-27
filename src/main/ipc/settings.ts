@@ -31,6 +31,7 @@ export function registerSettingsRoutes(
     ctx.saveSettings(settings);
     return toPublicSettings(settings);
   });
+  handle(IPC.settingsUsageReport, () => ctx.host.usageReport());
   handle(IPC.settingsSetPromptTemplates, (_event, promptTemplates) => {
     const settings = { ...ctx.getSettings(), promptTemplates };
     ctx.saveSettings(settings);

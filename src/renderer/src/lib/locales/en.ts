@@ -43,6 +43,24 @@ export const EN_MESSAGES: Record<string, string> = {
   "找不到可重跑的执行记录。": "This run is no longer available to retry.",
   "定时任务会话固定使用只读权限。": "Scheduled task chats use read-only permissions.",
   "定时任务执行失败。请查看会话后重试。": "The scheduled task failed. Review its chat, then retry.",
+  // 用量统计
+  用量统计: "Usage",
+  "按天、项目和模型查看已保存的 token 和费用。":
+    "View saved tokens and costs by day, project, or model.",
+  用量统计分组: "Group usage by",
+  按天: "By day",
+  按项目: "By project",
+  按模型: "By model",
+  未知日期: "Unknown date",
+  未知模型: "Unknown model",
+  "总计 {0} token": "{0} tokens total",
+  "{0} token": "{0} tokens",
+  "已记录费用 {0}": "Recorded cost {0}",
+  "没有可统计的会话用量。": "No saved session usage yet.",
+  "运行一次聊天任务后刷新。": "Run a chat task, then refresh.",
+  "无法读取用量。请重试。": "Could not load usage. Try again.",
+  "有 {0} 个会话无法读取。修复会话存储或升级 Pilot 后刷新。":
+    "Could not read {0} chats. Fix session storage or upgrade Pilot, then refresh.",
   // 窗口菜单与侧栏
   项目钩子: "Project hooks",
   工具调用前钩子: "Before-tool hook",

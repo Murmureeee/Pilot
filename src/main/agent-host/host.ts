@@ -55,6 +55,7 @@ import type {
   VerificationTask,
 } from "@shared/contract";
 import type { ProjectTrustDecision } from "@shared/project-config";
+import type { UsageReport } from "@shared/usage";
 
 import { compactFocus } from "../../shared/compact-command";
 import {
@@ -163,6 +164,7 @@ import type {
   TextModelRequest,
   WorktreeOperationPreview,
 } from "./types";
+import { readUsageReport } from "./usage-report";
 
 const BASE_SYSTEM_PROMPT = `You are a helpful assistant running inside ${APP_NAME}.`;
 
@@ -193,6 +195,10 @@ export class AgentHost {
   private readonly deletingSessions = new Set<string>();
   private sessionId: string | null = null;
   private newChatDraft: NewChatDraft;
+
+  usageReport(): Promise<UsageReport> {
+    return readUsageReport(this.deps.store);
+  }
 
   constructor(private readonly deps: HostDeps) {
     this.newChatDraft = deps.store.newChatDraft() ?? this.emptyDraft();

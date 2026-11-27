@@ -893,6 +893,7 @@ export class AgentRun {
       });
       signal.throwIfAborted();
       if (!compaction) return false;
+      compaction.usageProject = store.projectOf(this.deps.instructions.projectDirectory) ?? null;
       if (this.deps.compaction?.mode === "retry" && !this.ownsCheckpoint) {
         // Commit the smaller context and transfer the saved task in the same write.
         store.addCompaction(
@@ -1146,6 +1147,9 @@ export class AgentRun {
         endedAt: Math.max(this.turnStartedAt, Date.now()),
       };
       assistant.pilotTiming = timing;
+      assistant.pilotUsageId = randomUUID();
+      assistant.pilotUsageProject =
+        this.deps.store.projectOf(this.deps.instructions.projectDirectory) ?? null;
       if (assistant.usage && assistant.stopReason !== "error") {
         // 上下文占用 = 最近一轮（不是累计）：请求携带的 input/cache + 本轮输出
         const u = assistant.usage;

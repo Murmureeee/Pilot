@@ -168,6 +168,7 @@ export type SettingsSection =
   | "persona"
   | "shortcuts"
   | "archived"
+  | "usage"
   | "data"
   | "about"
   | "skills"

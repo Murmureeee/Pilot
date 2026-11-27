@@ -23,6 +23,7 @@ import { ProviderSettings } from "./settings/ProviderSettings";
 import { ScheduledTaskSettings } from "./settings/ScheduledTaskSettings";
 import { ShortcutSettings } from "./settings/ShortcutSettings";
 import { SkillSettings } from "./settings/SkillSettings";
+import { UsageSettings } from "./settings/UsageSettings";
 
 export function SettingsView(): JSX.Element {
   const settings = useAgentStore((s) => s.settings);
@@ -94,6 +95,8 @@ export function SettingsView(): JSX.Element {
         {section === "scheduledTasks" && <ScheduledTaskSettings />}
 
         {section === "archived" && <ArchivedSettings />}
+
+        {section === "usage" && <UsageSettings />}
 
         {section === "data" && <DataSettings appInfo={appInfo} />}
 

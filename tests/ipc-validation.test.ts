@@ -196,6 +196,7 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.skillsToggle]: [sessionId, "example-skill", true],
   [IPC.settingsGet]: [],
   [IPC.settingsSetProjectHooks]: ["E:/project", "bash", { beforeTool: "git status" }],
+  [IPC.settingsUsageReport]: [],
   [IPC.settingsSetPromptTemplates]: [[{ name: "audit", text: "Review {{file}}." }]],
   [IPC.settingsSave]: [settings],
   [IPC.settingsSetLogLevel]: ["debug"],

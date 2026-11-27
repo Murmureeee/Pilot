@@ -605,7 +605,7 @@ export class SessionStore {
     this.writeIndex({ ...this.index, recentProjects: this.projectOpened(project) });
   }
 
-  private projectOf(directory: string | undefined): string | undefined {
+  projectOf(directory: string | undefined): string | undefined {
     return this.worktreeAt(directory)?.projectDirectory ?? directory;
   }
 

@@ -89,6 +89,7 @@ import type {
 } from "./imports";
 import type { McpOAuthRef, McpServerInfo, McpServerInput } from "./mcp";
 import type { ProjectConfigInfo, ProjectTrustDecision } from "./project-config";
+import type { UsageReport } from "./usage";
 
 export interface PiApi {
   scheduledTasksList(): Promise<import("./scheduled-tasks").ScheduledTask[]>;
@@ -277,6 +278,7 @@ export interface PiApi {
   sessionStopTerminal(composerId: string, id: string): Promise<void>;
   onTerminalEvent(callback: (event: TerminalEvent) => void): () => void;
   settingsGet(): Promise<PublicSettings>;
+  settingsUsageReport(): Promise<UsageReport>;
   settingsSave(input: SettingsInput): Promise<PublicSettings>;
   settingsSetProjectHooks(
     directory: string,

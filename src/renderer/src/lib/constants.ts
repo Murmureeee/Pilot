@@ -60,6 +60,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   persona: "个性化",
   shortcuts: "快捷键",
   archived: "已归档的聊天",
+  usage: "用量统计",
   data: "存储与诊断",
   about: "关于",
   skills: "技能",
@@ -76,6 +77,7 @@ export const SETTINGS_SECTION_DESCRIPTIONS: Record<SettingsSection, string> = {
   persona: "管理 Agent 的自定义指令和可重复使用的提示词模板。",
   shortcuts: "当前可用的键盘操作。",
   archived: "查看、恢复或永久删除已归档的聊天。",
+  usage: "按天、项目和模型查看已保存的 token 和费用。",
   data: "本地存储、数据备份和诊断日志。",
   about: "版本信息、应用更新和反馈渠道。",
   skills: "查看本机和当前项目的技能。已启用的技能会在任务需要时读取。",
@@ -146,6 +148,7 @@ export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[
     "停止任务",
   ],
   archived: ["取消归档", "永久删除"],
+  usage: ["Token", "费用", "按天", "按项目", "按模型"],
   data: [
     "应用数据目录",
     "聊天记录目录",

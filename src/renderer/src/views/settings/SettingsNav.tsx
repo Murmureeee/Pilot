@@ -5,6 +5,7 @@ import {
   BlocksIcon,
   BotIcon,
   CalendarClockIcon,
+  ChartNoAxesColumnIcon,
   DownloadIcon,
   HardDriveIcon,
   InfoIcon,
@@ -56,6 +57,7 @@ const SETTINGS_NAV: {
     label: "数据",
     items: [
       { id: "archived", icon: ArchiveIcon },
+      { id: "usage", icon: ChartNoAxesColumnIcon },
       { id: "data", icon: HardDriveIcon },
     ],
   },
