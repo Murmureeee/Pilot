@@ -26,6 +26,8 @@ import {
   COMPACTION_SUMMARY_PROMPT,
   DEFAULT_MODEL_CAPABILITIES,
   DEFAULT_MODEL_PRICING,
+  LOCAL_MODEL_TEST_TIMEOUT_MS,
+  MODEL_TEST_TIMEOUT_MS,
   SESSION_TITLE_PROMPT,
 } from "./constants";
 import { legacyMentionParts } from "./mentions";
@@ -350,7 +352,9 @@ export async function testProvider(
     const stream = await streamFn(model, context, {
       maxTokens: 1,
       maxRetries: 0,
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(
+        isLocalOpenAiProvider(cfg) ? LOCAL_MODEL_TEST_TIMEOUT_MS : MODEL_TEST_TIMEOUT_MS,
+      ),
     });
     for await (const event of stream) {
       if (event.type === "error") {

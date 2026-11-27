@@ -31,7 +31,7 @@ function failureKind(result: AssistantMessage, status?: number): ModelFailure["k
     return "context-limit";
   if (
     status === 404 ||
-    /model_not_found|unsupported_(?:model|parameter|value)|(?:model|model id).{0,80}(?:not found|does not exist|not supported)|(?:does not support|unsupported).{0,50}(?:tools|reasoning|vision|images|parameters)/i.test(
+    /model_not_found|unsupported_(?:model|parameter|value)|(?:model|model id).{0,80}(?:not found|does not exist|not supported)|(?:does not support|unsupported).{0,50}(?:tools|reasoning|vision|images?|parameters)/i.test(
       detail,
     )
   )

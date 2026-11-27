@@ -138,6 +138,25 @@ it.each([
   },
 );
 
+it("reports LM Studio rejecting image input as a model capability error", async () => {
+  const { model, streamFn } = resolveModel(provider, undefined);
+  const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+    errorResponse(
+      400,
+      "The provided messages contain images, but qwen3-4b-instruct-2507 does not support image inputs.",
+    ),
+  );
+  const onFailure = vi.fn<(failure: ModelFailure) => void>();
+  const onRetry = vi.fn<(progress: ModelRetryProgress | null) => void>();
+  const stream = await withModelRetry(streamFn, { onRetry, onFailure })(model, context, { fetch });
+
+  expect(await readResult(stream)).toMatchObject({ stopReason: "error" });
+  expect(onFailure).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ kind: "capability" }),
+  );
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
 it("aborts the scheduled backoff without another request", async () => {
   const { model, streamFn } = resolveModel(provider, undefined);
   const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(errorResponse(503, "Busy"));

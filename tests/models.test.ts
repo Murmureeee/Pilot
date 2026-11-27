@@ -227,6 +227,7 @@ describe("provider connectivity test (FR-5.1)", () => {
   });
 
   it("reports a provider error with the key redacted and does not retry", async () => {
+    using timeout = vi.spyOn(AbortSignal, "timeout");
     const fetch = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async () =>
@@ -238,10 +239,33 @@ describe("provider connectivity test (FR-5.1)", () => {
       expect(result.error).toContain("Rejected ••••");
       expect(result.error).not.toContain("test-key");
       expect(fetch).toHaveBeenCalledTimes(1);
+      expect(timeout).toHaveBeenCalledWith(20_000);
     } finally {
       fetch.mockRestore();
     }
   });
+
+  it.each(LOCAL_OPENAI_PRESETS)(
+    "allows $name to load the model on the first connection test",
+    async ({ baseUrl }) => {
+      using timeout = vi.spyOn(AbortSignal, "timeout");
+      const provider: ProviderConfig = {
+        id: "compatible",
+        kind: "openai-compatible",
+        name: "Compatible endpoint",
+        modelId: "local-model",
+        baseUrl,
+      };
+      const request = vi.fn<typeof globalThis.fetch>(async () =>
+        Response.json({ error: { message: "Model not found" } }, { status: 404 }),
+      );
+
+      await testProvider(provider, undefined, request);
+
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(timeout).toHaveBeenCalledWith(60_000);
+    },
+  );
 
   it("accepts local endpoints without credentials and requires keys for remote compatible endpoints", () => {
     const provider: ProviderConfig = {
