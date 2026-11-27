@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { createReadStream } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -238,7 +238,18 @@ async function verifyDeb() {
 }
 
 async function verifyLinuxPicker(page) {
+  const directory = join(scratch, "Selected folder");
+  await mkdir(directory);
+  const selected = await pickGtkDirectory(page, "select-directory", directory);
+  assert.ok(selected, "The GTK picker must return a path when confirmed");
+  assert.equal(await realpath(selected), await realpath(directory));
+  assert.equal(await pickGtkDirectory(page, "cancel-directory"), null);
+  console.log("Verified the native GTK directory picker canceled and returned the confirmed directory");
+}
+
+async function pickGtkDirectory(page, action, directory) {
   await page.evaluate(() => {
+    delete globalThis.pilotPickedDirectory;
     void window.pi.pickWorkingDirectory("zh").then((path) => {
       globalThis.pilotPickedDirectory = { path };
     });
@@ -248,12 +259,13 @@ async function verifyLinuxPicker(page) {
     assert.ifError(search.error);
     return search.status === 0 && search.stdout.trim().split("\n").at(-1);
   });
-  execFileSync("bash", [fixtureScript, "cancel-directory", windowId], { timeout: 10_000 });
+  const args = [fixtureScript, action, windowId];
+  if (directory) args.push(directory);
+  execFileSync("bash", args, { timeout: 10_000 });
   const picked = await waitFor("the native directory picker to close", () =>
     page.evaluate(() => globalThis.pilotPickedDirectory),
   );
-  assert.equal(picked.path, null);
-  console.log("Verified the native GTK directory picker opened and canceled cleanly");
+  return picked.path;
 }
 
 function installDeb(file, expectedVersion) {
@@ -293,10 +305,15 @@ async function closeFixture() {
       await once(child, "exit");
   }
   try {
-    if (installedFixture) purgeDeb();
+    if (installedFixture) {
+      purgeDeb();
+      execFileSync("bash", [fixtureScript, "check-absent"]);
+    }
   } finally {
     await rm(scratch, { recursive: true, force: true });
+    await assert.rejects(stat(scratch), { code: "ENOENT" });
   }
+  console.log("Removed the Linux test processes, package copies, and profiles");
 }
 
 try {

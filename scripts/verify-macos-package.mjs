@@ -116,6 +116,35 @@ async function verifyWindow(page, app) {
   }
 }
 
+async function verifyNativePicker(page, app, directory) {
+  await app.evaluate(({ app, BrowserWindow }) => {
+    app.focus({ steal: true });
+    BrowserWindow.getAllWindows()[0].focus();
+  });
+  const pid = String(app.process().pid);
+  for (const expected of [null, directory]) {
+    await page.evaluate(() => {
+      delete globalThis.pilotPickedDirectory;
+      void window.pi.pickWorkingDirectory("en").then((path) => {
+        globalThis.pilotPickedDirectory = { path };
+      });
+    });
+    run("swift", ["scripts/macos-pick-folder.swift", pid, ...(expected ? [expected] : [])], {
+      timeout: 30_000,
+    });
+    const picked = await waitFor("the native macOS directory picker result", () =>
+      page.evaluate(() => globalThis.pilotPickedDirectory),
+    );
+    if (expected === null) {
+      assert.equal(picked.path, null);
+    } else {
+      assert.ok(picked.path, "The macOS picker must return a path when confirmed");
+      assert.equal(await realpath(picked.path), await realpath(expected));
+    }
+  }
+  console.log("Verified the native macOS directory picker canceled and returned the confirmed directory");
+}
+
 const server = createServer(async (request, response) => {
   try {
     const path = new URL(request.url, "http://127.0.0.1").pathname;
@@ -174,6 +203,9 @@ try {
     assert.equal(info.version, version);
     await verifyWindow(page, app);
     await verifyProjectShell(page, project);
+    // Native keys and the system pasteboard belong to the disposable desktop session.
+    if (process.env.RUNNER_ENVIRONMENT === "github-hosted")
+      await verifyNativePicker(page, app, project);
     const settings = await page.evaluate(([baseUrl, apiKey]) => window.pi.settingsSave({
       providers: [{ id: "fixture", name: "Fixture", kind: "openai-compatible", baseUrl, apiKey, modelId: "fixture" }],
       activeProviderId: "fixture",
@@ -225,5 +257,7 @@ try {
   const cleanup = { recursive: true, force: true, maxRetries: 10, retryDelay: 100 };
   await rm(updateCache, cleanup);
   await rm(scratch, cleanup);
+  await assert.rejects(stat(updateCache), { code: "ENOENT" });
+  await assert.rejects(stat(scratch), { code: "ENOENT" });
   console.log("Removed the macOS test profiles, bundles, logs, and update cache");
 }

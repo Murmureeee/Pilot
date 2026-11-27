@@ -11,6 +11,20 @@ case "$1" in
   cancel-directory)
     exec xdotool windowfocus --sync "$2" key --clearmodifiers Escape
     ;;
+  select-directory)
+    xdotool windowfocus --sync "$2"
+    sleep 0.2
+    xdotool key --clearmodifiers ctrl+l ctrl+a
+    xdotool type --clearmodifiers --delay 20 "$3"
+    read -r width height < <(xdotool getwindowgeometry --shell "$2" | awk -F= '
+      $1 == "WIDTH" { width = $2 }
+      $1 == "HEIGHT" { height = $2 }
+      END { print width, height }
+    ')
+    # GTK's Return key in the location field can close the chooser without selecting a folder.
+    # The stock GTK chooser on the Xvfb desktop places Open at the bottom right.
+    exec xdotool mousemove --window "$2" "$((width - 50))" "$((height - 22))" click 1
+    ;;
   check-absent|install|purge)
     test "${RUNNER_ENVIRONMENT:-}" = github-hosted
     case "$1" in
