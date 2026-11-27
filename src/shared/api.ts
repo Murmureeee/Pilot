@@ -101,6 +101,7 @@ export interface PiApi {
   setTitlebarTheme(theme: ThemeSetting): Promise<void>;
   getUpdateStatus(): Promise<UpdateStatus>;
   checkForUpdates(): Promise<UpdateStatus>;
+  downloadUpdate(): Promise<void>;
   installUpdate(): Promise<void>;
   showUpdatePackage(): Promise<void>;
   onUpdateStatus(callback: (status: UpdateStatus) => void): () => void;
@@ -259,6 +260,7 @@ export interface PiApi {
   settingsSetPromptTemplates(templates: PromptTemplate[]): Promise<PublicSettings>;
   settingsSetLogLevel(level: LogLevel): Promise<void>;
   settingsSetNotificationsEnabled(enabled: boolean): Promise<void>;
+  settingsSetAutoDownloadUpdates(enabled: boolean): Promise<void>;
   settingsSetExternalEditor(editor: ExternalEditor): Promise<ExternalEditor>;
   settingsSelectModel(providerId: string, modelId: string): Promise<PublicSettings>;
   settingsSetThinkingLevel(level: ThinkingLevel): Promise<PublicSettings>;

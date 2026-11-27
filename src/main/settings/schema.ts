@@ -197,6 +197,7 @@ const storedSettings = z.looseObject({
   externalEditor: externalEditorSchema.optional().catch(undefined),
   logLevel: z.enum(LOG_LEVELS).optional().catch(undefined),
   notificationsEnabled: z.boolean().optional().catch(undefined),
+  autoDownloadUpdates: z.boolean().optional().catch(undefined),
   persona: optionalText,
   promptTemplates: promptTemplatesSchema.optional(),
   afterTurnVerification: z.record(z.string(), afterTurnVerificationSchema.nullable()).optional(),

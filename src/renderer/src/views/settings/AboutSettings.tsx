@@ -1,14 +1,65 @@
 // @env browser
 import { ExternalLinkIcon } from "lucide-react";
-import type { JSX } from "react";
+import { useState, type JSX } from "react";
 
 import { UpdatePanel } from "@renderer/components/ai/update-panel";
+import { Switch } from "@renderer/components/ui/switch";
 import { APP_LINKS } from "@renderer/lib/constants";
 import { t, useLocale } from "@renderer/lib/i18n";
+import { useAgentStore } from "@renderer/stores/agent";
+import { useUpdateStore } from "@renderer/stores/update";
 import { APP_NAME } from "@shared/constants";
 import type { AppInfo } from "@shared/contract";
 
 import { SettingsGroup, SettingsItem } from "./SettingsGroup";
+
+function AutoDownloadSetting(): JSX.Element | null {
+  const locale = useLocale();
+  const supported = useUpdateStore((s) => s.status !== null && s.status.state !== "unavailable");
+  const enabled = useAgentStore((s) => s.settings?.autoDownloadUpdates);
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+  if (!supported || enabled === undefined) return null;
+
+  const save = async (checked: boolean): Promise<void> => {
+    if (saving) return;
+    setSaving(true);
+    setSaveFailed(false);
+    try {
+      await useAgentStore.getState().setAutoDownloadUpdates(checked);
+    } catch {
+      setSaveFailed(true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const label = t("自动下载更新", locale);
+  const description = t("关闭后仍会检查更新，发现新版本时可手动下载。", locale);
+  return (
+    <>
+      <SettingsItem
+        label={label}
+        htmlFor="settings-auto-download-updates"
+        description={description}
+      >
+        <Switch
+          id="settings-auto-download-updates"
+          aria-label={label}
+          aria-description={description}
+          aria-busy={saving || undefined}
+          checked={enabled}
+          onCheckedChange={(checked) => void save(checked)}
+        />
+      </SettingsItem>
+      {saveFailed && (
+        <p role="alert" className="text-xs text-destructive">
+          {t("无法保存自动下载设置，请重试。", locale)}
+        </p>
+      )}
+    </>
+  );
+}
 
 export function AboutSettings({ appInfo }: { appInfo: AppInfo | null }): JSX.Element {
   const locale = useLocale();
@@ -33,6 +84,7 @@ export function AboutSettings({ appInfo }: { appInfo: AppInfo | null }): JSX.Ele
               </div>
             </div>
           </div>
+          <AutoDownloadSetting />
         </div>
       </SettingsGroup>
 

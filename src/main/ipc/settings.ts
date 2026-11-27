@@ -25,6 +25,9 @@ export function registerSettingsRoutes(
   handle(IPC.settingsSetNotificationsEnabled, (_event, notificationsEnabled) => {
     ctx.saveSettings({ ...ctx.getSettings(), notificationsEnabled });
   });
+  handle(IPC.settingsSetAutoDownloadUpdates, (_event, autoDownloadUpdates) => {
+    ctx.saveSettings({ ...ctx.getSettings(), autoDownloadUpdates });
+  });
   handle(IPC.settingsSetExternalEditor, (_event, externalEditor) => {
     ctx.saveSettings({ ...ctx.getSettings(), externalEditor });
     return externalEditor;

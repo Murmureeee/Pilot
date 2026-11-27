@@ -43,6 +43,7 @@ export interface UpdateStore {
   setDialog(dialog: UpdateStore["dialog"]): void;
   subscribe(): () => void;
   check(): Promise<void>;
+  download(): Promise<void>;
   install(): Promise<void>;
   showPackage(): Promise<void>;
 }

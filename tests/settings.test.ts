@@ -79,6 +79,26 @@ it("defaults older settings to VS Code and preserves a saved editor on other set
   expect(loadSettings(profile.path).externalEditor).toEqual(externalEditor);
 });
 
+it("defaults to automatic update downloads and preserves an explicit opt-out", () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-update-settings-"));
+  const settings = loadSettings(profile.path);
+  saveSettings(profile.path, settings);
+  expect(toPublicSettings(loadSettings(profile.path)).autoDownloadUpdates).toBe(true);
+
+  saveSettings(profile.path, { ...settings, autoDownloadUpdates: false });
+  const reopened = loadSettings(profile.path);
+  expect(toPublicSettings(reopened).autoDownloadUpdates).toBe(false);
+  saveSettings(
+    profile.path,
+    mergeSettingsInput(reopened, {
+      providers: reopened.providers,
+      activeProviderId: reopened.activeProviderId,
+      persona: "Keep the update preference.",
+    }),
+  );
+  expect(toPublicSettings(loadSettings(profile.path)).autoDownloadUpdates).toBe(false);
+});
+
 it("keeps a project's after-turn command and shell through ordinary settings saves", () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-after-turn-settings-"));
   const settings = loadSettings(profile.path);

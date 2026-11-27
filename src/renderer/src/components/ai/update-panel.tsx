@@ -18,6 +18,8 @@ function describeStatus(status: UpdateStatus, locale: Locale): string {
       return t("正在检查更新…", locale);
     case "current":
       return t("已是最新版本。", locale);
+    case "available":
+      return t("发现新版本 {0}。", locale, [status.version]);
     case "error":
       if (status.reason === "appimage-install")
         return t("AppImage 更新失败。请确认所在目录可写，再重试。", locale);
@@ -41,15 +43,28 @@ export function UpdatePanel({ locale }: { locale: Locale }): JSX.Element {
   const status = useUpdateStore((s) => s.status);
   const actionFailed = useUpdateStore((s) => s.actionFailed);
   const state = status?.state;
-  const canCheck =
-    state === "idle" || state === "current" || state === "error" || (!status && actionFailed);
+  const { check, download, install, showPackage } = useUpdateStore.getState();
+  const action =
+    state === "ready"
+      ? { label: "更新并重启", run: install }
+      : state === "package-ready"
+        ? { label: "打开下载位置", run: showPackage }
+        : state === "available" || state === "downloading"
+          ? { label: "下载更新", run: download }
+          : { label: "检查更新", run: check };
+  const busy = state === "checking" || state === "downloading";
+  const showAction = state ? state !== "unavailable" && state !== "installing" : actionFailed;
+  const failed = state === "error" || (!status && actionFailed);
   const description = status
     ? describeStatus(status, locale)
     : t(actionFailed ? "更新失败，请重试。" : "正在读取更新状态…", locale);
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <p role="status" className="text-xs text-muted-foreground">
+      <p
+        role={failed ? "alert" : "status"}
+        className={failed ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
+      >
         {description}
       </p>
       {actionFailed && status && state !== "error" && (
@@ -60,19 +75,23 @@ export function UpdatePanel({ locale }: { locale: Locale }): JSX.Element {
           )}
         </p>
       )}
-      {canCheck && (
-        <Button size="sm" variant="outline" onClick={() => void useUpdateStore.getState().check()}>
-          {t("检查更新", locale)}
-        </Button>
-      )}
-      {state === "ready" && (
-        <Button size="sm" onClick={() => void useUpdateStore.getState().install()}>
-          {t("更新并重启", locale)}
-        </Button>
-      )}
-      {state === "package-ready" && (
-        <Button size="sm" onClick={() => void useUpdateStore.getState().showPackage()}>
-          {t("打开下载位置", locale)}
+      {showAction && (
+        <Button
+          size="sm"
+          variant={action.run === check ? "outline" : "default"}
+          disabled={busy}
+          focusableWhenDisabled
+          className="aria-disabled:opacity-50"
+          onClick={() => void action.run()}
+        >
+          {t(
+            state === "checking"
+              ? "正在检查…"
+              : state === "downloading"
+                ? "正在下载…"
+                : action.label,
+            locale,
+          )}
         </Button>
       )}
     </div>
@@ -82,6 +101,7 @@ export function UpdatePanel({ locale }: { locale: Locale }): JSX.Element {
 export function UpdateRailButton({ locale }: { locale: Locale }): JSX.Element | null {
   const status = useUpdateStore((s) => s.status);
   if (
+    status?.state !== "available" &&
     status?.state !== "downloading" &&
     status?.state !== "ready" &&
     status?.state !== "package-ready" &&
@@ -91,11 +111,13 @@ export function UpdateRailButton({ locale }: { locale: Locale }): JSX.Element | 
 
   const canInstall = status.state === "ready";
   const label =
-    status.state === "package-ready"
-      ? t("查看已下载的安装包", locale)
-      : canInstall
-        ? t("更新并重启", locale)
-        : describeStatus(status, locale);
+    status.state === "available"
+      ? t("查看可用更新…", locale)
+      : status.state === "package-ready"
+        ? t("查看已下载的安装包", locale)
+        : canInstall
+          ? t("更新并重启", locale)
+          : describeStatus(status, locale);
   const handleClick = (): void => {
     const update = useUpdateStore.getState();
     if (canInstall) void update.install();

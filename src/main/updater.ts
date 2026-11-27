@@ -8,7 +8,11 @@ import { AppImageUpdater, DebUpdater, autoUpdater, type AppUpdater } from "elect
 
 import type { UpdateStatus } from "@shared/contract";
 
-import { UPDATE_NOT_READY_MESSAGE } from "./constants";
+import {
+  UPDATE_CHECK_INTERVAL_MS,
+  UPDATE_CHECK_STARTUP_DELAY_MS,
+  UPDATE_NOT_READY_MESSAGE,
+} from "./constants";
 import { errorDetails, type DiagnosticLog } from "./diagnostics";
 import type { DesktopNetwork } from "./types";
 
@@ -35,11 +39,13 @@ export class DesktopUpdater {
   private readonly updater?: AppUpdater;
   private readonly appImagePath?: string;
   private downloadedFile?: string;
+  private checkTimer?: NodeJS.Timeout;
 
   constructor(
     private readonly publish: (status: UpdateStatus) => void,
     private readonly log: DiagnosticLog,
     private readonly configureProxy: DesktopNetwork["configureProxy"],
+    private autoDownload: boolean,
   ) {
     if (
       !app.isPackaged ||
@@ -63,13 +69,10 @@ export class DesktopUpdater {
     this.updater = updater;
     this.status = { state: "idle" };
     log.write("info", "updater", "idle");
-    updater.autoDownload = true;
+    // Apply the current preference after each check, including changes made while it was in flight.
+    updater.autoDownload = false;
     updater.autoInstallOnAppQuit = false;
     updater.disableWebInstaller = true;
-    updater.on("update-not-available", () => this.setStatus({ state: "current" }));
-    updater.on("update-available", (info) =>
-      this.setStatus({ state: "downloading", version: info.version, percent: 0 }),
-    );
     updater.on("download-progress", (progress) => {
       const status = this.status;
       const percent = Math.max(0, Math.min(100, Math.round(progress.percent)));
@@ -85,7 +88,10 @@ export class DesktopUpdater {
       this.downloadedFile = info.downloadedFile;
       this.setStatus({ state: deb ? "package-ready" : "ready", version: info.version });
     });
-    updater.on("error", (error) => this.setStatus({ state: "error" }, error));
+    updater.on("error", (error) => {
+      // Checks and downloads report errors through their promises. Installation uses this event.
+      if (this.status.state === "installing") this.setStatus({ state: "error" }, error);
+    });
   }
 
   private setStatus(status: UpdateStatus, error?: unknown): void {
@@ -105,23 +111,66 @@ export class DesktopUpdater {
     return this.status;
   }
 
+  startPeriodicChecks(): void {
+    if (this.updater && !this.checkTimer) this.scheduleCheck(UPDATE_CHECK_STARTUP_DELAY_MS);
+  }
+
+  stopPeriodicChecks(): void {
+    clearTimeout(this.checkTimer);
+    this.checkTimer = undefined;
+  }
+
+  private scheduleCheck(delay: number): void {
+    this.checkTimer = setTimeout(() => {
+      this.scheduleCheck(UPDATE_CHECK_INTERVAL_MS);
+      void this.check();
+    }, delay).unref();
+  }
+
+  setAutoDownload(enabled: boolean): void {
+    if (this.autoDownload === enabled) return;
+    this.autoDownload = enabled;
+    if (enabled) void this.download();
+  }
+
   async check(): Promise<UpdateStatus> {
     const updater = this.updater;
     const { state } = this.status;
-    if (!updater || (state !== "idle" && state !== "current" && state !== "error"))
+    if (
+      !updater ||
+      (state !== "idle" && state !== "current" && state !== "available" && state !== "error")
+    ) {
       return this.status;
+    }
     this.downloadedFile = undefined;
     this.setStatus({ state: "checking" });
     try {
       await this.configureProxy(updater.netSession);
       const result = await updater.checkForUpdates();
       if (!result) this.setStatus({ state: "unavailable" });
-      // Download errors emit the same updater error event as check failures.
-      void result?.downloadPromise?.catch(() => {});
+      else if (!result.isUpdateAvailable) this.setStatus({ state: "current" });
+      else if (this.autoDownload) void this.downloadVersion(updater, result.updateInfo.version);
+      else this.setStatus({ state: "available", version: result.updateInfo.version });
     } catch (error) {
       this.setStatus({ state: "error" }, error);
     }
     return this.status;
+  }
+
+  async download(): Promise<void> {
+    const status = this.status;
+    if (this.updater && status.state === "available") {
+      await this.downloadVersion(this.updater, status.version);
+    }
+  }
+
+  private async downloadVersion(updater: AppUpdater, version: string): Promise<void> {
+    this.setStatus({ state: "downloading", version, percent: 0 });
+    try {
+      await updater.downloadUpdate();
+    } catch (error) {
+      this.setStatus({ state: "error" }, error);
+    }
   }
 
   async showPackage(): Promise<void> {

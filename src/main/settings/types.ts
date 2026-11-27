@@ -61,6 +61,7 @@ export interface Settings {
   externalEditor?: ExternalEditor;
   logLevel?: LogLevel;
   notificationsEnabled?: boolean;
+  autoDownloadUpdates?: boolean;
   persona?: string;
   promptTemplates?: PromptTemplate[];
   afterTurnVerification?: Record<string, AfterTurnVerification | null>;

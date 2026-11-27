@@ -173,6 +173,7 @@ function startDesktop(): (entry: ProjectEntry) => void {
     saveSettings(userData, settings);
     log.setLevel(getLogLevel(settings));
     notifications.setEnabled(settings.notificationsEnabled !== false);
+    updater.setAutoDownload(settings.autoDownloadUpdates !== false);
   };
   const store = new SessionStore(sessionsDir);
   const syncSleepBlocker = (): void =>
@@ -257,7 +258,9 @@ function startDesktop(): (entry: ProjectEntry) => void {
     (event) => sendToRenderers(UPDATE_STATUS_CHANNEL, event),
     log,
     network.configureProxy,
+    initialSettings.autoDownloadUpdates !== false,
   );
+  app.once("will-quit", () => updater.stopPeriodicChecks());
   let mainWindow: BrowserWindow | undefined;
   const exit = new DesktopExit({
     getWindow: () => mainWindow,
@@ -324,7 +327,7 @@ function startDesktop(): (entry: ProjectEntry) => void {
   });
   getMainWindow();
 
-  setTimeout(() => void updater.check(), 2000).unref();
+  updater.startPeriodicChecks();
   return (entry) => {
     if (exit.isExiting()) return;
     const window = getMainWindow();

@@ -102,6 +102,7 @@ interface AgentStore extends AgentUiState {
   savePromptTemplates(templates: PromptTemplate[]): Promise<void>;
   setLogLevel(level: LogLevel): Promise<void>;
   setNotificationsEnabled(enabled: boolean): Promise<void>;
+  setAutoDownloadUpdates(enabled: boolean): Promise<void>;
   saveExternalEditor(editor: ExternalEditor): Promise<ExternalEditor>;
   dismissSettingsRecovery(): Promise<void>;
   retrySettingsRecovery(): Promise<void>;
@@ -520,6 +521,10 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   setNotificationsEnabled: async (notificationsEnabled) => {
     await window.pi.settingsSetNotificationsEnabled(notificationsEnabled);
     set(({ settings }) => (settings ? { settings: { ...settings, notificationsEnabled } } : {}));
+  },
+  setAutoDownloadUpdates: async (autoDownloadUpdates) => {
+    await window.pi.settingsSetAutoDownloadUpdates(autoDownloadUpdates);
+    set(({ settings }) => (settings ? { settings: { ...settings, autoDownloadUpdates } } : {}));
   },
   saveExternalEditor: async (editor) => {
     const externalEditor = await window.pi.settingsSetExternalEditor(editor);

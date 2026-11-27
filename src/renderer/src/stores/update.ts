@@ -49,6 +49,16 @@ export const useUpdateStore = create<UpdateStore>((set, get) => ({
     }
   },
 
+  download: async () => {
+    if (get().status?.state !== "available") return;
+    set({ actionFailed: false });
+    try {
+      await window.pi.downloadUpdate();
+    } catch {
+      set({ actionFailed: true });
+    }
+  },
+
   install: async () => {
     if (get().status?.state !== "ready") return;
     set({ actionFailed: false });

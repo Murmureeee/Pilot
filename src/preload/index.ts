@@ -36,6 +36,7 @@ const api: PiApi = {
   setTitlebarTheme: (theme: ThemeSetting) => ipcRenderer.invoke(IPC.appSetTitlebarTheme, theme),
   getUpdateStatus: () => ipcRenderer.invoke(IPC.appGetUpdateStatus),
   checkForUpdates: () => ipcRenderer.invoke(IPC.appCheckForUpdates),
+  downloadUpdate: () => ipcRenderer.invoke(IPC.appDownloadUpdate),
   installUpdate: () => ipcRenderer.invoke(IPC.appInstallUpdate),
   showUpdatePackage: () => ipcRenderer.invoke(IPC.appShowUpdatePackage),
   onUpdateStatus: (callback) => {
@@ -189,6 +190,8 @@ const api: PiApi = {
   settingsSetLogLevel: (level) => ipcRenderer.invoke(IPC.settingsSetLogLevel, level),
   settingsSetNotificationsEnabled: (enabled) =>
     ipcRenderer.invoke(IPC.settingsSetNotificationsEnabled, enabled),
+  settingsSetAutoDownloadUpdates: (enabled) =>
+    ipcRenderer.invoke(IPC.settingsSetAutoDownloadUpdates, enabled),
   settingsSetExternalEditor: (editor) => ipcRenderer.invoke(IPC.settingsSetExternalEditor, editor),
   settingsSelectModel: (providerId, modelId) =>
     ipcRenderer.invoke(IPC.settingsSelectModel, providerId, modelId),

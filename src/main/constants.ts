@@ -43,6 +43,8 @@ export const RENDERER_RECOVERY_MESSAGES = {
 
 export const APP_EXITING_MESSAGE = "应用正在退出。";
 export const UPDATE_NOT_READY_MESSAGE = "没有已下载的更新。";
+export const UPDATE_CHECK_STARTUP_DELAY_MS = 2_000;
+export const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1_000;
 export const INVALID_ENVIRONMENT_PROXY =
   "无法使用环境变量中的代理地址。请检查 HTTP_PROXY 或 HTTPS_PROXY 后重启 Pilot。";
 

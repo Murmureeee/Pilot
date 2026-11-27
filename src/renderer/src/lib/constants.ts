@@ -142,7 +142,7 @@ export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[
   ],
   archived: ["取消归档", "永久删除"],
   data: ["应用数据目录", "聊天记录目录", "日志级别", "日志目录"],
-  about: ["版本", "软件更新", "检查更新", "更新记录", "反馈问题"],
+  about: ["版本", "软件更新", "检查更新", "自动下载更新", "更新记录", "反馈问题"],
   skills: [
     "导入技能目录",
     "打开技能目录",

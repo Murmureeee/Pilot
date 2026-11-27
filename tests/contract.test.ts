@@ -48,7 +48,9 @@ describe("IPC contract", () => {
   it("keeps update status notifications separate from invoke channels", () => {
     expect(UPDATE_STATUS_CHANNEL).toMatch(/^app:/);
     expect(Object.values(IPC)).not.toContain(UPDATE_STATUS_CHANNEL);
+    expect(IPC.appDownloadUpdate).toBe("app:download-update");
     expect(IPC.appShowUpdatePackage).toBe("app:show-update-package");
+    expect(IPC.settingsSetAutoDownloadUpdates).toBe("settings:set-auto-download-updates");
   });
 
   it("uses the settings namespace for the diagnostic log level", () => {

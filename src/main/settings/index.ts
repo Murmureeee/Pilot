@@ -147,6 +147,7 @@ export function mergeSettingsInput(current: Settings, input: SettingsInput): Set
     externalEditor: current.externalEditor,
     logLevel: current.logLevel,
     notificationsEnabled: current.notificationsEnabled,
+    autoDownloadUpdates: current.autoDownloadUpdates,
     // 人设传 "" 即清空（空串不是 nullish，不会被 ?? 吞掉）；技能启停整表提交
     persona: input.persona ?? current.persona ?? "",
     promptTemplates: current.promptTemplates,
@@ -192,6 +193,7 @@ export function toPublicSettings(settings: Settings): PublicSettings {
     externalEditor: settings.externalEditor ?? DEFAULT_EXTERNAL_EDITOR,
     logLevel: getLogLevel(settings),
     notificationsEnabled: settings.notificationsEnabled !== false,
+    autoDownloadUpdates: settings.autoDownloadUpdates !== false,
     persona: settings.persona ?? "",
     promptTemplates: settings.promptTemplates ?? [],
     pluginPromptTemplates: settings.importedPlugins?.flatMap(({ managed }) =>

@@ -20,6 +20,7 @@ export const IPC = {
   appSetTitlebarTheme: "app:set-titlebar-theme",
   appGetUpdateStatus: "app:get-update-status",
   appCheckForUpdates: "app:check-for-updates",
+  appDownloadUpdate: "app:download-update",
   appInstallUpdate: "app:install-update",
   appShowUpdatePackage: "app:show-update-package",
   agentPrompt: "agent:prompt",
@@ -126,6 +127,7 @@ export const IPC = {
   settingsSetPromptTemplates: "settings:set-prompt-templates",
   settingsSetLogLevel: "settings:set-log-level",
   settingsSetNotificationsEnabled: "settings:set-notifications-enabled",
+  settingsSetAutoDownloadUpdates: "settings:set-auto-download-updates",
   settingsSetExternalEditor: "settings:set-external-editor",
   settingsSelectModel: "settings:select-model",
   settingsSetThinkingLevel: "settings:set-thinking-level",
@@ -228,6 +230,7 @@ export const TERMINAL_EVENT_CHANNEL = "session:terminal-event";
 export type UpdateStatus =
   | { state: "unavailable" | "idle" | "checking" | "current" }
   | { state: "error"; reason?: "appimage-install" | "package-missing" }
+  | { state: "available"; version: string }
   | { state: "downloading"; version: string; percent: number }
   | { state: "ready" | "installing" | "package-ready"; version: string };
 
@@ -1040,6 +1043,7 @@ export interface PublicSettings {
   externalEditor: ExternalEditor;
   logLevel: LogLevel;
   notificationsEnabled: boolean;
+  autoDownloadUpdates: boolean;
   /** 全局人设/自定义指令（设置页「个性化」编辑） */
   persona: string;
   promptTemplates: PromptTemplate[];

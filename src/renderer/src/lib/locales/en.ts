@@ -45,6 +45,7 @@ export const EN_MESSAGES: Record<string, string> = {
   "正在读取更新状态…": "Loading update status…",
   "正在检查更新…": "Checking for updates…",
   "已是最新版本。": "You're up to date.",
+  "发现新版本 {0}。": "Version {0} is available.",
   "更新失败，请重试。": "Update failed. Try again.",
   "AppImage 更新失败。请确认所在目录可写，再重试。":
     "The AppImage update failed. Make sure its folder is writable and try again.",
@@ -56,6 +57,14 @@ export const EN_MESSAGES: Record<string, string> = {
   软件更新: "Software update",
   检查更新: "Check for updates",
   "检查更新…": "Check for updates…",
+  下载更新: "Download update",
+  "查看可用更新…": "View available update…",
+  "正在检查…": "Checking…",
+  "正在下载…": "Downloading…",
+  自动下载更新: "Automatically download updates",
+  "关闭后仍会检查更新，发现新版本时可手动下载。":
+    "When off, Pilot still checks for updates and lets you download them manually.",
+  "无法保存自动下载设置，请重试。": "Could not save the automatic download setting. Try again.",
   更新并重启: "Update and restart",
   "版本 {0} 已下载。请用系统包管理器安装，再重新打开 Pilot。":
     "Version {0} downloaded. Install it with your system package manager, then reopen Pilot.",

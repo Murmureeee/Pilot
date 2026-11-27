@@ -201,6 +201,7 @@ const inputs = {
   [IPC.appSetTitlebarTheme]: z.tuple([z.enum(["light", "dark", "system"])]),
   [IPC.appGetUpdateStatus]: none,
   [IPC.appCheckForUpdates]: none,
+  [IPC.appDownloadUpdate]: none,
   [IPC.appInstallUpdate]: none,
   [IPC.appShowUpdatePackage]: none,
   [IPC.menuAction]: z.tuple([
@@ -431,6 +432,7 @@ const inputs = {
   [IPC.settingsSetPromptTemplates]: z.tuple([promptTemplatesSchema]),
   [IPC.settingsSetLogLevel]: z.tuple([z.enum(LOG_LEVELS)]),
   [IPC.settingsSetNotificationsEnabled]: z.tuple([z.boolean()]),
+  [IPC.settingsSetAutoDownloadUpdates]: z.tuple([z.boolean()]),
   [IPC.settingsSetExternalEditor]: z.tuple([externalEditorSchema]),
   [IPC.settingsSelectModel]: z.tuple([id, nonBlank]),
   [IPC.settingsSetThinkingLevel]: z.tuple([z.enum(THINKING_LEVELS)]),
