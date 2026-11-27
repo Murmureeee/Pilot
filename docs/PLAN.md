@@ -33,7 +33,7 @@ P0 为首个日用版的交付条件，P1 为日常效率和发行完善，P2 �
 | 8 | [模型验收与跨平台发行](#8-模型验收与跨平台发行) | P1 | 真实模型验收、安装更新、更新策略、签名、诊断与性能、数据备份与恢复、持久化格式版本 |
 | 9 | [定时任务与生态扩展](#9-定时任务与生态扩展) | P2 | 本地调度、钩子、用量统计、托盘与全局快捷键、页面预览、远程与容器项目、多语言、外部资料引用 |
 
-里程碑 1 至 7 已完成。里程碑 8 已交付真实模型验收，下一项是 Windows 安装、升级和卸载复验。
+里程碑 1 至 7 已完成。里程碑 8 已交付真实模型验收和 Windows 安装与更新验收，下一项是更新策略。
 
 ### 1. 项目与会话恢复
 
@@ -140,7 +140,8 @@ P0 为首个日用版的交付条件，P1 为日常效率和发行完善，P2 �
 ### 8. 模型验收与跨平台发行
 
 - [x] **真实模型验收。** Windows 上用已配置的 OpenAI Responses 云端模型、Ollama 和 LM Studio 实测模型发现、流式文本、只读工具调用和停止。错误回显覆盖网络中断、凭据拒绝和模型能力错误，额度不足使用受控 HTTP 429 复核。记录服务版本、模型 ID 和验收结果。[验收记录](./DEVELOPMENT_HISTORY.md#2026-11-27)
-- [ ] **Windows。** 每次发版复验新装、旧版升级、卸载和数据保留，继续使用公开 HTTPS 更新源。完善 Windows 安装包签名。
+- [x] **Windows 安装与更新。** 每次发版复验新装、旧版 HTTPS 升级、卸载和数据保留。实测了从 pi Desktop `0.1.0` 升级到公开 `v0.6.0`，签名候选包另通过自定义安装目录和卸载重装后的数据恢复检查。[公开 HTTPS 验收](https://github.com/Murmureeee/Pilot/actions/runs/45942454476) · [签名安装验收](https://github.com/Murmureeee/Pilot/actions/runs/45946604068)
+- [ ] **Windows 正式签名。** 打包和验签已接入发布流程。安装包、应用和卸载器的签名与发布者校验通过临时证书验收。生产发布需要受信任的代码签名证书。[签名验收脚本](../scripts/verify-windows-signing.mjs)
 - [x] **Windows 更新入口。** 「帮助 → 检查更新…」显示检查和下载状态，侧栏设置上方可查看下载进度，下载完成后点击即可安装并重启。
 - [x] **Linux 更新入口。** AppImage 和 Debian 安装包共用「检查更新…」，下载时校验对应文件。AppImage 可保留原路径替换并重启，Debian 安装包提供下载位置，由系统包管理器安装。发行流程包含 `latest-linux.yml`，CI 用两个打包版本复核检查、下载和升级。[Linux 更新验收](../scripts/verify-linux-update.mjs)
 - [ ] **更新策略。** 现在只在启动后检查一次更新，发现新版后自动下载。改为运行期间定期检查，并在设置「关于」里提供自动下载开关。关闭后发现新版只提示，由用户决定何时下载。[更新实现](../src/main/updater.ts)
@@ -153,6 +154,8 @@ P0 为首个日用版的交付条件，P1 为日常效率和发行完善，P2 �
 Windows 历史安装版抽样记录为冷启动约 1.27 秒、500 条消息滚动帧间隔 P95 为 18.2 毫秒、120 个文字增量最大渲染延迟 32.3 毫秒。发版时按当次提交复测。
 
 GitHub Actions 在代码推送到 `main` 或更新指向 `main` 的 PR 时执行 Windows 验证。发布相关的手动输入为 `build_test_packages`、`verify_installation`、`prepare_release` 和 `verify_published_update`。[构建与发布工作流](../.github/workflows/windows.yml)
+
+`verify_installation` 在一次性的 Windows runner 上用临时证书签名并验证安装包。`prepare_release` 从 `WIN_CSC_LINK` 密文读取 Base64 编码的生产 PFX，密码使用 `WIN_CSC_KEY_PASSWORD` 密文。可通过仓库变量 `PILOT_WINDOWS_PUBLISHER` 指定证书的完整主题 DN。配置生产证书时，工作流在暂存前核对安装包、程序签名和更新清单。[打包入口](../scripts/package-win.mjs) · [签名验收](../scripts/verify-windows-signing.mjs)
 
 ### 9. 定时任务与生态扩展
 
