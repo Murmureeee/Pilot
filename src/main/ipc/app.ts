@@ -12,6 +12,7 @@ import {
   type PingResponse,
 } from "../../shared/contract";
 import { NATIVE_DIALOG_TITLES, TITLE_BAR_OVERLAY_COLORS } from "../constants";
+import { pagePreviewReport, preparePagePreview } from "../page-preview";
 import { handle, setConversationVisible, setRendererLocale } from "./transport";
 import type { IpcContext } from "./types";
 
@@ -123,4 +124,8 @@ export function registerAppRoutes(
   handle(IPC.appDownloadUpdate, () => ctx.updater.download());
   handle(IPC.appInstallUpdate, () => ctx.exit.installUpdate());
   handle(IPC.appShowUpdatePackage, () => ctx.updater.showPackage());
+  handle(IPC.appPreparePagePreview, (_event, address) => preparePagePreview(address));
+  handle(IPC.appPagePreviewReport, (event, guest, includeScreenshot) =>
+    pagePreviewReport(event.sender, guest, includeScreenshot),
+  );
 }

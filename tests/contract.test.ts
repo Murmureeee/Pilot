@@ -33,6 +33,11 @@ describe("IPC contract", () => {
     expect(IPC.appBackupResult).toBe("app:backup-result");
   });
 
+  it("separates opening a local page from collecting a preview report", () => {
+    expect(IPC.appPreparePagePreview).toBe("app:prepare-page-preview");
+    expect(IPC.appPagePreviewReport).toBe("app:page-preview-report");
+  });
+
   it("separates worktree discovery, creation, review, and confirmation", () => {
     expect(IPC.sessionGitWorktrees).toBe("session:git-worktrees");
     expect(IPC.sessionCreateGitWorktree).toBe("session:create-git-worktree");

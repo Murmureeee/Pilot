@@ -260,7 +260,7 @@ export interface FileChangesStore {
   cancelUndo(id: string): void;
 }
 
-export type ReviewTab = "changes" | "files" | "verification" | "terminal";
+export type ReviewTab = "changes" | "files" | "verification" | "terminal" | "preview";
 
 export interface ReviewStore {
   composerId: string | null;

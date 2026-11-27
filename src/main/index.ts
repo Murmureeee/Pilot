@@ -48,6 +48,7 @@ import {
   sendToRenderers,
 } from "./ipc/transport";
 import { createDesktopNetwork } from "./network";
+import { registerPagePreview } from "./page-preview";
 import { prepareUserDataDirectory } from "./profile";
 import { afterTurnVerificationFor } from "./project-config";
 import {
@@ -112,11 +113,13 @@ function createWindow(log: DiagnosticLog, stateFile: string, iconPath: string): 
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      webviewTag: true,
     },
   });
   rememberWindow(win, stateFile, log);
   if (state?.maximized) win.maximize();
   registerRenderer(win.webContents);
+  registerPagePreview(win.webContents);
   registerWindowRecovery(win, log);
 
   // Dev startup checks consume the console marker. Packaged diagnostics store metadata only.

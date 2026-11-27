@@ -295,6 +295,12 @@ export function useWorkbenchCommands({
         icon: TerminalIcon,
         run: () => openReview("terminal"),
       },
+      {
+        id: "review-preview",
+        label: "打开预览页签",
+        icon: EyeIcon,
+        run: () => openReview("preview"),
+      },
     );
     for (const kind of VERIFICATION_KINDS)
       commands.push({

@@ -63,6 +63,8 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.appDownloadUpdate]: [],
   [IPC.appInstallUpdate]: [],
   [IPC.appShowUpdatePackage]: [],
+  [IPC.appPreparePagePreview]: ["http://localhost:5173/"],
+  [IPC.appPagePreviewReport]: [2, true],
   [IPC.agentPrompt]: ["  preserve prompt whitespace  "],
   [IPC.agentSearchWorkspace]: ["src/报告"],
   [IPC.agentResolveDroppedPaths]: [sessionId, "E:/project", ["E:/project/report.txt"]],

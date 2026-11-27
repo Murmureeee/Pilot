@@ -213,6 +213,8 @@ const inputs = {
   [IPC.appDownloadUpdate]: none,
   [IPC.appInstallUpdate]: none,
   [IPC.appShowUpdatePackage]: none,
+  [IPC.appPreparePagePreview]: z.tuple([z.string().trim().min(1).max(2048)]),
+  [IPC.appPagePreviewReport]: z.tuple([z.number().int().positive(), z.boolean()]),
   [IPC.menuAction]: z.tuple([
     z.enum([
       "undo",

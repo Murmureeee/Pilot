@@ -970,6 +970,28 @@ export const EN_MESSAGES: Record<string, string> = {
   "此会话已有验证命令在运行。": "This chat already has a verification command running.",
   "无法停止验证命令。": "Could not stop the verification command.",
   终端: "Terminal",
+  预览: "Preview",
+  打开预览页签: "Open the Preview tab",
+  本机开发服务器地址: "Local development server URL",
+  打开页面: "Open page",
+  重新加载页面: "Reload page",
+  开发页面预览: "Development page preview",
+  将截图加入草稿: "Attach screenshot to draft",
+  将控制台错误加入草稿: "Add console errors to draft",
+  控制台错误: "Console errors",
+  "页面预览 {0}": "Page preview {0}",
+  "正在打开页面…": "Opening page…",
+  "请输入本机开发服务器的 HTTP 或 HTTPS 地址。":
+    "Enter the HTTP or HTTPS URL of a local development server.",
+  "在终端启动开发服务器，再输入地址打开页面。":
+    "Start the development server in the terminal, then enter its URL.",
+  "打开页面失败（{0}）。请检查开发服务器后重新加载。":
+    "Could not open the page ({0}). Check the development server and reload.",
+  "页面预览已关闭，请重新打开。": "The preview has closed. Open the page again.",
+  "无法截取预览页面，请等待页面加载后重试。":
+    "Could not capture the page. Wait for it to load and try again.",
+  "页面截图过大，请缩小预览区域后重试。":
+    "The screenshot is too large. Reduce the preview width and try again.",
   交互式终端: "Interactive terminal",
   打开终端: "Open terminal",
   打开终端页签: "Open the Terminal tab",

@@ -36,6 +36,8 @@ export const IPC = {
   appDownloadUpdate: "app:download-update",
   appInstallUpdate: "app:install-update",
   appShowUpdatePackage: "app:show-update-package",
+  appPreparePagePreview: "app:prepare-page-preview",
+  appPagePreviewReport: "app:page-preview-report",
   agentPrompt: "agent:prompt",
   agentResume: "agent:resume",
   agentCompact: "agent:compact",

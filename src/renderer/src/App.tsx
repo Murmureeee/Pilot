@@ -7,6 +7,7 @@ import { ChatHeader } from "@renderer/components/ai/chat-header";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
 import { FeedbackBar } from "@renderer/components/ai/feedback-bar";
 import { WorktreeArchiveDialog } from "@renderer/components/ai/git-worktree-dialog";
+import { PagePreviewPanel } from "@renderer/components/ai/page-preview-panel";
 import { ProjectDropTarget } from "@renderer/components/ai/project-drop-target";
 import { PromptTemplateDialog } from "@renderer/components/ai/prompt-template-dialog";
 import { ReviewChanges } from "@renderer/components/ai/review-changes";
@@ -595,6 +596,14 @@ export default function App(): JSX.Element {
                   >
                     <TerminalPanel composerId={composerId} workingDirectory={workingDirectory} />
                   </Suspense>
+                }
+                preview={
+                  <PagePreviewPanel
+                    key={workingDirectory}
+                    composerId={composerId}
+                    canEdit={canEdit}
+                    onAppend={(prompt) => editComposer({ prompt, composerId })}
+                  />
                 }
               />
             )}

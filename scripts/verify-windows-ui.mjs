@@ -9,6 +9,7 @@ import { repository, withDesktop as withApp } from "./windows-ui/desktop.mjs";
 import { startModelFixture } from "./windows-ui/model.mjs";
 import { seedScheduleRecovery, verifyRecoveredSchedules, verifyScheduledTasks } from "./windows-ui/scheduled-tasks.mjs";
 import { startMcpOAuthFixture } from "./windows-ui/mcp-oauth.mjs";
+import { verifyPagePreview } from "./windows-ui/page-preview.mjs";
 import {
   prepareTerminalExit,
   seedBackupProfile,
@@ -184,6 +185,11 @@ try {
       verifyProjectHooks(page, window, model, hooksProject),
     );
   }, hooksProject);
+  await withApp(join(scratch, "page-preview-profile"), async (page, _window, app) => {
+    await runScene("Preview an isolated local page and attach a screenshot with console errors", () =>
+      verifyPagePreview(page, app),
+    );
+  }, commandProject);
   mkdirSync(subtaskProject);
   await withApp(subtaskProfile, async (page, window) => {
     await runScene("Delegate read-only research, restore its trace and cancel a planning subtask", () =>

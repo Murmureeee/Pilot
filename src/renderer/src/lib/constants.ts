@@ -475,6 +475,7 @@ export const REVIEW_TABS = [
   { value: "files", label: "文件" },
   { value: "verification", label: "验证" },
   { value: "terminal", label: "终端" },
+  { value: "preview", label: "预览" },
 ] as const;
 export const DEFAULT_TERMINAL_SIZE = { columns: 80, rows: 24 } as const;
 export const TERMINAL_SCROLLBACK = 5000;

@@ -89,6 +89,7 @@ import type {
   PluginPackageSource,
 } from "./imports";
 import type { McpOAuthRef, McpServerInfo, McpServerInput } from "./mcp";
+import type { PagePreviewReport } from "./page-preview";
 import type { ProjectConfigInfo, ProjectTrustDecision } from "./project-config";
 import type { UsageReport } from "./usage";
 
@@ -127,6 +128,8 @@ export interface PiApi {
   downloadUpdate(): Promise<void>;
   installUpdate(): Promise<void>;
   showUpdatePackage(): Promise<void>;
+  preparePagePreview(address: string): Promise<string>;
+  pagePreviewReport(guest: number, includeScreenshot: boolean): Promise<PagePreviewReport>;
   onUpdateStatus(callback: (status: UpdateStatus) => void): () => void;
   getSnapshot(): Promise<Snapshot>;
   agentPrompt(

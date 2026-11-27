@@ -96,6 +96,7 @@ export function ReviewPanel({
   files,
   verification,
   terminal,
+  preview,
 }: {
   open: boolean;
   overlay: boolean;
@@ -111,6 +112,7 @@ export function ReviewPanel({
   files: ReactNode;
   verification: ReactNode;
   terminal: ReactNode;
+  preview: ReactNode;
 }): JSX.Element {
   const locale = useLocale();
   const tab = useReviewStore((state) => state.tab);
@@ -126,7 +128,7 @@ export function ReviewPanel({
     verificationStatus !== "success" &&
     verificationStatus !== "stopped" &&
     verificationStatus !== "interrupted";
-  const contents = { changes, files, verification, terminal };
+  const contents = { changes, files, verification, terminal, preview };
 
   useLayoutEffect(() => {
     if (open) setVisited((tabs) => (tabs.includes(tab) ? tabs : [...tabs, tab]));
