@@ -247,15 +247,15 @@ function resolveOpenAi(
  * 解析 catalog/test 的目标：字符串 = 已保存 provider id（key 从存储解密）；
  * 对象 = 未保存的草稿（FR-5.7 向导用，apiKey 为用户刚输入的明文）。
  */
-export function resolveProviderRef(
+export async function resolveProviderRef(
   ref: string | ProviderInput,
   findSaved: (id: string) => ProviderConfig | undefined,
-  readKey: (stored: string | undefined) => string | undefined,
-): { cfg: ProviderConfig; key: string | undefined } {
+  readKey: (stored: string | undefined) => string | undefined | Promise<string | undefined>,
+): Promise<{ cfg: ProviderConfig; key: string | undefined }> {
   if (typeof ref === "string") {
     const saved = findSaved(ref);
     if (!saved) throw new Error(`provider 不存在: ${ref}`);
-    return { cfg: saved, key: readKey(saved.apiKey) };
+    return { cfg: saved, key: await readKey(saved.apiKey) };
   }
   if (!ref || typeof ref !== "object" || !ref.kind) {
     throw new Error("invalid provider draft");
@@ -266,7 +266,7 @@ export function resolveProviderRef(
   const key =
     draftKey ??
     (saved?.kind === ref.kind && saved.baseUrl?.trim() === ref.baseUrl?.trim()
-      ? readKey(saved.apiKey)
+      ? await readKey(saved.apiKey)
       : undefined);
   return {
     cfg: { ...ref, apiKey: undefined },

@@ -162,14 +162,18 @@ function startDesktop(): (entry: ProjectEntry) => void {
   const getSettings = (): ReturnType<typeof loadSettings> => loadSettings(userData);
   const initialSettings = getSettings();
   const log = new DiagnosticLog(logsDir, getLogLevel(initialSettings));
-  log.write("info", "main", "startup", { version: app.getVersion() });
+  log.startRun(app.getVersion());
   process.on("uncaughtExceptionMonitor", (error) => {
     log.write("error", "main", "uncaught-exception", errorDetails(error));
+  });
+  app.on("child-process-gone", (_event, { type, reason, exitCode }) => {
+    if (reason !== "clean-exit")
+      log.write("error", "child", "process-gone", { reason, code: exitCode, processType: type });
   });
   const setSleepBlocked = createSleepBlocker(log);
   app.once("will-quit", () => {
     setSleepBlocked(false);
-    log.write("info", "main", "quit");
+    log.finishRun();
   });
 
   const persistSettings = (settings: Settings): void => {
@@ -297,7 +301,7 @@ function startDesktop(): (entry: ProjectEntry) => void {
       host.revealSession(id);
       revealWindow(window);
     },
-    reportError: (action) => log.write("warn", "main", "task-notification-" + action),
+    reportError: (action) => log.write("warn", "main", `task-notification-${action}`),
   });
   app.once("will-quit", () => notifications.dispose());
   registerIpc({
@@ -305,6 +309,7 @@ function startDesktop(): (entry: ProjectEntry) => void {
     sessionsDir,
     skillsDir,
     logsDir,
+    log,
     getSettings,
     saveSettings: persistSettings,
     onConversationVisibilityChanged: () => notifications.sync(),

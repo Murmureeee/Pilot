@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { mergeSettingsInput, toPublicSettings } from "../src/main/settings";
+import { prepareSettingsInput, toPublicSettings } from "../src/main/settings";
 import { parseSettings } from "../src/main/settings/schema";
 import { fillPromptTemplate, promptParameters } from "../src/renderer/src/lib/prompt-templates";
 
@@ -17,7 +17,7 @@ describe("prompt templates", () => {
     );
   });
 
-  it("reads older profiles and preserves saved templates through unrelated settings changes", () => {
+  it("reads older profiles and preserves saved templates through unrelated settings changes", async () => {
     const legacy = { providers: [], activeProviderId: "" };
     expect(
       toPublicSettings(parseSettings(Buffer.from(JSON.stringify(legacy)))!).promptTemplates,
@@ -25,9 +25,7 @@ describe("prompt templates", () => {
     const promptTemplates = [{ name: "audit", text: "Inspect {{file}}" }];
     const loaded = parseSettings(Buffer.from(JSON.stringify({ ...legacy, promptTemplates })));
     expect(loaded).toBeDefined();
-    expect(
-      toPublicSettings(mergeSettingsInput(loaded!, { ...legacy, persona: "Updated" }))
-        .promptTemplates,
-    ).toEqual(promptTemplates);
+    const apply = await prepareSettingsInput({ ...legacy, persona: "Updated" });
+    expect(toPublicSettings(apply(loaded!)).promptTemplates).toEqual(promptTemplates);
   });
 });

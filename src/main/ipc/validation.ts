@@ -196,6 +196,8 @@ const inputs = {
   [IPC.runAgentSmoke]: none,
   [IPC.appInfo]: none,
   [IPC.appOpenPath]: z.tuple([z.enum(["settings", "sessions", "skills", "logs"])]),
+  [IPC.appDiagnosticEvents]: none,
+  [IPC.appExportDiagnostics]: locale,
   [IPC.appSetLocale]: locale,
   [IPC.appSetConversationVisible]: z.tuple([z.boolean()]),
   [IPC.appSetTitlebarTheme]: z.tuple([z.enum(["light", "dark", "system"])]),

@@ -31,6 +31,47 @@ export const DEFAULT_LOG_LEVEL = "info";
 export const DEFAULT_EXTERNAL_EDITOR = { kind: "vscode" } as const;
 export const LOG_FILE_COUNT = 3;
 export const LOG_FILE_MAX_BYTES = 1024 * 1024;
+export const DIAGNOSTIC_EVENT_LIMIT = 200;
+export const DIAGNOSTIC_EVENTS = {
+  main: [
+    "startup",
+    "quit",
+    "previous-run-interrupted",
+    "uncaught-exception",
+    "agent-error",
+    "exit-failed",
+    "window-state-save-failed",
+    "sleep-blocker-start-failed",
+    "sleep-blocker-stop-failed",
+    "show-project-entry-error",
+    "task-notification-show",
+    "task-notification-open",
+    "task-notification-unread",
+  ],
+  renderer: [
+    "mounted",
+    "console",
+    "preload-error",
+    "load-failed",
+    "process-gone",
+    "unresponsive",
+    "reload",
+    "recovery-failed",
+  ],
+  child: ["process-gone"],
+  updater: [
+    "unavailable",
+    "idle",
+    "checking",
+    "current",
+    "error",
+    "available",
+    "downloading",
+    "ready",
+    "installing",
+    "package-ready",
+  ],
+} as const;
 
 export const SUPPORTED_LOCALES = ["zh", "en"] as const;
 export const DEFAULT_LOCALE = SUPPORTED_LOCALES[0];

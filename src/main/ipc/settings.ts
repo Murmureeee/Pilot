@@ -6,9 +6,9 @@ import { SKILL_UNAVAILABLE } from "../agent-host/constants";
 import { listModels, resolveProviderRef, testProvider } from "../agent-host/models";
 import { deleteSkillDirectory, importSkill, readSkillFile } from "../agent-host/skills";
 import { NATIVE_DIALOG_TITLES } from "../constants";
-import { mergeSettingsInput, toPublicSettings, validateSettingsInput } from "../settings";
+import { prepareSettingsInput, toPublicSettings, validateSettingsInput } from "../settings";
 import { updateActiveModel } from "../settings/models";
-import { decryptSecret } from "../settings/secrets";
+import { decryptProviderKey } from "../settings/secrets";
 import { sameToolRule } from "../settings/tool-rules";
 import { handle } from "./transport";
 import type { IpcContext } from "./types";
@@ -118,23 +118,33 @@ export function registerSettingsRoutes(
   // ref = 已保存 provider id（string，key 从存储解密）或未保存草稿（ProviderInput，FR-5.7 向导）
   const providerRef = (ref: string | ProviderInput): ReturnType<typeof resolveProviderRef> => {
     const { providers } = ctx.getSettings();
-    return resolveProviderRef(ref, (id) => providers.find((p) => p.id === id), decryptSecret);
+    return resolveProviderRef(ref, (id) => providers.find((p) => p.id === id), decryptProviderKey);
   };
-  handle(IPC.settingsModelCatalog, (_event, ref) => {
-    const { cfg, key } = providerRef(ref);
+  handle(IPC.settingsModelCatalog, async (_event, ref) => {
+    const { cfg, key } = await providerRef(ref);
     return listModels(cfg, key, ctx.request);
   });
-  handle(IPC.settingsTestProvider, (_event, ref) => {
-    const { cfg, key } = providerRef(ref);
+  handle(IPC.settingsTestProvider, async (_event, ref) => {
+    const { cfg, key } = await providerRef(ref);
     return testProvider(cfg, key, ctx.request);
   });
+  let pendingSave = Promise.resolve();
   handle(IPC.settingsSave, (_event, input) => {
     const invalid = validateSettingsInput(input);
     if (invalid) throw new Error(invalid);
-    const current = ctx.getSettings();
-    const merged = mergeSettingsInput(current, input);
-    ctx.saveSettings(merged);
-    if (current.workingDirectory !== merged.workingDirectory) ctx.host.publishSnapshot();
-    return toPublicSettings(merged);
+    const save = pendingSave.then(async () => {
+      const apply = await prepareSettingsInput(input);
+      const current = ctx.getSettings();
+      const merged = apply(current);
+      ctx.saveSettings(merged);
+      if (current.workingDirectory !== merged.workingDirectory) ctx.host.publishSnapshot();
+      return toPublicSettings(merged);
+    });
+    // Form saves replace the provider list, so preserve their invocation order.
+    pendingSave = save.then(
+      () => {},
+      () => {},
+    );
+    return save;
   });
 }

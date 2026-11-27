@@ -14,7 +14,7 @@ import { encryptSecret } from "../settings/secrets";
 import type { McpServerConfig, Settings } from "../settings/types";
 import { collectImportCatalog } from "./catalog";
 import { copyImportedDirectory } from "./files";
-import type { ImportLocations, ServerImport, SkillImport } from "./types";
+import type { ImportCandidate, ImportLocations, ServerImport, SkillImport } from "./types";
 
 export function importedPlugins(settings: Settings, skillsDir: string): ImportedPluginInfo[] {
   const enabledSkills = new Set(settings.skillsEnabled);
@@ -86,12 +86,12 @@ export function previewExternalImport(
   };
 }
 
-export function importExternal(
+export async function prepareExternalImport(
   kind: ExternalImportKind,
   selectedIds: readonly string[],
   settings: Settings,
   locations: ImportLocations,
-): { settings: Settings; report: ImportReport } {
+): Promise<(current: Settings) => { settings: Settings; report: ImportReport }> {
   if (!selectedIds.length) throw new Error("请至少选择一个要导入的项目。");
   const catalog = collectImportCatalog(kind, settings, locations);
   const byId = new Map(
@@ -104,6 +104,29 @@ export function importExternal(
     if (!candidate) throw new Error("导入列表已变化，请重新扫描后选择。");
     return candidate;
   });
+  const servers = selected.flatMap((candidate) =>
+    candidate.kind === "mcp" ? [candidate] : candidate.kind === "plugin" ? candidate.servers : [],
+  );
+  const encrypted = new Map(
+    await Promise.all(
+      [...new Map(servers.map((server) => [server.storageKey, server]))].map(
+        async ([key, server]) =>
+          [
+            key,
+            await encryptSecret(JSON.stringify(server.connection)).catch(() => undefined),
+          ] as const,
+      ),
+    ),
+  );
+  return (current) => applyExternalImport(selected, current, locations, encrypted);
+}
+
+function applyExternalImport(
+  selected: readonly ImportCandidate[],
+  settings: Settings,
+  locations: ImportLocations,
+  encrypted: ReadonlyMap<string, string | undefined>,
+): { settings: Settings; report: ImportReport } {
   const report: ImportReport = {
     skills: 0,
     plugins: 0,
@@ -145,10 +168,8 @@ export function importExternal(
       report.existing++;
       return existing;
     }
-    let encryptedImport: string;
-    try {
-      encryptedImport = encryptSecret(JSON.stringify(connection));
-    } catch {
+    const encryptedImport = encrypted.get(storageKey);
+    if (!encryptedImport) {
       report.issues.push({ name, reason: "encryption" });
       return undefined;
     }

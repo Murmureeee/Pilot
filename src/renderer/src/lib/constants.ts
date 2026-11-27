@@ -3,6 +3,8 @@ import type {
   ApprovalMode,
   CommandDanger,
   CommandShell,
+  DiagnosticEventName,
+  DiagnosticSource,
   ExternalEditor,
   GitChange,
   GitChangesView,
@@ -141,7 +143,15 @@ export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[
     "停止任务",
   ],
   archived: ["取消归档", "永久删除"],
-  data: ["应用数据目录", "聊天记录目录", "日志级别", "日志目录"],
+  data: [
+    "应用数据目录",
+    "聊天记录目录",
+    "日志级别",
+    "日志目录",
+    "诊断事件",
+    "崩溃记录",
+    "脱敏诊断",
+  ],
   about: ["版本", "软件更新", "检查更新", "自动下载更新", "更新记录", "反馈问题"],
   skills: [
     "导入技能目录",
@@ -319,6 +329,59 @@ export const LOG_LEVEL_LABELS: Record<LogLevel, string> = {
   warn: "警告",
   info: "信息",
   debug: "调试",
+};
+
+export const DIAGNOSTIC_SOURCE_LABELS: Record<DiagnosticSource, string> = {
+  main: "主进程",
+  renderer: "渲染进程",
+  child: "子进程",
+  updater: "软件更新",
+};
+
+export const DIAGNOSTIC_EVENT_LABELS: Record<DiagnosticEventName, string> = {
+  startup: "应用启动",
+  quit: "正常退出",
+  "previous-run-interrupted": "上次运行意外结束",
+  "uncaught-exception": "主进程异常",
+  "agent-error": "Agent 运行失败",
+  "exit-failed": "应用退出失败",
+  "window-state-save-failed": "窗口状态保存失败",
+  "sleep-blocker-start-failed": "阻止休眠失败",
+  "sleep-blocker-stop-failed": "恢复休眠失败",
+  "show-project-entry-error": "项目打开提示失败",
+  "task-notification-show": "桌面通知发送失败",
+  "task-notification-open": "从通知打开会话失败",
+  "task-notification-unread": "未读状态保存失败",
+  mounted: "界面已加载",
+  console: "界面控制台事件",
+  "preload-error": "预加载失败",
+  "load-failed": "界面加载失败",
+  "process-gone": "进程退出",
+  unresponsive: "界面无响应",
+  reload: "界面重新加载",
+  "recovery-failed": "界面恢复失败",
+  unavailable: "更新服务不可用",
+  idle: "更新服务就绪",
+  checking: "检查更新中",
+  current: "已是最新版本",
+  error: "更新失败",
+  available: "发现新版本",
+  downloading: "下载更新中",
+  ready: "更新已就绪",
+  installing: "安装更新中",
+  "package-ready": "更新安装包已下载",
+};
+
+export const DIAGNOSTIC_REASON_LABELS: Readonly<Record<string, string>> = {
+  "clean-exit": "正常退出",
+  "abnormal-exit": "异常退出",
+  killed: "进程被终止",
+  crashed: "进程崩溃",
+  oom: "内存不足",
+  "launch-failed": "进程启动失败",
+  "integrity-failure": "进程完整性检查失败",
+  "memory-eviction": "系统回收内存",
+  unresponsive: "界面无响应",
 };
 
 export const PROVIDER_KIND_LABELS: Record<ProviderKind, string> = {

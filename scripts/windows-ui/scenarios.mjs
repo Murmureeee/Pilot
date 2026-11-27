@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { stripVTControlCharacters } from "node:util";
@@ -307,6 +307,212 @@ async function selectAppearance(page, current, locale, theme, focusTarget = "[da
   );
   await page.keyboard.press("Control+l");
   await page.waitForFunction((target) => document.activeElement?.matches(target), focusTarget);
+}
+
+export async function verifyDiagnostics(page, window, app, profile, scratch) {
+  const secret = "pilot-diagnostic-fixture-credential";
+  const record = {
+    time: new Date().toISOString(),
+    level: "error",
+    source: "renderer",
+    event: "process-gone",
+    reason: "crashed",
+    code: 7,
+    path: secret,
+    details: { message: secret },
+    version: secret,
+  };
+  const files = join(profile, "logs");
+  const line = JSON.stringify(record) + "\n";
+  appendFileSync(join(files, "pilot.log"), line.repeat(225));
+  writeFileSync(join(files, "pilot.log.1"), JSON.stringify({ ...record, code: 8, reason: secret }) + "\n");
+  const events = await page.evaluate(() => window.pi.diagnosticEvents());
+  assert.equal(events.length, 200);
+  assert.equal(events[0].reason, "crashed");
+  assert.ok(!JSON.stringify(events).includes(secret));
+
+  const labels = [
+    { section: "存储与诊断", open: "查看事件", title: "诊断事件", event: "进程退出", refresh: "刷新事件" },
+    { section: "Storage and diagnostics", open: "View events", title: "Diagnostic events", event: "Process exited", refresh: "Refresh events" },
+  ];
+  let current = locales[0];
+  let contrast = Infinity;
+  for (const [index, locale] of locales.entries()) {
+    const copy = labels[index];
+    for (const theme of ["light", "dark"]) {
+      await selectAppearance(page, current, locale, theme);
+      current = locale;
+      await openSettings(page, locale, copy.section);
+      for (const size of [wide, narrow]) {
+        await resize(page, window, size);
+        const open = button(page, copy.open);
+        await open.scrollIntoViewIfNeeded();
+        await open.focus();
+        await page.keyboard.press("Enter");
+        const dialog = page.getByRole("dialog", { name: copy.title });
+        const list = dialog.getByRole("region", { name: copy.title });
+        await list.getByText(copy.event, { exact: true }).first().waitFor();
+        await assertFits(dialog);
+        await assertFits(button(dialog, locale.close));
+        assert.equal(await list.getByRole("listitem").count(), 200);
+        contrast = Math.min(contrast, await minimumTextContrast(dialog, "h2, p, time"));
+        assert.ok(contrast >= 4.5, "Diagnostic text contrast " + contrast.toFixed(2));
+        if (theme === "dark" && size === narrow) {
+          await list.and(page.locator(":focus-visible")).waitFor();
+          await page.keyboard.press("End");
+          await list.evaluate((node) => {
+            if (node.scrollHeight <= node.clientHeight) throw new Error("Expected a scrollable list");
+          });
+          await page.waitForFunction((title) =>
+            [...document.querySelectorAll("section")].some(
+              (node) => node.getAttribute("aria-label") === title && node.scrollTop > 0,
+            ), copy.title);
+          await page.keyboard.press("Tab");
+          await button(dialog, copy.refresh).and(page.locator(":focus-visible")).waitFor();
+          await page.keyboard.press("Enter");
+          await list.getByText(copy.event, { exact: true }).first().waitFor();
+        }
+        await page.keyboard.press("Escape");
+        await dialog.waitFor({ state: "hidden" });
+        await page.waitForFunction((label) => document.activeElement?.textContent.trim() === label, copy.open);
+      }
+      await page.keyboard.press("Control+l");
+    }
+  }
+  console.log("Diagnostic text minimum contrast " + contrast.toFixed(2) + ":1");
+
+  await selectAppearance(page, current, locales[0], "light");
+  await openSettings(page, locales[0], labels[0].section);
+  const save = button(page, "导出 JSON");
+  const target = join(scratch, "诊断报告.json");
+  const choose = (filePath) => app.evaluate(({ dialog }, filePath) => {
+    const original = dialog.showSaveDialog;
+    dialog.showSaveDialog = async (parent, options) => {
+      dialog.showSaveDialog = original;
+      if (!parent || options.title !== "导出脱敏诊断" || options.defaultPath !== "pilot-diagnostics.json" ||
+          options.filters[0].extensions[0] !== "json") throw new Error("Unexpected save dialog options");
+      return filePath ? { canceled: false, filePath } : { canceled: true };
+    };
+  }, filePath);
+  await choose(null);
+  await save.click();
+  await save.waitFor();
+  assert.equal(await page.getByText("已导出脱敏诊断。", { exact: true }).count(), 0);
+  assert.ok(!existsSync(target));
+  await choose(files);
+  await save.click();
+  await page.getByRole("alert").getByText(/无法导出诊断/).waitFor();
+  await choose(target);
+  await save.click();
+  await page.getByText("已导出脱敏诊断。", { exact: true }).waitFor();
+  const json = readFileSync(target, "utf8");
+  assert.ok(!json.includes(secret));
+  assert.ok(!json.includes(profile));
+  const { runtime, events: saved } = JSON.parse(json);
+  assert.equal(runtime.platform, "win32");
+  assert.match(runtime.electron, /^\d+\.\d+\.\d+$/);
+  assert.match(runtime.node, /^\d+\.\d+\.\d+$/);
+  assert.equal(saved.filter(({ reason }) => reason === "crashed").length, 225);
+  assert.ok(saved.some(({ code, reason }) => code === 8 && reason === undefined));
+}
+
+export async function verifyCredentialMigration(page, app, profile, model) {
+  const path = join(profile, "settings.json");
+  const provider = {
+    id: "diagnostics-model",
+    name: "Migration fixture",
+    kind: "openai-compatible",
+    baseUrl: model.baseUrl,
+    modelId: model.modelId,
+  };
+  const legacy = await app.evaluate(({ safeStorage }) =>
+    safeStorage.encryptString("pilot-test-legacy-key").toString("base64"),
+  );
+  const input = { activeProviderId: provider.id, providers: [provider] };
+  const savedInput = { ...input, providers: [{ ...provider, apiKey: "pilot-test-replacement-key" }] };
+  writeFileSync(path, JSON.stringify({ ...input, providers: [{ ...provider, apiKey: legacy }] }));
+  const original = readFileSync(path, "utf8");
+  await app.evaluate(({ safeStorage }) => {
+    const available = safeStorage.isAsyncEncryptionAvailable;
+    const encrypt = safeStorage.encryptStringAsync;
+    const decrypt = safeStorage.decryptStringAsync;
+    const started = Promise.withResolvers();
+    const release = Promise.withResolvers();
+    globalThis.pilotCredentialTest = { available, encrypt, decrypt, started, release, recovered: false };
+    safeStorage.isAsyncEncryptionAvailable = async () => false;
+  });
+  let pending;
+  try {
+    await assert.rejects(page.evaluate((id) => window.pi.modelCatalog(id), provider.id), /系统密钥服务暂不可用/);
+    await assert.rejects(page.evaluate((input) => window.pi.settingsSave(input), savedInput), /无法保存密钥/);
+    assert.equal(readFileSync(path, "utf8"), original);
+    await app.evaluate(({ safeStorage }) => {
+      const state = globalThis.pilotCredentialTest;
+      safeStorage.isAsyncEncryptionAvailable = state.available;
+      safeStorage.decryptStringAsync = async (cipher) => {
+        const result = await state.decrypt.call(safeStorage, cipher);
+        state.recovered = result.result === "pilot-test-legacy-key";
+        return result;
+      };
+      safeStorage.encryptStringAsync = async (plain) => {
+        if (plain === "pilot-test-replacement-key") {
+          state.started.resolve();
+          await state.release.promise;
+        }
+        return state.encrypt.call(safeStorage, plain);
+      };
+    });
+    assert.ok((await page.evaluate((id) => window.pi.modelCatalog(id), provider.id))
+      .some(({ id }) => id === model.modelId));
+    assert.equal(await app.evaluate(() => globalThis.pilotCredentialTest.recovered), true);
+
+    pending = page.evaluate((input) => window.pi.settingsSave(input), savedInput);
+    void pending.catch(() => {});
+    await app.evaluate(() => Promise.race([
+      globalThis.pilotCredentialTest.started.promise,
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Provider encryption did not start")), 3_000).unref();
+      }),
+    ]));
+    await page.evaluate(async () => {
+      await window.pi.settingsSetLogLevel("debug");
+      await window.pi.mcpSave({
+        id: "d5980bef-3a5d-4a6b-9083-c310ad6a298b",
+        name: "MCP migration fixture",
+        enabled: false,
+        policy: "confirm",
+        transport: { type: "http", url: "https://example.test/mcp" },
+        headers: [["Authorization", "Bearer pilot-test-mcp"]],
+      });
+    });
+    await app.evaluate(() => { globalThis.pilotCredentialTest.release.resolve(); });
+    const publicSettings = await pending;
+    assert.equal(publicSettings.providers[0].hasKey, true);
+    assert.ok(!Object.hasOwn(publicSettings.providers[0], "apiKey"));
+    assert.equal(publicSettings.logLevel, "debug");
+
+    const body = readFileSync(path, "utf8");
+    assert.ok(!body.includes("pilot-test-"));
+    const settings = JSON.parse(body);
+    assert.equal(settings.logLevel, "debug");
+    assert.notEqual(settings.providers[0].apiKey, legacy);
+    assert.equal(await app.evaluate(({ safeStorage }, saved) => {
+      const read = (cipher) => safeStorage.decryptString(Buffer.from(cipher, "base64"));
+      return read(saved.providers[0].apiKey) === "pilot-test-replacement-key" &&
+        JSON.parse(read(saved.mcpServers[0].encryptedHeaders))[0][1] === "Bearer pilot-test-mcp";
+    }, settings), true);
+  } finally {
+    await app.evaluate(({ safeStorage }) => {
+      const state = globalThis.pilotCredentialTest;
+      if (!state) return;
+      state.release.resolve();
+      safeStorage.isAsyncEncryptionAvailable = state.available;
+      safeStorage.encryptStringAsync = state.encrypt;
+      safeStorage.decryptStringAsync = state.decrypt;
+      delete globalThis.pilotCredentialTest;
+    });
+    await pending?.catch(() => {});
+  }
 }
 
 async function verifyReviewLayout(page, locale, overlay) {
@@ -1191,7 +1397,7 @@ export async function prepareTerminalExit(page, app) {
 
 function minimumTextContrast(container, selector) {
   return container.evaluate((element, textSelector) => {
-    const context = document.createElement("canvas").getContext("2d");
+    const context = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
     const luminance = (color) => {
       context.clearRect(0, 0, 1, 1);
       context.fillStyle = color;

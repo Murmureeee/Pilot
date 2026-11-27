@@ -13,7 +13,7 @@ import {
 import { searchMcpRegistry } from "../discovery/registry";
 import {
   importedPlugins,
-  importExternal,
+  prepareExternalImport,
   previewExternalImport,
   toggleImportedPlugin,
 } from "../external-import";
@@ -29,7 +29,7 @@ import {
   uninstallPluginPackage,
 } from "../external-import/packages";
 import { loadProjectConfig, projectMcpServers, projectTrustState } from "../project-config";
-import { mergeMcpServer } from "../settings/mcp";
+import { saveMcpServer } from "../settings/mcp";
 import type { McpServerConfig } from "../settings/types";
 import { handle } from "./transport";
 import type { IpcContext } from "./types";
@@ -55,13 +55,14 @@ export function registerIntegrationRoutes(
   handle(IPC.settingsPreviewExternalImport, (_event, kind, project) =>
     previewExternalImport(kind, ctx.getSettings(), importLocations(project)),
   );
-  handle(IPC.settingsImportExternal, (_event, kind, project, selectedIds) => {
-    const { settings, report } = importExternal(
+  handle(IPC.settingsImportExternal, async (_event, kind, project, selectedIds) => {
+    const apply = await prepareExternalImport(
       kind,
       selectedIds,
       ctx.getSettings(),
       importLocations(project),
     );
+    const { settings, report } = apply(ctx.getSettings());
     if (report.skills || report.plugins || report.servers) ctx.saveSettings(settings);
     return report;
   });
@@ -154,8 +155,8 @@ export function registerIntegrationRoutes(
   );
 
   handle(IPC.settingsMcpList, () => listMcp());
-  handle(IPC.settingsMcpSave, (_event, input) => {
-    ctx.saveSettings(mergeMcpServer(ctx.getSettings(), input));
+  handle(IPC.settingsMcpSave, async (_event, input) => {
+    await saveMcpServer(ctx.getSettings, ctx.saveSettings, input);
     return listMcp();
   });
   handle(IPC.settingsMcpReconnect, (_event, id) => listMcp(id));

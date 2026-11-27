@@ -33,6 +33,8 @@ const valid: Record<IpcChannel, unknown[]> = {
   [IPC.appInfo]: [],
   [IPC.menuAction]: ["undo"],
   [IPC.appOpenPath]: ["logs"],
+  [IPC.appDiagnosticEvents]: [],
+  [IPC.appExportDiagnostics]: ["en"],
   [IPC.appSetTitlebarTheme]: ["system"],
   [IPC.appSetLocale]: ["en"],
   [IPC.appSetConversationVisible]: [true],

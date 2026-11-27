@@ -7,21 +7,25 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   loadSettings,
-  mergeSettingsInput,
+  prepareSettingsInput,
   saveSettings,
   toPublicSettings,
   validateSettingsInput,
 } from "../src/main/settings";
 import { updateActiveModel } from "../src/main/settings/models";
 import type { Settings } from "../src/main/settings/types";
-import type { ExternalEditor } from "../src/shared/contract";
+import type { ExternalEditor, SettingsInput } from "../src/shared/contract";
 import { effectiveModelCapabilities } from "../src/shared/model-capabilities";
 import { modelCatalogInput } from "../src/shared/providers";
 
 vi.mock("electron", () => ({ safeStorage: { isEncryptionAvailable: () => false } }));
 vi.mock("node:fs", { spy: true });
 
-it("persists an auxiliary selection and clears it when its catalog entry is removed", () => {
+async function mergeSettingsInput(current: Settings, input: SettingsInput): Promise<Settings> {
+  return (await prepareSettingsInput(input))(current);
+}
+
+it("persists an auxiliary selection and clears it when its catalog entry is removed", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-aux-model-"));
   const defaults = loadSettings(profile.path);
   expect(toPublicSettings(defaults).auxiliaryModel).toBeNull();
@@ -42,21 +46,21 @@ it("persists an auxiliary selection and clears it when its catalog entry is remo
     auxiliaryModel: selection,
   };
   expect(validateSettingsInput(settings)).toBeUndefined();
-  saveSettings(profile.path, mergeSettingsInput(defaults, settings));
+  saveSettings(profile.path, await mergeSettingsInput(defaults, settings));
   const current = loadSettings(profile.path);
   expect(toPublicSettings(current).auxiliaryModel).toEqual(selection);
   const { auxiliaryModel: _selection, ...other } = settings;
-  expect(mergeSettingsInput(current, other).auxiliaryModel).toEqual(selection);
+  expect((await mergeSettingsInput(current, other)).auxiliaryModel).toEqual(selection);
   expect(
-    mergeSettingsInput(current, { ...settings, auxiliaryModel: null }).auxiliaryModel,
+    (await mergeSettingsInput(current, { ...settings, auxiliaryModel: null })).auxiliaryModel,
   ).toBeUndefined();
   expect(
-    mergeSettingsInput(current, { ...other, providers: [primary] }).auxiliaryModel,
+    (await mergeSettingsInput(current, { ...other, providers: [primary] })).auxiliaryModel,
   ).toBeUndefined();
   expect(validateSettingsInput({ ...settings, providers: [primary] })).toContain("辅助模型");
 });
 
-it("defaults older settings to VS Code and preserves a saved editor on other settings saves", () => {
+it("defaults older settings to VS Code and preserves a saved editor on other settings saves", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-editor-settings-"));
   const settings = loadSettings(profile.path);
   saveSettings(profile.path, settings);
@@ -70,7 +74,7 @@ it("defaults older settings to VS Code and preserves a saved editor on other set
   saveSettings(profile.path, { ...settings, externalEditor });
   const reopened = loadSettings(profile.path);
   expect(toPublicSettings(reopened).externalEditor).toEqual(externalEditor);
-  const updated = mergeSettingsInput(reopened, {
+  const updated = await mergeSettingsInput(reopened, {
     providers: reopened.providers,
     activeProviderId: reopened.activeProviderId,
     persona: "Keep the editor preference.",
@@ -79,7 +83,7 @@ it("defaults older settings to VS Code and preserves a saved editor on other set
   expect(loadSettings(profile.path).externalEditor).toEqual(externalEditor);
 });
 
-it("defaults to automatic update downloads and preserves an explicit opt-out", () => {
+it("defaults to automatic update downloads and preserves an explicit opt-out", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-update-settings-"));
   const settings = loadSettings(profile.path);
   saveSettings(profile.path, settings);
@@ -90,7 +94,7 @@ it("defaults to automatic update downloads and preserves an explicit opt-out", (
   expect(toPublicSettings(reopened).autoDownloadUpdates).toBe(false);
   saveSettings(
     profile.path,
-    mergeSettingsInput(reopened, {
+    await mergeSettingsInput(reopened, {
       providers: reopened.providers,
       activeProviderId: reopened.activeProviderId,
       persona: "Keep the update preference.",
@@ -99,7 +103,7 @@ it("defaults to automatic update downloads and preserves an explicit opt-out", (
   expect(toPublicSettings(loadSettings(profile.path)).autoDownloadUpdates).toBe(false);
 });
 
-it("keeps a project's after-turn command and shell through ordinary settings saves", () => {
+it("keeps a project's after-turn command and shell through ordinary settings saves", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-after-turn-settings-"));
   const settings = loadSettings(profile.path);
   const afterTurnVerification = {
@@ -107,7 +111,7 @@ it("keeps a project's after-turn command and shell through ordinary settings sav
   } as const;
   saveSettings(profile.path, { ...settings, afterTurnVerification });
   const reopened = loadSettings(profile.path);
-  const updated = mergeSettingsInput(reopened, {
+  const updated = await mergeSettingsInput(reopened, {
     providers: reopened.providers,
     activeProviderId: reopened.activeProviderId,
     persona: "Keep the project settings.",
@@ -120,30 +124,33 @@ describe("settings recovery", () => {
   it.each([
     Buffer.from('{"providers":[{"apiKey":"saved"}'),
     Buffer.from('{"providers":[null],"activeProviderId":"saved"}'),
-  ])("backs up invalid settings and keeps the notice through saves and reloads", (original) => {
-    using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-settings-recovery-"));
-    const path = join(profile.path, "settings.json");
-    fs.writeFileSync(path, original);
+  ])(
+    "backs up invalid settings and keeps the notice through saves and reloads",
+    async (original) => {
+      using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-settings-recovery-"));
+      const path = join(profile.path, "settings.json");
+      fs.writeFileSync(path, original);
 
-    const recovered = loadSettings(profile.path);
-    expect(recovered.providers.map(({ id }) => id)).toEqual(["faux-default"]);
-    const backup = recovered.recoveredFrom!;
-    expect(backup).toMatch(/settings\.corrupt-\d{8}-\d{6}\.json$/);
-    expect(fs.readFileSync(backup)).toEqual(original);
-    expect(toPublicSettings(recovered).recovery).toEqual({ status: "recovered", path: backup });
+      const recovered = loadSettings(profile.path);
+      expect(recovered.providers.map(({ id }) => id)).toEqual(["faux-default"]);
+      const backup = recovered.recoveredFrom!;
+      expect(backup).toMatch(/settings\.corrupt-\d{8}-\d{6}\.json$/);
+      expect(fs.readFileSync(backup)).toEqual(original);
+      expect(toPublicSettings(recovered).recovery).toEqual({ status: "recovered", path: backup });
 
-    const edited = mergeSettingsInput(recovered, {
-      providers: recovered.providers,
-      activeProviderId: recovered.activeProviderId,
-      persona: "saved after recovery",
-    });
-    saveSettings(profile.path, edited);
-    expect(loadSettings(profile.path)).toMatchObject({
-      recoveredFrom: backup,
-      persona: edited.persona,
-    });
-    expect(fs.readdirSync(profile.path)).toHaveLength(2);
-  });
+      const edited = await mergeSettingsInput(recovered, {
+        providers: recovered.providers,
+        activeProviderId: recovered.activeProviderId,
+        persona: "saved after recovery",
+      });
+      saveSettings(profile.path, edited);
+      expect(loadSettings(profile.path)).toMatchObject({
+        recoveredFrom: backup,
+        persona: edited.persona,
+      });
+      expect(fs.readdirSync(profile.path)).toHaveLength(2);
+    },
+  );
 
   it("leaves the original intact and blocks saves until it can be backed up", () => {
     using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-settings-blocked-"));
@@ -170,7 +177,7 @@ describe("settings recovery", () => {
 });
 
 describe("tool environment settings", () => {
-  it("loads old settings, persists the folder and preserves it on unrelated saves", () => {
+  it("loads old settings, persists the folder and preserves it on unrelated saves", async () => {
     using appData = mkdtempDisposableSync(join(tmpdir(), "pi-settings-"));
     using project = mkdtempDisposableSync(join(tmpdir(), "pi-project-"));
     const legacy = { providers: [], activeProviderId: "" };
@@ -181,38 +188,44 @@ describe("tool environment settings", () => {
       commandShell: process.platform === "win32" ? "powershell" : "bash",
       logLevel: "info",
     });
-    const configured = mergeSettingsInput(current, {
+    const configured = await mergeSettingsInput(current, {
       ...legacy,
       workingDirectory: project.path,
       commandShell: "bash",
     });
     saveSettings(appData.path, configured);
-    const edited = mergeSettingsInput(loadSettings(appData.path), { ...legacy, persona: "hello" });
+    const edited = await mergeSettingsInput(loadSettings(appData.path), {
+      ...legacy,
+      persona: "hello",
+    });
     expect(toPublicSettings(edited)).toMatchObject({
       workingDirectory: realpathSync(project.path),
       commandShell: "bash",
     });
     expect(
-      mergeSettingsInput(edited, { ...legacy, workingDirectory: null }).workingDirectory,
+      (await mergeSettingsInput(edited, { ...legacy, workingDirectory: null })).workingDirectory,
     ).toBeUndefined();
-    expect(() => mergeSettingsInput(edited, { ...legacy, workingDirectory: "relative" })).toThrow(
-      /无法使用该工作目录/,
-    );
+    await expect(
+      mergeSettingsInput(edited, { ...legacy, workingDirectory: "relative" }),
+    ).rejects.toThrow(/无法使用该工作目录/);
     expect(validateSettingsInput({ ...legacy, commandShell: "unknown" as never })).toBe(
       "不支持此命令环境。",
     );
   });
 
-  it("keeps the saved log level when other preferences are updated", () => {
+  it("keeps the saved log level when other preferences are updated", async () => {
     using appData = mkdtempDisposableSync(join(tmpdir(), "pilot-log-settings-"));
     const legacy = { providers: [], activeProviderId: "" };
     saveSettings(appData.path, { ...legacy, logLevel: "off" });
-    const edited = mergeSettingsInput(loadSettings(appData.path), { ...legacy, persona: "hello" });
+    const edited = await mergeSettingsInput(loadSettings(appData.path), {
+      ...legacy,
+      persona: "hello",
+    });
     expect(toPublicSettings(edited).logLevel).toBe("off");
     expect(toPublicSettings({ ...legacy, logLevel: "invalid" as never }).logLevel).toBe("info");
   });
 
-  it("round-trips shell-specific approvals and keeps legacy entries available to revoke", () => {
+  it("round-trips shell-specific approvals and keeps legacy entries available to revoke", async () => {
     using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-command-rules-"));
     const settings: Settings = {
       providers: [],
@@ -225,7 +238,7 @@ describe("tool environment settings", () => {
       ],
     };
     saveSettings(profile.path, settings);
-    const edited = mergeSettingsInput(loadSettings(profile.path), {
+    const edited = await mergeSettingsInput(loadSettings(profile.path), {
       ...settings,
       persona: "updated",
     });
@@ -233,7 +246,7 @@ describe("tool environment settings", () => {
     expect(toPublicSettings(loadSettings(profile.path)).toolRules).toEqual(settings.toolRules);
   });
 
-  it("preserves a saved credential only while the provider type and endpoint stay the same", () => {
+  it("preserves a saved credential only while the provider type and endpoint stay the same", async () => {
     const original: Settings = {
       activeProviderId: "compatible",
       providers: [
@@ -249,18 +262,24 @@ describe("tool environment settings", () => {
     };
     const { apiKey: _savedKey, ...provider } = original.providers[0];
     expect(
-      mergeSettingsInput(original, { ...original, providers: [{ ...provider, modelId: "next" }] })
-        .providers[0].apiKey,
+      (
+        await mergeSettingsInput(original, {
+          ...original,
+          providers: [{ ...provider, modelId: "next" }],
+        })
+      ).providers[0].apiKey,
     ).toBe("saved-ciphertext");
     expect(
-      mergeSettingsInput(original, {
-        ...original,
-        providers: [{ ...provider, baseUrl: "http://127.0.0.1:11434/v1" }],
-      }).providers[0].apiKey,
+      (
+        await mergeSettingsInput(original, {
+          ...original,
+          providers: [{ ...provider, baseUrl: "http://127.0.0.1:11434/v1" }],
+        })
+      ).providers[0].apiKey,
     ).toBeUndefined();
   });
 
-  it("requires system encryption for new API keys and only exposes credential presence", () => {
+  it("requires system encryption for new API keys and only exposes credential presence", async () => {
     const previous: Settings = {
       activeProviderId: "example",
       providers: [
@@ -275,12 +294,12 @@ describe("tool environment settings", () => {
       ],
     };
     const [provider] = previous.providers;
-    expect(() =>
+    await expect(
       mergeSettingsInput(previous, {
         ...previous,
         providers: [{ ...provider, apiKey: "new-secret" }],
       }),
-    ).toThrow("系统密钥服务不可用，无法保存密钥。");
+    ).rejects.toThrow("系统密钥服务不可用，无法保存密钥。");
     expect(previous.providers[0].apiKey).toBe("existing-ciphertext");
     expect(toPublicSettings(previous).providers[0]).toMatchObject({ hasKey: true });
     expect(toPublicSettings(previous).providers[0]).not.toHaveProperty("apiKey");
@@ -288,7 +307,7 @@ describe("tool environment settings", () => {
 });
 
 describe("saved models and thinking levels", () => {
-  it("migrates legacy single-model providers and persists a multi-model selection", () => {
+  it("migrates legacy single-model providers and persists a multi-model selection", async () => {
     using appData = mkdtempDisposableSync(join(tmpdir(), "pilot-model-settings-"));
     const provider = {
       id: "local",
@@ -315,7 +334,7 @@ describe("saved models and thinking levels", () => {
         },
       },
     ]);
-    const updated = mergeSettingsInput(legacy, {
+    const updated = await mergeSettingsInput(legacy, {
       providers: [
         {
           ...provider,
@@ -345,7 +364,7 @@ describe("saved models and thinking levels", () => {
     expect(() => updateActiveModel(restored, "local", "other-model")).toThrow(/当前提供方/);
   });
 
-  it("keeps model lists through unrelated changes and requires a model for the active provider", () => {
+  it("keeps model lists through unrelated changes and requires a model for the active provider", async () => {
     const provider = {
       id: "s",
       kind: "faux" as const,
@@ -357,7 +376,7 @@ describe("saved models and thinking levels", () => {
       ],
     };
     const current = { providers: [provider], activeProviderId: "s" };
-    const edited = mergeSettingsInput(current, {
+    const edited = await mergeSettingsInput(current, {
       providers: [{ ...provider, models: undefined }],
       activeProviderId: "s",
       persona: "sample",
@@ -371,7 +390,7 @@ describe("saved models and thinking levels", () => {
     ).toMatch(/至少一个模型/);
   });
 
-  it("persists reported capabilities separately from explicit overrides and clearing them", () => {
+  it("persists reported capabilities separately from explicit overrides and clearing them", async () => {
     using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-capability-settings-"));
     const model = {
       id: "vision",
@@ -406,7 +425,7 @@ describe("saved models and thinking levels", () => {
       supportsThinking: true,
     });
     expect(modelCatalogInput([publicModel])).toEqual([model]);
-    const cleared = mergeSettingsInput(loaded, {
+    const cleared = await mergeSettingsInput(loaded, {
       activeProviderId: "local",
       providers: [{ ...loaded.providers[0], models: [{ ...model, overrides: undefined }] }],
     });

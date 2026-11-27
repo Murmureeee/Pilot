@@ -23,7 +23,7 @@ import { APP_NAME } from "../../../../shared/constants";
 import { isLoopbackHost } from "../../../../shared/mcp";
 import { mcpConnectionBinding } from "../../../settings/mcp";
 import { decryptSecret, encryptSecret } from "../../../settings/secrets";
-import type { McpServerConfig } from "../../../settings/types";
+import type { McpServerConfig, Settings } from "../../../settings/types";
 import {
   MCP_OAUTH_BROWSER_FAILED,
   MCP_OAUTH_BUSY,
@@ -137,9 +137,15 @@ export class McpOAuth {
     return;
   }
 
-  private save(endpoint: McpOAuthEndpoint, state: McpOAuthState): void {
+  private async save(
+    endpoint: McpOAuthEndpoint,
+    state: McpOAuthState,
+    isCurrent: (settings: Settings) => boolean,
+  ): Promise<boolean> {
     const { codeVerifier: _codeVerifier, oauthState: _oauthState, ...grant } = state;
+    const encryptedState = await encryptSecret(JSON.stringify(grant), true);
     const settings = this.options.getSettings();
+    if (!isCurrent(settings)) return false;
     this.options.saveSettings({
       ...settings,
       mcpOAuth: {
@@ -147,10 +153,11 @@ export class McpOAuth {
         [endpoint.id]: {
           binding: endpoint.binding,
           project: endpoint.project,
-          encryptedState: encryptSecret(JSON.stringify(grant), true),
+          encryptedState,
         },
       },
     });
+    return true;
   }
 
   info(endpoint: McpOAuthEndpoint): McpOAuthInfo {
@@ -257,7 +264,16 @@ export class McpOAuth {
     if (latest?.record.encryptedState !== saved.record.encryptedState)
       return Boolean(latest?.state?.tokens);
     const next = store.load();
-    if (next && (result === "AUTHORIZED" || !next.tokens)) this.save(endpoint, next);
+    if (next && (result === "AUTHORIZED" || !next.tokens)) {
+      const updated = await this.save(endpoint, next, (settings) => {
+        const record = settings.mcpOAuth?.[endpoint.id];
+        return (
+          record?.binding === endpoint.binding &&
+          record.encryptedState === saved.record.encryptedState
+        );
+      });
+      if (!updated) return Boolean(this.read(endpoint)?.state?.tokens);
+    }
     if (result === "AUTHORIZED") this.challenges.delete(endpoint.revision);
     return result === "AUTHORIZED";
   }
@@ -354,7 +370,12 @@ export class McpOAuth {
     if (!isCurrent()) throw new Error(MCP_OAUTH_CHANGED);
     const grant = store.load();
     if (!grant?.tokens) throw new Error(MCP_OAUTH_FAILED);
-    this.save(endpoint, grant);
+    const saved = await this.save(endpoint, grant, () => {
+      if (cancelled.aborted) return false;
+      if (!isCurrent()) throw new Error(MCP_OAUTH_CHANGED);
+      return true;
+    });
+    if (!saved) return false;
     this.challenges.delete(endpoint.revision);
     return true;
   }

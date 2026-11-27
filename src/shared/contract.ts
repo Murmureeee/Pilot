@@ -3,6 +3,7 @@
 import type {
   EXECUTION_APPROVAL_MODES,
   IMAGE_ATTACHMENT_MIME_TYPES,
+  DIAGNOSTIC_EVENTS,
   LOG_LEVELS,
   SUPPORTED_LOCALES,
   THINKING_LEVELS,
@@ -15,6 +16,8 @@ export const IPC = {
   appInfo: "app:info",
   menuAction: "app:menu-action",
   appOpenPath: "app:open-path",
+  appDiagnosticEvents: "app:diagnostic-events",
+  appExportDiagnostics: "app:export-diagnostics",
   appSetLocale: "app:set-locale",
   appSetConversationVisible: "app:set-conversation-visible",
   appSetTitlebarTheme: "app:set-titlebar-theme",
@@ -195,6 +198,20 @@ export interface PromptInput {
 /** 数据目录（shell.openPath 的白名单目标，防止渲染层打开任意路径） */
 export type OpenPathTarget = "settings" | "sessions" | "skills" | "logs";
 export type LogLevel = (typeof LOG_LEVELS)[number];
+export type DiagnosticSource = keyof typeof DIAGNOSTIC_EVENTS;
+export type DiagnosticEventName = (typeof DIAGNOSTIC_EVENTS)[DiagnosticSource][number];
+export interface DiagnosticEvent {
+  time: string;
+  level: Exclude<LogLevel, "off">;
+  source: DiagnosticSource;
+  event: DiagnosticEventName;
+  errorName?: string;
+  code?: string | number;
+  line?: number;
+  reason?: string;
+  version?: string;
+  processType?: string;
+}
 
 /** 菜单可触发的窗口级动作（白名单在主进程校验） */
 export type MenuAction =

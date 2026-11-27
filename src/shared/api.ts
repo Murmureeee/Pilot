@@ -5,6 +5,7 @@ import type {
   AgentSmokeResult,
   AppInfo,
   ComposerDraft,
+  DiagnosticEvent,
   FileDiff,
   GitBranchOptions,
   GitBranchRequest,
@@ -94,6 +95,8 @@ export interface PiApi {
   menuAction(action: MenuAction): Promise<void>;
   /** 打开数据目录（设置/会话），主进程白名单校验 */
   openPath(target: OpenPathTarget): Promise<string>;
+  diagnosticEvents(): Promise<DiagnosticEvent[]>;
+  exportDiagnostics(locale: Locale): Promise<boolean>;
   /** 同步界面语言供主进程的原生提示使用。 */
   setLocale(locale: Locale): Promise<void>;
   setConversationVisible(visible: boolean): Promise<void>;

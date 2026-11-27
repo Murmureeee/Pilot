@@ -103,8 +103,20 @@ export function saveSettings(dir: string, settings: Settings): void {
   writeJsonAtomic(path, pruneMcpOAuth(settings));
 }
 
-/** 渲染层提交 → 存储形态：新 key 加密，未变更的 key 保留原密文 */
-export function mergeSettingsInput(current: Settings, input: SettingsInput): Settings {
+export async function prepareSettingsInput(
+  input: SettingsInput,
+): Promise<(current: Settings) => Settings> {
+  const providers = await Promise.all(
+    input.providers.map(async ({ apiKey, ...provider }) => ({
+      ...provider,
+      apiKey: apiKey ? await encryptSecret(apiKey) : undefined,
+    })),
+  );
+  // Read current settings at commit time so unrelated writes survive the encryption.
+  return (current) => mergeSettingsInput(current, { ...input, providers });
+}
+
+function mergeSettingsInput(current: Settings, input: SettingsInput): Settings {
   const workingDirectory =
     input.workingDirectory === undefined
       ? current.workingDirectory
@@ -124,7 +136,7 @@ export function mergeSettingsInput(current: Settings, input: SettingsInput): Set
       baseUrl: p.baseUrl,
       modelId,
       models,
-      apiKey: p.apiKey ? encryptSecret(p.apiKey) : sameConnection ? prev?.apiKey : undefined,
+      apiKey: p.apiKey ?? (sameConnection ? prev?.apiKey : undefined),
     };
   });
   const thinkingLevels = enabledThinkingLevels(input.thinkingLevels ?? current.thinkingLevels);

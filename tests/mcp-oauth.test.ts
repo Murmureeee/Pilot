@@ -13,6 +13,8 @@ import type { McpServerConfig, Settings } from "../src/main/settings/types";
 vi.mock("electron", () => ({
   safeStorage: {
     isEncryptionAvailable: () => true,
+    isAsyncEncryptionAvailable: async () => true,
+    encryptStringAsync: async (plain: string) => Buffer.from(plain, "utf8"),
     getSelectedStorageBackend: () => "gnome_libsecret",
     encryptString: (plain: string) => Buffer.from(plain, "utf8"),
     decryptString: (cipher: Buffer) => cipher.toString("utf8"),

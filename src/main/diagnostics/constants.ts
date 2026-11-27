@@ -1,5 +1,26 @@
 // @env node
 export const LOG_FILE_NAME = "pilot.log";
+export const RUN_MARKER_NAME = ".running";
+export const SAFE_PROCESS_REASONS = [
+  "clean-exit",
+  "abnormal-exit",
+  "killed",
+  "crashed",
+  "oom",
+  "launch-failed",
+  "integrity-failure",
+  "memory-eviction",
+  "unresponsive",
+] as const;
+export const SAFE_CHILD_PROCESS_TYPES = [
+  "Utility",
+  "Zygote",
+  "Sandbox helper",
+  "GPU",
+  "Pepper Plugin",
+  "Pepper Plugin Broker",
+  "Unknown",
+] as const;
 export const SAFE_ERROR_NAMES = [
   "Error",
   "TypeError",

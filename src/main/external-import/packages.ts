@@ -363,16 +363,11 @@ export async function installPluginPackage(
     const reviewed = prepare(root, origin, revision, readSettings(), locations, replacing);
     if (token !== reviewed.preview.token || reviewed.preview.current)
       throw new Error(PACKAGE_CHANGED);
-    const commit = (): void => {
-      const current = readSettings();
-      const { manifest, servers, preview, id, contentId } = reviewed;
-      const previous = current.importedPlugins?.find((entry) => entry.id === id);
-      if (previous?.managed?.contentId !== reviewed.previous?.managed?.contentId)
-        throw new Error(PACKAGE_CHANGED);
-      if (!manifest.skillPaths.length && !manifest.templates.length && !servers.length)
-        throw new Error(PACKAGE_EMPTY);
-      const target = assets(locations, contentId);
-      const connections: McpServerConfig[] = servers.map(({ name, connection }) => ({
+    const { manifest, servers, preview, id, contentId } = reviewed;
+    if (!manifest.skillPaths.length && !manifest.templates.length && !servers.length)
+      throw new Error(PACKAGE_EMPTY);
+    const connections = await Promise.all(
+      servers.map(async ({ name, connection }): Promise<McpServerConfig> => ({
         id: randomUUID(),
         name: manifest.name + " / " + name,
         enabled: false,
@@ -381,9 +376,16 @@ export async function installPluginPackage(
           connection.transport.type === "http"
             ? { type: "http", url: "" }
             : { type: "stdio", command: "", args: [] },
-        encryptedImport: encryptSecret(JSON.stringify(connection)),
+        encryptedImport: await encryptSecret(JSON.stringify(connection)),
         importKey: fingerprint(contentId, name),
-      }));
+      })),
+    );
+    const commit = (): void => {
+      const current = readSettings();
+      const previous = current.importedPlugins?.find((entry) => entry.id === id);
+      if (prepare(root, origin, revision, current, locations, replacing).preview.token !== token)
+        throw new Error(PACKAGE_CHANGED);
+      const target = assets(locations, contentId);
       const skillIds = manifest.skillPaths.map((path) => {
         const name =
           basename(path)

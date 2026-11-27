@@ -1,11 +1,25 @@
 // @env node
-import { appendFileSync, existsSync, lstatSync, mkdirSync, renameSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
-import { LOG_FILE_COUNT, LOG_FILE_MAX_BYTES, LOG_LEVELS } from "../../shared/constants";
-import type { LogLevel } from "../../shared/contract";
-import { LOG_FILE_NAME, SAFE_ERROR_CODES, SAFE_ERROR_NAMES } from "./constants";
-import type { LogDetails, LogSeverity, LogSource } from "./types";
+import {
+  DIAGNOSTIC_EVENTS,
+  LOG_FILE_COUNT,
+  LOG_FILE_MAX_BYTES,
+  LOG_LEVELS,
+} from "../../shared/constants";
+import type { DiagnosticEvent, DiagnosticSource, LogLevel } from "../../shared/contract";
+import { LOG_FILE_NAME, RUN_MARKER_NAME, SAFE_ERROR_CODES, SAFE_ERROR_NAMES } from "./constants";
+import { readEventLines, readRecentEvents, safeDetails, safeVersion } from "./events";
+import type { DiagnosticReport, LogDetails } from "./types";
 
 export function errorDetails(error: unknown): LogDetails {
   if (!(error instanceof Error)) return {};
@@ -19,6 +33,8 @@ export function errorDetails(error: unknown): LogDetails {
 export class DiagnosticLog {
   private writeFailed = false;
   private readonly file: string;
+  private readonly marker: string;
+  private running = false;
 
   constructor(
     private readonly directory: string,
@@ -26,28 +42,78 @@ export class DiagnosticLog {
     private readonly maxBytes = LOG_FILE_MAX_BYTES,
   ) {
     this.file = join(directory, LOG_FILE_NAME);
+    this.marker = join(directory, RUN_MARKER_NAME);
   }
 
   setLevel(level: LogLevel): void {
+    const wasOff = this.level === "off";
     this.level = level;
+    if (this.running && wasOff !== (level === "off")) this.trackRun();
   }
 
-  write(level: LogSeverity, source: LogSource, event: string, details: LogDetails = {}): void {
+  startRun(version: string): void {
+    this.running = true;
+    if (existsSync(this.marker)) this.write("error", "main", "previous-run-interrupted");
+    this.trackRun();
+    this.write("info", "main", "startup", { version });
+  }
+
+  finishRun(): void {
+    this.running = false;
+    this.trackRun();
+    this.write("info", "main", "quit");
+  }
+
+  private trackRun(): void {
+    try {
+      if (this.running && this.level !== "off") {
+        mkdirSync(this.directory, { recursive: true, mode: 0o700 });
+        if (!existsSync(this.marker)) writeFileSync(this.marker, "", { flag: "wx", mode: 0o600 });
+      } else {
+        rmSync(this.marker, { force: true });
+      }
+    } catch {
+      console.warn("[diagnostics] Unable to update the local run marker");
+    }
+  }
+
+  async events(limit = Infinity): Promise<DiagnosticEvent[]> {
+    const files = await Promise.all(
+      Array.from({ length: LOG_FILE_COUNT }, (_, index) =>
+        readEventLines(index === 0 ? this.file : `${this.file}.${index}`, this.maxBytes),
+      ),
+    );
+    return readRecentEvents(files, limit);
+  }
+
+  async report(version: string): Promise<DiagnosticReport> {
+    return {
+      runtime: {
+        app: safeVersion(version),
+        electron: safeVersion(process.versions.electron),
+        node: safeVersion(process.versions.node),
+        platform: process.platform,
+        arch: process.arch,
+      },
+      events: await this.events(),
+    };
+  }
+
+  write<S extends DiagnosticSource>(
+    level: DiagnosticEvent["level"],
+    source: S,
+    event: (typeof DIAGNOSTIC_EVENTS)[S][number],
+    details: LogDetails = {},
+  ): void {
     if (LOG_LEVELS.indexOf(level) > LOG_LEVELS.indexOf(this.level)) return;
 
-    // Store only diagnostic metadata. Error messages, URLs, and tool data can contain secrets.
-    const { errorName, code, line, reason, version } = details;
     const entry =
       JSON.stringify({
         time: new Date().toISOString(),
         level,
         source,
         event,
-        errorName,
-        code,
-        line,
-        reason,
-        version,
+        ...safeDetails(details),
       }) + "\n";
     const bytes = Buffer.byteLength(entry);
     if (bytes > this.maxBytes) return;

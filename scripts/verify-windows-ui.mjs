@@ -21,6 +21,8 @@ import {
   verifyAuxiliaryModels,
   verifyBackgroundTerminal,
   verifyCommandsAndTemplates,
+  verifyCredentialMigration,
+  verifyDiagnostics,
   verifyDiscovery,
   verifyExternalEditor,
   verifyFirstRun,
@@ -157,6 +159,7 @@ const pluginProfile = join(scratch, "plugin-profile");
 const discoveryProfile = join(scratch, "discovery-profile");
 const projectConfigProfile = join(scratch, "project-config-profile");
 const oauthProfile = join(scratch, "mcp-oauth-profile");
+const diagnosticsProfile = join(scratch, "diagnostics-profile");
 const parallelProfile = join(scratch, "parallel-profile");
 const worktreeProfile = join(scratch, "worktree-profile");
 const worktreeProject = join(scratch, "Worktree project");
@@ -207,6 +210,7 @@ try {
   mkdirSync(discoveryProfile);
   mkdirSync(projectConfigProfile);
   mkdirSync(oauthProfile);
+  mkdirSync(diagnosticsProfile);
   mkdirSync(oauthProject);
   mkdirSync(configurableProject);
   mkdirSync(project);
@@ -428,6 +432,14 @@ try {
   await withApp(oauthProfile, async (page, _window, app) => {
     await runScene("Refresh an MCP grant after restarting, sign in again, and isolate project credentials", () =>
       verifyRestoredMcpOAuth(page, app, model, oauthFixture, oauthProfile, oauthServer, oauthProject),
+    );
+  });
+  await withApp(diagnosticsProfile, async (page, window, app) => {
+    await runScene("Read and export redacted diagnostic events across layouts", () =>
+      verifyDiagnostics(page, window, app, diagnosticsProfile, scratch),
+    );
+    await runScene("Read legacy credentials and preserve concurrent saves through key storage delays", () =>
+      verifyCredentialMigration(page, app, diagnosticsProfile, model),
     );
   });
 } finally {

@@ -282,7 +282,7 @@ describe("provider connectivity test (FR-5.1)", () => {
     ).toThrow(/API key/);
   });
 
-  it("reuses a saved key only for previews of the same provider endpoint", () => {
+  it("reuses a saved key only for previews of the same provider endpoint", async () => {
     const saved: ProviderConfig = {
       id: "compatible",
       kind: "openai-compatible",
@@ -296,13 +296,15 @@ describe("provider connectivity test (FR-5.1)", () => {
     const read = (key: string | undefined): string | undefined =>
       key === "encrypted" ? "test-key" : undefined;
 
-    expect(resolveProviderRef(saved.id, find, read).key).toBe("test-key");
-    expect(resolveProviderRef({ ...draft, modelId: "model-b" }, find, read).key).toBe("test-key");
-    const newEndpoint = { ...draft, baseUrl: "https://other.test/v1" };
-    expect(resolveProviderRef(newEndpoint, find, read).key).toBeUndefined();
-    expect(resolveProviderRef({ ...newEndpoint, apiKey: "draft-key" }, find, read).key).toBe(
-      "draft-key",
+    expect((await resolveProviderRef(saved.id, find, read)).key).toBe("test-key");
+    expect((await resolveProviderRef({ ...draft, modelId: "model-b" }, find, read)).key).toBe(
+      "test-key",
     );
+    const newEndpoint = { ...draft, baseUrl: "https://other.test/v1" };
+    expect((await resolveProviderRef(newEndpoint, find, read)).key).toBeUndefined();
+    expect(
+      (await resolveProviderRef({ ...newEndpoint, apiKey: "draft-key" }, find, read)).key,
+    ).toBe("draft-key");
   });
 
   it("faux provider passes with latency reported", async () => {

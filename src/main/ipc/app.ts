@@ -1,15 +1,17 @@
 // @env node
 import { mkdirSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 
-import { BrowserWindow, app, nativeTheme, shell, type WebContents } from "electron";
+import { BrowserWindow, app, dialog, nativeTheme, shell, type WebContents } from "electron";
 
+import { DIAGNOSTIC_EVENT_LIMIT } from "../../shared/constants";
 import {
   IPC,
   type MenuAction,
   type OpenPathTarget,
   type PingResponse,
 } from "../../shared/contract";
-import { TITLE_BAR_OVERLAY_COLORS } from "../constants";
+import { NATIVE_DIALOG_TITLES, TITLE_BAR_OVERLAY_COLORS } from "../constants";
 import { handle, setConversationVisible, setRendererLocale } from "./transport";
 import type { IpcContext } from "./types";
 
@@ -49,6 +51,7 @@ export function registerAppRoutes(
     | "sessionsDir"
     | "skillsDir"
     | "logsDir"
+    | "log"
     | "isDev"
     | "updater"
     | "exit"
@@ -75,6 +78,22 @@ export function registerAppRoutes(
     };
     if (target === "logs") mkdirSync(ctx.logsDir, { recursive: true, mode: 0o700 });
     return shell.openPath(dirs[target]);
+  });
+  handle(IPC.appDiagnosticEvents, () => ctx.log.events(DIAGNOSTIC_EVENT_LIMIT));
+  handle(IPC.appExportDiagnostics, async (event, locale) => {
+    const options = {
+      title: NATIVE_DIALOG_TITLES[locale].exportDiagnostics,
+      defaultPath: "pilot-diagnostics.json",
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    };
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const result = window
+      ? await dialog.showSaveDialog(window, options)
+      : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) return false;
+    const report = await ctx.log.report(app.getVersion());
+    await writeFile(result.filePath, JSON.stringify(report, null, 2) + "\n", { mode: 0o600 });
+    return true;
   });
   handle(IPC.appSetLocale, (event, locale) => setRendererLocale(event.sender, locale));
   handle(IPC.appSetConversationVisible, (event, visible) => {

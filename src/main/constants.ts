@@ -88,6 +88,7 @@ export const NATIVE_DIALOG_TITLES = {
     openProject: "打开项目",
     bindProject: "关联项目",
     exportMarkdown: "导出 Markdown",
+    exportDiagnostics: "导出脱敏诊断",
   },
   en: {
     skill: "Choose a skill folder containing SKILL.md",
@@ -98,6 +99,7 @@ export const NATIVE_DIALOG_TITLES = {
     openProject: "Open project",
     bindProject: "Link project",
     exportMarkdown: "Export Markdown",
+    exportDiagnostics: "Export redacted diagnostics",
   },
 } as const satisfies Record<
   Locale,
@@ -110,6 +112,7 @@ export const NATIVE_DIALOG_TITLES = {
     openProject: string;
     bindProject: string;
     exportMarkdown: string;
+    exportDiagnostics: string;
   }
 >;
 

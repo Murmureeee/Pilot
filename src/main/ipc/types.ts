@@ -14,6 +14,7 @@ import type {
 import type { AgentHost } from "../agent-host/host";
 import type { McpManager } from "../agent-host/mcp";
 import type { DesktopExit } from "../desktop-exit";
+import type { DiagnosticLog } from "../diagnostics";
 import type { Settings } from "../settings/types";
 import type { TerminalManager } from "../terminal";
 import type { DesktopUpdater } from "../updater";
@@ -43,6 +44,7 @@ export interface IpcContext {
   sessionsDir: string;
   skillsDir: string;
   logsDir: string;
+  log: DiagnosticLog;
   request: typeof globalThis.fetch;
   getSettings(): Settings;
   saveSettings(settings: Settings): void;

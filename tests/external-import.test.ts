@@ -24,7 +24,7 @@ import {
   rememberMarketplace,
 } from "../src/main/discovery/marketplace";
 import {
-  importExternal,
+  prepareExternalImport,
   importedPlugins,
   previewExternalImport,
   toggleImportedPlugin,
@@ -42,7 +42,7 @@ import type {
 } from "../src/main/external-import/types";
 import {
   loadSettings,
-  mergeSettingsInput,
+  prepareSettingsInput,
   saveSettings,
   toPublicSettings,
 } from "../src/main/settings";
@@ -52,12 +52,15 @@ import type {
   ExternalImportItem,
   ExternalImportKind,
   ImportSource,
+  ImportReport,
   PluginPackageSource,
 } from "../src/shared/imports";
 
 vi.mock("electron", () => ({
   safeStorage: {
     isEncryptionAvailable: () => true,
+    isAsyncEncryptionAvailable: async () => true,
+    encryptStringAsync: async (value: string) => Buffer.from(value, "utf8"),
     encryptString: (value: string) => Buffer.from(value, "utf8"),
     decryptString: (value: Buffer) => value.toString("utf8"),
   },
@@ -83,6 +86,15 @@ function write(path: string, text: string | object): void {
 }
 
 const empty: Settings = { providers: [], activeProviderId: "" };
+
+async function importExternal(
+  kind: ExternalImportKind,
+  selectedIds: string[],
+  settings: Settings,
+  paths: ImportLocations,
+): Promise<{ settings: Settings; report: ImportReport }> {
+  return (await prepareExternalImport(kind, selectedIds, settings, paths))(settings);
+}
 
 function options(
   kind: ExternalImportKind,
@@ -182,7 +194,7 @@ describe("external import selection", () => {
     expect(settings.importedPlugins).toHaveLength(4);
   });
 
-  it("previews both tools without writes and imports only the checked MCP server", () => {
+  it("previews both tools without writes and imports only the checked MCP server", async () => {
     using fixture = mkdtempDisposableSync(join(tmpdir(), "pi-import-selection-"));
     const paths = locations(fixture.path);
     write(
@@ -208,7 +220,7 @@ describe("external import selection", () => {
     expect(existsSync(paths.settingsDir)).toBe(false);
 
     const selected = preview.groups[0].items[0].id;
-    const { settings, report } = importExternal("mcp", [selected], empty, paths);
+    const { settings, report } = await importExternal("mcp", [selected], empty, paths);
     expect(report).toMatchObject({ skills: 0, plugins: 0, servers: 1, existing: 0, issues: [] });
     expect(settings.mcpServers?.map(({ name, enabled }) => [name, enabled])).toEqual([
       ["chosen", false],
@@ -220,7 +232,7 @@ describe("external import selection", () => {
     });
   });
 
-  it("rejects an empty or stale selection before copying any of its items", () => {
+  it("rejects an empty or stale selection before copying any of its items", async () => {
     using fixture = mkdtempDisposableSync(join(tmpdir(), "pi-import-selection-"));
     const paths = locations(fixture.path);
     const file = join(paths.codexHome, "config.toml");
@@ -230,8 +242,10 @@ describe("external import selection", () => {
       file,
       '[mcp_servers.current]\ncommand = "node"\n[mcp_servers.stale]\ncommand = "updated"',
     );
-    expect(() => importExternal("mcp", [], empty, paths)).toThrow(/至少选择一个/);
-    expect(() => importExternal("mcp", [current.id, stale.id], empty, paths)).toThrow(/重新扫描/);
+    await expect(importExternal("mcp", [], empty, paths)).rejects.toThrow(/至少选择一个/);
+    await expect(importExternal("mcp", [current.id, stale.id], empty, paths)).rejects.toThrow(
+      /重新扫描/,
+    );
     expect(existsSync(paths.settingsDir)).toBe(false);
     expect(empty.mcpServers).toBeUndefined();
   });
@@ -279,17 +293,22 @@ describe("external import selection", () => {
     const personal = options("skill", "codex", empty, paths)
       .filter(({ plugin: owner }) => !owner)
       .map(({ id }) => id);
-    const first = importExternal("skill", personal, empty, paths);
+    const first = await importExternal("skill", personal, empty, paths);
     expect(first.report).toMatchObject({ skills: 3, plugins: 0, servers: 0 });
     const serviceIds = options("mcp", "codex", first.settings, paths).map(({ id }) => id);
-    const second = importExternal("mcp", serviceIds, first.settings, paths);
+    const second = await importExternal("mcp", serviceIds, first.settings, paths);
     expect(second.report).toMatchObject({ skills: 0, plugins: 0, servers: 3 });
     const [bundle] = options("plugin", "codex", second.settings, paths);
     expect(bundle).toMatchObject({
       imported: false,
       contents: { skills: ["packaged"], servers: ["remote"] },
     });
-    const { report, settings } = importExternal("plugin", [bundle.id], second.settings, paths);
+    const { report, settings } = await importExternal(
+      "plugin",
+      [bundle.id],
+      second.settings,
+      paths,
+    );
     expect(report).toMatchObject({ skills: 1, plugins: 1, servers: 0, existing: 1, issues: [] });
     expect(scanSkills(paths.skillsDir, [])).toHaveLength(4);
     expect(settings.skillsEnabled).toBeUndefined();
@@ -327,13 +346,15 @@ describe("external import selection", () => {
       importedPlugins(toggleImportedPlugin(enabled, imported.id, false), paths.skillsDir)[0]
         .enabled,
     ).toBe("none");
-    const saved = mergeSettingsInput(enabled, {
-      providers: [],
-      activeProviderId: "",
-      persona: "test",
-    });
+    const saved = (
+      await prepareSettingsInput({
+        providers: [],
+        activeProviderId: "",
+        persona: "test",
+      })
+    )(enabled);
     expect(importedPlugins(saved, paths.skillsDir)[0].enabled).toBe("all");
-    expect(importExternal("plugin", [bundle.id], saved, paths).report).toMatchObject({
+    expect((await importExternal("plugin", [bundle.id], saved, paths)).report).toMatchObject({
       skills: 0,
       plugins: 0,
       servers: 0,
@@ -341,7 +362,7 @@ describe("external import selection", () => {
     });
   });
 
-  it("applies Claude Code project precedence and resolves a bundled stdio server from the copied plugin", () => {
+  it("applies Claude Code project precedence and resolves a bundled stdio server from the copied plugin", async () => {
     using fixture = mkdtempDisposableSync(join(realpathSync(tmpdir()), "pi-claude-import-"));
     const paths = locations(fixture.path);
     const project = paths.workspace!;
@@ -387,16 +408,21 @@ describe("external import selection", () => {
     const skills = options("skill", "claude-code", empty, paths)
       .filter(({ plugin: owner }) => !owner)
       .map(({ id }) => id);
-    const first = importExternal("skill", skills, empty, paths);
+    const first = await importExternal("skill", skills, empty, paths);
     expect(first.report.skills).toBe(2);
     const services = previewExternalImport("mcp", first.settings, paths).groups.find(
       ({ source }) => source === "claude-code",
     )!;
     expect(services.issues).toContainEqual({ name: "old_sse", reason: "transport" });
     const selected = services.items.find(({ name }) => name === "selected")!;
-    const second = importExternal("mcp", [selected.id], first.settings, paths);
+    const second = await importExternal("mcp", [selected.id], first.settings, paths);
     const [bundle] = options("plugin", "claude-code", second.settings, paths);
-    const { report, settings } = importExternal("plugin", [bundle.id], second.settings, paths);
+    const { report, settings } = await importExternal(
+      "plugin",
+      [bundle.id],
+      second.settings,
+      paths,
+    );
     expect(report).toMatchObject({ skills: 1, plugins: 1, servers: 1, existing: 0 });
     expect(report.installedPlugins[0]).toMatchObject({
       name: "sample",
