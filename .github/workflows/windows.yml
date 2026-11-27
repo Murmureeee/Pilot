@@ -305,14 +305,16 @@ jobs:
 
       - name: Start both Linux packages in isolated profiles
         run: |
-          if ! command -v xvfb-run >/dev/null || ! command -v xauth >/dev/null || ! command -v xdotool >/dev/null; then
+          if ! command -v xvfb-run >/dev/null || ! command -v xauth >/dev/null ||
+            ! command -v dbus-run-session >/dev/null || [ ! -x /usr/libexec/at-spi-bus-launcher ] ||
+            ! /usr/bin/python3 -c 'import pyatspi'; then
             sudo apt-get update
-            sudo apt-get install -y xvfb xauth xdotool
+            sudo apt-get install -y xvfb xauth dbus-x11 at-spi2-core python3-pyatspi
           fi
           bash scripts/verify-linux-package.sh
 
       - name: Verify Linux package updates
-        run: xvfb-run -a node scripts/verify-linux-update.mjs --install-deb
+        run: dbus-run-session -- xvfb-run -a node scripts/verify-linux-update.mjs --install-deb
 
       - name: Stage verified Linux packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

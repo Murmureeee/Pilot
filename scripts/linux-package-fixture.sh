@@ -5,18 +5,8 @@ case "$1" in
   unpack)
     exec dpkg-deb -x "$2" "$3"
     ;;
-  picker-window)
-    exec xdotool search --onlyvisible --name '^选择工具工作目录$'
-    ;;
   select-directory)
-    xdotool windowfocus --sync "$2" key --clearmodifiers ctrl+l
-    sleep 0.2
-    xdotool type --clearmodifiers "$3"
-    xdotool key --clearmodifiers Return
-    sleep 0.5
-    if xdotool search --onlyvisible --name '^选择工具工作目录$' >/dev/null; then
-      exec xdotool key --clearmodifiers alt+o
-    fi
+    exec /usr/bin/python3 scripts/verify-gtk-directory.py 'Choose the tools’ working directory'
     ;;
   check-absent|install|purge)
     test "${RUNNER_ENVIRONMENT:-}" = github-hosted

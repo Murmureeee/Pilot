@@ -517,7 +517,7 @@ export async function verifyAgentMemory(page, model, project) {
   await button(dialog, "Save memory").press("Enter");
   await dialog.getByText("Memory saved", { exact: true }).waitFor();
   assert.ok((await page.evaluate(() => window.pi.settingsGet())).persona.endsWith(globalMemory + "\n"));
-  await button(dialog, "Done").press("Enter");
+  await button(dialog, "Done").click();
   await dialog.waitFor({ state: "hidden" });
   await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "Review memory…");
   assert.equal(readFileSync(join(project, "AGENTS.md"), "utf8"), projectMemory + "\n");

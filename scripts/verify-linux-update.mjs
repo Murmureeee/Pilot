@@ -1,6 +1,6 @@
 // @env node
 import assert from "node:assert/strict";
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { createReadStream } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, unlink, writeFile } from "node:fs/promises";
@@ -194,7 +194,6 @@ async function verifyDeb() {
   try {
     await expectState(page, "current");
     await verifyProjectShell(page, project);
-    if (usePackageManager) await verifyLinuxPicker(page);
     await page.locator("[data-composer-editor]").fill(draft);
     await waitFor("the saved Debian draft", async () =>
       (await page.evaluate(() => window.pi.getSnapshot())).composerDraft.includes(draft),
@@ -227,25 +226,34 @@ async function verifyDeb() {
     installDeb(join(release, debName(version)), version);
     await verifyInstalledDeb(profile, cache, draft);
     console.log("Debian package manager installed, upgraded, purged and reinstalled Pilot with its draft intact");
+    const { browser, page } = await launch(installedDeb, profile, cache, project);
+    try {
+      await verifyLinuxPicker(page);
+      await closeApp(page);
+      await waitFor("the directory picker test app to exit", () => !browser.isConnected());
+    } finally {
+      await browser.close();
+    }
   }
 }
 
 async function verifyLinuxPicker(page) {
   const directory = join(scratch, "selected");
   await mkdir(directory);
-  await page.evaluate(() => {
-    void window.pi.pickWorkingDirectory("zh").then((path) => {
+  await page.evaluate(async (path) => {
+    const { providers, activeProviderId } = await window.pi.settingsGet();
+    await window.pi.settingsSave({
+      providers: providers.map(({ id, name, kind, baseUrl, modelId }) => ({
+        id, name, kind, baseUrl, modelId,
+      })),
+      activeProviderId,
+      workingDirectory: path,
+    });
+    void window.pi.pickWorkingDirectory("en").then((path) => {
       globalThis.pilotPickedDirectory = { path };
     });
-  });
-  const windowId = await waitFor("the GTK directory picker", () => {
-    const search = spawnSync("bash", [fixtureScript, "picker-window"], {
-      encoding: "utf8",
-    });
-    assert.ifError(search.error);
-    return search.status === 0 && search.stdout.trim().split("\n").at(-1);
-  });
-  execFileSync("bash", [fixtureScript, "select-directory", windowId, directory]);
+  }, directory);
+  execFileSync("bash", [fixtureScript, "select-directory"], { stdio: "inherit", timeout: 20_000 });
   const picked = await waitFor("the selected native directory", () =>
     page.evaluate(() => globalThis.pilotPickedDirectory),
   );
