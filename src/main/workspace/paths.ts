@@ -1,5 +1,5 @@
 // @env node
-import { lstatSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -18,6 +18,27 @@ export function normalizeWorkingDirectory(directory: string): string {
 export function isWithinDirectory(directory: string, target: string): boolean {
   const path = relative(directory, target);
   return path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path);
+}
+
+export function workspaceRoot(directory = homedir()): string {
+  let canonical: string;
+  try {
+    canonical = realpathSync.native(directory);
+  } catch {
+    canonical = resolve(directory);
+  }
+  let candidate = canonical;
+  while (true) {
+    // A linked worktree uses a .git file and has its own working files and index.
+    if (existsSync(join(candidate, ".git"))) return candidate;
+    const parent = dirname(candidate);
+    if (parent === candidate) return canonical;
+    candidate = parent;
+  }
+}
+
+export function workspacesOverlap(first: string, second: string): boolean {
+  return isWithinDirectory(first, second) || isWithinDirectory(second, first);
 }
 
 function resolveExistingParent(path: string): string {

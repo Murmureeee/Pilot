@@ -14,6 +14,7 @@ import type {
   PromptInput,
   PromptTemplate,
   PublicSettings,
+  RunBlocker,
   RunRef,
   SessionMeta,
   SessionSettings,
@@ -65,7 +66,7 @@ interface AgentStore extends AgentUiState {
     input: PromptInput,
     workingDirectory: string | null,
     composerId: string,
-  ): Promise<boolean | ActiveRun>;
+  ): Promise<boolean | RunBlocker>;
   resumeRun(run: RunRef, compact?: boolean): Promise<void>;
   compactContext(composerId: string): Promise<void>;
   saveDraft(composerId: string, draft: ComposerDraft): Promise<void>;
@@ -75,7 +76,7 @@ interface AgentStore extends AgentUiState {
   newSession(): Promise<void>;
   selectProject(selection?: ProjectSelection): Promise<void>;
   /** record=false 用于前进/后退（不重复入栈） */
-  loadSession(id: string, record?: boolean): Promise<void>;
+  loadSession(id: string, record?: boolean, focus?: boolean): Promise<void>;
   /** 手动重命名会话（titleCustom 保护，自动标题不再覆盖） */
   renameSession(id: string, title: string): Promise<void>;
   /** 置顶/取消置顶（在当前项目分组内） */
@@ -159,6 +160,22 @@ export function selectPlanReview(
   return planMode?.proposal ? planMode : undefined;
 }
 
+export function selectCurrentRun(
+  state: Pick<AgentUiState, "sessionId" | "activeRuns">,
+): ActiveRun | null {
+  return state.activeRuns.find(({ sessionId }) => sessionId === state.sessionId) ?? null;
+}
+
+export function selectWorkspaceRun(
+  state: Pick<AgentUiState, "sessionId" | "activeRuns" | "workspaceRunIds">,
+): ActiveRun | null {
+  return (
+    selectCurrentRun(state) ??
+    state.activeRuns.find(({ runId }) => state.workspaceRunIds.includes(runId)) ??
+    null
+  );
+}
+
 export function selectProjectDirectory(
   state: Pick<AgentStore, "sessionId" | "draftWorkingDirectory" | "sessions">,
 ): string | null {
@@ -184,12 +201,13 @@ export function selectWorkingDirectory(
     | "draftWorkingDirectory"
     | "sessions"
     | "settings"
-    | "activeRun"
+    | "activeRuns"
     | "interruptedRun"
     | "failedRun"
   >,
 ): string | null {
-  if (state.activeRun?.sessionId === state.sessionId) return state.activeRun.workingDirectory;
+  const run = selectCurrentRun(state);
+  if (run) return run.workingDirectory;
   if (state.interruptedRun?.sessionId === state.sessionId)
     return state.interruptedRun.workingDirectory;
   if (state.failedRun?.sessionId === state.sessionId) return state.failedRun.workingDirectory;
@@ -222,7 +240,8 @@ function sessionSnapshot(
     recentProjects: snapshot.recentProjects,
     messages: snapshot.messages,
     status: snapshot.status,
-    activeRun: snapshot.activeRun,
+    activeRuns: snapshot.activeRuns,
+    workspaceRunIds: snapshot.workspaceRunIds,
     interruptedRun: snapshot.interruptedRun,
     failedRun: snapshot.failedRun,
     settings: snapshot.settings,
@@ -388,8 +407,10 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     }
   },
 
-  loadSession: async (id, record = true) => {
+  loadSession: async (id, record = true, focus = false) => {
     await window.pi.sessionLoad(id, record);
+    if (focus && get().sessionId === id)
+      set((state) => ({ revealRequest: state.revealRequest + 1 }));
   },
 
   navBack: async () => {

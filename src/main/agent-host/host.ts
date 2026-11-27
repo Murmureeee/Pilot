@@ -3,11 +3,10 @@
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 
-import { Agent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
+import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
 
 import type {
-  ActiveRun,
   ApprovalMode,
   ComposerDraft,
   FileDiff,
@@ -35,6 +34,7 @@ import type {
   PlanDecision,
   PromptInput,
   PromptMention,
+  RunBlocker,
   RunRef,
   SessionMeta,
   SessionNavigation,
@@ -50,7 +50,12 @@ import type {
 import type { ProjectTrustDecision } from "@shared/project-config";
 
 import { compactFocus } from "../../shared/compact-command";
-import { APP_NAME, DEFAULT_THINKING_LEVEL, PLAN_PROPOSAL_MAX_LENGTH } from "../../shared/constants";
+import {
+  APP_NAME,
+  DEFAULT_THINKING_LEVEL,
+  MAX_CONCURRENT_RUNS,
+  PLAN_PROPOSAL_MAX_LENGTH,
+} from "../../shared/constants";
 import { imagesFromMessageParts } from "../../shared/image-attachments";
 import { draftFromMessageParts, promptFromDraft, visibleMessageText } from "../../shared/mentions";
 import { applyMessageEvent } from "../../shared/message-events";
@@ -85,7 +90,12 @@ import {
   replaceGitWorktreeFile,
   sameGitFile,
 } from "../workspace/git-review-files";
-import { createToolPathResolver, normalizeWorkingDirectory } from "../workspace/paths";
+import {
+  createToolPathResolver,
+  normalizeWorkingDirectory,
+  workspaceRoot,
+  workspacesOverlap,
+} from "../workspace/paths";
 import { getCommandShell } from "../workspace/shell";
 import { buildTextDiff, textLines } from "../workspace/text-diff";
 import type {
@@ -129,7 +139,9 @@ import type {
   MessageRollbackOperation,
   NewChatDraft,
   ReferencedUserMessage,
+  RunningSession,
   SavedGitChanges,
+  SessionAgent,
   TextModelRequest,
 } from "./types";
 
@@ -147,14 +159,8 @@ function createSessionView(): AgentSessionView {
 }
 
 export class AgentHost {
-  private agent: Agent | null = null;
-  private agentSessionId: string | null = null;
-  private agentProvider: ProviderConfig | null = null;
-  private agentInstructions: AgentInstructions | null = null;
-  private agentToolEnvironment: ToolEnvironment | null = null;
-  private localTools: AgentTool[] = [];
-  private view = createSessionView();
-  private run?: AgentRun;
+  private cachedAgent?: SessionAgent;
+  private readonly runs = new Map<string, RunningSession>();
   private gitRollback?: GitRollbackOperation;
   private applyingGitRollback = false;
   private messageRollback?: MessageRollbackOperation;
@@ -163,6 +169,7 @@ export class AgentHost {
   private gitBranchPreviewRequest = 0;
   private applyingGitSelection = false;
   private readonly sessionRules = new Map<string, ToolRule[]>();
+  private readonly deletingSessions = new Set<string>();
   private sessionId: string | null = null;
   private newChatDraft: NewChatDraft;
 
@@ -179,12 +186,48 @@ export class AgentHost {
   }
 
   private selectedRun(ref: RunRef): AgentRun | undefined {
-    const run = this.run;
-    return run?.state.runId === ref.runId &&
-      run.state.sessionId === ref.sessionId &&
-      this.sessionId === ref.sessionId
-      ? run
-      : undefined;
+    const run = this.currentRun?.run;
+    return this.sessionId === ref.sessionId && run?.state.runId === ref.runId ? run : undefined;
+  }
+
+  private get currentRun(): RunningSession | undefined {
+    return this.sessionId ? this.runs.get(this.sessionId) : undefined;
+  }
+
+  private sessionAgent(id: string): SessionAgent | undefined {
+    return (
+      this.runs.get(id)?.agent ??
+      (this.cachedAgent?.sessionId === id ? this.cachedAgent : undefined)
+    );
+  }
+
+  private workspaceRuns(directory: string | undefined): AgentRun[] {
+    if (!this.runs.size) return [];
+    const root = workspaceRoot(directory);
+    return [...this.runs.values()].flatMap(({ workspace, run }) =>
+      workspacesOverlap(workspace, root) ? [run] : [],
+    );
+  }
+
+  private runBlocker(directory: string | undefined): RunBlocker | undefined {
+    if (this.deletingSessions.has(this.composerId))
+      throw new Error("此会话正在删除。请切换到其他会话。");
+    const run = this.currentRun?.run ?? this.workspaceRuns(directory)[0];
+    if (run) {
+      const { runId, sessionId } = run.state;
+      return { kind: "workspace", run: { runId, sessionId } };
+    }
+    if (this.runs.size >= MAX_CONCURRENT_RUNS) return { kind: "capacity" };
+  }
+
+  requireRunSlot(directory = this.getWorkingDirectory()): void {
+    const blocker = this.runBlocker(directory);
+    if (!blocker) return;
+    throw new Error(
+      blocker.kind === "workspace"
+        ? "请等待当前工作区的任务结束后重试。"
+        : "并行任务已达上限。请等待一项任务结束后重试。",
+    );
   }
 
   respondPermission(ref: RunRef, requestId: string, decision: PermissionDecision): void {
@@ -229,15 +272,15 @@ export class AgentHost {
   }
 
   getWorkingDirectory(): string | undefined {
-    const active = this.run?.state;
-    if (active && active.sessionId === this.sessionId) return active.workingDirectory ?? undefined;
+    const active = this.currentRun?.run.state;
+    if (active) return active.workingDirectory ?? undefined;
     const interrupted = this.sessionId && this.deps.store.checkpoint(this.sessionId);
     if (interrupted) return interrupted.workingDirectory ?? undefined;
     return this.getProjectDirectory() ?? this.deps.getSettings().workingDirectory;
   }
 
   hasActiveRun(): boolean {
-    return this.run !== undefined;
+    return this.runs.size > 0;
   }
 
   private startSession(workingDirectory: string | undefined): void {
@@ -267,11 +310,11 @@ export class AgentHost {
 
   getInstructionSources(composerId: string): SessionInstructionSources {
     this.checkComposerId(composerId);
-    const running = this.run;
-    if (running && running.state.sessionId === this.sessionId && this.agentInstructions) {
-      const scopedProject = running.instructionSources();
+    const running = this.currentRun;
+    if (running) {
+      const scopedProject = running.run.instructionSources();
       return {
-        ...this.agentInstructions.sources,
+        ...running.agent.instructions.sources,
         ...(scopedProject.length && { scopedProject }),
         running: true,
       };
@@ -357,7 +400,10 @@ export class AgentHost {
   }
 
   /** 确保当前会话有 Agent 实例；跨会话或 provider/模型/systemPrompt 变更时重建（转录从落盘恢复） */
-  private ensureAgent(workingDirectory: string | undefined, skills?: readonly SkillMeta[]): Agent {
+  private ensureAgent(
+    workingDirectory: string | undefined,
+    skills?: readonly SkillMeta[],
+  ): SessionAgent {
     const settings = this.deps.getSettings();
     const selection = resolveSessionModel(settings, this.currentSettings.model);
     const provider = selection && settings.providers.find((p) => p.id === selection.providerId);
@@ -373,36 +419,34 @@ export class AgentHost {
       commandShell: getCommandShell(settings.commandShell),
     };
 
-    // FR-1.6：provider/模型变更；FR-1.7/5.9：人设/技能变更 → 重建，下一轮请求生效（上下文不丢）
+    const cached = this.cachedAgent;
     if (
-      this.agent &&
-      this.agentSessionId === sessionId &&
+      cached?.sessionId === sessionId &&
       !this.deps.store.checkpoint(sessionId) &&
-      this.agentProvider?.id === active.id &&
-      this.agentProvider.kind === active.kind &&
-      this.agentProvider.modelId === active.modelId &&
-      this.agentProvider.baseUrl === active.baseUrl &&
-      this.agentProvider.apiKey === active.apiKey &&
-      JSON.stringify(this.agentProvider.models?.find(({ id }) => id === active.modelId)) ===
+      cached.provider.id === active.id &&
+      cached.provider.kind === active.kind &&
+      cached.provider.modelId === active.modelId &&
+      cached.provider.baseUrl === active.baseUrl &&
+      cached.provider.apiKey === active.apiKey &&
+      JSON.stringify(cached.provider.models?.find(({ id }) => id === active.modelId)) ===
         JSON.stringify(entry) &&
-      this.agentInstructions?.appPrompt === instructions.appPrompt &&
-      this.agentInstructions.contextPrompt === instructions.contextPrompt &&
-      this.agentToolEnvironment?.workingDirectory === toolEnvironment.workingDirectory &&
-      this.agentToolEnvironment?.commandShell === toolEnvironment.commandShell
+      cached.instructions.appPrompt === instructions.appPrompt &&
+      cached.instructions.contextPrompt === instructions.contextPrompt &&
+      cached.environment.workingDirectory === toolEnvironment.workingDirectory &&
+      cached.environment.commandShell === toolEnvironment.commandShell
     ) {
-      this.agentInstructions = instructions;
-      this.agent.state.thinkingLevel = settings.thinkingLevel ?? DEFAULT_THINKING_LEVEL;
-      return this.agent;
+      cached.instructions = instructions;
+      cached.agent.state.thinkingLevel = settings.thinkingLevel ?? DEFAULT_THINKING_LEVEL;
+      return cached;
     }
 
-    if (this.agentSessionId !== sessionId) this.resetAgent();
     const apiKey = decryptSecret(active.apiKey);
     const { model, streamFn } = resolveModel(active, apiKey, this.deps.request);
     const { contextWindow } = model;
-    this.view.contextWindow =
-      Number.isFinite(contextWindow) && contextWindow > 0 ? contextWindow : null;
+    const view = createSessionView();
+    view.contextWindow = Number.isFinite(contextWindow) && contextWindow > 0 ? contextWindow : null;
 
-    this.localTools = createTools(toolEnvironment);
+    const tools = createTools(toolEnvironment);
     const messages = this.deps.store.load(sessionId);
     // Request-time instructions are loaded from their sources instead of copied into history.
     const first = messages[0];
@@ -411,7 +455,7 @@ export class AgentHost {
       initialState: {
         systemPrompt: BASE_SYSTEM_PROMPT,
         model,
-        tools: this.localTools,
+        tools,
         messages,
         thinkingLevel: settings.thinkingLevel ?? DEFAULT_THINKING_LEVEL,
       },
@@ -420,20 +464,23 @@ export class AgentHost {
     });
 
     if (!this.sessionId) this.startSession(workingDirectory);
-    this.agent = agent;
-    this.agentSessionId = sessionId;
-    this.agentProvider = active;
-    this.agentInstructions = instructions;
-    this.agentToolEnvironment = toolEnvironment;
     const compactions = this.deps.store.compactions(sessionId);
-    this.view.messages = toUiMessages(agent.state.messages, "s", undefined, compactions);
+    view.messages = toUiMessages(agent.state.messages, "s", undefined, compactions);
     // id 计数只数 UI 可见消息（user/assistant），与事件侧计数保持一致
-    this.view.nextId = this.view.messages.filter(({ role }) => role !== "system").length;
-    this.view.usage = transcriptUsage(agent.state.messages, compactions);
-    this.view.contextTokens = contextSize(
-      compactedContext(agent.state.messages, compactions.at(-1)),
-    );
-    return agent;
+    view.nextId = view.messages.filter(({ role }) => role !== "system").length;
+    view.usage = transcriptUsage(agent.state.messages, compactions);
+    view.contextTokens = contextSize(compactedContext(agent.state.messages, compactions.at(-1)));
+    const session = {
+      sessionId,
+      agent,
+      provider: active,
+      instructions,
+      environment: toolEnvironment,
+      tools,
+      view,
+    };
+    this.cachedAgent = session;
+    return session;
   }
 
   checkWorkingDirectory(expected: string | null): void {
@@ -530,7 +577,7 @@ export class AgentHost {
     const current = this.currentSettings.planMode;
     if (enabled === Boolean(current)) return;
     if (current?.proposal) throw new Error("请先确认或放弃此计划。");
-    if (this.run?.state.sessionId === id) throw new Error("请等待当前回复结束后再切换计划模式。");
+    if (this.runs.has(id)) throw new Error("请等待当前回复结束后再切换计划模式。");
     this.updateCurrentSettings({
       planMode: enabled ? { executionMode: this.executionMode() } : undefined,
     });
@@ -558,11 +605,12 @@ export class AgentHost {
       this.sendSessions();
       return;
     }
-    if (this.run || this.applyingGitRollback || this.applyingGitSelection)
+    if (this.applyingGitRollback || this.applyingGitSelection)
       throw new Error("请等待当前操作结束后再执行计划。");
     const directory = this.getWorkingDirectory();
     if ((directory ?? null) !== proposal.workingDirectory)
       throw new Error("计划的工作目录已更改。请放弃此计划并重新规划。");
+    this.requireRunSlot(directory);
     const agent = this.ensureAgent(directory);
     return this.beginRun(agent, {
       initialMessage: {
@@ -586,7 +634,7 @@ export class AgentHost {
     composerId?: string,
     expectedDirectory?: string | null,
     replay = false,
-  ): Promise<void> | ActiveRun {
+  ): Promise<void> | RunBlocker {
     if (this.applyingGitRollback) throw new Error("正在撤销 Git 变更，请稍后重试。");
     if (this.applyingGitSelection) throw new Error("正在更新 Git，请稍后重试。");
     if (composerId !== undefined) this.checkComposerId(composerId);
@@ -599,28 +647,26 @@ export class AgentHost {
       if (expectedDirectory !== undefined) this.checkWorkingDirectory(expectedDirectory);
       return this.compact(composerId ?? this.composerId, focus, composerId);
     }
-    const run = this.run;
-    if (
-      run &&
-      (run.state.sessionId !== this.sessionId ||
-        run.state.status === "stopping" ||
-        !run.acceptsPrompts ||
-        run.gitChangesAtEnd)
-    ) {
-      return run.state;
-    }
+    const running = this.currentRun;
+    const run = running?.run;
+    if (run && (run.state.status === "stopping" || !run.acceptsPrompts || run.gitChangesAtEnd))
+      throw new Error("当前任务正在收尾，请稍后重试。");
     const planMode = this.currentSettings.planMode;
     if (!run && planMode?.proposal) throw new Error("请先确认或放弃此计划。");
     if (expectedDirectory !== undefined) this.checkWorkingDirectory(expectedDirectory);
     if (
       images.length &&
-      !(run ? this.agent?.state.model.input.includes("image") : this.supportsImages())
+      !(running ? running.agent.agent.state.model.input.includes("image") : this.supportsImages())
     ) {
       throw new Error("当前模型仅支持文本。请选择支持图像的模型或移除图片。");
     }
     const workingDirectory = this.getWorkingDirectory();
-    const skills = run
-      ? this.agentInstructions!.skills
+    if (!run) {
+      const blocker = this.runBlocker(workingDirectory);
+      if (blocker) return blocker;
+    }
+    const skills = running
+      ? running.agent.instructions.skills
       : scanSkills(
           this.deps.skillsDir,
           this.deps.getSettings().skillsEnabled ?? [],
@@ -631,7 +677,6 @@ export class AgentHost {
         ? { text: input }
         : prepareMentionPrompt(input, (directory) => directory === workingDirectory, skills);
     const clearDraftFor = composerId ?? (this.sessionId === null ? this.composerId : undefined);
-    const agent = run && this.agent ? this.agent : this.ensureAgent(workingDirectory, skills);
     const message: ReferencedUserMessage = {
       role: "user",
       content: images.length
@@ -650,14 +695,15 @@ export class AgentHost {
       return Promise.resolve();
     }
 
-    return this.beginRun(agent, { initialMessage: message, clearDraftFor });
+    return this.beginRun(this.ensureAgent(workingDirectory, skills), {
+      initialMessage: message,
+      clearDraftFor,
+    });
   }
 
-  resume(ref: RunRef, compact = false): Promise<void> | ActiveRun {
+  resume(ref: RunRef, compact = false): Promise<void> {
     if (this.applyingGitRollback) throw new Error("正在撤销 Git 变更，请稍后重试。");
     if (this.applyingGitSelection) throw new Error("正在更新 Git，请稍后重试。");
-    const active = this.run?.state;
-    if (active) return active;
     const checkpoint =
       this.sessionId === ref.sessionId ? this.deps.store.checkpoint(ref.sessionId) : undefined;
     if (checkpoint?.runId !== ref.runId) {
@@ -666,12 +712,13 @@ export class AgentHost {
     if (compact && checkpoint.failure?.kind !== "context-limit")
       throw new Error("该任务没有上下文超限错误。");
     const directory = checkpoint.workingDirectory ?? undefined;
-    const agent = this.ensureAgent(directory);
+    this.requireRunSlot(directory);
+    const sessionAgent = this.ensureAgent(directory);
     const savedMode = checkpoint.planApprovalMode;
     const planMode = this.getCurrentSession()?.planMode;
     const planning = savedMode === undefined ? Boolean(planMode) : savedMode === "plan";
     const approvedPlanMode = savedMode === "plan" ? undefined : savedMode;
-    const last = agent.state.messages.at(-1);
+    const last = sessionAgent.agent.state.messages.at(-1);
     const message: ReferencedUserMessage | undefined =
       !last || last.role === "assistant"
         ? {
@@ -681,7 +728,7 @@ export class AgentHost {
             pilotPlanning: planning ? true : undefined,
           }
         : undefined;
-    return this.beginRun(agent, {
+    return this.beginRun(sessionAgent, {
       initialMessage: message,
       compaction: compact ? { mode: "retry" } : undefined,
       planning,
@@ -692,19 +739,21 @@ export class AgentHost {
 
   compact(composerId: string, focus = "", clearDraftFor?: string): Promise<void> {
     this.checkComposerId(composerId);
-    if (this.applyingGitRollback || this.applyingGitSelection || this.run)
+    if (this.applyingGitRollback || this.applyingGitSelection)
       throw new Error("请在当前操作结束后压缩上下文。");
     if (!this.sessionId) throw new Error("没有足够的较早内容可压缩。");
-    const agent = this.ensureAgent(this.getWorkingDirectory());
+    const directory = this.getWorkingDirectory();
+    this.requireRunSlot(directory);
+    const agent = this.ensureAgent(directory);
     return this.beginRun(agent, { clearDraftFor, compaction: { mode: "manual", focus } });
   }
 
-  private resolveAuxiliaryModel(): TextModelRequest | undefined {
+  private resolveAuxiliaryModel(providerForRun: ProviderConfig): TextModelRequest | undefined {
     const { providers, auxiliaryModel } = this.deps.getSettings();
     if (
       !auxiliaryModel ||
-      (auxiliaryModel.providerId === this.agentProvider?.id &&
-        auxiliaryModel.modelId === this.agentProvider.modelId)
+      (auxiliaryModel.providerId === providerForRun.id &&
+        auxiliaryModel.modelId === providerForRun.modelId)
     )
       return;
     const provider = providers.find(({ id }) => id === auxiliaryModel.providerId);
@@ -750,7 +799,7 @@ export class AgentHost {
   }
 
   private beginRun(
-    agent: Agent,
+    sessionAgent: SessionAgent,
     options: Partial<
       Pick<
         AgentRunOptions,
@@ -763,7 +812,7 @@ export class AgentHost {
       >
     > = {},
   ): Promise<void> {
-    const sessionId = this.sessionId!;
+    const { sessionId, agent, provider, environment, tools, instructions, view } = sessionAgent;
     if (this.deps.store.messageHistory(sessionId).rollback)
       throw new Error("此聊天有未完成的撤销。请重新打开「回到此处」。");
     const sessionRules = this.sessionRules.get(sessionId) ?? [];
@@ -771,7 +820,7 @@ export class AgentHost {
     const session = this.getCurrentSession();
     const sessionMode = session?.planMode;
     const planning = options.planning ?? Boolean(sessionMode);
-    const auxiliaryModel = this.resolveAuxiliaryModel();
+    const auxiliaryModel = this.resolveAuxiliaryModel(provider);
     const needsTitle =
       !session?.titleCustom &&
       !session?.titleGenerated &&
@@ -782,10 +831,10 @@ export class AgentHost {
       agent,
       auxiliaryModel,
       sessionId,
-      environment: this.agentToolEnvironment!,
-      tools: this.localTools,
-      instructions: this.agentInstructions!,
-      view: this.view,
+      environment,
+      tools,
+      instructions,
+      view,
       sessionRules,
       planning,
       settingsOnStart:
@@ -798,8 +847,8 @@ export class AgentHost {
         this.sendSessions();
       },
       onFinished: (completedTask) => {
-        if (this.run !== run) return;
-        this.run = undefined;
+        this.runs.delete(sessionId);
+        if (this.sessionId === sessionId) this.cachedAgent = sessionAgent;
         const directory = run.state.workingDirectory;
         if (
           completedTask &&
@@ -815,7 +864,12 @@ export class AgentHost {
         this.deps.onActivityChanged?.();
       },
     });
-    this.run = run;
+    this.runs.set(sessionId, {
+      run,
+      agent: sessionAgent,
+      workspace: workspaceRoot(environment.workingDirectory),
+    });
+    this.cachedAgent = undefined;
     return run.start();
   }
 
@@ -824,12 +878,16 @@ export class AgentHost {
   }
 
   async stopForExit(): Promise<void> {
-    await this.run?.stopForExit();
+    const results = await Promise.allSettled(
+      [...this.runs.values()].map(({ run }) => run.stopForExit()),
+    );
+    for (const result of results) {
+      if (result.status === "rejected") throw result.reason;
+    }
   }
 
   private async stopOwnedRun(id: string): Promise<void> {
-    const run = this.run;
-    if (run?.state.sessionId === id) await run.stopAndWait();
+    await this.runs.get(id)?.run.stopAndWait();
   }
 
   clearQueue(ref: RunRef): void {
@@ -851,7 +909,7 @@ export class AgentHost {
 
   /** 归档/取消归档；归档当前打开的会话时回到草稿态（数据保留在归档区） */
   async archiveSession(id: string, archived: boolean): Promise<Snapshot> {
-    if (archived && this.run?.state.sessionId === id) await this.stopOwnedRun(id);
+    if (archived && this.runs.has(id)) await this.stopOwnedRun(id);
     const directory = this.deps.store.getMeta(id)?.workingDirectory;
     this.deps.store.setArchived(id, archived);
     if (archived && this.sessionId === id) {
@@ -878,8 +936,11 @@ export class AgentHost {
     this.checkComposerId(composerId);
     const origin = this.getCurrentSession();
     if (!origin) throw new Error("找不到该会话。");
-    if (action === "retry" && (this.run || this.applyingGitRollback || this.applyingGitSelection))
-      throw new Error("请等待当前任务结束后再重试。");
+    if (action === "retry") {
+      if (this.applyingGitRollback || this.applyingGitSelection)
+        throw new Error("请等待当前操作结束后再重试。");
+      this.requireRunSlot();
+    }
     const messages = this.deps.store.load(origin.id);
     const index = messageIndex(messages, messageId);
     const expectedRole = action === "retry" ? "assistant" : "user";
@@ -935,18 +996,24 @@ export class AgentHost {
 
   /** 删除会话；删除当前会话时回到草稿态（不新建会话文件） */
   async deleteSession(id: string): Promise<Snapshot> {
-    if (this.run?.state.sessionId === id) await this.stopOwnedRun(id);
-    await this.deps.terminal?.removeComposer(id);
-    const directory = this.deps.store.getMeta(id)?.workingDirectory;
-    this.deps.store.remove(id);
-    this.sessionRules.delete(id);
-    if (this.agentSessionId === id) this.resetAgent();
-    if (this.sessionId === id) {
-      this.switchSession(null, this.projectDraft(directory));
-      return this.publishSnapshot("reset");
+    if (this.deletingSessions.has(id)) return this.getSnapshot();
+    this.deletingSessions.add(id);
+    try {
+      if (this.runs.has(id)) await this.stopOwnedRun(id);
+      await this.deps.terminal?.removeComposer(id);
+      const directory = this.deps.store.getMeta(id)?.workingDirectory;
+      this.deps.store.remove(id);
+      this.sessionRules.delete(id);
+      if (this.cachedAgent?.sessionId === id) this.cachedAgent = undefined;
+      if (this.sessionId === id) {
+        this.switchSession(null, this.projectDraft(directory));
+        return this.publishSnapshot("reset");
+      }
+      this.sendSessions();
+      return this.getSnapshot();
+    } finally {
+      this.deletingSessions.delete(id);
     }
-    this.sendSessions();
-    return this.getSnapshot();
   }
 
   newSession(): Snapshot {
@@ -989,11 +1056,11 @@ export class AgentHost {
       this.saveNewChatDraft({ ...this.newChatDraft, workingDirectory });
       return this.publishSnapshot();
     }
-    if (this.run?.state.sessionId === id) await this.stopOwnedRun(id);
+    if (this.runs.has(id)) await this.stopOwnedRun(id);
     if (this.sessionId !== id) throw new Error("会话已切换，请重新关联项目。");
     this.deps.store.bindProject(id, workingDirectory);
     this.sessionRules.delete(id);
-    if (this.agentSessionId === id) this.resetAgent();
+    if (this.cachedAgent?.sessionId === id) this.cachedAgent = undefined;
     return this.publishSnapshot();
   }
 
@@ -1010,13 +1077,6 @@ export class AgentHost {
     if (!this.deps.store.getMeta(id)) return;
     if (this.sessionId !== id) this.switchSession(id);
     this.publishSnapshot("reveal");
-  }
-
-  private resetAgent(): void {
-    this.agent = null;
-    this.agentSessionId = null;
-    this.agentInstructions = null;
-    this.view = createSessionView();
   }
 
   private projectDraft(workingDirectory?: string): NewChatDraft {
@@ -1044,11 +1104,10 @@ export class AgentHost {
     change: RecordedFileChange;
   } {
     if (this.sessionId !== sessionId) throw new Error("会话已切换，请重新打开文件变更。");
+    const live = this.sessionAgent(sessionId);
     const messages =
-      this.agentSessionId === sessionId &&
-      this.agent &&
-      (this.run?.state.sessionId === sessionId || !this.deps.store.checkpoint(sessionId))
-        ? this.agent.state.messages
+      live && (this.runs.has(sessionId) || !this.deps.store.checkpoint(sessionId))
+        ? live.agent.state.messages
         : this.deps.store.read(sessionId).messages;
     for (const [index, message] of messages.entries()) {
       if (message.role !== "toolResult") continue;
@@ -1061,7 +1120,7 @@ export class AgentHost {
   async getGitChanges(composerId: string, live = false): Promise<GitChangesView | null> {
     this.checkComposerId(composerId);
     const sessionId = this.sessionId;
-    const run = this.run?.state.sessionId === sessionId ? this.run : undefined;
+    const run = this.currentRun?.run;
     const directory = this.getWorkingDirectory();
     if (!live && run?.gitChangesAtEnd) return run.gitChangesAtEnd;
     const interrupted = !run && sessionId ? this.deps.store.checkpoint(sessionId) : undefined;
@@ -1206,7 +1265,7 @@ export class AgentHost {
     if (!change) throw new Error("找不到这条文件变更。");
     const directory = this.getWorkingDirectory();
     const saved =
-      this.sessionId && view?.phase === "finished" && this.run?.state.sessionId !== this.sessionId
+      this.sessionId && view?.phase === "finished" && !this.currentRun
         ? this.gitRecord(this.sessionId, directory)
         : undefined;
     const snapshot = saved?.checkpoint?.snapshot ?? (await captureGitSnapshot(directory));
@@ -1245,9 +1304,10 @@ export class AgentHost {
     this.checkComposerId(composerId);
     if (this.applyingGitSelection || this.applyingGitRollback)
       throw new Error("正在更新 Git，请稍后重试。");
-    if (this.run) throw new Error("请等待当前回复结束后再更新 Git。");
     const directory = this.getWorkingDirectory();
     if (!directory) throw new Error("请先选择工作目录。");
+    if (this.currentRun || this.workspaceRuns(directory).length)
+      throw new Error("请等待当前工作区的任务结束后再更新 Git。");
     return directory;
   }
 
@@ -1458,15 +1518,15 @@ export class AgentHost {
     composerId: string,
     selection: GitRollbackSelection,
   ): Promise<GitRollbackPreview> {
-    if (this.run || this.applyingGitRollback) throw new Error("请等待当前回复结束后再撤销。");
     const { checkpoint, directory, file } = this.selectedGitCheckpoint(
       composerId,
       selection.checkpointId,
       selection.path,
     );
+    this.checkRollbackAvailable(directory);
     await verifyGitRollback(directory, checkpoint.snapshot, [file]);
     const current = this.selectedGitCheckpoint(composerId, checkpoint.id, file.path);
-    if (this.run || this.applyingGitRollback) throw new Error("请等待当前回复结束后再撤销。");
+    this.checkRollbackAvailable(directory);
     const after = rollbackTarget(directory, current.checkpoint, current.file, selection);
     const token = randomUUID();
     this.gitRollback = {
@@ -1486,8 +1546,7 @@ export class AgentHost {
 
   async applyGitRollback(composerId: string, token: string): Promise<void> {
     this.checkComposerId(composerId);
-    if (this.applyingGitSelection) throw new Error("正在更新 Git，请稍后重试。");
-    if (this.run || this.applyingGitRollback) throw new Error("请等待当前回复结束后再撤销。");
+    this.checkRollbackAvailable(this.getWorkingDirectory());
     const operation = this.gitRollback;
     if (!operation || operation.token !== token || operation.sessionId !== composerId)
       throw new Error("检查点已更新，请重新预览撤销范围。");
@@ -1538,9 +1597,8 @@ export class AgentHost {
   ): Promise<MessageRollbackPreview> {
     this.checkComposerId(composerId);
     if (!this.sessionId) throw new Error("找不到该会话。");
-    if (this.run || this.applyingGitRollback || this.applyingGitSelection)
-      throw new Error("请等待当前任务结束后再撤销。");
     const directory = this.getWorkingDirectory();
+    this.checkRollbackAvailable(directory);
     this.gitRecord(composerId, directory);
     const store = this.deps.store;
     let record = store.read(composerId);
@@ -1568,6 +1626,7 @@ export class AgentHost {
     const plan = await prepareMessageRollback(record, messageId, directory);
     this.checkComposerId(composerId);
     this.checkWorkingDirectory(directory ?? null);
+    this.checkRollbackAvailable(directory);
     if (plan.preview.conflicts.length) {
       this.messageRollback = undefined;
       return plan.preview;
@@ -1579,8 +1638,7 @@ export class AgentHost {
 
   async applyMessageRollback(composerId: string, token: string): Promise<Snapshot> {
     this.checkComposerId(composerId);
-    if (this.run || this.applyingGitRollback || this.applyingGitSelection)
-      throw new Error("请等待当前任务结束后再撤销。");
+    this.checkRollbackAvailable(this.getWorkingDirectory());
     const operation = this.messageRollback;
     if (!operation || operation.token !== token || operation.sessionId !== composerId)
       throw new Error("检查点已更新，请重新预览撤销范围。");
@@ -1624,7 +1682,7 @@ export class AgentHost {
         }
         throw error;
       }
-      this.resetAgent();
+      if (this.cachedAgent?.sessionId === composerId) this.cachedAgent = undefined;
       return this.publishSnapshot();
     } finally {
       this.applyingGitRollback = false;
@@ -1638,13 +1696,10 @@ export class AgentHost {
   }
 
   undoFileChange(sessionId: string, changeId: string): void {
-    if (this.applyingGitSelection) throw new Error("正在更新 Git，请稍后重试。");
-    if (this.run?.state.sessionId === sessionId || this.applyingGitRollback) {
-      throw new Error("请等待当前回复结束后再撤销。");
-    }
+    const directory = this.getWorkingDirectory();
+    this.checkRollbackAvailable(directory);
     const { messages, index, message, change } = this.sessionFileChange(sessionId, changeId);
     if (change.summary.reverted) return;
-    const directory = this.getWorkingDirectory();
     const checkpoint = this.gitRecord(sessionId, directory)?.checkpoint;
     const path =
       checkpoint && relativeGitPath(directory, checkpoint.snapshot.root, change.absolutePath);
@@ -1659,9 +1714,10 @@ export class AgentHost {
     });
     this.deps.store.save(sessionId, updated, this.deps.store.checkpoint(sessionId));
     const event = { type: "file_change" as const, callId: message.toolCallId, change: reverted };
-    if (this.agentSessionId === sessionId && this.agent) {
-      this.agent.state.messages = updated;
-      this.view.messages = applyMessageEvent(this.view.messages, event);
+    const live = this.sessionAgent(sessionId);
+    if (live) {
+      live.agent.state.messages = updated;
+      live.view.messages = applyMessageEvent(live.view.messages, event);
     }
     this.deps.broadcast({ ...event, sessionId });
   }
@@ -1675,9 +1731,9 @@ export class AgentHost {
 
   getSnapshot(): Snapshot {
     const sessions = this.deps.store.list();
-    const activeRun = this.run?.state ?? null;
-    const ownRun = activeRun?.sessionId === this.sessionId ? this.run : undefined;
-    const hasLiveMessages = this.sessionId !== null && this.sessionId === this.agentSessionId;
+    const ownRun = this.currentRun?.run;
+    const conflictingRuns = ownRun ? [ownRun] : this.workspaceRuns(this.getWorkingDirectory());
+    const view = this.sessionId ? this.sessionAgent(this.sessionId)?.view : undefined;
     const checkpoint =
       !ownRun && this.sessionId ? this.deps.store.checkpoint(this.sessionId) : undefined;
     const settings = toPublicSettings(this.deps.getSettings());
@@ -1686,9 +1742,7 @@ export class AgentHost {
       ? effectiveModelCapabilities(selected.automatic, selected.overrides)
       : null;
     const storedMessages =
-      this.sessionId && (!hasLiveMessages || checkpoint)
-        ? this.deps.store.load(this.sessionId)
-        : [];
+      this.sessionId && (!view || checkpoint) ? this.deps.store.load(this.sessionId) : [];
     const compactions = this.sessionId ? this.deps.store.compactions(this.sessionId) : [];
     return {
       sessionId: this.sessionId,
@@ -1702,29 +1756,34 @@ export class AgentHost {
       sessions,
       recentProjects: this.deps.store.listRecentProjects(sessions),
       messages:
-        hasLiveMessages && !checkpoint
-          ? this.view.messages
+        view && !checkpoint
+          ? view.messages
           : this.sessionId
             ? toUiMessages(storedMessages, "s", undefined, compactions)
             : [],
       status: ownRun?.state.status ?? "idle",
-      activeRun,
+      activeRuns: [...this.runs.values()].map(({ run }) => run.state),
+      workspaceRunIds: conflictingRuns.map(({ state }) => state.runId),
       interruptedRun: this.sessionId
         ? (interruptedRunOf(this.sessionId, checkpoint) ?? null)
         : null,
       failedRun: this.sessionId ? (failedRunOf(this.sessionId, checkpoint) ?? null) : null,
       pendingPermissions: ownRun?.pendingPermissions ?? [],
       pendingProjectTrust: ownRun?.pendingProjectTrust ?? null,
-      error: hasLiveMessages ? this.view.error : null,
+      error: view?.error ?? null,
       settings,
-      usage: hasLiveMessages
-        ? { ...this.view.usage }
-        : transcriptUsage(storedMessages, compactions),
-      contextWindow: ownRun ? this.view.contextWindow : (configured?.contextWindow ?? null),
-      contextTokens: hasLiveMessages
-        ? this.view.contextTokens
+      usage: view ? { ...view.usage } : transcriptUsage(storedMessages, compactions),
+      contextWindow: ownRun && view ? view.contextWindow : (configured?.contextWindow ?? null),
+      contextTokens: view
+        ? view.contextTokens
         : contextSize(compactedContext(storedMessages, compactions.at(-1))),
       steerCount: ownRun?.steerCount ?? 0,
     };
+  }
+
+  private checkRollbackAvailable(directory: string | undefined): void {
+    if (this.applyingGitSelection) throw new Error("正在更新 Git，请稍后重试。");
+    if (this.currentRun || this.workspaceRuns(directory).length || this.applyingGitRollback)
+      throw new Error("请等待当前工作区的操作结束后再撤销。");
   }
 }

@@ -125,11 +125,11 @@ describe("agent-events adapter", () => {
     const event = { type: "model_retry", retry, resetReplyId: "reply" } as const;
     const other = { ...partial, sessionId: "another" };
     expect(applyRunEvent(other, event)).toMatchObject({
-      activeRun: { retry },
+      activeRuns: [{ retry }],
       messages: other.messages,
     });
     const waiting = applyRunEvent(partial, event);
-    expect(waiting.activeRun?.retry).toEqual(retry);
+    expect(waiting.activeRuns[0]?.retry).toEqual(retry);
     expect(waiting.messages).toEqual([
       { id: "reply", role: "assistant", parts: [], streaming: true, timing },
     ]);
@@ -141,11 +141,11 @@ describe("agent-events adapter", () => {
     } as const;
     const terminal = { type: "status", status: "idle", result: "failed", failedRun } as const;
     const ended = applyRunEvent(waiting, terminal);
-    expect(ended).toMatchObject({ activeRun: null, interruptedRun: null, failedRun });
+    expect(ended).toMatchObject({ activeRuns: [], interruptedRun: null, failedRun });
     const next = { ...run, runId: "next", workingDirectory: "E:/a", status: "streaming" } as const;
     expect(applyAgentEvent(ended, { type: "run_started", run: next }).failedRun).toBeNull();
     expect(applyRunEvent(other, terminal)).toMatchObject({
-      activeRun: null,
+      activeRuns: [],
       failedRun: null,
       messages: other.messages,
     });
@@ -433,7 +433,7 @@ describe("agent-events adapter", () => {
     const compaction = { id: "summary", position: 1, summary: "Saved", trimmedTools: 1 };
     let state = applyRunEvent(initialRunUiState(), { type: "messages", messages });
     state = applyRunEvent(state, { type: "context_compacting", compacting: true });
-    expect(state.activeRun?.compacting).toBe(true);
+    expect(state.activeRuns[0]?.compacting).toBe(true);
     const event = { type: "context_compacted", compaction, contextTokens: 1200 } as const;
     const other = { ...state, sessionId: "other" };
     expect(applyRunEvent(other, event)).toBe(other);
@@ -500,7 +500,7 @@ describe("agent-events adapter", () => {
       type: "run_started",
       run: { ...run, status: "streaming", workingDirectory: null, planning: true },
     });
-    expect(started.activeRun?.planning).toBe(true);
+    expect(started.activeRuns[0]?.planning).toBe(true);
     expect(started.status).toBe("idle");
     const sessions = [
       {
@@ -517,7 +517,7 @@ describe("agent-events adapter", () => {
     ] satisfies SessionMeta[];
     const updated = applyAgentEvent(started, { type: "sessions", sessions, recentProjects: [] });
     const settled = applyRunEvent(updated, { type: "status", status: "idle", result: "success" });
-    expect(settled).toMatchObject({ sessionId: "other", activeRun: null, sessions });
+    expect(settled).toMatchObject({ sessionId: "other", activeRuns: [], sessions });
     expect(settled.pendingPermissions).toEqual([]);
   });
 
@@ -575,21 +575,43 @@ describe("agent-events adapter", () => {
   });
 
   it("updates the background run notice while ignoring its messages, queue, errors, and stale completion", () => {
+    const b = { runId: "running-b", sessionId: "b" };
     const state = {
-      ...initialRunUiState(),
-      sessionId: "b",
-      status: "idle" as const,
+      ...applyAgentEvent(
+        { ...initialRunUiState(), sessionId: b.sessionId },
+        {
+          type: "run_started",
+          run: { ...b, status: "streaming", workingDirectory: "E:/b" },
+        },
+      ),
       messages: [
         { id: "s-0", role: "assistant", parts: [{ type: "text", text: "B" }] },
       ] satisfies UiMessage[],
     };
-    const waiting = applyRunEvent(state, { type: "status", status: "waiting_approval" });
-    expect(waiting.status).toBe("idle");
-    expect(waiting.activeRun?.status).toBe("waiting_approval");
+    const started = applyAgentEvent(state, {
+      type: "run_started",
+      run: { ...run, status: "streaming", workingDirectory: "E:/a" },
+    });
+    const waiting = applyRunEvent(started, { type: "status", status: "waiting_approval" });
+    expect(waiting.status).toBe("streaming");
+    expect(waiting.activeRuns).toMatchObject([
+      { ...b, status: "streaming" },
+      { ...run, status: "waiting_approval" },
+    ]);
+    const usage = {
+      type: "usage",
+      tokens: { input: 10, output: 20, cacheRead: 0, cacheWrite: 0 },
+      costTotal: 0.03,
+      contextTokens: 30,
+      contextWindow: 1000,
+    } as const;
+    const withUsage = applyAgentEvent(waiting, { ...usage, run: b });
+    expect(withUsage.usage).toEqual({ ...usage.tokens, costTotal: usage.costTotal });
     const background: AgentRunEvent[] = [
       { type: "assistant_delta", id: "s-0", delta: "A only" },
       { type: "queue", steerCount: 1 },
       { type: "error", message: "A failed" },
+      { ...usage, tokens: { ...usage.tokens, input: 99 } },
       {
         type: "permission_request",
         requestId: "a1",
@@ -600,7 +622,7 @@ describe("agent-events adapter", () => {
         danger: false,
       },
     ];
-    for (const event of background) expect(applyRunEvent(waiting, event)).toBe(waiting);
+    for (const event of background) expect(applyRunEvent(withUsage, event)).toBe(withUsage);
     expect(
       applyAgentEvent(waiting, {
         type: "status",
@@ -608,10 +630,12 @@ describe("agent-events adapter", () => {
         run: { ...run, runId: "older-run" },
       }),
     ).toBe(waiting);
-    expect(applyRunEvent(waiting, { type: "status", status: "idle" })).toMatchObject({
+    expect(applyRunEvent(withUsage, { type: "status", status: "idle" })).toMatchObject({
       sessionId: "b",
       messages: state.messages,
-      activeRun: null,
+      status: "streaming",
+      usage: withUsage.usage,
+      activeRuns: [{ ...b, status: "streaming" }],
     });
   });
 

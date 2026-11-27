@@ -32,6 +32,7 @@ import {
   verifyInteractiveTerminal,
   verifyLayouts,
   verifyMcpOAuth,
+  verifyParallelSessions,
   verifyRestoredMcpOAuth,
   verifyPlanDraft,
   verifyPlanExecution,
@@ -154,6 +155,10 @@ const pluginProfile = join(scratch, "plugin-profile");
 const discoveryProfile = join(scratch, "discovery-profile");
 const projectConfigProfile = join(scratch, "project-config-profile");
 const oauthProfile = join(scratch, "mcp-oauth-profile");
+const parallelProfile = join(scratch, "parallel-profile");
+const parallelProjects = ["Parallel project A", "Parallel project B", "Parallel project C"].map(
+  (name) => join(scratch, name),
+);
 const oauthProject = join(scratch, "oauth-project");
 const configurableProject = join(scratch, "configurable-project");
 const discoveryMarket = join(scratch, "catalog fixture");
@@ -212,6 +217,19 @@ try {
     scripts: { test: 'node -e "console.log(123456789)"' },
   }));
   model = await startModelFixture();
+  for (const directory of parallelProjects) {
+    mkdirSync(directory);
+    execFileSync("git", ["init", "-q", "--template="], { cwd: directory });
+    execFileSync("git", [
+      "-c", "user.name=Pilot Desktop Test", "-c", "user.email=pilot@example.invalid",
+      "-c", "commit.gpgSign=false", "commit", "--allow-empty", "-qm", "Fixture baseline",
+    ], { cwd: directory });
+  }
+  await withApp(parallelProfile, async (page, window, app) => {
+    await runScene("Run, approve, stop and review tasks independently in separate projects", () =>
+      verifyParallelSessions(page, window, app, model, parallelProjects, scratch),
+    );
+  }, parallelProjects[0]);
   await withApp(profile, async (page, window, app) => {
     await runScene("First-run model configuration", () =>
       verifyFirstRun(page, window, app, model, project),

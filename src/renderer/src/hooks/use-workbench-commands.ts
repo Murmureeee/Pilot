@@ -44,6 +44,7 @@ import type {
 import {
   selectApprovalMode,
   selectComposerSettings,
+  selectCurrentRun,
   selectProjectDirectory,
   useAgentStore,
 } from "@renderer/stores/agent";
@@ -108,7 +109,7 @@ export function useWorkbenchCommands({
   const sessionId = useAgentStore((state) => state.sessionId);
   const planning = useAgentStore((state) => Boolean(selectComposerSettings(state).planMode));
   const approvalMode = useAgentStore(selectApprovalMode);
-  const activeRun = useAgentStore((state) => state.activeRun);
+  const activeRun = useAgentStore(selectCurrentRun);
   const choosingProject = useAgentStore((state) => state.choosingProject);
   const project = useAgentStore(selectProjectDirectory);
   const templates = useAgentStore((state) => state.settings?.promptTemplates);

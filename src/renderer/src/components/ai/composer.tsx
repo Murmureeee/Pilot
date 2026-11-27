@@ -30,6 +30,7 @@ import {
 } from "react";
 
 import { ModelRetryLabel } from "@renderer/components/ai/model-feedback";
+import { Alert, AlertDescription } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -86,18 +87,19 @@ import type {
 import {
   selectApprovalMode,
   selectComposerSettings,
+  selectCurrentRun,
   selectProjectBinding,
+  selectWorkspaceRun,
   useAgentStore,
 } from "@renderer/stores/agent";
 import { compactFocus } from "@shared/compact-command";
-import { APP_NAME, IMAGE_ATTACHMENT_MIME_TYPES, WORKSPACE_QUERY_LENGTH } from "@shared/constants";
-import type {
-  ActiveRun,
-  ApprovalMode,
-  ComposerDraft,
-  PromptMention,
-  SkillMeta,
-} from "@shared/contract";
+import {
+  APP_NAME,
+  IMAGE_ATTACHMENT_MIME_TYPES,
+  MAX_CONCURRENT_RUNS,
+  WORKSPACE_QUERY_LENGTH,
+} from "@shared/constants";
+import type { ApprovalMode, ComposerDraft, PromptMention, SkillMeta } from "@shared/contract";
 import { imagesFromMessageParts } from "@shared/image-attachments";
 import { draftFromMessageParts, promptFromDraft } from "@shared/mentions";
 import { effectiveModelCapabilities } from "@shared/model-capabilities";
@@ -165,7 +167,9 @@ export function Composer({
   const steerCount = useAgentStore((s) => s.steerCount);
   const usage = useAgentStore((s) => s.usage);
   const sessionId = useAgentStore((s) => s.sessionId);
-  const activeRun = useAgentStore((s) => s.activeRun);
+  const ownRun = useAgentStore(selectCurrentRun);
+  const workspaceRun = useAgentStore(selectWorkspaceRun);
+  const slotsFull = useAgentStore((s) => s.activeRuns.length >= MAX_CONCURRENT_RUNS);
   const [draft, setDraft] = useState(() => promptFromDraft(useAgentStore.getState().composerDraft));
   const [selection, setSelection] = useState<ComposerSelection | null>(null);
   const [focused, setFocused] = useState(false);
@@ -179,7 +183,7 @@ export function Composer({
   const [skills, setSkills] = useState<SkillMeta[]>([]);
   const [loadingSkills, setLoadingSkills] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [blockedSend, setBlockedSend] = useState<ActiveRun | null>(null);
+  const [blockedSend, setBlockedSend] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [memoryDraft, setMemoryDraft] = useState<string | null>(null);
   const [fileDragging, setFileDragging] = useState(false);
@@ -208,7 +212,6 @@ export function Composer({
   const choosingProject = useAgentStore((s) => s.choosingProject);
   const projectError = useAgentStore((s) => s.projectError);
 
-  const ownRun = activeRun?.sessionId === sessionId ? activeRun : null;
   const attachments = useComposerImages(composerId);
   const model = settings && selectedCatalogModel(settings, savedModel);
   const supportsImages = Boolean(
@@ -216,8 +219,8 @@ export function Composer({
   );
   const textRun = ownRun?.modelCapabilities?.supportsImages === false;
   const imagesBlocked = attachments.images.length > 0 && (!supportsImages || textRun);
-  const otherRun = activeRun && !ownRun ? activeRun : null;
-  const noticeRun = otherRun ?? blockedSend;
+  const noticeRun = ownRun ? null : workspaceRun;
+  const capacityBlocked = !ownRun && !noticeRun && slotsFull;
   const runTitle = useAgentStore(
     (s) => s.sessions.find(({ id }) => id === noticeRun?.sessionId)?.title,
   );
@@ -282,7 +285,7 @@ export function Composer({
     const next = readComposerDraft(editor.current, resources.current);
     setDraft(promptFromDraft(next));
     setSendError(null);
-    setBlockedSend(null);
+    setBlockedSend(false);
     void saveDraft(composerId, next).catch((error: unknown) => {
       if (useAgentStore.getState().composerDraft === next) {
         setSendError(error instanceof Error ? error.message : String(error));
@@ -546,7 +549,7 @@ export function Composer({
     }
     setSubmitting(true);
     setSendError(null);
-    setBlockedSend(null);
+    setBlockedSend(false);
     try {
       const input = attachments.images.length ? { ...draft, images: attachments.images } : draft;
       const result = await prompt(trimPrompt(input), workingDirectory, composerId);
@@ -556,8 +559,10 @@ export function Composer({
         lastRange.current = null;
         setDraft({ text: "", mentions: [] });
         setSelection(null);
-      } else if (result && result.sessionId !== sessionId) {
-        setBlockedSend(result);
+      } else if (result) {
+        setBlockedSend(true);
+        if (result.kind === "workspace" && result.run.runId !== noticeRun?.runId)
+          void window.pi.getSnapshot().catch(() => {});
       }
     } catch (error) {
       setSendError(error instanceof Error ? error.message : String(error));
@@ -696,28 +701,40 @@ export function Composer({
           ? "正在压缩上下文…"
           : "回复中…";
   const runNotice =
-    otherRun?.status === "waiting_approval"
-      ? "会话「{0}」等待审批"
-      : otherRun?.status === "stopping"
-        ? "会话「{0}」正在停止"
-        : otherRun
-          ? "会话「{0}」正在运行"
-          : "发送时，会话「{0}」有一项运行中的任务。";
+    noticeRun?.status === "waiting_approval"
+      ? "同一工作区的会话「{0}」等待审批。"
+      : noticeRun?.status === "stopping"
+        ? "同一工作区的会话「{0}」正在停止。"
+        : "同一工作区的会话「{0}」正在运行。";
 
   return (
     <div className="relative flex w-full min-w-0 flex-col gap-2">
-      {noticeRun && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/60 px-3 py-2">
-          <div role="status" className="min-w-0 text-sm wrap-anywhere">
-            <p>{t(runNotice, locale, [runTitle ?? t("新会话", locale)])}</p>
-            {blockedSend && (
-              <p className="text-xs text-muted-foreground">{t("此消息仍在草稿中。", locale)}</p>
-            )}
+      {!ownRun && (noticeRun || capacityBlocked || blockedSend) && (
+        <Alert
+          role="status"
+          data-run-block
+          className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+        >
+          <div className="min-w-0 wrap-anywhere">
+            <p>
+              {noticeRun
+                ? t(runNotice, locale, [runTitle ?? t("新会话", locale)])
+                : capacityBlocked
+                  ? t("已同时运行 {0} 项任务。等一项结束后再发送。", locale, [MAX_CONCURRENT_RUNS])
+                  : t("现在可以再次发送。", locale)}
+            </p>
+            {blockedSend && <AlertDescription>{t("此消息仍在草稿中。", locale)}</AlertDescription>}
           </div>
-          <Button size="xs" variant="ghost" onClick={() => void loadSession(noticeRun.sessionId)}>
-            {t("返回任务会话", locale)}
-          </Button>
-        </div>
+          {noticeRun && (
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => void loadSession(noticeRun.sessionId, true, true)}
+            >
+              {t("返回任务会话", locale)}
+            </Button>
+          )}
+        </Alert>
       )}
       {ownRun && (
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-2 text-xs text-muted-foreground">

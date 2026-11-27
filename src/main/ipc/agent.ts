@@ -51,8 +51,7 @@ export function registerAgentRoutes({
   });
   handle(IPC.agentResume, (_event, run, compact) => {
     exit.checkWorkAllowed();
-    const result = host.resume(run, compact);
-    return result instanceof Promise ? null : result;
+    void host.resume(run, compact);
   });
   handle(IPC.agentCompact, (_event, composerId, focus) => {
     exit.checkWorkAllowed();
@@ -342,9 +341,9 @@ export function registerAgentRoutes({
     const ref = verificationRef(composerId, runId);
     if (host.selectedSessionId() !== ref.sessionId)
       throw new Error("请先发送一条消息，再把验证结果交给 Agent。");
-    if (host.hasActiveRun()) throw new Error("请等待当前任务结束后再修复验证失败。");
     const result = verification.result(ref);
     if (result.status !== "failed") throw new Error("请选择失败的验证结果。");
+    host.requireRunSlot();
     void host.prompt(
       verificationRepairPrompt(result, locale),
       undefined,

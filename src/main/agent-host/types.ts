@@ -36,7 +36,7 @@ import type {
   VerificationTask,
 } from "@shared/contract";
 
-import type { Settings } from "../settings/types";
+import type { ProviderConfig, Settings } from "../settings/types";
 import type { TerminalManager } from "../terminal";
 import type { WebRequests } from "../web/types";
 import type {
@@ -51,6 +51,7 @@ import type {
   GitWorktree,
 } from "../workspace/types";
 import type { McpManager } from "./mcp";
+import type { AgentRun } from "./run";
 import type { SessionStore } from "./session-store";
 import type { ToolEnvironment } from "./tools/types";
 
@@ -87,6 +88,22 @@ export interface AgentSessionView {
   usage: Snapshot["usage"];
   contextWindow: number | null;
   contextTokens: number;
+}
+
+export interface SessionAgent {
+  sessionId: string;
+  agent: Agent;
+  provider: ProviderConfig;
+  instructions: AgentInstructions;
+  environment: ToolEnvironment;
+  tools: AgentTool[];
+  view: AgentSessionView;
+}
+
+export interface RunningSession {
+  run: AgentRun;
+  agent: SessionAgent;
+  workspace: string;
 }
 
 export interface TextModelRequest {

@@ -33,7 +33,12 @@ import {
 import { useTranscriptLocation } from "@renderer/hooks/use-transcript-location";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { ChatRow, ComposerShortcuts, WorkbenchCommand } from "@renderer/lib/types";
-import { selectPlanReview, useAgentStore } from "@renderer/stores/agent";
+import {
+  selectCurrentRun,
+  selectPlanReview,
+  selectWorkspaceRun,
+  useAgentStore,
+} from "@renderer/stores/agent";
 import type { UiMessage, UiPart } from "@shared/contract";
 import { visibleMessageText } from "@shared/mentions";
 import { isLocalOpenAiProvider } from "@shared/providers";
@@ -84,7 +89,8 @@ export function ChatView({
   const projectTrust = useAgentStore((s) => s.pendingProjectTrust);
   const planReview = useAgentStore(selectPlanReview);
   const dockBlocked = Boolean(permission || projectTrust || planReview);
-  const activeRun = useAgentStore((s) => s.activeRun);
+  const activeRun = useAgentStore(selectCurrentRun);
+  const workspaceBusy = useAgentStore((state) => selectWorkspaceRun(state) !== null);
   const interruptedRun = useAgentStore((s) => s.interruptedRun);
   const failedRun = useAgentStore((s) => s.failedRun);
   const resumeRun = useAgentStore((s) => s.resumeRun);
@@ -311,7 +317,7 @@ export function ChatView({
                                 projectDirectory={projectDirectory}
                                 live={live}
                                 busy={busy}
-                                hasActiveRun={activeRun !== null}
+                                hasActiveRun={workspaceBusy}
                                 hasLaterMessages={row !== lastRow}
                                 findLocation={match?.location}
                               />

@@ -15,7 +15,7 @@ import {
 } from "@renderer/lib/constants";
 import { localizeError, t, useLocale } from "@renderer/lib/i18n";
 import type { AppendGitAnnotations, GitAnnotationSource, GitReview } from "@renderer/lib/types";
-import { useAgentStore } from "@renderer/stores/agent";
+import { selectWorkspaceRun, useAgentStore } from "@renderer/stores/agent";
 import { useGitAnnotationStore } from "@renderer/stores/git-annotations";
 import type {
   GitChange,
@@ -147,7 +147,7 @@ export function GitChangesPanel({
   const [commit, setCommit] = useState<GitCommitResult>();
   const [annotation, setAnnotation] = useState<GitAnnotationSource>();
   const annotationScope = JSON.stringify([composerId, workingDirectory]);
-  const busy = useAgentStore((state) => state.activeRun !== null);
+  const busy = useAgentStore((state) => selectWorkspaceRun(state) !== null);
   const live = !showCheckpoint && !showHistory;
   const history = useGitReview(live ? null : composerId, workingDirectory, false);
   const review = live ? liveReview : history;

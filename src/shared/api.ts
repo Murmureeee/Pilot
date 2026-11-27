@@ -1,7 +1,6 @@
 // @env all
 // 渲染层可用的 API 形状。preload 实现它，renderer 通过 window.pi 消费。
 import type {
-  ActiveRun,
   AfterTurnVerification,
   AgentSmokeResult,
   AppInfo,
@@ -46,6 +45,7 @@ import type {
   ProviderTestResult,
   PublicSettings,
   RunRef,
+  RunBlocker,
   SessionMeta,
   SessionSearchResults,
   SessionInstructionSources,
@@ -104,8 +104,8 @@ export interface PiApi {
     input: string | PromptInput,
     expectedDirectory?: string | null,
     composerId?: string,
-  ): Promise<ActiveRun | null>;
-  agentResume(run: RunRef, compact?: boolean): Promise<ActiveRun | null>;
+  ): Promise<RunBlocker | null>;
+  agentResume(run: RunRef, compact?: boolean): Promise<void>;
   agentCompact(composerId: string, focus?: string): Promise<void>;
   searchWorkspace(query: string, expectedDirectory?: string): Promise<WorkspaceEntry[]>;
   previewWorkspaceReference(

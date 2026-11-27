@@ -9,7 +9,7 @@ export class TaskNotifications {
   private enabled: boolean;
   private readonly approvals = new Map<string, PendingApproval>();
   private readonly notices = new Map<string, ActiveNotice>();
-  private flashing?: { window: BrowserWindow; sessionId: string };
+  private flashing?: { window: BrowserWindow; sessionIds: Set<string> };
 
   constructor(private readonly options: TaskNotificationOptions) {
     this.enabled = options.enabled;
@@ -36,7 +36,7 @@ export class TaskNotifications {
     const visible = this.options.getVisibleSessionId();
     if (visible) {
       this.markUnread(visible, false);
-      if (this.flashing?.sessionId === visible) this.stopFlash();
+      this.clearSessionFlash(visible);
     }
     for (const approval of this.approvals.values()) this.announceApproval(approval, visible);
   }
@@ -54,14 +54,17 @@ export class TaskNotifications {
           (notice.kind === "plan" && (!session.planMode?.proposal || session.archived))
         ) {
           this.closeNotice(id);
-          if (notice.kind === "plan" && this.flashing?.sessionId === id) this.stopFlash();
+          this.clearSessionFlash(id);
         }
       }
       return;
     }
     if (!("run" in event)) return;
     const { runId, sessionId } = event.run;
-    if (event.type === "run_started") this.closeNotice(sessionId);
+    if (event.type === "run_started") {
+      this.closeNotice(sessionId);
+      this.clearSessionFlash(sessionId);
+    }
     if (event.type === "permission_request" || event.type === "project_trust_request") {
       const approval = this.approvals.get(runId) ?? {
         sessionId,
@@ -116,8 +119,12 @@ export class TaskNotifications {
     this.closeNotice(id);
     const window = this.options.getWindow();
     if (process.platform === "win32" && window && !window.isDestroyed()) {
-      window.flashFrame(true);
-      this.flashing = { window, sessionId: id };
+      if (this.flashing?.window !== window) {
+        this.stopFlash();
+        window.flashFrame(true);
+        this.flashing = { window, sessionIds: new Set() };
+      }
+      this.flashing.sessionIds.add(id);
     }
     try {
       if (!Notification.isSupported()) return;
@@ -159,7 +166,11 @@ export class TaskNotifications {
   private clearApproval(runId: string, id: string): void {
     if (!this.approvals.delete(runId)) return;
     if (this.notices.get(id)?.kind === "approval") this.closeNotice(id);
-    if (this.flashing?.sessionId === id) this.stopFlash();
+    this.clearSessionFlash(id);
+  }
+
+  private clearSessionFlash(id: string): void {
+    if (this.flashing?.sessionIds.delete(id) && !this.flashing.sessionIds.size) this.stopFlash();
   }
 
   private stopFlash(): void {

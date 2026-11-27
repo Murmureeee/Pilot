@@ -24,6 +24,7 @@ import {
   selectPlanReview,
   selectProjectDirectory,
   selectWorkingDirectory,
+  selectWorkspaceRun,
   useAgentStore,
 } from "@renderer/stores/agent";
 import { VERIFICATION_COMMAND_LIMIT } from "@shared/constants";
@@ -244,7 +245,8 @@ export function VerificationPanel({
   const workingDirectory = useAgentStore(selectWorkingDirectory);
   const shell = useAgentStore((store) => store.settings?.commandShell);
   const canRepair = useAgentStore(
-    (store) => store.sessionId === composerId && !store.activeRun && !selectPlanReview(store),
+    (store) =>
+      store.sessionId === composerId && !selectWorkspaceRun(store) && !selectPlanReview(store),
   );
   const [state, setState] = useState<VerificationState>();
   const [runs, setRuns] = useState<VerificationRun[]>([]);

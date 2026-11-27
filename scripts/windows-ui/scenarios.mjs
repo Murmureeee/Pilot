@@ -623,7 +623,7 @@ export async function verifyAfterTurnVerification(page, window, app, model, proj
   await openProject(otherProject);
   next.write({ content: "The fixture turn is complete." });
   next.finish();
-  await page.waitForFunction(async () => !(await window.pi.getSnapshot()).activeRun);
+  await page.waitForFunction(async () => (await window.pi.getSnapshot()).activeRuns.length === 0);
   const other = await page.evaluate(async () => {
     const { composerId } = await window.pi.getSnapshot();
     return window.pi.sessionVerification(composerId);
@@ -1530,6 +1530,171 @@ async function waitForProjectDraft(page, directory) {
   }, directory);
 }
 
+export async function verifyParallelSessions(page, window, app, model, projects, scratch) {
+  const [projectA, projectB, projectC] = projects;
+  const script = join(scratch, "parallel-mcp.cjs");
+  const output = "parallel-result.txt";
+  const description = "Read the current project directory";
+  writeFileSync(script, [
+    'const { writeFileSync } = require("node:fs");',
+    'const { basename, join } = require("node:path");',
+    'const directory = process.cwd();',
+    'writeFileSync(join(__dirname, basename(directory) + ".pid"), String(process.pid));',
+    'require("node:readline").createInterface({ input: process.stdin }).on("line", (line) => {',
+    '  const request = JSON.parse(line);',
+    '  if (!Object.hasOwn(request, "id")) return;',
+    '  const results = {',
+    '    initialize: { protocolVersion: request.params?.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "Workspace", version: "1" } },',
+    '    "tools/list": { tools: [{ name: "cwd", description: "Read the current project directory", inputSchema: { type: "object" } }] },',
+    '    "tools/call": { content: [{ type: "text", text: directory }] },',
+    '  };',
+    '  console.log(JSON.stringify({ jsonrpc: "2.0", id: request.id, result: results[request.method] ?? {} }));',
+    '});',
+  ].join("\n"));
+  await page.evaluate(async ({ baseUrl, modelId }) => {
+    await window.pi.settingsSave({
+      providers: [{ id: "parallel-model", kind: "openai-compatible", name: "Parallel fixture",
+        baseUrl, modelId, models: [{ id: modelId, name: "Parallel test model" }] }],
+      activeProviderId: "parallel-model",
+    });
+    await window.pi.settingsSetNotificationsEnabled(false);
+  }, { baseUrl: model.baseUrl, modelId: model.modelId });
+  await page.reload();
+  await waitForProjectDraft(page, projectA);
+  await page.evaluate(({ command, scriptPath }) => window.pi.mcpSave({
+    id: crypto.randomUUID(), name: "Workspace", enabled: true, policy: "confirm",
+    transport: { type: "stdio", command, args: [scriptPath] },
+  }), { command: process.execPath, scriptPath: script });
+  const memory = () => app.evaluate(({ app }) =>
+    app.getAppMetrics().reduce((total, { memory }) => total + memory.workingSetSize, 0),
+  );
+  const idle = await memory();
+  const card = page.locator("[data-permission-card]");
+  const blocker = page.locator("[data-run-block]");
+  const snapshot = () => page.evaluate(() => window.pi.getSnapshot());
+  const chooseFolder = async (directory) => {
+    await app.evaluate(({ dialog }, folder) => {
+      const original = dialog.showOpenDialog;
+      dialog.showOpenDialog = async () => {
+        dialog.showOpenDialog = original;
+        return { canceled: false, filePaths: [folder] };
+      };
+    }, directory);
+    await page.keyboard.press("Control+o");
+    await waitForProjectDraft(page, directory);
+  };
+  const row = (id) => page.locator('[data-session-id="' + id + '"]');
+  const status = (id, value) => row(id).locator('[data-session-status="' + value + '"]');
+
+  await resize(page, window, wide);
+  await send(page, "Prepare parallel result A");
+  const requestA = await model.nextCompletion();
+  assert.ok(requestA.input.tools.some(({ function: tool }) => tool.description === description));
+  sendTool(requestA, "parallel-write-a", "write_file", { path: output, content: "Result A" });
+  await card.waitFor();
+  const a = (await snapshot()).sessionId;
+  await status(a, "approval").waitFor();
+
+  await chooseFolder(projectB);
+  await blocker.waitFor({ state: "hidden" });
+  await send(page, "Prepare parallel result B");
+  const requestB = await model.nextCompletion();
+  const mcpTool = requestB.input.tools.find(({ function: tool }) => tool.description === description);
+  assert.ok(mcpTool);
+  sendTool(requestB, "parallel-write-b", "write_file", { path: output, content: "Result B" });
+  await card.waitFor();
+  const b = (await snapshot()).sessionId;
+  await status(a, "approval").waitFor();
+  await status(b, "approval").waitFor();
+  const parallel = await memory();
+  await page.reload();
+  await card.waitFor();
+  let live = await snapshot();
+  assert.equal(live.sessionId, b);
+  assert.equal(live.activeRuns.length, 2);
+  assert.equal(live.pendingPermissions[0].callId, "parallel-write-b");
+
+  await chooseFolder(projectC);
+  const before = (await snapshot()).sessions.length;
+  await send(page, "Keep this third draft");
+  await blocker.getByText("此消息仍在草稿中。", { exact: true }).waitFor();
+  live = await snapshot();
+  assert.equal(live.sessionId, null);
+  assert.equal(live.sessions.length, before);
+  assert.deepEqual(live.composerDraft, ["Keep this third draft"]);
+  let current = locales[0];
+  let contrast = Infinity;
+  for (const [size, zoom] of [[wide, 1], [narrow, 1], [narrow, 1.5]]) {
+    await resize(page, window, size, zoom);
+    for (const locale of locales) {
+      for (const theme of ["light", "dark"]) {
+        await selectAppearance(page, current, locale, theme);
+        current = locale;
+        await assertFits(blocker);
+        contrast = Math.min(contrast, await minimumTextContrast(blocker, "p, [data-slot=alert-description]"));
+      }
+    }
+  }
+  assert.ok(contrast >= 4.5, "Parallel capacity notice contrast " + contrast.toFixed(2) + ":1");
+  await resize(page, window, wide);
+  await page.evaluate((directory) => window.pi.sessionUseRecentProject(directory), projectA);
+  await waitForProjectDraft(page, projectA);
+  await send(page, "Keep this same-workspace draft");
+  await blocker.getByText("Your message is still a draft.", { exact: true }).waitFor();
+  const jump = button(blocker, "Go to task chat");
+  await assertFits(jump);
+  await jump.press("Enter");
+  await card.and(page.locator(":focus")).waitFor();
+  assert.equal((await snapshot()).sessionId, a);
+  await button(card, "Allow once").press("Enter");
+  const finalA = await model.nextCompletion();
+  finalA.write({ content: "Only A finished." });
+  finalA.finish();
+  await page.getByText("Only A finished.", { exact: true }).waitFor();
+  await page.waitForFunction(async () => (await window.pi.getSnapshot()).activeRuns.length === 1);
+  assert.equal(readFileSync(join(projectA, output), "utf8"), "Result A");
+  assert.ok(!existsSync(join(projectB, output)));
+  const gitA = await page.evaluate((id) => window.pi.sessionGitChanges(id), a);
+  assert.ok(gitA.checkpoint.files.some(({ path }) => path === output));
+  await status(b, "approval").waitFor();
+
+  await row(b).click();
+  await button(card, "Allow once").press("Enter");
+  const toolRequest = await model.nextCompletion();
+  sendTool(toolRequest, "parallel-mcp-b", mcpTool.function.name, {});
+  await button(card, "Allow once").press("Enter");
+  const finalB = await model.nextCompletion();
+  assert.match(JSON.stringify(finalB.input.messages.at(-1)), /Parallel project B/);
+  finalB.write({ content: "Only B is still streaming." });
+  await page.getByText("Only B is still streaming.", { exact: true }).waitFor();
+
+  await page.evaluate((directory) => window.pi.sessionUseRecentProject(directory), projectC);
+  await waitForProjectDraft(page, projectC);
+  await editor(page).press("Enter");
+  const requestC = await model.nextCompletion();
+  assert.equal(requestC.input.messages.at(-1).content, "Keep this third draft");
+  const c = (await snapshot()).sessionId;
+  await button(page, "Stop").press("Enter");
+  await page.waitForFunction(async (id) =>
+    (await window.pi.getSnapshot()).activeRuns.every(({ sessionId }) => sessionId !== id), c);
+  await status(b, "running").waitFor();
+  await row(b).click();
+  await page.getByText("Only B is still streaming.", { exact: true }).waitFor();
+  finalB.finish();
+  await page.waitForFunction(async () => (await window.pi.getSnapshot()).activeRuns.length === 0);
+  assert.equal(readFileSync(join(projectB, output), "utf8"), "Result B");
+  const gitB = await page.evaluate((id) => window.pi.sessionGitChanges(id), b);
+  assert.ok(gitB.checkpoint.files.some(({ path }) => path === output));
+  assert.ok(!existsSync(join(projectC, output)));
+  for (const directory of projects) {
+    const pid = Number(readFileSync(join(scratch, basename(directory) + ".pid"), "utf8"));
+    assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+  }
+  console.log("Parallel notice minimum contrast " + contrast.toFixed(2) + ":1");
+  console.log("Electron working set in KiB idle / two pending tasks / settled: " +
+    [idle, parallel, await memory()].join(" / "));
+}
+
 async function openProjectConfiguration(page, locale) {
   const trigger = button(page, locale.more);
   const title = locale.lang === "en" ? "Project configuration" : "项目配置";
@@ -2347,7 +2512,7 @@ export async function verifyAuxiliaryModels(page, window, model) {
   assert.equal(second.input.model, model.modelId);
   second.write({ content: "Second report reply." });
   second.finish();
-  await page.waitForFunction(async () => !(await window.pi.getSnapshot()).activeRun);
+  await page.waitForFunction(async () => (await window.pi.getSnapshot()).activeRuns.length === 0);
   await page.locator("[data-context-usage]").press("Enter");
   await button(page, "Compact context").press("Enter");
   const summary = await model.nextUtilityCompletion();
@@ -2595,7 +2760,7 @@ export async function verifyPluginPackages(page, window, app, model, fixture) {
   assert.match(JSON.stringify(response.input.messages.find(({ role }) => role === "tool")), /Plugin fixture version 1\.0\.0/);
   response.write({ content: "Verified the plugin fixture." });
   response.finish();
-  await page.waitForFunction(async () => !(await window.pi.getSnapshot()).activeRun);
+  await page.waitForFunction(async () => (await window.pi.getSnapshot()).activeRuns.length === 0);
 
   await openSettings(page, en, "Plugins");
   const update = page.getByRole("dialog", { name: "Check for plugin updates" });
@@ -3329,5 +3494,5 @@ export async function verifyImageConversation(page, model, project) {
   await page.getByText("The fixture continued in text.", { exact: true }).waitFor();
   await button(page, "View image image-only.png").waitFor();
   await button(page, "Send").waitFor();
-  await page.waitForFunction(async () => (await window.pi.getSnapshot()).activeRun === null);
+  await page.waitForFunction(async () => (await window.pi.getSnapshot()).activeRuns.length === 0);
 }

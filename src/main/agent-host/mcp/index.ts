@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { addAbortListener } from "node:events";
 
-import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
+import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
   createMcpToolName,
   limitMcpContent,
@@ -31,7 +31,7 @@ import type { McpServerConfig, Settings } from "../../settings/types";
 import { mcpOAuthEndpoint, type McpOAuth } from "./oauth";
 import { MCP_OAUTH_CHANGED, MCP_OAUTH_REQUIRED } from "./oauth/constants";
 import type { McpOAuthEndpoint } from "./oauth/types";
-import type { McpConnection, McpTool, McpToolPolicy } from "./types";
+import type { McpConnection, McpTool, McpToolSession } from "./types";
 
 function readEncrypted<T>(stored?: string): T | undefined {
   if (!stored) return undefined;
@@ -126,10 +126,10 @@ function buildTool(
 
 export class McpManager {
   private readonly connections = new Map<string, McpConnection>();
+  private readonly runConnections = new Map<Map<string, McpConnection>, string | undefined>();
   private readonly closing = new Set<Promise<void>>();
   private readonly pausedPluginServers = new Map<string, number>();
   private readonly reconnectOnSync = new Set<string>();
-  private configs: McpServerConfig[] = [];
 
   constructor(
     private readonly getSettings: () => Settings,
@@ -183,79 +183,74 @@ export class McpManager {
     this.reconnectOnSync.add(endpoint.id);
   }
 
-  private sync(
-    workingDirectory: string | undefined,
-    reconnectId?: string,
-    projectServers: readonly McpServerConfig[] = [],
-  ): McpConnection[] {
-    const mcpServers = [...(this.getSettings().mcpServers ?? []), ...projectServers];
-    this.configs = mcpServers;
-    const active = mcpServers.filter(
+  private sync(workingDirectory: string | undefined, reconnectId?: string): void {
+    const active = (this.getSettings().mcpServers ?? []).filter(
       (config) => config.enabled && !this.pausedPluginServers.has(config.id),
     );
     const enabledIds = new Set(active.map((config) => config.id));
     for (const id of this.connections.keys()) {
       if (!enabledIds.has(id) || id === reconnectId || this.reconnectOnSync.has(id)) {
-        this.disconnect(id);
+        this.disconnect(this.connections, id);
       }
     }
     this.reconnectOnSync.clear();
-    return active.map((config) => {
-      // A changed endpoint or executable gets a new namespace so old approvals do not transfer.
-      const signature = JSON.stringify([
-        config.id,
-        config.name,
-        config.transport,
-        config.encryptedEnv,
-        config.encryptedHeaders,
-        config.encryptedImport,
-        config.transport.type === "stdio" ? workingDirectory : undefined,
-        ...(config.project ? [config.project] : []),
-        ...(config.oauthClient ? [config.oauthClient] : []),
-      ]);
+    for (const config of active) {
+      const signature = this.signature(config, workingDirectory);
       const existing = this.connections.get(config.id);
-      if (existing?.signature === signature) return existing;
-      this.disconnect(config.id);
-      const client = new McpClient({
-        // Servers can use the client name as a stable identifier.
-        name: APP_PACKAGE_NAME,
-        title: APP_NAME,
-        version: this.version,
-        requestTimeoutMs: 10000,
-      });
-      const connection: McpConnection = {
-        client,
-        signature,
-        ready: Promise.resolve(),
-        tools: [],
-      };
-      connection.ready = this.connect(connection, config, workingDirectory);
-      this.connections.set(config.id, connection);
-      return connection;
-    });
+      if (existing?.signature === signature) continue;
+      this.disconnect(this.connections, config.id);
+      this.connections.set(config.id, this.createConnection(config, workingDirectory, signature));
+    }
   }
 
-  private disconnect(id: string): void {
-    const connection = this.connections.get(id);
+  private signature(config: McpServerConfig, workingDirectory: string | undefined): string {
+    // A changed endpoint or executable gets a new namespace so old approvals do not transfer.
+    return JSON.stringify([
+      config.id,
+      config.name,
+      config.transport,
+      config.encryptedEnv,
+      config.encryptedHeaders,
+      config.encryptedImport,
+      config.transport.type === "stdio" ? workingDirectory : undefined,
+      ...(config.project ? [config.project] : []),
+      ...(config.oauthClient ? [config.oauthClient] : []),
+    ]);
+  }
+
+  private createConnection(
+    config: McpServerConfig,
+    workingDirectory: string | undefined,
+    signature: string,
+  ): McpConnection {
+    const client = new McpClient({
+      name: APP_PACKAGE_NAME,
+      title: APP_NAME,
+      version: this.version,
+      requestTimeoutMs: 10000,
+    });
+    const connection: McpConnection = { client, signature, ready: Promise.resolve(), tools: [] };
+    connection.ready = this.connect(connection, config, workingDirectory);
+    return connection;
+  }
+
+  private disconnect(
+    connections: Map<string, McpConnection>,
+    id: string,
+  ): Promise<void> | undefined {
+    const connection = connections.get(id);
     if (!connection) return;
-    this.connections.delete(id);
+    connections.delete(id);
     const closed = connection.client.close().catch(() => {});
     this.closing.add(closed);
     void closed.then(() => this.closing.delete(closed));
-  }
-
-  async closeProjectServers(): Promise<void> {
-    for (const config of this.configs) {
-      if (config.project) this.disconnect(config.id);
-    }
-    this.configs = this.configs.filter((config) => !config.project);
-    await Promise.all(this.closing);
+    return closed;
   }
 
   async withPluginServersClosed(ids: readonly string[], change: () => void): Promise<void> {
     for (const id of ids) {
       this.pausedPluginServers.set(id, (this.pausedPluginServers.get(id) ?? 0) + 1);
-      this.disconnect(id);
+      this.disconnect(this.connections, id);
     }
     try {
       await Promise.all(this.closing);
@@ -331,72 +326,100 @@ export class McpManager {
     if (preserveConnections && reconnectId) this.reconnectOnSync.add(reconnectId);
     if (!preserveConnections) this.sync(workingDirectory, reconnectId);
     const configs = this.getSettings().mcpServers ?? [];
-    await Promise.all(configs.map(({ id }) => this.connections.get(id)?.ready));
-    return configs.map((config) => {
-      const { id, name, transport, enabled, policy, encryptedEnv, encryptedImport, oauthClient } =
-        config;
-      const connection = this.connections.get(id);
-      const connected = connection?.client.connectionState === "connected" && !connection.error;
-      return {
-        id,
-        name,
-        transport,
-        enabled,
-        policy,
-        imported: Boolean(encryptedImport),
-        oauth: this.oauthInfo(config),
-        oauthClient,
-        hasEnv: Boolean(encryptedEnv || (encryptedImport && transport.type === "stdio")),
-        status: !enabled ? "disabled" : connected ? "connected" : "error",
-        tools: connected
-          ? connection.tools.map((tool) => ({ name: tool.name, label: tool.label }))
-          : [],
-        error: enabled && !connected ? (connection?.error ?? "MCP 连接已断开。") : undefined,
-      };
-    });
-  }
-
-  async tools(
-    workingDirectory: string | undefined,
-    signal?: AbortSignal,
-    projectServers?: readonly McpServerConfig[],
-  ): Promise<AgentTool[]> {
-    signal?.throwIfAborted();
-    const connections = this.sync(workingDirectory, undefined, projectServers);
-    const ready = Promise.all(connections.map((connection) => connection.ready));
-    if (signal) {
-      const cancelled = Promise.withResolvers<never>();
-      const listener = addAbortListener(signal, () => cancelled.reject(signal.reason));
-      try {
-        await Promise.race([ready, cancelled.promise]);
-      } finally {
-        listener[Symbol.dispose]();
-      }
-    } else {
-      await ready;
-    }
-    return connections.flatMap((connection) =>
-      connection.client.connectionState === "connected" ? connection.tools : [],
+    const running = [...this.runConnections].find(
+      ([, directory]) => directory === workingDirectory,
+    );
+    const connections = running?.[0] ?? this.connections;
+    return Promise.all(
+      configs.map(async (config) => {
+        const { id, name, transport, enabled, policy, encryptedEnv, encryptedImport, oauthClient } =
+          config;
+        const connection = connections.get(id);
+        await connection?.ready;
+        const connected = connection?.client.connectionState === "connected" && !connection.error;
+        return {
+          id,
+          name,
+          transport,
+          enabled,
+          policy,
+          imported: Boolean(encryptedImport),
+          oauth: this.oauthInfo(config),
+          oauthClient,
+          hasEnv: Boolean(encryptedEnv || (encryptedImport && transport.type === "stdio")),
+          status: !enabled ? "disabled" : connected ? "connected" : "error",
+          tools: connected
+            ? connection.tools.map((tool) => ({ name: tool.name, label: tool.label }))
+            : [],
+          error: enabled && !connected ? (connection?.error ?? "MCP 连接已断开。") : undefined,
+        };
+      }),
     );
   }
 
-  policyOf(name: string): McpToolPolicy | undefined {
-    for (const config of this.configs) {
-      const tool = this.connections.get(config.id)?.tools.find((entry) => entry.name === name);
-      if (tool) {
-        return {
-          label: tool.label,
-          serverName: config.name,
-          toolName: tool.remoteName,
-          requireConfirmation: config.policy === "confirm",
-        };
+  openToolSession(
+    workingDirectory: string | undefined,
+    projectServers: readonly McpServerConfig[],
+  ): McpToolSession {
+    const configs = [...(this.getSettings().mcpServers ?? []), ...projectServers].filter(
+      (config) => config.enabled && !this.pausedPluginServers.has(config.id),
+    );
+    // Stdio working directories and tool policies are bound to the run that loaded them.
+    const connections = new Map<string, McpConnection>();
+    this.runConnections.set(connections, workingDirectory);
+    for (const config of configs) {
+      const signature = this.signature(config, workingDirectory);
+      const idle = this.connections.get(config.id);
+      if (idle?.signature === signature && !idle.error && !this.reconnectOnSync.has(config.id)) {
+        this.connections.delete(config.id);
+        connections.set(config.id, idle);
+      } else {
+        this.disconnect(this.connections, config.id);
+        this.reconnectOnSync.delete(config.id);
+        connections.set(config.id, this.createConnection(config, workingDirectory, signature));
       }
     }
-    return undefined;
+    return {
+      tools: async (signal) => {
+        signal.throwIfAborted();
+        const cancelled = Promise.withResolvers<never>();
+        const listener = addAbortListener(signal, () => cancelled.reject(signal.reason));
+        try {
+          await Promise.race([
+            Promise.all([...connections.values()].map((connection) => connection.ready)),
+            cancelled.promise,
+          ]);
+        } finally {
+          listener[Symbol.dispose]();
+        }
+        return [...connections.values()].flatMap((connection) =>
+          connection.client.connectionState === "connected" ? connection.tools : [],
+        );
+      },
+      policyOf: (name) => {
+        for (const config of configs) {
+          const tool = connections.get(config.id)?.tools.find((entry) => entry.name === name);
+          if (tool)
+            return {
+              label: tool.label,
+              serverName: config.name,
+              toolName: tool.remoteName,
+              requireConfirmation: config.policy === "confirm",
+            };
+        }
+      },
+      close: async () => {
+        const closed = [...connections.keys()].map((id) => this.disconnect(connections, id));
+        this.runConnections.delete(connections);
+        await Promise.all(closed);
+      },
+    };
   }
 
   async close(): Promise<void> {
-    for (const id of this.connections.keys()) this.disconnect(id);
+    for (const connections of [this.connections, ...this.runConnections.keys()])
+      for (const id of connections.keys()) this.disconnect(connections, id);
+    this.runConnections.clear();
     await Promise.all([this.oauth?.close(), ...this.closing]);
   }
 }

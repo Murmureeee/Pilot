@@ -20,3 +20,9 @@ export interface McpToolPolicy {
   toolName: string;
   requireConfirmation: boolean;
 }
+
+export interface McpToolSession {
+  tools(signal: AbortSignal): Promise<AgentTool[]>;
+  policyOf(name: string): McpToolPolicy | undefined;
+  close(): Promise<void>;
+}

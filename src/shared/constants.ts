@@ -2,6 +2,7 @@
 export { name as APP_PACKAGE_NAME, productName as APP_NAME } from "../../package.json";
 export const WORKSPACE_QUERY_LENGTH = 512;
 export const CONVERSATION_QUERY_LENGTH = 512;
+export const MAX_CONCURRENT_RUNS = 2;
 export const IMAGE_ATTACHMENT_MIME_TYPES = [
   "image/png",
   "image/jpeg",

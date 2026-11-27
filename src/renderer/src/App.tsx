@@ -48,6 +48,7 @@ import type {
 } from "@renderer/lib/types";
 import { isTerminalShortcut, windowShortcutAction } from "@renderer/lib/window-shortcuts";
 import {
+  selectCurrentRun,
   selectPlanReview,
   selectProjectDirectory,
   selectWorkingDirectory,
@@ -100,10 +101,8 @@ export default function App(): JSX.Element {
       state.messages.some(({ role }) => role === "user"),
   );
   const stoppableRunId = useAgentStore((state) =>
-    state.status === "streaming" &&
-    state.pendingPermissions.length === 0 &&
-    state.activeRun?.sessionId === state.sessionId
-      ? state.activeRun.runId
+    state.status === "streaming" && state.pendingPermissions.length === 0
+      ? (selectCurrentRun(state)?.runId ?? null)
       : null,
   );
   const reviewAttached = useReviewStore(
@@ -187,7 +186,8 @@ export default function App(): JSX.Element {
       const store = useAgentStore.getState();
       if (shortcut === "stop-run") {
         clear();
-        if (store.activeRun?.runId === stoppableRunId) store.abort(store.activeRun);
+        const run = selectCurrentRun(store);
+        if (run && run.runId === stoppableRunId) store.abort(run);
         return;
       }
       editComposer({ shortcut });
@@ -365,9 +365,12 @@ export default function App(): JSX.Element {
               '[data-permission-card] button[aria-keyshortcuts="Escape"], [data-project-trust-card] button[aria-keyshortcuts="Escape"]',
             )
             ?.click();
-        } else if (store.activeRun && store.activeRun.runId === stoppableRunId) {
-          event.preventDefault();
-          press(store.activeRun);
+        } else {
+          const run = selectCurrentRun(store);
+          if (run && run.runId === stoppableRunId) {
+            event.preventDefault();
+            press(run);
+          }
         }
         return;
       }

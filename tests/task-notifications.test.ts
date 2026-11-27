@@ -42,9 +42,9 @@ beforeEach(() => {
 const run = { sessionId: "a", runId: "run-a" };
 const isWindows = process.platform === "win32";
 
-const request = (requestId: string): UiAgentEvent => ({
+const request = (requestId: string, ref = run): UiAgentEvent => ({
   type: "permission_request",
-  run,
+  run: ref,
   requestId,
   callId: requestId,
   toolName: "write_file",
@@ -65,7 +65,7 @@ function idle(result?: "success" | "failed" | "stopped"): UiAgentEvent {
   return { type: "status", status: "idle", run, result };
 }
 
-function fixture(locale: Locale = "zh") {
+function fixture(locale: Locale = "zh", others: SessionMeta[] = []) {
   const session: SessionMeta = {
     id: run.sessionId,
     title: "Working chat",
@@ -87,7 +87,8 @@ function fixture(locale: Locale = "zh") {
     getWindow: () => window as unknown as BrowserWindow,
     getLocale: () => locale,
     getVisibleSessionId: () => view.visible,
-    getSession: (id) => (id === session.id ? session : null),
+    getSession: (id) =>
+      id === session.id ? session : (others.find((item) => item.id === id) ?? null),
     setUnread,
     openSession,
     reportError: vi.fn<TaskNotificationOptions["reportError"]>(),
@@ -137,6 +138,24 @@ it("only announces terminal results outside the chat and reads a completion on r
   expect(native.items[1].options.title).toBe("Task failed");
   expect(native.items[0].close).toHaveBeenCalledOnce();
   expect(setUnread).toHaveBeenCalledTimes(2);
+});
+
+it("keeps both background approval notices until their own run resolves", () => {
+  const second = { id: "b", title: "Second chat", updatedAt: 1, createdAt: 1 };
+  const otherRun = { sessionId: second.id, runId: "run-b" };
+  const { controller, view, openSession, window } = fixture("en", [second]);
+  view.visible = null;
+  controller.handleEvent(request("a1"));
+  controller.handleEvent(request("b1", otherRun));
+  controller.handleEvent(request("b2", otherRun));
+  expect(native.items.map(({ options }) => options.body)).toEqual(["Working chat", "Second chat"]);
+  controller.handleEvent(respond("a1"));
+  expect(native.items[0].close).toHaveBeenCalledOnce();
+  expect(native.items[1].close).not.toHaveBeenCalled();
+  expect(window.flashFrame.mock.calls).toEqual(isWindows ? [[true]] : []);
+  native.items[1].emit("click");
+  expect(openSession).toHaveBeenCalledExactlyOnceWith(second.id);
+  expect(window.flashFrame.mock.calls).toEqual(isWindows ? [[true], [false]] : []);
 });
 
 it("announces pending plans and dismisses their notice after the plan is discarded", () => {

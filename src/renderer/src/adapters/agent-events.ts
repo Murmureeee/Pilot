@@ -17,7 +17,8 @@ import { applyMessageEvent } from "../../../shared/message-events";
 
 export interface AgentUiState {
   status: AgentStatus;
-  activeRun: ActiveRun | null;
+  activeRuns: ActiveRun[];
+  workspaceRunIds: string[];
   interruptedRun: InterruptedRun | null;
   failedRun: FailedRun | null;
   messages: UiMessage[];
@@ -37,7 +38,8 @@ export interface AgentUiState {
 export function initialAgentUiState(): AgentUiState {
   return {
     status: "idle",
-    activeRun: null,
+    activeRuns: [],
+    workspaceRunIds: [],
     interruptedRun: null,
     failedRun: null,
     messages: [],
@@ -59,31 +61,53 @@ export function applyAgentEvent(state: AgentUiState, event: UiAgentEvent): Agent
     const belongsToSelection = event.run.sessionId === state.sessionId;
     return {
       ...state,
-      activeRun: event.run,
+      activeRuns: [
+        ...state.activeRuns.filter(({ sessionId }) => sessionId !== event.run.sessionId),
+        event.run,
+      ],
       ...(belongsToSelection
-        ? { status: event.run.status, error: null, interruptedRun: null, failedRun: null }
+        ? {
+            workspaceRunIds: [event.run.runId],
+            status: event.run.status,
+            error: null,
+            interruptedRun: null,
+            failedRun: null,
+          }
         : {}),
     };
   }
 
   if ("run" in event) {
-    const active = state.activeRun;
-    if (active?.runId !== event.run.runId || active.sessionId !== event.run.sessionId) return state;
+    const index = state.activeRuns.findIndex(
+      ({ runId, sessionId }) => runId === event.run.runId && sessionId === event.run.sessionId,
+    );
+    if (index < 0) return state;
+    const active = state.activeRuns[index];
     const belongsToSelection = event.run.sessionId === state.sessionId;
     if (event.type === "model_retry") {
       return {
         ...state,
-        activeRun: { ...active, retry: event.retry ?? undefined },
+        activeRuns: state.activeRuns.with(index, { ...active, retry: event.retry ?? undefined }),
         messages: belongsToSelection ? applyMessageEvent(state.messages, event) : state.messages,
       };
     }
     if (event.type === "context_compacting") {
-      return { ...state, activeRun: { ...active, compacting: event.compacting } };
+      return {
+        ...state,
+        activeRuns: state.activeRuns.with(index, { ...active, compacting: event.compacting }),
+      };
     }
     if (event.type === "status") {
       return {
         ...state,
-        activeRun: event.status === "idle" ? null : { ...active, status: event.status },
+        activeRuns:
+          event.status === "idle"
+            ? state.activeRuns.toSpliced(index, 1)
+            : state.activeRuns.with(index, { ...active, status: event.status }),
+        workspaceRunIds:
+          event.status === "idle" && state.workspaceRunIds.includes(active.runId)
+            ? state.workspaceRunIds.filter((id) => id !== active.runId)
+            : state.workspaceRunIds,
         ...(belongsToSelection
           ? {
               status: event.status,

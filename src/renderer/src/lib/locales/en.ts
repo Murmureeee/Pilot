@@ -408,10 +408,23 @@ export const EN_MESSAGES: Record<string, string> = {
   "可以从已保存的消息和工具结果继续。": "Continue from the saved messages and tool results.",
   继续任务: "Resume task",
   "该任务已更新，请重新打开会话。": "The task has changed. Reopen the chat to continue.",
-  "会话「{0}」等待审批": "“{0}” is waiting for approval",
-  "会话「{0}」正在停止": "The task in “{0}” is stopping",
-  "会话「{0}」正在运行": "A task is running in “{0}”",
-  "发送时，会话「{0}」有一项运行中的任务。": "“{0}” had an active task when you tried to send.",
+  "同一工作区的会话「{0}」等待审批。": "“{0}” is waiting for approval in this workspace.",
+  "同一工作区的会话「{0}」正在停止。": "“{0}” is stopping in this workspace.",
+  "同一工作区的会话「{0}」正在运行。": "“{0}” is running in this workspace.",
+  "已同时运行 {0} 项任务。等一项结束后再发送。":
+    "{0} tasks are running. Wait for one to finish before sending.",
+  "现在可以再次发送。": "You can send again now.",
+  "当前任务正在收尾，请稍后重试。": "This task is finishing. Try again in a moment.",
+  "此会话正在删除。请切换到其他会话。": "This chat is being deleted. Switch to another chat.",
+  "请等待当前工作区的任务结束后重试。":
+    "Wait for the active task in this workspace to finish, then try again.",
+  "并行任务已达上限。请等待一项任务结束后重试。":
+    "The parallel task limit is reached. Wait for one task to finish, then try again.",
+  "请等待当前操作结束后再重试。": "Wait for the current operation to finish, then try again.",
+  "请等待当前工作区的任务结束后再更新 Git。":
+    "Wait for the active task in this workspace to finish before updating Git.",
+  "请等待当前工作区的操作结束后再撤销。":
+    "Wait for the active operation in this workspace to finish before reverting.",
   "此消息仍在草稿中。": "Your message is still a draft.",
   返回任务会话: "Go to task chat",
   "插话排队 {0}": "{0} queued",

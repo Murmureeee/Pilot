@@ -28,7 +28,7 @@ export function SidebarChatList(): JSX.Element {
   const recentProjects = useAgentStore((s) => s.recentProjects);
   const projectDirectory = useAgentStore(selectProjectDirectory);
   const choosingProject = useAgentStore((s) => s.choosingProject);
-  const activeRun = useAgentStore((s) => s.activeRun);
+  const activeRuns = useAgentStore((s) => s.activeRuns);
   const interruptedRun = useAgentStore((s) => s.interruptedRun);
   const failedRun = useAgentStore((s) => s.failedRun);
   const [renameTarget, setRenameTarget] = useState<SessionMeta | null>(null);
@@ -85,7 +85,12 @@ export function SidebarChatList(): JSX.Element {
       key={session.id}
       session={session}
       current={session.id === sessionId}
-      status={sessionRowStatus(session, activeRun, interruptedRun, failedRun)}
+      status={sessionRowStatus(
+        session,
+        activeRuns.find((run) => run.sessionId === session.id) ?? null,
+        interruptedRun,
+        failedRun,
+      )}
       nested={nested}
       onRename={setRenameTarget}
       onDelete={setDeleteTarget}

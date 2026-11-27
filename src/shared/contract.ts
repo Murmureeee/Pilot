@@ -380,6 +380,8 @@ export interface RunRef {
   sessionId: string;
 }
 
+export type RunBlocker = { kind: "workspace"; run: RunRef } | { kind: "capacity" };
+
 export interface ActiveRun extends RunRef {
   planning?: true;
   status: Exclude<AgentStatus, "idle">;
@@ -1010,7 +1012,8 @@ export interface Snapshot {
   recentProjects: string[];
   messages: UiMessage[];
   status: AgentStatus;
-  activeRun: ActiveRun | null;
+  activeRuns: ActiveRun[];
+  workspaceRunIds: string[];
   interruptedRun: InterruptedRun | null;
   failedRun: FailedRun | null;
   pendingPermissions: PermissionRequest[];

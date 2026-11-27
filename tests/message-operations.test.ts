@@ -98,7 +98,7 @@ it("uses the chosen message boundary for branch, edit, and retry while preservin
   host.loadSession(id);
   host.branchMessage(id, original.messages[3].id, "retry");
   await vi.waitFor(() => {
-    expect(host.getSnapshot().activeRun).toBeNull();
+    expect(host.getSnapshot().activeRuns).toEqual([]);
     expect(host.getSnapshot().messages.at(-1)?.parts).toContainEqual({
       type: "text",
       text: "Retried reply",

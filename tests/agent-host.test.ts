@@ -28,6 +28,7 @@ import { expect, it, vi } from "vitest";
 
 import { AgentHost } from "../src/main/agent-host/host";
 import { McpManager } from "../src/main/agent-host/mcp";
+import type { McpToolSession } from "../src/main/agent-host/mcp/types";
 import * as models from "../src/main/agent-host/models";
 import { loadProjectInstructions } from "../src/main/agent-host/project-instructions";
 import { actionFingerprint } from "../src/main/agent-host/recovery";
@@ -44,6 +45,10 @@ import { promptFromDraft } from "../src/shared/mentions";
 import { fixtureTitle } from "./model-fixture";
 
 vi.mock("electron", () => ({ safeStorage: {} }));
+
+function mcpToolSession(tools: Promise<AgentTool[]> = Promise.resolve([])): McpToolSession {
+  return { tools: () => tools, policyOf: () => undefined, close: async () => {} };
+}
 
 it("plans with read-only tools, restores the edited plan after restart, and executes with the original mode", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-plan-mode-"));
@@ -83,7 +88,7 @@ it("plans with read-only tools, restores the edited plan after restart, and exec
     },
   });
   const mcp = new McpManager(() => settings, "0.0.0");
-  using mcpTools = vi.spyOn(mcp, "tools").mockResolvedValue([]);
+  using mcpTools = vi.spyOn(mcp, "openToolSession").mockImplementation(() => mcpToolSession());
   const approvals: string[] = [];
   const afterTurn = vi.fn<(sessionId: string, directory: string, task: VerificationTask) => void>();
   const createHost = (): AgentHost => {
@@ -114,7 +119,7 @@ it("plans with read-only tools, restores the edited plan after restart, and exec
   // The plan must retain the permissions it was created with even if the global default changes.
   settings.approvalMode = "full-access";
   const planning = host.prompt("Prepare a note");
-  expect(host.getSnapshot().activeRun?.planning).toBe(true);
+  expect(host.getSnapshot().activeRuns[0]?.planning).toBe(true);
   expect(() => host.setPlanMode(composerId, false)).toThrow("请等待当前回复结束");
   await planning;
   expect(requests).toHaveLength(3);
@@ -208,7 +213,7 @@ it("binds project trust, MCP startup and file rules to the selected run", async 
       fixtureTitle(context) ?? catalog.streamSimple(model, context, options),
   });
   const mcp = new McpManager(() => settings, "0.0.0");
-  using mcpTools = vi.spyOn(mcp, "tools").mockResolvedValue([]);
+  using mcpTools = vi.spyOn(mcp, "openToolSession").mockImplementation(() => mcpToolSession());
   const approvals: string[] = [];
   const completed =
     vi.fn<(id: string, directory: string, task: VerificationTask, fingerprint?: string) => void>();
@@ -229,7 +234,10 @@ it("binds project trust, MCP startup and file rules to the selected run", async 
   });
   const waiting = async (previous?: string) =>
     vi.waitFor(() => {
-      const { activeRun, pendingProjectTrust } = host.getSnapshot();
+      const {
+        activeRuns: [activeRun],
+        pendingProjectTrust,
+      } = host.getSnapshot();
       expect(activeRun?.status).toBe("waiting_approval");
       expect(pendingProjectTrust?.requestId).toBeTruthy();
       expect(pendingProjectTrust?.requestId).not.toBe(previous);
@@ -256,7 +264,7 @@ it("binds project trust, MCP startup and file rules to the selected run", async 
     );
     host.respondProjectTrust(first.run, first.request.requestId, "skip");
     await firstTurn;
-    expect(mcpTools.mock.lastCall?.[2]).toBeUndefined();
+    expect(mcpTools.mock.lastCall?.[1]).toEqual([]);
     expect(completed.mock.lastCall?.[3]).toBeUndefined();
     expect(settings.projectTrust).toBeUndefined();
 
@@ -274,7 +282,7 @@ it("binds project trust, MCP startup and file rules to the selected run", async 
     expect(mcpTools).toHaveBeenCalledOnce();
     host.respondProjectTrust(changed.run, changed.request.requestId, "trust");
     await secondTurn;
-    expect(mcpTools.mock.lastCall?.[2]).toEqual([
+    expect(mcpTools.mock.lastCall?.[1]).toEqual([
       expect.objectContaining({ name: "fixture", project: expect.objectContaining({ directory }) }),
     ]);
     expect(readFileSync(join(directory, "reviewed", "allowed.txt"), "utf8")).toBe("allowed");
@@ -471,7 +479,7 @@ it("publishes the result for a background failure and clears it after a successf
   const host = createHost();
   host.openProject(root);
   const running = host.prompt("Run that fails");
-  const ref = host.getSnapshot().activeRun!;
+  const ref = host.getSnapshot().activeRuns[0]!;
   host.newSession();
   await running;
 
@@ -678,7 +686,7 @@ it("keeps queued file references in the working directory of the active run", as
   };
   const mcp = new McpManager(() => settings, "0.0.0");
   const preparation = Promise.withResolvers<AgentTool[]>();
-  vi.spyOn(mcp, "tools").mockReturnValueOnce(preparation.promise);
+  vi.spyOn(mcp, "openToolSession").mockReturnValueOnce(mcpToolSession(preparation.promise));
   const host = new AgentHost({
     getSettings: () => settings,
     saveSettings: vi.fn<(value: Settings) => void>(),
@@ -815,7 +823,7 @@ it("reopens a recent project after restart and links an old chat without changin
   );
 });
 
-it("keeps the original run, approval, and transcript while another project is selected", async () => {
+it("keeps the original run and draft separate when switching to an overlapping folder", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-project-switch-"));
   const original = realpathSync(profile.path);
   const next = join(original, "next");
@@ -828,7 +836,7 @@ it("keeps the original run, approval, and transcript while another project is se
     if (event.type === "permission_request") requested.resolve(event);
   });
   const mcp = new McpManager(() => settings, "0.0.0");
-  const tools = vi.spyOn(mcp, "tools");
+  const tools = vi.spyOn(mcp, "openToolSession");
   const host = new AgentHost({
     getSettings: () => settings,
     saveSettings: vi.fn<(value: Settings) => void>(),
@@ -845,12 +853,10 @@ it("keeps the original run, approval, and transcript while another project is se
   host.openProject(original);
 
   const running = host.prompt("Original 演示", a);
-  const ref = host.getSnapshot().activeRun!;
+  const ref = host.getSnapshot().activeRuns[0]!;
   const invalid = { sessionId: a, runId: b };
   try {
-    await vi.waitFor(() =>
-      expect(tools).toHaveBeenCalledWith(original, expect.any(AbortSignal), undefined),
-    );
+    await vi.waitFor(() => expect(tools).toHaveBeenCalledWith(original, []));
     expect(host.openProject(next)).toMatchObject({
       status: "idle",
       sessionId: null,
@@ -858,14 +864,14 @@ it("keeps the original run, approval, and transcript while another project is se
       composerDraft: ["B draft"],
       messages: [],
       pendingPermissions: [],
-      activeRun: ref,
+      activeRuns: [ref],
     });
     expect(host.getWorkingDirectory()).toBe(next);
     settings.approvalMode = "read-only";
     const request = await requested.promise;
     expect(host.prompt("Blocked send", b)).toMatchObject({
-      sessionId: a,
-      status: "waiting_approval",
+      kind: "workspace",
+      run: { sessionId: a, runId: ref.runId },
     });
     expect(store.loadDraft(b)).toEqual(["B draft"]);
     expect(host.getSnapshot().pendingPermissions).toEqual([]);
@@ -887,7 +893,7 @@ it("keeps the original run, approval, and transcript while another project is se
     expect(host.getSnapshot()).toMatchObject({
       sessionId: null,
       composerId: b,
-      activeRun: null,
+      activeRuns: [],
       messages: [],
       composerDraft: ["B draft"],
     });
@@ -907,6 +913,93 @@ it("keeps the original run, approval, and transcript while another project is se
   }
 });
 
+it("runs distinct workspaces together and preserves both checkpoints when exiting", async () => {
+  using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-parallel-"));
+  const root = realpathSync(profile.path);
+  const projectA = join(root, "A");
+  const dirA = join(projectA, "first");
+  const aliasA = join(projectA, "second");
+  const dirB = join(root, "B");
+  const dirC = join(root, "C");
+  for (const directory of [dirA, aliasA, dirB, dirC]) mkdirSync(directory, { recursive: true });
+  execFileSync("git", ["init", "-q", "--template="], { cwd: projectA });
+  const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
+  const settings: Settings = { providers: [provider], activeProviderId: provider.id };
+  const sessions = join(root, "sessions");
+  const store = new SessionStore(sessions);
+  const host = new AgentHost({
+    getSettings: () => settings,
+    saveSettings: (value) => Object.assign(settings, value),
+    broadcast: () => {},
+    store,
+    skillsDir: join(root, "skills"),
+    mcp: new McpManager(() => settings, "0.0.0"),
+  });
+  const idA = host.openProject(dirA).composerId;
+  const first = host.prompt("A 演示", idA);
+  const [a] = host.getSnapshot().activeRuns;
+  const sameWorkspace = host.openProject(aliasA);
+  const idB = host.openProject(dirB).composerId;
+  const second = host.prompt("B 演示", idB);
+  const [, b] = host.getSnapshot().activeRuns;
+  const idC = host.openProject(dirC).composerId;
+  let third: ReturnType<AgentHost["prompt"]> | undefined;
+  try {
+    expect(first).toBeInstanceOf(Promise);
+    expect(second).toBeInstanceOf(Promise);
+    expect(sameWorkspace.workspaceRunIds).toEqual([a.runId]);
+    expect([a, b].map(({ sessionId, workingDirectory }) => [sessionId, workingDirectory])).toEqual([
+      [idA, dirA],
+      [idB, dirB],
+    ]);
+    host.saveSessionDraft(idC, ["C 演示"]);
+    expect(host.prompt("C 演示", idC)).toEqual({ kind: "capacity" });
+    expect(host.getSnapshot()).toMatchObject({
+      sessionId: null,
+      composerDraft: ["C 演示"],
+      workspaceRunIds: [],
+    });
+    expect(store.getMeta(idC)).toBeNull();
+    await vi.waitFor(() =>
+      expect(host.getSnapshot().activeRuns.map(({ status }) => status)).toEqual([
+        "waiting_approval",
+        "waiting_approval",
+      ]),
+    );
+    const [requestB] = host.loadSession(idB).pendingPermissions;
+    const [requestA] = host.loadSession(idA).pendingPermissions;
+    host.respondPermission(a, requestB.requestId, "once");
+    host.abort(b);
+    expect(host.getSnapshot().pendingPermissions).toEqual([requestA]);
+    host.respondPermission(a, requestA.requestId, "session");
+    host.loadSession(idB);
+    await first;
+    expect(host.getSnapshot()).toMatchObject({
+      activeRuns: [{ sessionId: idB, status: "waiting_approval" }],
+      pendingPermissions: [requestB],
+    });
+    expect(existsSync(join(dirA, "pilot-demo.txt"))).toBe(true);
+    expect(existsSync(join(dirB, "pilot-demo.txt"))).toBe(false);
+    expect(host.openProject(dirC).composerId).toBe(idC);
+    third = host.prompt("C 演示", idC);
+    expect(third).toBeInstanceOf(Promise);
+    await vi.waitFor(() => expect(host.getSnapshot().pendingPermissions).toHaveLength(1));
+    host.saveSessionDraft(idC, ["C next draft"]);
+    await host.stopForExit();
+    expect(host.hasActiveRun()).toBe(false);
+    expect(host.getSnapshot().activeRuns).toEqual([]);
+    const reopened = new SessionStore(sessions);
+    expect(reopened.checkpoint(idA)).toBeUndefined();
+    expect(reopened.checkpoint(idB)).toMatchObject({ runId: b.runId, workingDirectory: dirB });
+    expect(reopened.checkpoint(idC)).toMatchObject({ workingDirectory: dirC });
+    expect(reopened.loadDraft(idC)).toEqual(["C next draft"]);
+    expect(existsSync(join(dirC, "pilot-demo.txt"))).toBe(false);
+  } finally {
+    await host.stopForExit();
+    await Promise.all([first, second, third]);
+  }
+});
+
 it("holds the run lock while stopping and ignores stop and queue actions from an earlier run", async () => {
   using profile = mkdtempDisposableSync(join(tmpdir(), "pilot-run-stop-"));
   const provider = { id: "faux", kind: "faux", name: "Faux", modelId: "faux-default" } as const;
@@ -914,9 +1007,9 @@ it("holds the run lock while stopping and ignores stop and queue actions from an
   const mcp = new McpManager(() => settings, "0.0.0");
   const firstPreparation = Promise.withResolvers<AgentTool[]>();
   const secondPreparation = Promise.withResolvers<AgentTool[]>();
-  vi.spyOn(mcp, "tools")
-    .mockReturnValueOnce(firstPreparation.promise)
-    .mockReturnValueOnce(secondPreparation.promise);
+  vi.spyOn(mcp, "openToolSession")
+    .mockReturnValueOnce(mcpToolSession(firstPreparation.promise))
+    .mockReturnValueOnce(mcpToolSession(secondPreparation.promise));
   const store = new SessionStore(join(profile.path, "sessions"));
   const b = store.create().id;
   store.saveDraft(b, ["Second chat"]);
@@ -932,7 +1025,7 @@ it("holds the run lock while stopping and ignores stop and queue actions from an
   const a = host.newSession().composerId;
   host.saveSessionDraft(a, ["First"]);
   const first = host.prompt("First", a);
-  const previous = host.getSnapshot().activeRun!;
+  const previous = host.getSnapshot().activeRuns[0]!;
   try {
     const interrupted = new SessionStore(join(profile.path, "sessions"));
     expect(interrupted.checkpoint(a)).toMatchObject({
@@ -945,7 +1038,10 @@ it("holds the run lock while stopping and ignores stop and queue actions from an
     expect(interrupted.loadDraft(a)).toEqual([]);
     host.abort(previous);
     host.loadSession(b);
-    expect(host.prompt("Second chat", b)).toMatchObject({ sessionId: a, status: "stopping" });
+    expect(host.prompt("Second chat", b)).toEqual({
+      kind: "workspace",
+      run: { sessionId: a, runId: previous.runId },
+    });
     expect(host.getSnapshot().composerDraft).toEqual(["Second chat"]);
   } finally {
     firstPreparation.resolve([]);
@@ -955,7 +1051,7 @@ it("holds the run lock while stopping and ignores stop and queue actions from an
   host.loadSession(a);
   expect(host.getSnapshot().interruptedRun).toBeNull();
   const second = host.prompt("A new run", a);
-  const active = host.getSnapshot().activeRun!;
+  const active = host.getSnapshot().activeRuns[0]!;
   try {
     expect(active.runId).not.toBe(previous.runId);
     await host.prompt("Queued in A", a);
@@ -997,13 +1093,13 @@ it("preserves a resumable checkpoint and draft when quitting during approval", a
   const id = host.openProject(directory).composerId;
   const prompt = "退出期间的演示";
   const running = host.prompt(prompt, id);
-  const ref = host.getSnapshot().activeRun!;
+  const ref = host.getSnapshot().activeRuns[0]!;
   try {
     await vi.waitFor(() => expect(host.getSnapshot().pendingPermissions).toHaveLength(1));
     host.saveSessionDraft(id, ["下次继续时的草稿"]);
     await host.stopForExit();
     expect(host.getSnapshot()).toMatchObject({
-      activeRun: null,
+      activeRuns: [],
       pendingPermissions: [],
       interruptedRun: { runId: ref.runId, sessionId: id, workingDirectory: directory },
       composerDraft: ["下次继续时的草稿"],
@@ -1058,7 +1154,7 @@ it("waits for run cleanup when exit starts from the run_started notification", a
     baseline.resolve(null);
     await exit;
     expect(host.getSnapshot()).toMatchObject({
-      activeRun: null,
+      activeRuns: [],
       interruptedRun: { sessionId: host.getSnapshot().sessionId },
     });
   } finally {
@@ -1138,7 +1234,7 @@ it("resumes with a new run ID and blocks replay of an action recorded in the che
     agentRunId: started?.run.runId,
   });
   expect(store.checkpoint(session.id)).toBeUndefined();
-  expect(host.getSnapshot().activeRun).toBeNull();
+  expect(host.getSnapshot().activeRuns).toEqual([]);
 });
 
 it("declares the current MCP tools on the first request and refreshes a resumed prompt", async () => {
@@ -1153,7 +1249,9 @@ it("declares the current MCP tools on the first request and refreshes a resumed 
     parameters: obj({}),
     execute: async () => ({ content: [], details: undefined }),
   };
-  vi.spyOn(mcp, "tools").mockResolvedValueOnce([externalTool]).mockResolvedValueOnce([]);
+  vi.spyOn(mcp, "openToolSession")
+    .mockReturnValueOnce(mcpToolSession(Promise.resolve([externalTool])))
+    .mockReturnValueOnce(mcpToolSession());
   const host = new AgentHost({
     getSettings: () => settings,
     saveSettings: vi.fn<(value: Settings) => void>(),
@@ -1226,7 +1324,7 @@ it("rebuilds the cached model after capability edits for the same saved model", 
   ];
   expect(host.getSnapshot().contextWindow).toBe(8192);
   const run = host.prompt("Second request");
-  expect(host.getSnapshot().activeRun?.modelCapabilities).toMatchObject({
+  expect(host.getSnapshot().activeRuns[0]?.modelCapabilities).toMatchObject({
     contextWindow: 8192,
     maxTokens: 1024,
     supportsImages: false,

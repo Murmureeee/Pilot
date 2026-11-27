@@ -128,8 +128,10 @@ export function registerSettingsRoutes(
   handle(IPC.settingsSave, (_event, input) => {
     const invalid = validateSettingsInput(input);
     if (invalid) throw new Error(invalid);
-    const merged = mergeSettingsInput(ctx.getSettings(), input);
+    const current = ctx.getSettings();
+    const merged = mergeSettingsInput(current, input);
     ctx.saveSettings(merged);
+    if (current.workingDirectory !== merged.workingDirectory) ctx.host.publishSnapshot();
     return toPublicSettings(merged);
   });
 }

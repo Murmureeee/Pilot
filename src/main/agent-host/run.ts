@@ -70,6 +70,7 @@ import {
   contextSize,
 } from "./context-compaction";
 import { previewFileApproval, verifyApprovedFile } from "./file-approval";
+import type { McpToolSession } from "./mcp/types";
 import { capabilitiesFromModel } from "./model-capabilities";
 import { withModelRetry } from "./model-retry";
 import { PermissionManager } from "./permissions";
@@ -121,6 +122,7 @@ export class AgentRun {
   private projectTrust?: PendingProjectTrust;
   private projectConfig?: ProjectConfig;
   private projectRules: ToolRule[] = [];
+  private mcpSession?: McpToolSession;
   private suppliedScopes: ReadonlySet<string> = new Set();
   private readonly previousActions: ReadonlySet<string>;
   private readonly finishedTools = new Map<string, ApprovedToolResult>();
@@ -403,7 +405,7 @@ export class AgentRun {
   ): Promise<BeforeToolCallResult | undefined> {
     signal?.throwIfAborted();
     const { toolCall, args } = context;
-    const { environment, mcp } = this.deps;
+    const { environment } = this.deps;
     const scopes = this.projectScopes.includeTool(toolCall.name, args);
     const action = actionFingerprint(toolCall.name, args, environment.workingDirectory);
     if (action && this.previousActions.has(action)) {
@@ -420,7 +422,7 @@ export class AgentRun {
     const result = await this.permissions.gate(
       toolCall,
       args,
-      mcp.policyOf(toolCall.name),
+      this.mcpSession?.policyOf(toolCall.name),
       environment,
       () => this.describePermission(context),
     );
@@ -446,7 +448,7 @@ export class AgentRun {
     toolCall,
     args,
   }: BeforeToolCallContext): PermissionDetails {
-    const { agent, environment, mcp } = this.deps;
+    const { agent, environment } = this.deps;
     const { workingDirectory } = environment;
     const index = ++this.approvalIndex;
     const start = assistantMessage.content.findIndex(
@@ -472,7 +474,7 @@ export class AgentRun {
             this.permissions.needsConfirmation(
               candidate.name,
               input,
-              mcp.policyOf(candidate.name),
+              this.mcpSession?.policyOf(candidate.name),
               environment,
             )
           )
@@ -555,19 +557,17 @@ export class AgentRun {
       )
         await this.prepareProject(projectDirectory);
       // Loading MCP tools can start a stdio server before any tool call is made.
-      const externalTools =
-        this.planning || signal.aborted
-          ? []
-          : await this.deps.mcp
-              .tools(
-                directory,
-                signal,
-                this.projectConfig ? projectMcpServers(this.projectConfig) : undefined,
-              )
-              .catch((error: unknown) => {
-                if (signal.aborted) return [];
-                throw error;
-              });
+      let externalTools: AgentTool[] = [];
+      if (!this.planning && !signal.aborted) {
+        this.mcpSession = this.deps.mcp.openToolSession(
+          directory,
+          this.projectConfig ? projectMcpServers(this.projectConfig) : [],
+        );
+        externalTools = await this.mcpSession.tools(signal).catch((error: unknown) => {
+          if (signal.aborted) return [];
+          throw error;
+        });
+      }
       if (signal.aborted) {
         if (this.interruptedForExit) return;
         const messages = initialMessage
@@ -673,7 +673,8 @@ export class AgentRun {
       }
       this.permissions.abortAll();
       this.finishProjectTrust();
-      if (this.projectConfig?.servers.length) await this.deps.mcp.closeProjectServers();
+      await this.mcpSession?.close();
+      this.mcpSession = undefined;
       agent.clearAllQueues();
       unsubscribe();
       agent.beforeToolCall = undefined;
@@ -1267,7 +1268,7 @@ export class AgentRun {
   }
 
   private toolLabel(name: string): string {
-    return this.deps.mcp.policyOf(name)?.label ?? labelOf(name);
+    return this.mcpSession?.policyOf(name)?.label ?? labelOf(name);
   }
 }
 
