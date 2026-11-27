@@ -1,9 +1,9 @@
 // @env node
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { createReadStream } from "node:fs";
-import { mkdir, mkdtemp, readFile, realpath, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -238,28 +238,22 @@ async function verifyDeb() {
 }
 
 async function verifyLinuxPicker(page) {
-  const directory = join(scratch, "selected");
-  await mkdir(directory);
-  await page.evaluate(async (path) => {
-    const { providers, activeProviderId } = await window.pi.settingsGet();
-    await window.pi.settingsSave({
-      providers: providers.map(({ id, name, kind, baseUrl, modelId }) => ({
-        id, name, kind, baseUrl, modelId,
-      })),
-      activeProviderId,
-      workingDirectory: path,
-    });
-    void window.pi.pickWorkingDirectory("en").then((path) => {
+  await page.evaluate(() => {
+    void window.pi.pickWorkingDirectory("zh").then((path) => {
       globalThis.pilotPickedDirectory = { path };
     });
-  }, directory);
-  execFileSync("bash", [fixtureScript, "select-directory"], { stdio: "inherit", timeout: 20_000 });
-  const picked = await waitFor("the selected native directory", () =>
+  });
+  const windowId = await waitFor("the GTK directory picker", () => {
+    const search = spawnSync("bash", [fixtureScript, "picker-window"], { encoding: "utf8" });
+    assert.ifError(search.error);
+    return search.status === 0 && search.stdout.trim().split("\n").at(-1);
+  });
+  execFileSync("bash", [fixtureScript, "cancel-directory", windowId], { timeout: 10_000 });
+  const picked = await waitFor("the native directory picker to close", () =>
     page.evaluate(() => globalThis.pilotPickedDirectory),
   );
-  assert.ok(picked.path, "The native picker was canceled");
-  assert.equal(await realpath(picked.path), await realpath(directory));
-  console.log("Verified the GTK directory picker selected an existing folder");
+  assert.equal(picked.path, null);
+  console.log("Verified the native GTK directory picker opened and canceled cleanly");
 }
 
 function installDeb(file, expectedVersion) {

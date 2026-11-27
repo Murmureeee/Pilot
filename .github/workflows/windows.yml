@@ -306,10 +306,9 @@ jobs:
       - name: Start both Linux packages in isolated profiles
         run: |
           if ! command -v xvfb-run >/dev/null || ! command -v xauth >/dev/null ||
-            ! command -v dbus-run-session >/dev/null || [ ! -x /usr/libexec/at-spi-bus-launcher ] ||
-            ! /usr/bin/python3 -c 'import pyatspi'; then
+            ! command -v dbus-run-session >/dev/null || ! command -v xdotool >/dev/null; then
             sudo apt-get update
-            sudo apt-get install -y xvfb xauth dbus-x11 at-spi2-core python3-pyatspi
+            sudo apt-get install -y xvfb xauth dbus-x11 xdotool
           fi
           bash scripts/verify-linux-package.sh
 
