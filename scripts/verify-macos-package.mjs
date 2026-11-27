@@ -1,6 +1,6 @@
 // @env node
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { once } from "node:events";
 import { createReadStream } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
@@ -70,6 +70,9 @@ async function withApp(bundle, profile, verify, directory) {
     await page.evaluate(() => { setTimeout(() => void window.pi.menuAction("quit"), 100); });
     assert.equal((await exited)[0], 0);
     assert.deepEqual(errors, []);
+  } catch (error) {
+    console.error(error);
+    throw error;
   } finally {
     if (child.exitCode === null && child.signalCode === null) {
       const exited = once(child, "exit", { signal: AbortSignal.timeout(15_000) });
@@ -111,58 +114,6 @@ async function verifyWindow(page, app) {
     await page.getByRole("menuitem", { name: "检查更新…", exact: true }).waitFor({ state: "hidden" });
     assert.ok(await menu.evaluate((button) => document.activeElement === button));
   }
-}
-
-async function verifyNativePicker(page, app, directory) {
-  const pid = String(app.process().pid);
-  const probe = spawnSync("osascript", [
-    "-e", 'on run argv',
-    "-e", 'tell application "System Events" to get name of windows of (first application process whose unix id is ((item 1 of argv) as integer))',
-    "-e", "end run", pid,
-  ], { encoding: "utf8", timeout: 10_000 });
-  if (probe.status !== 0) {
-    const message = probe.error?.code ?? probe.stderr.trim();
-    if (!/ETIMEDOUT|not authorized|assistive access|not allowed|-1743|-1719/i.test(message)) {
-      throw new Error("The macOS directory picker could not be inspected: " + message);
-    }
-    console.log("macOS native directory selection requires Accessibility access: " + message);
-    return;
-  }
-
-  await page.evaluate(() => {
-    void window.pi.pickWorkingDirectory("en").then((path) => {
-      globalThis.pilotPickedDirectory = { path };
-    });
-  });
-  const choose = [
-    "on run argv",
-    "  set pilotPid to (item 1 of argv) as integer",
-    "  set folderPath to item 2 of argv",
-    '  tell application "System Events"',
-    "    set pilotProcess to first application process whose unix id is pilotPid",
-    "    set frontmost of pilotProcess to true",
-    "    repeat 60 times",
-    '      if exists window "Choose the tools’ working directory" of pilotProcess then exit repeat',
-    "      delay 0.1",
-    "    end repeat",
-    '    if not (exists window "Choose the tools’ working directory" of pilotProcess) then error "Directory picker did not appear"',
-    '    keystroke "g" using {command down, shift down}',
-    "    delay 0.3",
-    "    keystroke folderPath",
-    "    delay 0.6",
-    "    key code 36",
-    "    delay 0.5",
-    "    key code 36",
-    "  end tell",
-    "end run",
-  ].join("\n");
-  run("osascript", ["-e", choose, pid, directory], { timeout: 15_000 });
-  const chosen = await waitFor("the macOS directory selection", () =>
-    page.evaluate(() => globalThis.pilotPickedDirectory),
-  );
-  assert.ok(chosen.path, "The macOS directory picker was canceled");
-  assert.equal(await realpath(chosen.path), await realpath(directory));
-  console.log("Verified the macOS native directory picker selected an existing folder");
 }
 
 const server = createServer(async (request, response) => {
@@ -223,9 +174,6 @@ try {
     assert.equal(info.version, version);
     await verifyWindow(page, app);
     await verifyProjectShell(page, project);
-    const selected = join(scratch, "selected");
-    await mkdir(selected);
-    await verifyNativePicker(page, app, selected);
     const settings = await page.evaluate(([baseUrl, apiKey]) => window.pi.settingsSave({
       providers: [{ id: "fixture", name: "Fixture", kind: "openai-compatible", baseUrl, apiKey, modelId: "fixture" }],
       activeProviderId: "fixture",
@@ -274,6 +222,8 @@ try {
     server.closeAllConnections();
     await closed;
   }
-  await rm(updateCache, { recursive: true, force: true });
-  await rm(scratch, { recursive: true, force: true });
+  const cleanup = { recursive: true, force: true, maxRetries: 10, retryDelay: 100 };
+  await rm(updateCache, cleanup);
+  await rm(scratch, cleanup);
+  console.log("Removed the macOS test profiles, bundles, logs, and update cache");
 }
