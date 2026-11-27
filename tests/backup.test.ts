@@ -4,13 +4,14 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { gzipSync } from "node:zlib";
 
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -90,17 +91,23 @@ it("does not save a backup inside a data root, including a child whose name star
   expect(() => checkExportDestination(profile, join(inside, "example.pilot-backup"))).toThrow(
     "请选择备份数据目录以外的位置",
   );
-  expect(checkExportDestination(profile, archive)).toBe(archive);
+  expect(checkExportDestination(profile, archive)).toBe(
+    join(realpathSync.native(scratch), basename(archive)),
+  );
 });
 
 it("rejects a backup inside a data root when the profile is reached through a directory alias", () => {
   const alias = join(scratch, "profile-alias");
+  const name = "example.pilot-backup";
   symlinkSync(profile, alias, "junction");
   mkdirSync(join(profile, "skills"));
 
-  expect(() =>
-    checkExportDestination(alias, join(alias, "skills", "example.pilot-backup")),
-  ).toThrow("请选择备份数据目录以外的位置");
+  expect(() => checkExportDestination(alias, join(alias, "skills", name))).toThrow(
+    "请选择备份数据目录以外的位置",
+  );
+  expect(checkExportDestination(alias, join(alias, name))).toBe(
+    join(realpathSync.native(profile), name),
+  );
 });
 
 it.each([
