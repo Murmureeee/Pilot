@@ -545,6 +545,187 @@ export function seedStorageProfiles(legacy, newer) {
   return { legacyId, newerId, legacyTranscript, newerTranscript, newerSettings, newerIndex };
 }
 
+export function seedBackupProfile(source, destination, archive) {
+  const id = "48687a06-2cb0-43a1-a627-9752f1621f1b";
+  const oldId = "7a6c4360-bb48-4cbd-ae92-4b8500d6ced7";
+  const plugin = "backup-fixture";
+  const skill = "backup-skill";
+  for (const dir of [source, destination]) mkdirSync(join(dir, "sessions"), { recursive: true });
+  const putChat = (dir, sessionId, title, message) => {
+    writeFileSync(join(dir, "sessions", "index.json"), JSON.stringify({
+      sessions: [{ id: sessionId, title, createdAt: 1, updatedAt: 1 }],
+    }));
+    writeFileSync(join(dir, "sessions", sessionId + ".jsonl"), JSON.stringify({
+      role: "user", content: message, timestamp: 1,
+    }) + "\n");
+  };
+  putChat(source, id, "Backed up chat", "Backed up transcript");
+  putChat(destination, oldId, "Local-only chat", "Local transcript");
+  writeFileSync(join(source, "sessions", id + ".draft.json"), JSON.stringify(["Backed up draft"]));
+  mkdirSync(join(source, "skills", skill), { recursive: true });
+  writeFileSync(join(source, "skills", skill, "SKILL.md"), "---\nname: Backup fixture\ndescription: Restored skill\n---\nKeep me.\n");
+  mkdirSync(join(source, "imported-plugin-data", plugin), { recursive: true });
+  writeFileSync(join(source, "imported-plugin-data", plugin, "asset.bin"), Buffer.from([0, 241, 255]));
+  const corrupt = join(destination, "..", "坏备份.pilot-backup");
+  writeFileSync(corrupt, "not a backup");
+  return { id, oldId, source, destination, archive, corrupt, plugin, skill };
+}
+
+async function chooseBackup(app, kind, path) {
+  await app.evaluate(({ dialog }, { kind, path }) => {
+    const method = kind === "save" ? "showSaveDialog" : "showOpenDialog";
+    const original = dialog[method];
+    dialog[method] = async (parent, options) => {
+      dialog[method] = original;
+      if (!parent || options.filters[0].extensions[0] !== "pilot-backup")
+        throw new Error("Expected a Pilot backup picker");
+      return kind === "save"
+        ? { canceled: !path, filePath: path }
+        : { canceled: !path, filePaths: path ? [path] : [] };
+    };
+  }, { kind, path });
+}
+
+export async function verifyBackupExport(page, app, { source, archive, plugin }) {
+  const { legacy, current } = await app.evaluate(async ({ safeStorage }) => ({
+    legacy: safeStorage.encryptString("legacy-fixture-key").toString("base64"),
+    current: (await safeStorage.encryptStringAsync("current-fixture-key")).toString("base64"),
+  }));
+  const models = [
+    { id: "faux-default", name: "Faux", kind: "faux", modelId: "faux-default" },
+    ...[["legacy", legacy], ["current", current], ["foreign", "bm90LXJlYWRhYmxl"]]
+      .map(([id, apiKey]) => ({ id, apiKey, name: id, kind: "openai-compatible", modelId: id })),
+  ];
+  writeFileSync(join(source, "settings.json"), JSON.stringify({
+    providers: models, activeProviderId: "faux-default", persona: "Restored persona",
+    toolRules: [{ toolName: "read_file", pathPrefix: source }],
+    importedPlugins: [{ id: plugin, name: "Backup fixture", source: "skill", partial: false, skillIds: [], serverIds: [] }],
+    mcpServers: [{
+      id: "7a6c4360-bb48-4cbd-ae92-4b8500d6ced7", name: "Foreign fixture", enabled: true, policy: "confirm",
+      transport: { type: "http", url: "https://example.invalid/mcp" }, encryptedHeaders: "bm90LXJlYWRhYmxl",
+    }],
+  }));
+  await openSettings(page, locales[0], "存储与诊断");
+  await chooseBackup(app, "save", null);
+  await button(page, "导出备份").click();
+  await button(page, "导出备份").waitFor();
+  assert.ok(!existsSync(archive));
+  await chooseBackup(app, "save", archive);
+  await button(page, "导出备份").click();
+  await page.getByText("已导出数据备份。", { exact: true }).waitFor();
+  assert.equal(readFileSync(archive).subarray(0, 2).toString("hex"), "1f8b");
+}
+
+export async function verifyBackupImport(page, window, app, fixture) {
+  const { destination, archive, corrupt } = fixture;
+  const staging = join(destination, ".pilot-restore");
+  const labels = [
+    { section: "存储与诊断", choose: "选择备份包", cancel: "取消", dialog: "恢复备份" },
+    { section: "Storage and diagnostics", choose: "Choose backup", cancel: "Cancel", dialog: "Restore backup" },
+  ];
+  await openSettings(page, locales[0], labels[0].section);
+  await chooseBackup(app, "open", null);
+  await button(page, labels[0].choose).click();
+  await button(page, labels[0].choose).waitFor();
+  await chooseBackup(app, "open", corrupt);
+  await button(page, labels[0].choose).click();
+  await page.getByText(/请选择有效的 Pilot 备份/).waitFor();
+  assert.ok(!existsSync(staging));
+  let current = locales[0];
+  for (const [index, locale] of locales.entries()) {
+    const copy = labels[index];
+    for (const theme of ["light", "dark"]) {
+      await selectAppearance(page, current, locale, theme);
+      current = locale;
+      await openSettings(page, locale, copy.section);
+      for (const size of [wide, narrow]) {
+        await resize(page, window, size);
+        await chooseBackup(app, "open", archive);
+        const trigger = button(page, copy.choose);
+        await trigger.scrollIntoViewIfNeeded();
+        await trigger.press("Enter");
+        const preview = page.getByRole("dialog", { name: copy.dialog, exact: true });
+        await preview.getByText(basename(archive), { exact: true }).waitFor();
+        await assertFits(preview);
+        await preview.getByRole("table").waitFor();
+        const cancel = button(preview, copy.cancel);
+        await page.waitForFunction((name) => document.activeElement?.textContent === name, copy.cancel);
+        await cancel.press("Escape");
+        await preview.waitFor({ state: "hidden" });
+        await page.waitForFunction((name) => document.activeElement?.textContent === name, copy.choose);
+        assert.ok(!existsSync(staging));
+      }
+    }
+  }
+  await selectAppearance(page, current, locales[0], "light");
+  await openSettings(page, locales[0], labels[0].section);
+  await chooseBackup(app, "open", archive);
+  await button(page, labels[0].choose).click();
+  const confirm = button(page, "覆盖并重启");
+  await confirm.waitFor();
+  await page.evaluate(() => window.pi.settingsSetLogLevel("warn"));
+  await confirm.click();
+  await page.getByText(/本机数据已变化/).waitFor();
+  await button(page.getByRole("dialog", { name: labels[0].dialog }), "取消").click();
+  await chooseBackup(app, "open", archive);
+  await button(page, labels[0].choose).click();
+  await confirm.waitFor();
+  await confirmBackupRestart(page, app, destination);
+  assert.ok(existsSync(join(destination, "sessions", fixture.oldId + ".jsonl")));
+}
+
+async function confirmBackupRestart(page, app, profile) {
+  const marker = join(profile, "requested-relaunch");
+  await app.evaluate(({ app }, path) => {
+    // Playwright owns the replacement process in the next scene.
+    app.relaunch = () => process.mainModule.require("node:fs").writeFileSync(path, "1", { flag: "wx" });
+  }, marker);
+  const exited = once(app.process(), "exit", { signal: AbortSignal.timeout(15_000) });
+  await button(page, "覆盖并重启").click({ noWaitAfter: true });
+  const [status] = await exited;
+  assert.equal(status, 0);
+  assert.equal(readFileSync(marker, "utf8"), "1");
+  assert.equal(JSON.parse(readFileSync(join(profile, ".pilot-restore", "state.json"), "utf8")).phase, "pending");
+}
+
+export async function verifyBackupSameProfile(page, app, { source, archive }) {
+  await openSettings(page, locales[0], "存储与诊断");
+  await chooseBackup(app, "open", archive);
+  await button(page, "选择备份包").click();
+  await page.getByText("恢复后需重新填写凭据或登录（提供方 1 项，MCP 服务 1 项）。", { exact: true }).waitFor();
+  await confirmBackupRestart(page, app, source);
+}
+
+export async function verifyBackupRestored(page, app, fixture, keepKeys) {
+  const { source, destination, id, oldId, plugin, skill } = fixture;
+  const profile = keepKeys ? source : destination;
+  const result = page.getByRole("dialog", { name: "已恢复数据备份" });
+  await result.getByText("请在「模型与提供方」重新填写 " + (keepKeys ? 1 : 3) + " 项失效密钥。").waitFor();
+  await result.getByText("请在「MCP 服务」重新填写凭据或登录（1 项）。").waitFor();
+  await button(result, "知道了").click();
+  await result.waitFor({ state: "hidden" });
+  await resize(page, await app.browserWindow(page), wide);
+  await page.locator('[data-session-id="' + id + '"]').click();
+  await page.getByText("Backed up transcript", { exact: true }).waitFor();
+  assert.equal(await editor(page).innerText(), "Backed up draft");
+  const { settings } = await page.evaluate(() => window.pi.getSnapshot());
+  assert.equal(settings.persona, "Restored persona");
+  assert.deepEqual(settings.providers.map(({ hasKey }) => hasKey), [false, keepKeys, keepKeys, false]);
+  assert.ok(settings.toolRules.some(({ toolName }) => toolName === "read_file"));
+  assert.match(readFileSync(join(profile, "skills", skill, "SKILL.md"), "utf8"), /Keep me/);
+  assert.deepEqual(readFileSync(join(profile, "imported-plugin-data", plugin, "asset.bin")), Buffer.from([0, 241, 255]));
+  const saved = JSON.parse(readFileSync(join(profile, "settings.json"), "utf8"));
+  assert.equal(saved.mcpServers[0].enabled, false);
+  assert.ok(!Object.hasOwn(saved.mcpServers[0], "encryptedHeaders"));
+  if (keepKeys) {
+    assert.deepEqual(await app.evaluate(({ safeStorage }, keys) => keys.map((key) =>
+      safeStorage.decryptString(Buffer.from(key, "base64")),
+    ), saved.providers.slice(1, 3).map(({ apiKey }) => apiKey)), ["legacy-fixture-key", "current-fixture-key"]);
+  }
+  assert.ok(!existsSync(join(profile, "sessions", oldId + ".jsonl")));
+  assert.ok(!existsSync(join(profile, ".pilot-restore")));
+}
+
 export async function verifyVersionedStorage(page, profile, fixture) {
   const { legacyId, newerId, legacyTranscript, newerTranscript } = fixture;
   const data = join(profile, "sessions");

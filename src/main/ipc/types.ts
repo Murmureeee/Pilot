@@ -1,6 +1,7 @@
 // @env node
 import type { IpcMainInvokeEvent } from "electron";
 
+import type { BackupRestoreResult } from "../../shared/backup";
 import type {
   AGENT_EVENT_CHANNEL,
   IPC,
@@ -13,6 +14,7 @@ import type {
 } from "../../shared/contract";
 import type { AgentHost } from "../agent-host/host";
 import type { McpManager } from "../agent-host/mcp";
+import type { ProfileBackup } from "../backup";
 import type { DesktopExit } from "../desktop-exit";
 import type { DiagnosticLog } from "../diagnostics";
 import type { Settings } from "../settings/types";
@@ -55,5 +57,7 @@ export interface IpcContext {
   verification: VerificationManager;
   terminal: TerminalManager;
   exit: DesktopExit;
+  backup: ProfileBackup;
+  backupResult: BackupRestoreResult | null;
   isDev: boolean;
 }

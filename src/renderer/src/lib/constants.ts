@@ -74,7 +74,7 @@ export const SETTINGS_SECTION_DESCRIPTIONS: Record<SettingsSection, string> = {
   persona: "管理 Agent 的自定义指令和可重复使用的提示词模板。",
   shortcuts: "当前可用的键盘操作。",
   archived: "查看、恢复或永久删除已归档的聊天。",
-  data: "本地存储位置和诊断日志。",
+  data: "本地存储、数据备份和诊断日志。",
   about: "版本信息、应用更新和反馈渠道。",
   skills: "查看本机和当前项目的技能。已启用的技能会在任务需要时读取。",
   mcp: "连接外部工具服务。可手动添加，也可从 Codex 或 Claude Code 导入，工具调用遵循权限设置。",
@@ -146,6 +146,9 @@ export const SETTINGS_SECTION_KEYWORDS: Record<SettingsSection, readonly string[
   data: [
     "应用数据目录",
     "聊天记录目录",
+    "数据备份与恢复",
+    "导出备份",
+    "恢复备份",
     "日志级别",
     "日志目录",
     "诊断事件",

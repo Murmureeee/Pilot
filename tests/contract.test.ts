@@ -18,6 +18,14 @@ describe("IPC contract", () => {
     expect(IPC.sessionSaveDraftImages).toBe("session:save-draft-images");
   });
 
+  it("separates backup selection and preview from confirmation and cancellation", () => {
+    expect(IPC.appExportBackup).toBe("app:export-backup");
+    expect(IPC.appPreviewBackup).toBe("app:preview-backup");
+    expect(IPC.appCancelBackup).toBe("app:cancel-backup");
+    expect(IPC.appRestoreBackup).toBe("app:restore-backup");
+    expect(IPC.appBackupResult).toBe("app:backup-result");
+  });
+
   it("separates worktree discovery, creation, review, and confirmation", () => {
     expect(IPC.sessionGitWorktrees).toBe("session:git-worktrees");
     expect(IPC.sessionCreateGitWorktree).toBe("session:create-git-worktree");

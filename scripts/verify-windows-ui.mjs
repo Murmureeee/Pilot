@@ -15,12 +15,17 @@ import { startModelFixture } from "./windows-ui/model.mjs";
 import { startMcpOAuthFixture } from "./windows-ui/mcp-oauth.mjs";
 import {
   prepareTerminalExit,
+  seedBackupProfile,
   seedStorageProfiles,
   verifyAgentMemory,
   verifyAfterTurnVerification,
   verifyApprovals,
   verifyAuxiliaryModels,
   verifyBackgroundTerminal,
+  verifyBackupExport,
+  verifyBackupImport,
+  verifyBackupRestored,
+  verifyBackupSameProfile,
   verifyCommandsAndTemplates,
   verifyCredentialMigration,
   verifyDiagnostics,
@@ -121,10 +126,10 @@ async function withApp(profile, verify, project) {
     await verify(page, window, app);
 
     // Let the debugger receive the IPC response before the app closes its window.
-    const [[code]] = await Promise.all([
+    const code = child.exitCode ?? (await Promise.all([
       once(child, "exit", { signal: AbortSignal.timeout(timeout) }),
       page.evaluate(() => setTimeout(() => void window.pi.menuAction("quit"), 50)),
-    ]);
+    ]))[0][0];
     assert.equal(code, 0, "The UI test app must quit cleanly");
     assert.deepEqual(errors, [], "The renderer reported an uncaught exception");
     assert.doesNotMatch(logs.join(""), startupError);
@@ -165,6 +170,9 @@ const oauthProfile = join(scratch, "mcp-oauth-profile");
 const diagnosticsProfile = join(scratch, "diagnostics-profile");
 const legacyStorageProfile = join(scratch, "legacy-storage-profile");
 const newerStorageProfile = join(scratch, "newer-storage-profile");
+const backupSource = join(scratch, "backup-source");
+const backupDestination = join(scratch, "backup-destination");
+const backupFile = join(scratch, "Pilot 数据.pilot-backup");
 const parallelProfile = join(scratch, "parallel-profile");
 const worktreeProfile = join(scratch, "worktree-profile");
 const worktreeProject = join(scratch, "Worktree project");
@@ -456,6 +464,32 @@ try {
   await withApp(newerStorageProfile, async (page, window, app) => {
     await runScene("Show the upgrade notice and preserve newer settings and the session index", () =>
       verifyStorageUpgradeNotice(page, window, app, newerStorageProfile, storage),
+    );
+  });
+  const backup = seedBackupProfile(backupSource, backupDestination, backupFile);
+  await withApp(backupSource, async (page, _window, app) => {
+    await runScene("Export an isolated backup with same-machine and foreign credentials", () =>
+      verifyBackupExport(page, app, backup),
+    );
+  });
+  await withApp(backupDestination, async (page, window, app) => {
+    await runScene("Preview and cancel backup replacement across layouts, then confirm and restart", () =>
+      verifyBackupImport(page, window, app, backup),
+    );
+  });
+  await withApp(backupDestination, async (page, _window, app) => {
+    await runScene("Restore data and clear unreadable credentials in a fresh profile", () =>
+      verifyBackupRestored(page, app, backup, false),
+    );
+  });
+  await withApp(backupSource, async (page, _window, app) => {
+    await runScene("Preview the original profile with its existing system key storage", () =>
+      verifyBackupSameProfile(page, app, backup),
+    );
+  });
+  await withApp(backupSource, async (page, _window, app) => {
+    await runScene("Keep readable legacy and current credentials after restoring the original profile", () =>
+      verifyBackupRestored(page, app, backup, true),
     );
   });
 } finally {

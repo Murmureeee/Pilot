@@ -50,9 +50,9 @@ export function parseStoredJson(text: string | undefined): unknown {
   }
 }
 
-export function writeStorageAtomic(path: string, contents: string): void {
+export function writeStorageAtomic(path: string, contents: string, mode?: number): void {
   // A replaced file becomes visible only after the temporary file is flushed.
   const temporary = path + ".tmp";
-  writeFileSync(temporary, contents, { encoding: "utf8", flush: true });
+  writeFileSync(temporary, contents, { encoding: "utf8", flush: true, mode });
   renameSync(temporary, path);
 }

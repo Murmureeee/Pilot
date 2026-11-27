@@ -8,9 +8,10 @@ import { DesktopExit } from "../src/main/desktop-exit";
 import type { DiagnosticLog } from "../src/main/diagnostics";
 import type { UpdateStatus } from "../src/shared/contract";
 
-const { appOn, appQuit, showMessageBox } = vi.hoisted(() => ({
+const { appOn, appQuit, appRelaunch, showMessageBox } = vi.hoisted(() => ({
   appOn: vi.fn<(event: string, listener: (event: { preventDefault(): void }) => void) => void>(),
   appQuit: vi.fn<() => void>(),
+  appRelaunch: vi.fn<() => void>(),
   showMessageBox:
     vi.fn<
       (
@@ -20,7 +21,7 @@ const { appOn, appQuit, showMessageBox } = vi.hoisted(() => ({
 }));
 
 vi.mock("electron", () => ({
-  app: { on: appOn, quit: appQuit },
+  app: { on: appOn, quit: appQuit, relaunch: appRelaunch },
   dialog: { showMessageBox },
   ipcMain: {},
 }));
@@ -70,7 +71,36 @@ function setupExit(agentActive = true, verificationActive = true, terminalActive
 beforeEach(() => {
   appOn.mockClear();
   appQuit.mockClear();
+  appRelaunch.mockClear();
   showMessageBox.mockReset();
+});
+
+it("prepares a restore only after idle work is stopped and schedules one relaunch", async () => {
+  const { exit, mcp } = setupExit(false, false, false);
+  const prepare = vi.fn<() => void>(() => {
+    expect(mcp.close).toHaveBeenCalledOnce();
+    expect(appRelaunch).not.toHaveBeenCalled();
+  });
+  await exit.restartForRestore(prepare);
+  expect(prepare).toHaveBeenCalledOnce();
+  expect(appRelaunch).toHaveBeenCalledOnce();
+  expect(appQuit).toHaveBeenCalledOnce();
+  expect(exit.isExiting()).toBe(true);
+});
+
+it("refuses a restore during running work and returns to idle after a stale preview", async () => {
+  const active = setupExit(false, false, true);
+  const prepare = vi.fn<() => void>();
+  await expect(active.exit.restartForRestore(prepare)).rejects.toThrow("请先结束");
+  expect(prepare).not.toHaveBeenCalled();
+  const idle = setupExit(false, false, false);
+  await expect(
+    idle.exit.restartForRestore(() => {
+      throw new Error("stale");
+    }),
+  ).rejects.toThrow("stale");
+  expect(() => idle.exit.checkWorkAllowed()).not.toThrow();
+  expect(appRelaunch).not.toHaveBeenCalled();
 });
 
 it("keeps tasks running when a single quit confirmation is cancelled", async () => {

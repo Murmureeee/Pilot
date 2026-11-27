@@ -2,6 +2,7 @@
 import { cn } from "cn";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
 
+import { BackupRestoreResult } from "@renderer/components/ai/backup-restore-result";
 import { ChatHeader } from "@renderer/components/ai/chat-header";
 import { CommandPalette } from "@renderer/components/ai/command-palette";
 import { FeedbackBar } from "@renderer/components/ai/feedback-bar";
@@ -601,6 +602,7 @@ export default function App(): JSX.Element {
         </ProjectDropTarget>
       </div>
 
+      <BackupRestoreResult />
       <CommandPalette commands={commands} onOpenChatFind={openChatFind} />
       {worktreeArchiveSession && (
         <WorktreeArchiveDialog key={worktreeArchiveSession} sessionId={worktreeArchiveSession} />

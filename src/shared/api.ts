@@ -1,5 +1,6 @@
 // @env all
 // 渲染层可用的 API 形状。preload 实现它，renderer 通过 window.pi 消费。
+import type { BackupPreview, BackupRestoreResult } from "./backup";
 import type {
   AfterTurnVerification,
   AgentSmokeResult,
@@ -97,6 +98,11 @@ export interface PiApi {
   openPath(target: OpenPathTarget): Promise<string>;
   diagnosticEvents(): Promise<DiagnosticEvent[]>;
   exportDiagnostics(locale: Locale): Promise<boolean>;
+  exportBackup(): Promise<boolean>;
+  previewBackup(): Promise<BackupPreview | null>;
+  cancelBackup(token: string): Promise<void>;
+  restoreBackup(token: string): Promise<void>;
+  backupResult(): Promise<BackupRestoreResult | null>;
   /** 同步界面语言供主进程的原生提示使用。 */
   setLocale(locale: Locale): Promise<void>;
   setConversationVisible(visible: boolean): Promise<void>;

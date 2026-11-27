@@ -15,6 +15,9 @@ import { McpManager } from "./agent-host/mcp";
 import { McpOAuth } from "./agent-host/mcp/oauth";
 import { SessionStore } from "./agent-host/session-store";
 import { runAgentSmoke } from "./agent-host/smoke";
+import { ProfileBackup } from "./backup";
+import { BACKUP_COPY } from "./backup/constants";
+import { applyPendingBackup } from "./backup/restore";
 import {
   DEFAULT_WINDOW_SIZE,
   MINIMUM_WINDOW_SIZE,
@@ -155,6 +158,23 @@ function startDesktop(): (entry: ProjectEntry) => void {
   Menu.setApplicationMenu(null);
 
   const userData = app.getPath("userData");
+  const restored = applyPendingBackup(userData);
+  if (restored?.status === "blocked") {
+    const copy = BACKUP_COPY[restored.locale];
+    void dialog
+      .showMessageBox({
+        type: "error",
+        title: APP_NAME,
+        message: copy.failed,
+        detail: copy.blocked + "\n" + userData,
+        buttons: [copy.close],
+      })
+      .then(
+        () => app.exit(1),
+        () => app.exit(1),
+      );
+    return () => {};
+  }
   const sessionsDir = join(userData, "sessions");
   const skillsDir = join(userData, "skills");
   const logsDir = join(userData, "logs");
@@ -320,6 +340,8 @@ function startDesktop(): (entry: ProjectEntry) => void {
     verification,
     terminal,
     exit,
+    backup: new ProfileBackup(userData),
+    backupResult: restored ? { status: restored.status, credentials: restored.credentials } : null,
     isDev,
   });
   const getMainWindow = (): BrowserWindow => {

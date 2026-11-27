@@ -1351,7 +1351,7 @@ export const EN_MESSAGES: Record<string, string> = {
     "Manage input, desktop notifications, and the default working environment.",
   "主题和界面语言。": "Theme and interface language.",
   "查看、恢复或永久删除已归档的聊天。": "View, restore, or permanently delete archived chats.",
-  "本地存储位置和诊断日志。": "Local storage locations and diagnostic logs.",
+  "本地存储、数据备份和诊断日志。": "Local storage, backups, and diagnostic logs.",
   "查看本机和当前项目的技能。已启用的技能会在任务需要时读取。":
     "Browse installed skills and skills from the current project. Enabled skills are read as needed.",
   "连接外部工具服务。可手动添加，也可从 Codex 或 Claude Code 导入，工具调用遵循权限设置。":
@@ -1571,6 +1571,60 @@ export const EN_MESSAGES: Record<string, string> = {
   聊天记录目录: "Chat history folder",
   打开应用数据目录: "Open app data folder",
   打开聊天记录目录: "Open chat history folder",
+  数据备份与恢复: "Backup and restore",
+  数据备份: "Data backup",
+  "将聊天、草稿、设置、技能、授权规则和插件保存到一个备份包。":
+    "Save chats, drafts, settings, skills, permission rules, and plugins in a single backup.",
+  导出备份: "Export backup",
+  恢复备份: "Restore backup",
+  "选择备份包，查看本机数据的覆盖范围。":
+    "Choose a backup to review the local data it will replace.",
+  选择备份包: "Choose backup",
+  "读取备份中…": "Reading backup…",
+  "已导出数据备份。": "Data backup exported.",
+  "Pilot 将重启并用备份包替换以下本机数据。":
+    "Pilot will restart and replace the following local data with the backup.",
+  聊天记录: "Chat history",
+  草稿: "Drafts",
+  授权规则: "Permission rules",
+  本机: "This device",
+  备份包: "Backup",
+  有: "Present",
+  无: "None",
+  "恢复后需重新填写凭据或登录（提供方 {0} 项，MCP 服务 {1} 项）。":
+    "After restoring, re-enter credentials or sign in again ({0} provider keys, {1} MCP services).",
+  覆盖并重启: "Replace and restart",
+  "正在重启…": "Restarting…",
+  已恢复数据备份: "Data backup restored",
+  "已从备份包恢复 Pilot 数据。": "Pilot data has been restored from the backup.",
+  无法恢复备份: "Could not restore the backup",
+  "本机数据已还原。请检查数据目录的访问权限，再重新导入备份。":
+    "Your local data has been restored. Check access to the data directory and import the backup again.",
+  "请在「模型与提供方」重新填写 {0} 项失效密钥。":
+    "Re-enter {0} provider keys in Models and providers.",
+  "请在「MCP 服务」重新填写凭据或登录（{0} 项）。":
+    "Re-enter credentials or sign in again for {0} MCP services.",
+  "无法读取此备份包。请选择有效的 Pilot 备份。":
+    "Could not read this backup. Choose a valid Pilot backup.",
+  "备份范围内含有链接或不兼容的文件名。请检查相关目录后重试。":
+    "The data includes links or incompatible file names. Check the folders and try again.",
+  "备份超过 64 GiB 或 200000 个文件。请缩小数据目录后重试。":
+    "The backup exceeds 64 GiB or 200,000 files. Reduce the data size and try again.",
+  "本机数据已变化。请重新预览后再恢复。":
+    "Local data has changed. Preview the backup again before restoring.",
+  "备份期间数据发生变化。请重试导出。": "Data changed during the backup. Export it again.",
+  "请选择备份数据目录以外的位置保存备份包。":
+    "Choose a location outside the folders being backed up.",
+  "请先结束正在运行的任务、验证或终端进程，再恢复备份。":
+    "Finish running tasks, verifications, or terminal processes before restoring.",
+  "已有备份操作正在进行。请稍候重试。": "A backup operation is in progress. Try again shortly.",
+  "此备份预览已失效。请重新选择备份包。": "This preview has expired. Choose the backup again.",
+  "无法导出备份。请确认数据可读取，并选择有足够空间的保存位置。":
+    "Could not export the backup. Check that data is readable and choose a location with enough space.",
+  "无法读取或暂存备份。请检查文件权限和数据目录剩余空间。":
+    "Could not read or stage the backup. Check file permissions and free space in the data folder.",
+  "无法安排恢复。请检查数据目录的访问权限后重试。":
+    "Could not prepare the restore. Check access to the data folder and try again.",
   诊断日志: "Diagnostic logs",
   诊断事件: "Diagnostic events",
   崩溃记录: "Crash records",

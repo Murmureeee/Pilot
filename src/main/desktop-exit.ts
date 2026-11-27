@@ -8,6 +8,7 @@ import {
 } from "electron";
 
 import { APP_NAME, DEFAULT_LOCALE } from "../shared/constants";
+import { BACKUP_BUSY } from "./backup/constants";
 import { APP_EXITING_MESSAGE, NATIVE_EXIT_MESSAGES, UPDATE_NOT_READY_MESSAGE } from "./constants";
 import { errorDetails } from "./diagnostics";
 import { getRendererLocale } from "./ipc/transport";
@@ -56,6 +57,38 @@ export class DesktopExit {
     await this.request("update", this.deps.getWindow());
   }
 
+  async restartForRestore(prepare: () => void): Promise<void> {
+    if (this.stage !== "idle") throw new Error(APP_EXITING_MESSAGE);
+    if (
+      this.deps.host.hasActiveRun() ||
+      this.deps.verification.hasActiveRuns() ||
+      this.deps.terminal.hasActiveProcesses()
+    )
+      throw new Error(BACKUP_BUSY);
+    this.stage = "stopping";
+    try {
+      await this.stopWork();
+      await this.deps.mcp.close();
+      prepare();
+      app.relaunch();
+      this.stage = "exiting";
+      app.quit();
+    } finally {
+      if (this.stage !== "exiting") this.stage = "idle";
+    }
+  }
+
+  private async stopWork(): Promise<void> {
+    const stopped = await Promise.allSettled([
+      this.deps.host.stopForExit(),
+      this.deps.verification.stopAll(),
+      this.deps.terminal.stopAll(),
+    ]);
+    for (const result of stopped) {
+      if (result.status === "rejected") throw result.reason;
+    }
+  }
+
   private async request(action: ExitAction, window: BrowserWindow | undefined): Promise<void> {
     if (this.stage !== "idle") return;
     this.stage = "confirming";
@@ -90,14 +123,7 @@ export class DesktopExit {
       if (action === "update" && this.deps.updater.getStatus().state !== "ready") return;
 
       this.stage = "stopping";
-      const stopped = await Promise.allSettled([
-        this.deps.host.stopForExit(),
-        this.deps.verification.stopAll(),
-        this.deps.terminal.stopAll(),
-      ]);
-      for (const result of stopped) {
-        if (result.status === "rejected") throw result.reason;
-      }
+      await this.stopWork();
 
       if (action === "closeWindow") {
         this.stage = "closing-window";

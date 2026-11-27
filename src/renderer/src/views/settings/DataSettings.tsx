@@ -6,6 +6,7 @@ import { Button } from "@renderer/components/ui/button";
 import { t, useLocale } from "@renderer/lib/i18n";
 import type { AppInfo } from "@shared/contract";
 
+import { BackupSettings } from "./BackupSettings";
 import { DiagnosticSettings } from "./DiagnosticSettings";
 import { SettingsGroup } from "./SettingsGroup";
 
@@ -56,6 +57,7 @@ export function DataSettings({ appInfo }: { appInfo: AppInfo | null }): JSX.Elem
           </div>
         </div>
       </SettingsGroup>
+      <BackupSettings />
       <DiagnosticSettings />
     </div>
   );
