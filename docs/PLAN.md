@@ -11,11 +11,11 @@ Pilot 是基于 pi SDK 的本地 AI 编程桌面客户端。面向开发者的�
 | 对话与上下文 | 流式 Markdown、思考与工具轨迹、回合耗时摘要、会话累计 token 与费用、停止和插话、任务计划、先审阅后执行的计划模式、最近项目、按项目分组的会话、Git 分支显示、会话模型与权限模式、草稿与 JSONL 会话恢复、在途检查点追加写入、切换会话时保留原运行、异常退出后的任务续跑、模型请求失败重试、长会话压缩、项目指令与来源查看、会话全文搜索与 Markdown 导出、`@` 文件引用、命令面板、斜杠命令、带参数的提示词模板、可恢复的图片附件和项目文件拖放。消息可复制、编辑重发、分叉、重试或预览回退。键盘可聚焦输入框、切换权限模式、取回消息和停止任务。 | 在真实图像模型上验收图文会话。 |
 | 权限与文件 | 三种权限模式、按 Shell 和参数前缀保存的命令授权、危险命令逐次确认、可撤销的授权规则、按运行绑定的输入区审批卡。审批支持文件差异、MCP 参数、批次序号及工具步骤中的决定回看，处理后恢复草稿。命令停止和超时会清理受控进程树，成功与失败统一保留长输出的首尾。统一审查面板包含变更、文件、验证和终端。可按文件或区块暂存和提交，也可从任务检查点预览并撤销可确认的改动。普通文件夹支持内置工具差异与逐文件撤销。项目可手动运行或在回合结束后自动运行验证，保存结果并将失败交给 Agent 修复。终端支持交互式 Shell 与 Agent 后台命令。变更页签支持管理分支、预览推送、创建 GitHub PR，以及把选中的差异行和批注交给 Agent。可从资源管理器、命令行和拖放打开项目。文件预览与 Git 差异支持在所选编辑器中打开。受信任的项目可声明文件、命令和联网授权，以及手动与回合后验证命令。 Agent 可将项目内的文件读取和搜索委派给只读子任务。 | 复验跨平台 Shell、路径和文件选择。 |
 | 模型与集成 | Anthropic、OpenAI Responses、OpenAI 兼容端点和内置演示模型。已有模型目录、逐模型能力设置、连通性测试、会话标题与压缩摘要的辅助模型、Ollama / LM Studio 预设、本机和项目技能按需读取、stdio 和 Streamable HTTP MCP，以及 Codex / Claude Code 技能和 MCP 导入。可从 Git、文件夹和 ZIP 预览、安装、更新和卸载技能与插件，也可浏览 Claude Code 格式的插件市场并从官方 MCP Registry 搜索和预填配置。Agent 可在域名授权后读取公开网页和搜索，结果带来源链接。可读取受信任项目的 MCP 配置，兼容 Claude Code 的 `.mcp.json`。远程 MCP 服务支持浏览器 OAuth 登录和令牌刷新。 已在 Windows 验收云端、Ollama 和 LM Studio 的模型发现、流式回复和工具调用。 | 验收真实模型的图像输入。 |
-| 桌面与发行 | 简体中文和 English、亮色与暗色、本地诊断日志。后台待审批、完成和失败支持桌面通知与 Windows 任务栏提醒，点击通知可回到对应会话。同一数据目录重复启动时唤醒已有窗口。设置损坏时先备份原文件，再恢复默认设置。界面崩溃后可以重新加载并接回当前会话。有任务或验证命令运行时，关窗、退出和更新重启会先确认。重启后恢复窗口位置、大小、最大化状态、侧栏布局和会话失败标记。Agent 任务或验证命令运行时阻止系统自动睡眠。`v0.6.0` 已发布 Windows x64 安装包、Linux x64 AppImage 和 `.deb`。Windows 和 AppImage 可检查更新并重启安装。Debian 包可打开下载位置后用包管理器安装。默认安装目录为 `%LOCALAPPDATA%\Programs\pilot`，程序文件名为 `pilot.exe`。 | 复验 Linux 桌面安装与升级，交付 macOS 安装包和平台签名。 |
+| 桌面与发行 | 简体中文和 English、亮色与暗色、本地诊断日志。后台待审批、完成和失败支持桌面通知与 Windows 任务栏提醒，点击通知可回到对应会话。同一数据目录重复启动时唤醒已有窗口。设置损坏时先备份原文件，再恢复默认设置。界面崩溃后可以重新加载并接回当前会话。有任务或验证命令运行时，关窗、退出和更新重启会先确认。重启后恢复窗口位置、大小、最大化状态、侧栏布局和会话失败标记。Agent 任务或验证命令运行时阻止系统自动睡眠。`v0.6.0` 已发布 Windows x64 安装包、Linux x64 AppImage 和 `.deb`。Windows 和 AppImage 可检查更新并重启安装。Debian 包可打开下载位置后用包管理器安装。默认安装目录为 `%LOCALAPPDATA%\Programs\pilot`，程序文件名为 `pilot.exe`。已验收 Linux 包升级与 Apple Silicon 的 DMG 安装和 ZIP 更新下载。 | 复验原生文件选择确认，配置正式签名与 macOS 公证。 |
 
 - 已在 Windows 隔离实例中验收 PowerShell 和 Git Bash 的命令授权、旧规则停用、重启和撤销。审批卡与权限设置覆盖中英文、亮暗主题、1100 × 750 和 720 × 480。[开发完成记录](./DEVELOPMENT_HISTORY.md)
 - Pilot `v0.6.0` 的安装包和升级验收。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.6.0) · [打包与安装验收](https://github.com/Murmureeee/Pilot/actions/runs/45866015749) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/45868557473)
-- Linux `.deb` 的现有启动验收从解包后的程序执行。[Linux 打包验证](https://github.com/Murmureeee/Pilot/actions/runs/44669912414)
+- Ubuntu 24.04 的隔离桌面通过 AppImage 原位升级和 Debian 包管理器安装、升级、卸载及重装验收。Apple Silicon 已验收临时签名的 DMG 和更新 ZIP。[Linux 桌面验收](https://github.com/Murmureeee/Pilot/actions/runs/45960369098/job/140376515335) · [macOS 测试包](https://github.com/Murmureeee/Pilot/actions/runs/45960369098/artifacts/15180602975)
 
 ## 开发顺序
 
@@ -33,7 +33,7 @@ P0 为首个日用版的交付条件，P1 为日常效率和发行完善，P2 �
 | 8 | [模型验收与跨平台发行](#8-模型验收与跨平台发行) | P1 | 真实模型验收、安装更新、更新策略、签名、诊断与性能、数据备份与恢复、持久化格式版本 |
 | 9 | [定时任务与生态扩展](#9-定时任务与生态扩展) | P2 | 本地调度、钩子、用量统计、托盘与全局快捷键、页面预览、远程与容器项目、多语言、外部资料引用 |
 
-里程碑 1 至 7 已完成。里程碑 8 已交付真实模型验收、Windows 安装与更新验收及更新策略。下一项是 Linux 与 macOS 桌面验收。
+里程碑 1 至 7 已完成。里程碑 8 已交付真实模型验收、Windows 安装与更新验收、更新策略、Linux 包安装与升级验收，以及 macOS Apple Silicon 测试包。下一项开发是诊断与迁移。
 
 ### 1. 项目与会话恢复
 
@@ -145,7 +145,10 @@ P0 为首个日用版的交付条件，P1 为日常效率和发行完善，P2 �
 - [x] **Windows 更新入口。** 「帮助 → 检查更新…」显示检查和下载状态，侧栏设置上方可查看下载进度，下载完成后点击即可安装并重启。
 - [x] **Linux 更新入口。** AppImage 和 Debian 安装包共用「检查更新…」，下载时校验对应文件。AppImage 可保留原路径替换并重启，Debian 安装包提供下载位置，由系统包管理器安装。发行流程包含 `latest-linux.yml`，CI 用两个打包版本复核检查、下载和升级。[Linux 更新验收](../scripts/verify-linux-update.mjs)
 - [x] **更新策略。** 配置了更新源的安装版启动后检查更新，运行期间每四小时再检查。「设置 → 关于」可关闭自动下载，开关重启后保留。关闭时发现新版会在导航栏提示，可从更新面板手动下载。[更新实现](../src/main/updater.ts) · [验收记录](./DEVELOPMENT_HISTORY.md#2026-11-27)
-- [ ] **Linux 与 macOS。** 在真实桌面环境验证 Linux AppImage 和 `.deb` 的安装或启动、卸载及升级。生成 macOS DMG，验收签名、公证、凭据存储和更新。各平台覆盖 Shell、路径、原生窗控及文件选择。
+- [x] **Linux 安装与升级。** Ubuntu 24.04 Xvfb 下用提取运行方式启动 AppImage，验证原路径升级、替换失败恢复和草稿保留。用包管理器安装、升级、卸载及重装 `.deb`，核对版本与草稿。打包实例通过 Bash、含空格与中文的项目路径、GTK 目录选择框打开和取消的验收。[Linux 桌面验收](https://github.com/Murmureeee/Pilot/actions/runs/45960369098/job/140376515335)
+- [x] **macOS Apple Silicon 测试包。** 验收临时签名的 DMG 安装、重装后的钥匙串凭据、原生窗控、Bash 和项目路径。从旧版检查更新，手动下载相符的 ZIP 并校验 SHA-512。[macOS 验收](https://github.com/Murmureeee/Pilot/actions/runs/45960369098/job/140376515703)
+- [ ] **跨平台原生文件选择。** 在交互式 Linux 和 macOS 桌面复核确认选择并返回路径。
+- [ ] **macOS 正式发行。** 配置 Apple Developer ID Application 证书与 App Store Connect 公证凭据，验收正式签名、Gatekeeper、公证和更新后重启安装。
 - [ ] **诊断与迁移。** 在现有滚动日志上增加可导出的脱敏诊断、事件查看和崩溃记录。升级 Electron 前核对内置 Node 的 pi 兼容性，按需迁移异步 `safeStorage`，验证旧密文可读、密钥服务短暂不可用和并发保存。
 - [ ] **持久化格式版本。** 设置文件和会话记录写入格式版本号，读取时按版本迁移，没有版本号的旧数据按初始版本处理。遇到比当前应用更新的版本时不覆盖原文件，提示升级应用。
 - [ ] **数据备份与恢复。** 设置「存储与诊断」可把会话、设置、技能和授权规则导出为一个备份包，在新机器或重装后导入。导入前显示将覆盖的内容。密钥由本机的系统密钥服务加密，换机后无法解密，导入后提示重新填写。
@@ -153,9 +156,11 @@ P0 为首个日用版的交付条件，P1 为日常效率和发行完善，P2 �
 
 Windows 历史安装版抽样记录为冷启动约 1.27 秒、500 条消息滚动帧间隔 P95 为 18.2 毫秒、120 个文字增量最大渲染延迟 32.3 毫秒。发版时按当次提交复测。
 
-GitHub Actions 在代码推送到 `main` 或更新指向 `main` 的 PR 时执行 Windows 验证。发布相关的手动输入为 `build_test_packages`、`verify_installation`、`prepare_release` 和 `verify_published_update`。[构建与发布工作流](../.github/workflows/windows.yml)
+GitHub Actions 在代码推送到 `main` 或更新指向 `main` 的 PR 时执行 Windows 验证。`build_test_packages` 为 Windows、Linux 和 macOS 构建测试包。发布相关的其他手动输入为 `verify_installation`、`prepare_release`、`include_macos_release` 和 `verify_published_update`。[构建与发布工作流](../.github/workflows/windows.yml)
 
 `verify_installation` 在一次性的 Windows runner 上用临时证书签名并验证安装包。`prepare_release` 从 `WIN_CSC_LINK` 密文读取 Base64 编码的生产 PFX，密码使用 `WIN_CSC_KEY_PASSWORD` 密文。可通过仓库变量 `PILOT_WINDOWS_PUBLISHER` 指定证书的完整主题 DN。配置生产证书时，工作流在暂存前核对安装包、程序签名和更新清单。[打包入口](../scripts/package-win.mjs) · [签名验收](../scripts/verify-windows-signing.mjs)
+
+macOS 本机可运行 `pnpm package:mac` 生成临时签名测试包。准备正式发行草稿时，`prepare_release` 可启用 `include_macos_release`，从 `MAC_CSC_LINK` 和 `MAC_CSC_KEY_PASSWORD` 读取 Developer ID PFX 与密码，从 `APPLE_API_KEY_BASE64`、`APPLE_API_KEY_ID` 和 `APPLE_API_ISSUER` 读取公证凭据。通过签名与公证检查后，工作流暂存 Apple Silicon DMG、更新 ZIP、blockmap 和 `latest-mac.yml`。[打包入口](../scripts/package-mac.mjs) · [验收脚本](../scripts/verify-macos-package.mjs)
 
 ### 9. 定时任务与生态扩展
 
