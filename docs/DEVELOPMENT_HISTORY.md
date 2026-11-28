@@ -4,6 +4,12 @@
 
 ## 近期交付
 
+### 2026-11-28
+
+- **对话流分组与运行状态。** 助手回合里模型写的文字全部按正文、按时间顺序显示。两段正文之间的思考和工具步骤归为一组，两个以上的工具步骤折成一行数量标题，例如「读取 3 个文件 · 搜索 1 次」，有失败时标题后用红色写出失败步数。末尾的组在运行期间保持展开，正文接上后收起。编辑和写入步骤在行内显示增删行数，点击在审查面板打开差异。主列的绿色转圈和输入坞上方的 token、费用读数已移除。等待模型时对话流末尾显示灰色的「正在思考…」和已用时间，输入坞状态行只在审批、重试、压缩、停止和插话排队时出现。流式光标改用正文色，绿色留给侧栏运行标记和成功结果。Trace 组件引用的 `shimmer` 扫光样式此前没有定义，运行中的标题一直是静止的，这次补上并在减少动态效果时保持静止。八步验证通过，67 个 Vitest 文件共 683 项，Electron 冒烟返回 `ok: true`，开发版出现 `[renderer] [app] mounted` 且无未捕获异常，56 个 Windows 桌面场景通过。另用隔离配置和本地模型夹具截图复核了等待、分组运行、审批、流式输出和完成五个状态，完成状态另核对了暗色主题、英文和 720 × 480。测试进程和临时目录已清理。[对话流设计](./DESIGN.md#27-对话流) · [状态模型](./DESIGN.md#3-状态模型) · [提交 a73950d](https://github.com/Murmureeee/Pilot/commit/a73950d)
+
+- **Markdown 回复样式。** Streamdown 的排版样式是包内的 Tailwind 工具类，此前没有登记为扫描来源，回复里的列表没有项目符号和编号，引用没有竖线，代码块没有行号。登记后这些样式生效。标题没有采用 Streamdown 文档式的 30px 一级标题，改为 20、18、16、14px，与应用的字号层级一致。八步验证和 56 个 Windows 桌面场景重新通过，截图复核了标题、列表、引用、表格和代码块。[字号与字重](./DESIGN.md#42-字号与字重) · [提交 27bd735](https://github.com/Murmureeee/Pilot/commit/27bd735)
+
 ### 2026-11-27
 
 - **Pilot v0.7.0 发布。** 延续现有发行渠道，GitHub Releases 提供 Windows x64 安装包、blockmap 与更新清单，以及 Linux x64 AppImage、Debian `.deb` 与更新清单。Windows 通过完整桌面套件、新装、HTTPS 更新及卸载验证。Linux 两种安装包通过启动和升级验收。发布后核对两个公开更新清单均指向 `v0.7.0`。Windows 通过公开 HTTPS 从 pi Desktop `0.1.0` 更新到 `0.7.0`，校验安装包 SHA-512，并核对会话、设置、语言、主题与启用的技能保留。卸载重装也保留升级后的数据。构建版性能复测的冷启动中位数为 792.4 毫秒，文字增量渲染 P95 为 33.5 毫秒。隔离配置、测试进程和下载副本已清理。Windows 正式签名和 macOS 公证仍待完成。[正式发布](https://github.com/Murmureeee/Pilot/releases/tag/v0.7.0) · [发布验收](https://github.com/Murmureeee/Pilot/actions/runs/46024454143) · [公开更新验收](https://github.com/Murmureeee/Pilot/actions/runs/46027641545) · [发布提交 b7e8530](https://github.com/Murmureeee/Pilot/commit/b7e8530)
