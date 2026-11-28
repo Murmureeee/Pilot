@@ -1124,6 +1124,8 @@ export async function verifyProjectHooks(page, window, model, project) {
 
   await send(page, "Read the Hook desktop fixture.");
   const first = await model.nextCompletion();
+  await page.locator("[data-reply-working]").getByText("Thinking…", { exact: true }).waitFor();
+  assert.equal(await page.locator("[data-run-status]").count(), 0);
   sendTool(first, "hook-read", "read_file", { path: "notes.txt" });
   const afterRead = await model.nextCompletion();
   assert.match(JSON.stringify(afterRead.input.messages.at(-1)), /Hook desktop fixture/);
@@ -1131,8 +1133,13 @@ export async function verifyProjectHooks(page, window, model, project) {
   afterRead.write({ content: "Finished the hook fixture." });
   afterRead.finish();
   await button(page, "Send").waitFor();
+  assert.equal(await page.locator("[data-reply-working]").count(), 0);
   const openTrace = async () => {
     const activity = page.locator("[data-reply-activity] > [data-slot=trace-collapsible] > [data-slot=trace-collapsible-trigger]").first();
+    const title = await activity.innerText();
+    assert.match(title, /Ran 2 hooks/);
+    assert.match(title, /Read 1 file/);
+    await page.locator("[data-reply-summary]").getByText(/(· 4 steps|Steps taken: 4)$/).waitFor();
     await activity.press("Enter");
     for (const [name, output] of [
       ["Before-tool hook", "hook before read_file"],
@@ -1577,7 +1584,7 @@ export async function verifyWebTools(page, window, app, model) {
   assert.equal(await section.getAttribute("href"), sectionUrl);
   await section.press("Enter");
   const activity = page.locator("[data-reply-activity]").last();
-  await button(activity, /^(Worked for|Steps taken:)/).press("Enter");
+  await activity.locator("> [data-slot=trace-collapsible] > [data-slot=trace-collapsible-trigger]").press("Enter");
   await button(activity, new RegExp("^Search the web " + searchQuery)).press("Enter");
   const source = activity.getByRole("link", { name: "Pilot web fixture source", exact: true });
   await assertFits(source);
@@ -2189,9 +2196,6 @@ export async function verifySubtasks(page, window, model, project) {
   const answer = "The project research is complete.";
   const success = page.locator("[data-subtask-status=success]");
   const trigger = (line) => page.locator("[data-slot=trace-collapsible-trigger]").filter({ has: line });
-  const activity = page.locator(
-    "[data-reply-activity] > [data-slot=trace-collapsible] > [data-slot=trace-collapsible-trigger]",
-  );
   const subtask = trigger(success);
   const trace = page.locator("[data-subtask-trace]");
   const waitForUsage = (input, output, contextTokens) => page.waitForFunction(
@@ -2245,7 +2249,8 @@ export async function verifySubtasks(page, window, model, project) {
   await page.getByText(answer, { exact: true }).waitFor();
   await waitForIdle(page);
   await waitForUsage(71, 19, 16);
-  await activity.and(page.locator('[aria-expanded="false"]')).waitFor();
+  await subtask.and(page.locator('[aria-expanded="false"]')).waitFor();
+  assert.equal(await page.locator("[data-reply-activity] > [data-slot=trace-collapsible]").count(), 0);
 
   let current = locales[0];
   let contrast = Infinity;
@@ -2256,13 +2261,11 @@ export async function verifySubtasks(page, window, model, project) {
         await selectAppearance(page, current, locale, theme);
         current = locale;
         const english = locale.lang === "en";
-        await activity.press("Enter");
         await subtask.and(page.locator('[aria-expanded="false"]')).waitFor();
         assert.match(await subtask.innerText(), english ? /Subtask/ : /子任务/);
-        await page.keyboard.press("Tab");
+        await subtask.press("Space");
         await subtask.and(page.locator(":focus-visible")).waitFor();
         await assertFits(subtask);
-        await page.keyboard.press("Space");
         await trace.getByText(english ? "Subtask usage 60 tokens" : "子任务用量 60 token", { exact: true }).waitFor();
         await page.getByText(conclusion, { exact: true }).waitFor();
         const read = button(trace.getByRole("group", { name: english ? "Subtask steps" : "子任务步骤" }),
@@ -2278,8 +2281,6 @@ export async function verifySubtasks(page, window, model, project) {
         await read.and(page.locator(':focus-visible[aria-expanded="false"]')).waitFor();
         await subtask.press("Space");
         await subtask.and(page.locator(':focus-visible[aria-expanded="false"]')).waitFor();
-        await activity.press("Enter");
-        await activity.and(page.locator(':focus-visible[aria-expanded="false"]')).waitFor();
       }
     }
   }
@@ -2310,7 +2311,6 @@ export async function verifySubtasks(page, window, model, project) {
   });
   await stopped.waitFor();
   await page.getByText(stoppedMessage, { exact: true }).waitFor();
-  await activity.press("Enter");
   await subtask.press("Enter");
   await trace.getByText("Subtask usage 60 tokens", { exact: true }).waitFor();
   await button(trace, "Read file notes.txt").press("Enter");
@@ -4071,6 +4071,9 @@ export async function verifyCommandsAndTemplates(page, app, model, originalProje
   await page.getByText("Created the command fixture instructions.", { exact: true }).waitFor();
   await button(page, "Send").waitFor();
   assert.equal(readFileSync(instructionsPath, "utf8"), "# Project fixture\n");
+  await page.locator("[data-step-change]").last().press("Enter");
+  await page.locator("[data-file-changes-panel]").waitFor();
+  await page.keyboard.press("Control+l");
 
   await chooseSlash(page, "/diff");
   await page.getByRole("tab", { name: /^Changes/, selected: true }).waitFor();

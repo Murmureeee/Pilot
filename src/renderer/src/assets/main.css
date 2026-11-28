@@ -3,6 +3,32 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Trace 的运行态标题引用 shimmer，但组件带进来时没有附带样式定义，这里补上：
+   一道正文色的高光从左到右扫过灰色文字。减少动态效果时保持静止的灰色文字。 */
+@utility shimmer {
+  @media (prefers-reduced-motion: no-preference) {
+    background-image: linear-gradient(
+      90deg,
+      currentColor 40%,
+      var(--foreground) 50%,
+      currentColor 60%
+    );
+    background-size: 250% 100%;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 2.4s linear infinite;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
 .composer-editor[data-empty="true"]::before {
   position: absolute;
   color: var(--muted-foreground);

@@ -2,8 +2,9 @@
 import { create } from "zustand";
 
 import { REVIEW_TRIGGER_ID } from "@renderer/lib/constants";
-import type { ReviewStore, ReviewTab } from "@renderer/lib/types";
+import type { OpenFileChanges, ReviewStore, ReviewTab } from "@renderer/lib/types";
 import { selectWorkingDirectory, useAgentStore } from "@renderer/stores/agent";
+import { useFileChangesStore } from "@renderer/stores/file-changes";
 
 export const useReviewStore = create<ReviewStore>((set) => ({
   composerId: null,
@@ -33,6 +34,14 @@ export function closeReview(): void {
     if (document.activeElement !== trigger)
       document.getElementById(REVIEW_TRIGGER_ID)?.focus({ preventScroll: true });
   });
+}
+
+/** 在审查面板的「变更」页签打开某个回合的文件变更。 */
+export function showFileChanges(request: OpenFileChanges, trigger: HTMLElement): void {
+  const { composerId } = useAgentStore.getState();
+  if (!composerId) return;
+  useFileChangesStore.getState().open(request);
+  useReviewStore.getState().show(composerId, "changes", trigger);
 }
 
 export function activateReview(tab?: ReviewTab, trigger?: HTMLElement): void {

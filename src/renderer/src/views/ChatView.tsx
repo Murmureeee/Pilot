@@ -21,6 +21,7 @@ import {
   SettingsRecoveryNotice,
   StorageUpgradeNotice,
 } from "@renderer/components/ai/settings-recovery-notice";
+import { WorkingLine } from "@renderer/components/ai/working-line";
 import { InlineWorkspaceReference } from "@renderer/components/ai/workspace-reference";
 import { Bubble, BubbleContent } from "@renderer/components/ui/bubble";
 import { Button } from "@renderer/components/ui/button";
@@ -338,6 +339,12 @@ export function ChatView({
                       </MessageScrollerItem>
                     );
                   })}
+                  {/* 助手回合出现之前，等待提示接在用户消息后面。 */}
+                  {liveRow?.role === "user" && (
+                    <MessageScrollerItem>
+                      <WorkingLine />
+                    </MessageScrollerItem>
+                  )}
                 </MessageScrollerContent>
               </MessageScrollerViewport>
               <MessageScrollerButton

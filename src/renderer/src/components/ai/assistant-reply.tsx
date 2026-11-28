@@ -1,19 +1,19 @@
 // @env browser
-import { GlobeIcon, ListTreeIcon, LoaderCircleIcon } from "lucide-react";
-import { useState, type JSX } from "react";
+import { GlobeIcon } from "lucide-react";
+import type { JSX } from "react";
 
 import {
   Trace,
   TraceCollapsible,
   TraceCollapsibleContent,
   TraceCollapsibleTrigger,
-  TraceDescription,
   TraceIcon,
   TraceLine,
   TraceTitle,
 } from "@renderer/components/ui/trace";
 import { formatDuration } from "@renderer/lib/duration";
 import { t, useLocale } from "@renderer/lib/i18n";
+import { replyInProgress, replySegments, stepCounts } from "@renderer/lib/reply-segments";
 import type { ReplyEntry } from "@renderer/lib/types";
 import { TURN_HOOK_TRACE_TOOL } from "@shared/constants";
 import type { TranscriptLocation, UiMessage, WebSource } from "@shared/contract";
@@ -24,9 +24,11 @@ import { MemorySuggestion } from "./memory-dialog";
 import { MessageActions } from "./message-actions";
 import { PlanCard } from "./plan-card";
 import { Response } from "./response";
+import { StepGroup } from "./step-group";
 import { ThinkingBlock } from "./thinking-block";
 import { ToolTrace } from "./tool-trace";
 import { WebSourceLinks } from "./web-source-links";
+import { WorkingLine } from "./working-line";
 
 export function AssistantReply({
   messages,
@@ -50,8 +52,8 @@ export function AssistantReply({
   findLocation?: TranscriptLocation;
 }): JSX.Element {
   const locale = useLocale();
-  const [activityOpen, setActivityOpen] = useState(false);
   const target = findLocation && transcriptPartKey(findLocation.messageId, findLocation.partIndex);
+  const replyId = messages[0].id;
   const entries: ReplyEntry[] = messages.flatMap((message) =>
     message.parts.map((part, index) => ({
       key: message.id + "/" + (part.type === "tool" ? part.callId : index),
@@ -62,37 +64,32 @@ export function AssistantReply({
   );
   const plans = entries.filter(({ part }) => part.type === "plan");
   const plan = plans.find(({ location }) => location === target) ?? plans.at(-1);
-  const changes = entries.flatMap(({ part }) =>
-    part.type === "tool" && part.fileChange ? [part.fileChange] : [],
-  );
+  const tools = entries.flatMap(({ part }) => (part.type === "tool" ? [part] : []));
+  const changes = tools.flatMap(({ fileChange }) => (fileChange ? [fileChange] : []));
   const turnHooks = entries.filter(
     ({ part }) => part.type === "tool" && part.toolName === TURN_HOOK_TRACE_TOOL,
   );
-  const content = entries.filter(
-    ({ part }) =>
-      part.type !== "plan" && (part.type !== "tool" || part.toolName !== TURN_HOOK_TRACE_TOOL),
-  );
-  const activityEnd = content.findLastIndex(({ part }) => part.type !== "text") + 1;
-  const activity = [...content.slice(0, activityEnd), ...turnHooks];
-  const answer = content.slice(activityEnd);
-  const tools = activity.flatMap(({ part }) => (part.type === "tool" ? [part] : []));
-  const failed = tools.filter((tool) => tool.state === "error").length;
-  // 给出回答的回合把过程收成一行；没有回答（中断或失败）时过程就是结果，保持展开。
-  const summarized =
-    !live &&
-    tools.length > 0 &&
-    answer.some(({ part }) => part.type === "text" && part.text.trim());
+  const segments = replySegments(entries);
+  // 最后一组步骤之后的正文是这个回合的回答，复制和来源汇总都以它为准。
+  const answer = segments
+    .slice(segments.findLastIndex(({ kind }) => kind === "steps") + 1)
+    .flatMap((segment) =>
+      segment.kind === "text" && segment.entry.part.type === "text"
+        ? [segment.entry.part.text]
+        : [],
+    );
+  const finished = !live && tools.length > 0;
   const sources = new Map<string, WebSource>();
-  if (summarized) {
+  if (finished && answer.length > 0) {
     for (const tool of tools)
       for (const source of tool.sources ?? [])
         if (!sources.has(source.url) || source.section) sources.set(source.url, source);
   }
+  const end = messages.at(-1)?.timing;
+  // A resumed run can finish the same reply after the user has been away.
+  const start = end && messages.find(({ timing }) => timing?.runId === end.runId)?.timing;
   let summary = "";
-  if (summarized) {
-    const end = messages.at(-1)?.timing;
-    // A resumed run can finish the same reply after the user has been away.
-    const start = end && messages.find(({ timing }) => timing?.runId === end.runId)?.timing;
+  if (finished) {
     summary =
       start && end?.endedAt !== undefined
         ? t(tools.length === 1 ? "已处理 {0} · 1 步" : "已处理 {0} · {1} 步", locale, [
@@ -101,87 +98,67 @@ export function AssistantReply({
           ])
         : t("已处理 {0} 步", locale, [tools.length]);
   }
-  // 运行期间计划钉在输入坞上方，回合结束后才回到轨迹里。
-  const planCard = plan?.part.type === "plan" && (!live || plan.location === target) && (
-    <div data-transcript-part={plan.location}>
-      <PlanCard steps={plan.part.steps} reveal={plan.location === target} />
-    </div>
-  );
-  const matchedActivity =
-    activity.some(({ location }) => location === target) ||
-    (plan !== undefined && plan.location === target);
-  const steps = activity.map(({ key, location, part }) => {
-    if (part.type === "thinking" || part.type === "tool")
-      return (
-        <div key={key} data-transcript-part={location}>
-          {part.type === "thinking" ? (
-            <ThinkingBlock part={part} reveal={location === target} />
-          ) : (
-            <ToolTrace
-              part={part}
-              searchField={location === target ? findLocation?.field : undefined}
-            />
-          )}
-        </div>
-      );
-    if (part.type !== "text" || !part.text) return null;
-    return (
-      <div
-        key={key}
-        data-transcript-part={location}
-        className="text-[13px] leading-6 text-muted-foreground"
-      >
-        <Response content={part.text} />
+  const step = ({ key, location, part }: ReplyEntry): JSX.Element | null =>
+    part.type === "thinking" || part.type === "tool" ? (
+      <div key={key} data-transcript-part={location}>
+        {part.type === "thinking" ? (
+          <ThinkingBlock part={part} reveal={location === target} />
+        ) : (
+          <ToolTrace
+            part={part}
+            replyId={replyId}
+            searchField={location === target ? findLocation?.field : undefined}
+          />
+        )}
       </div>
-    );
-  });
+    ) : null;
 
   return (
     <>
-      {summarized ? (
-        <Trace data-reply-activity>
-          <TraceCollapsible open={activityOpen || matchedActivity} onOpenChange={setActivityOpen}>
-            <TraceCollapsibleTrigger>
-              <TraceLine>
-                <TraceIcon>
-                  <ListTreeIcon />
-                </TraceIcon>
-                <TraceTitle title={summary}>{summary}</TraceTitle>
-                {failed > 0 && (
-                  <TraceDescription className="text-destructive">
-                    {t("{0} 步失败", locale, [failed])}
-                  </TraceDescription>
-                )}
-              </TraceLine>
-            </TraceCollapsibleTrigger>
-            <TraceCollapsibleContent>
-              <div className="flex min-w-0 flex-col gap-2">
-                <Trace>{steps}</Trace>
-                {planCard}
-              </div>
-            </TraceCollapsibleContent>
-          </TraceCollapsible>
-        </Trace>
-      ) : (
-        <>
-          {activity.length > 0 && <Trace data-reply-activity>{steps}</Trace>}
-          {planCard}
-        </>
-      )}
-      {answer.map(
-        ({ key, location, part, streaming }) =>
-          part.type === "text" &&
-          part.text && (
+      {segments.map((segment, index) => {
+        if (segment.kind === "text") {
+          const { key, location, part, streaming } = segment.entry;
+          if (part.type !== "text") return null;
+          return (
             <div key={key} data-transcript-part={location} className="min-w-0 text-sm leading-6">
               <Response content={part.text} />
               {streaming && (
                 <span
                   aria-hidden="true"
-                  className="ml-0.5 inline-block h-4 w-1.5 rounded-xs bg-emerald-500 align-text-bottom motion-safe:animate-pulse"
+                  className="ml-0.5 inline-block h-4 w-1.5 rounded-xs bg-foreground align-text-bottom motion-safe:animate-pulse"
                 />
               )}
             </div>
-          ),
+          );
+        }
+        const parts = segment.entries.map(({ part }) => part);
+        const calls = parts.flatMap((part) => (part.type === "tool" ? [part] : []));
+        const steps = segment.entries.map(step);
+        return (
+          <Trace key={segment.entries[0].key} data-reply-activity>
+            {/* 单个步骤一行就能说清，两个以上才值得收成一组。 */}
+            {calls.length > 1 ? (
+              <StepGroup
+                counts={stepCounts(parts)}
+                failed={calls.filter((call) => call.state === "error").length}
+                // 后面还没有正文时，这组步骤就是当前进度或最终结果，保持展开。
+                autoOpen={index === segments.length - 1}
+                reveal={segment.entries.some(({ location }) => location === target)}
+              >
+                {steps}
+              </StepGroup>
+            ) : (
+              steps
+            )}
+          </Trace>
+        );
+      })}
+      {turnHooks.length > 0 && <Trace data-reply-turn-hooks>{turnHooks.map(step)}</Trace>}
+      {/* 运行期间计划钉在输入坞上方，回合结束后才回到轨迹里。 */}
+      {plan?.part.type === "plan" && (!live || plan.location === target) && (
+        <div data-transcript-part={plan.location}>
+          <PlanCard steps={plan.part.steps} reveal={plan.location === target} />
+        </div>
       )}
       {sources.size > 0 && (
         <Trace data-reply-sources>
@@ -201,12 +178,7 @@ export function AssistantReply({
         </Trace>
       )}
       {changes.length > 0 && (
-        <FileChangesCard
-          changes={changes}
-          sessionId={sessionId}
-          replyId={messages[0].id}
-          busy={busy}
-        />
+        <FileChangesCard changes={changes} sessionId={sessionId} replyId={replyId} busy={busy} />
       )}
       {composerId &&
         tools.map(
@@ -220,6 +192,11 @@ export function AssistantReply({
               />
             ),
         )}
+      {summary && (
+        <p data-reply-summary className="text-xs text-muted-foreground">
+          {summary}
+        </p>
+      )}
       {!live && composerId && (
         <MessageActions
           composerId={composerId}
@@ -227,17 +204,10 @@ export function AssistantReply({
           kind="assistant"
           busy={hasActiveRun}
           hasLaterMessages={hasLaterMessages}
-          text={answer
-            .flatMap(({ part }) => (part.type === "text" && part.text ? [part.text] : []))
-            .join("\n\n")}
+          text={answer.join("\n\n")}
         />
       )}
-      {entries.length === 0 && live && (
-        <span role="status" className="mt-2 w-fit text-emerald-700 dark:text-emerald-400">
-          <LoaderCircleIcon aria-hidden="true" className="size-4 motion-safe:animate-spin" />
-          <span className="sr-only">{t("回复中…", locale)}</span>
-        </span>
-      )}
+      {live && !replyInProgress(entries) && <WorkingLine startedAt={start?.startedAt} />}
     </>
   );
 }

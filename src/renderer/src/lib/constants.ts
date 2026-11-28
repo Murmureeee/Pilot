@@ -19,6 +19,11 @@ import type {
 } from "@shared/contract";
 import type { ExternalImportKind } from "@shared/imports";
 
+import {
+  HOOK_TRACE_TOOL,
+  RUN_SUBTASK_TOOL_NAME,
+  TURN_HOOK_TRACE_TOOL,
+} from "../../../shared/constants";
 import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL } from "../../../shared/web";
 import type {
   ComposerShortcut,
@@ -27,6 +32,7 @@ import type {
   SessionRowStatus,
   SettingsSection,
   ShortcutGroup,
+  StepKind,
 } from "./types";
 
 // 首页的起步任务：label 是按钮文字，prompt 是填进输入框的草稿。
@@ -307,6 +313,33 @@ export const TOOL_RULE_LABELS: Readonly<Record<string, string>> = {
   bash: "执行命令",
   [WEB_FETCH_TOOL]: "读取网页",
   [WEB_SEARCH_TOOL]: "搜索网页",
+};
+
+// 步骤组标题的归类。不在表里的工具（MCP、技能读取、后台命令等）归入 other。
+export const STEP_KINDS: Readonly<Record<string, StepKind>> = {
+  read_file: "read",
+  write_file: "edit",
+  edit_file: "edit",
+  bash: "command",
+  glob: "search",
+  grep: "search",
+  [WEB_FETCH_TOOL]: "web",
+  [WEB_SEARCH_TOOL]: "web",
+  [RUN_SUBTASK_TOOL_NAME]: "subtask",
+  [HOOK_TRACE_TOOL]: "hook",
+  [TURN_HOOK_TRACE_TOOL]: "hook",
+};
+
+// 数量为 1 时单独成句，英文的单复数由翻译表分别处理。
+export const STEP_COUNT_LABELS: Record<StepKind, readonly [one: string, many: string]> = {
+  read: ["读取 1 个文件", "读取 {0} 个文件"],
+  edit: ["编辑 1 个文件", "编辑 {0} 个文件"],
+  command: ["运行 1 条命令", "运行 {0} 条命令"],
+  search: ["搜索 1 次", "搜索 {0} 次"],
+  web: ["查阅网页 1 次", "查阅网页 {0} 次"],
+  subtask: ["委派 1 项子任务", "委派 {0} 项子任务"],
+  hook: ["运行 1 个钩子", "运行 {0} 个钩子"],
+  other: ["调用 1 个工具", "调用 {0} 个工具"],
 };
 
 export const COMMAND_SHELL_LABELS: Record<CommandShell, string> = {

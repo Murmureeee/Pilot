@@ -221,6 +221,25 @@ export interface ReplyEntry {
   streaming: boolean;
 }
 
+export type ReplySegment =
+  | { kind: "text"; entry: ReplyEntry }
+  | { kind: "steps"; entries: ReplyEntry[] };
+
+export type StepKind =
+  | "read"
+  | "edit"
+  | "command"
+  | "search"
+  | "web"
+  | "subtask"
+  | "hook"
+  | "other";
+
+export interface StepCount {
+  kind: StepKind;
+  count: number;
+}
+
 export interface ChatFind {
   sessionId: string;
   query: string;

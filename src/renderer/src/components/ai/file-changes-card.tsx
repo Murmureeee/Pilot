@@ -5,9 +5,7 @@ import { useState, type JSX } from "react";
 import { Button } from "@renderer/components/ui/button";
 import { summarizeChanges } from "@renderer/lib/file-changes";
 import { t, useLocale } from "@renderer/lib/i18n";
-import { useAgentStore } from "@renderer/stores/agent";
-import { useFileChangesStore } from "@renderer/stores/file-changes";
-import { useReviewStore } from "@renderer/stores/review";
+import { showFileChanges } from "@renderer/stores/review";
 import type { FileChangeSummary } from "@shared/contract";
 
 import { DiffStats } from "./diff-stats";
@@ -24,16 +22,13 @@ export function FileChangesCard({
   busy: boolean;
 }): JSX.Element {
   const locale = useLocale();
-  const open = useFileChangesStore((state) => state.open);
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? changes : changes.slice(0, 3);
   const { count, stats } = summarizeChanges(changes);
   const show = (trigger: HTMLElement, changeId?: string, confirmUndo = false): void => {
-    const { composerId } = useAgentStore.getState();
-    if (!sessionId || !composerId) return;
+    if (!sessionId) return;
     const changePath = changes.find((change) => change.id === changeId)?.path;
-    open({ sessionId, replyId, changeId, changePath, confirmUndo });
-    useReviewStore.getState().show(composerId, "changes", trigger);
+    showFileChanges({ sessionId, replyId, changeId, changePath, confirmUndo }, trigger);
   };
 
   return (

@@ -33,7 +33,8 @@ function PlanSteps({ steps }: { steps: PlanStep[] }): JSX.Element {
             <TraceLine
               className={cn(
                 "items-start",
-                step.status !== "pending" && "text-emerald-600 dark:text-emerald-400",
+                step.status === "in_progress" && "text-foreground",
+                step.status === "completed" && "text-emerald-600 dark:text-emerald-400",
               )}
             >
               <TraceIcon className="mt-0.5">

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { NATIVE_DIALOG_TITLES, NATIVE_EXIT_MESSAGES } from "../src/main/constants";
 import { parseIpcArgs } from "../src/main/ipc/validation";
-import { formatDuration } from "../src/renderer/src/lib/duration";
+import { formatDuration, formatElapsed } from "../src/renderer/src/lib/duration";
 import {
   currentLocale,
   localizeError,
@@ -68,6 +68,14 @@ describe("interface language", () => {
     expect(formatDuration(59_600, "zh")).toBe("1 分 0 秒");
     expect(formatDuration(133_000, "zh")).toBe("2 分 13 秒");
     expect(formatDuration(133_000, "en")).toBe("2m 13s");
+  });
+
+  it("counts a running timer in whole seconds", () => {
+    expect(formatElapsed(-20, "zh")).toBe("0 秒");
+    expect(formatElapsed(3_900, "zh")).toBe("3 秒");
+    expect(formatElapsed(59_999, "zh")).toBe("59 秒");
+    expect(formatElapsed(133_900, "zh")).toBe("2 分 13 秒");
+    expect(formatElapsed(133_900, "en")).toBe("2m 13s");
   });
 
   it("migrates the legacy locale preference and uses the Pilot key", () => {

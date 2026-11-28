@@ -165,7 +165,6 @@ export function Composer({
   const busy = status !== "idle";
   const settings = useAgentStore((s) => s.settings);
   const steerCount = useAgentStore((s) => s.steerCount);
-  const usage = useAgentStore((s) => s.usage);
   const sessionId = useAgentStore((s) => s.sessionId);
   const ownRun = useAgentStore(selectCurrentRun);
   const workspaceRun = useAgentStore(selectWorkspaceRun);
@@ -692,6 +691,7 @@ export function Composer({
     else document.execCommand("insertLineBreak");
   };
 
+  // 正常回复不占这一行：进度在对话流里。只有需要用户知道或处理的状态才显示。
   const statusLabel =
     status === "stopping"
       ? "正在停止…"
@@ -699,7 +699,8 @@ export function Composer({
         ? "等待操作审批…"
         : ownRun?.compacting
           ? "正在压缩上下文…"
-          : "回复中…";
+          : undefined;
+  const retry = status === "streaming" ? ownRun?.retry : undefined;
   const runNotice =
     noticeRun?.status === "waiting_approval"
       ? "同一工作区的会话「{0}」等待审批。"
@@ -736,50 +737,43 @@ export function Composer({
           )}
         </Alert>
       )}
-      {ownRun && (
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-2 text-xs text-muted-foreground">
-          <div className="flex flex-wrap items-center gap-2">
+      {ownRun && (statusLabel || retry || showStopHint || steerCount > 0) && (
+        <div
+          data-run-status
+          className="flex flex-wrap items-center gap-2 px-2 text-xs text-muted-foreground"
+        >
+          {(statusLabel || retry) && (
             <output
               className={cn(
                 "flex items-center gap-2",
                 status === "waiting_approval" && PERMISSION_ATTENTION_TEXT,
-                status === "streaming" && "text-emerald-700 dark:text-emerald-400",
               )}
             >
               <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
-              {status === "streaming" && ownRun.retry ? (
+              {retry ? (
                 <ModelRetryLabel
-                  key={ownRun.retry.attempt + "/" + ownRun.retry.retryAt}
-                  retry={ownRun.retry}
+                  key={retry.attempt + "/" + retry.retryAt}
+                  retry={retry}
                   locale={locale}
                 />
               ) : (
-                t(statusLabel, locale)
+                statusLabel && t(statusLabel, locale)
               )}
             </output>
-            {showStopHint && <span role="status">{t("再按一次 Esc 停止任务。", locale)}</span>}
-            {steerCount > 0 && (
-              <>
-                <span>{t("插话排队 {0}", locale, [steerCount])}</span>
-                <button
-                  type="button"
-                  onClick={() => clearQueue(ownRun)}
-                  className="underline underline-offset-2 hover:text-foreground"
-                >
-                  {t("清空排队", locale)}
-                </button>
-              </>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 tabular-nums">
-            <span>
-              {usage.input + usage.output} tokens
-              {usage.cacheRead + usage.cacheWrite > 0
-                ? ` (${t("缓存", locale)} ${usage.cacheRead + usage.cacheWrite})`
-                : ""}
-            </span>
-            <span>${usage.costTotal.toFixed(4)}</span>
-          </div>
+          )}
+          {showStopHint && <span role="status">{t("再按一次 Esc 停止任务。", locale)}</span>}
+          {steerCount > 0 && (
+            <>
+              <span>{t("插话排队 {0}", locale, [steerCount])}</span>
+              <button
+                type="button"
+                onClick={() => clearQueue(ownRun)}
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                {t("清空排队", locale)}
+              </button>
+            </>
+          )}
         </div>
       )}
 

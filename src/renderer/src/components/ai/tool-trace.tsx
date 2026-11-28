@@ -30,11 +30,13 @@ import { describeToolScope } from "@renderer/lib/tool-rules";
 import { parseToolFailure, stackDisplayPath } from "@renderer/lib/tool-trace";
 import type { ToolFailure } from "@renderer/lib/types";
 import { selectWorkingDirectory, useAgentStore } from "@renderer/stores/agent";
+import { showFileChanges } from "@renderer/stores/review";
 import { HOOK_TRACE_TOOL, RUN_SUBTASK_TOOL_NAME, TURN_HOOK_TRACE_TOOL } from "@shared/constants";
-import type { SubtaskTrace, TranscriptLocation, UiPart } from "@shared/contract";
+import type { FileChangeSummary, SubtaskTrace, TranscriptLocation, UiPart } from "@shared/contract";
 import { toolInput } from "@shared/tool-input";
 import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL, isWebTool } from "@shared/web";
 
+import { DiffStats } from "./diff-stats";
 import { WebSourceLinks } from "./web-source-links";
 import { InlineWorkspaceReference } from "./workspace-reference";
 
@@ -188,12 +190,49 @@ function SubtaskDetails({ trace }: { trace: SubtaskTrace }): JSX.Element {
   );
 }
 
+function ChangeLink({
+  change,
+  replyId,
+}: {
+  change: FileChangeSummary;
+  replyId: string;
+}): JSX.Element {
+  const locale = useLocale();
+  return (
+    <button
+      type="button"
+      data-step-change={change.id}
+      title={t("查看更改", locale)}
+      aria-label={t("查看 {0} 的更改", locale, [change.path])}
+      onClick={(event) => {
+        const { sessionId } = useAgentStore.getState();
+        if (!sessionId) return;
+        showFileChanges(
+          { sessionId, replyId, changeId: change.id, changePath: change.path },
+          event.currentTarget,
+        );
+      }}
+      className="shrink-0 rounded-sm text-xs text-muted-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+    >
+      {change.reverted ? (
+        t("已撤销", locale)
+      ) : change.stats ? (
+        <DiffStats stats={change.stats} />
+      ) : (
+        t("查看更改", locale)
+      )}
+    </button>
+  );
+}
+
 export function ToolTrace({
   part,
   searchField,
+  replyId,
 }: {
   part: Extract<UiPart, { type: "tool" }>;
   searchField?: TranscriptLocation["field"];
+  replyId?: string;
 }): JSX.Element {
   const locale = useLocale();
   const [open, setOpen] = useState<boolean | null>(null);
@@ -237,9 +276,6 @@ export function ToolTrace({
       status={stopped || interrupted || part.state === "success" ? undefined : part.state}
       data-tool-state={part.state}
       data-subtask-status={part.subtask?.status}
-      className={
-        subtask && part.state === "running" ? "text-emerald-700 dark:text-emerald-400" : undefined
-      }
     >
       <TraceIcon>
         {part.state === "running" ? (
@@ -259,8 +295,23 @@ export function ToolTrace({
     </TraceLine>
   );
 
+  // 增删行数是独立的按钮：步骤行本身用来展开参数和审批结果，不能再嵌一层可点击元素。
+  const change = replyId && part.fileChange && (
+    <ChangeLink change={part.fileChange} replyId={replyId} />
+  );
+  const withChange = (node: JSX.Element): JSX.Element =>
+    change ? (
+      <div className="flex min-w-0 items-center gap-2">
+        {node}
+        {change}
+      </div>
+    ) : (
+      node
+    );
+
   const { approval, sources } = part;
-  if (!output && !failure && !input.details && !approval && !sources && !part.subtask) return line;
+  if (!output && !failure && !input.details && !approval && !sources && !part.subtask)
+    return withChange(line);
 
   const showArguments =
     input.details && (failure || input.details !== input.preview || input.details.includes("\n"));
@@ -270,7 +321,7 @@ export function ToolTrace({
   );
   return (
     <TraceCollapsible open={Boolean(searchField) || (open ?? autoOpen)} onOpenChange={setOpen}>
-      <TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
+      {withChange(<TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>)}
       <TraceCollapsibleContent className="mt-1.5">
         <div className="flex min-w-0 flex-col gap-2">
           {approval && (
