@@ -1,5 +1,6 @@
 // @env browser
 // 流式 Markdown 渲染：Streamdown（流式安全的增量解析 + 代码高亮内置）。
+import { cn } from "cn";
 import { memo, type ComponentProps, type JSX } from "react";
 import {
   defaultComponents,
@@ -26,7 +27,25 @@ function MarkdownLink(props: ComponentProps<"a"> & ExtraProps): JSX.Element {
   );
 }
 
-const MARKDOWN_COMPONENTS = { a: MarkdownLink };
+type HeadingTag = "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+type HeadingProps = ComponentProps<HeadingTag> & ExtraProps;
+
+// Streamdown 默认按文档排版，一级标题 30px。消息正文是 14px，标题收进应用的字号层级，最大 20px。
+function heading(Tag: HeadingTag, size: string): (props: HeadingProps) => JSX.Element {
+  return function MarkdownHeading({ node: _node, className, ...props }: HeadingProps): JSX.Element {
+    return <Tag {...props} className={cn("mt-4 mb-2 font-semibold", size, className)} />;
+  };
+}
+
+const MARKDOWN_COMPONENTS = {
+  a: MarkdownLink,
+  h1: heading("h1", "text-xl"),
+  h2: heading("h2", "text-lg"),
+  h3: heading("h3", "text-base"),
+  h4: heading("h4", "text-sm"),
+  h5: heading("h5", "text-sm"),
+  h6: heading("h6", "text-sm"),
+};
 
 const ZH_TRANSLATIONS = {
   close: "关闭",

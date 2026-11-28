@@ -351,12 +351,13 @@
 | 页面标题 | `clamp(1.375rem, 2.5vw, 1.75rem)`，`font-semibold` | 首页标题 |
 | 分区标题 | 20px（`text-xl`），`font-semibold` | 设置分区标题 |
 | 分组标题 | 14px（`text-sm`），`font-semibold` | 设置分组标题 |
+| 消息内标题 | 20、18、16、14px，`font-semibold` | 消息正文里的 Markdown 一至四级标题，五、六级与四级相同 |
 | 正文 | 14px（`text-sm`），行高 24px | 消息正文、输入框、表单、按钮、设置行标题（`font-medium`） |
 | 界面文字 | 13px | 顶栏标题、侧栏行、菜单、标题栏 |
 | 辅助文字 | 12px（`text-xs`），`text-muted-foreground` | 说明行、时间、路径、角标 |
 | 代码 | 等宽，13px | 命令、差异、终端、路径 |
 
-字重只用 `font-normal`、`font-medium` 和 `font-semibold`。`font-semibold` 只给页面、分区和分组标题。`font-medium` 用于行标题、卡片标题和未读会话的标题，不用加粗表示选中。
+字重只用 `font-normal`、`font-medium` 和 `font-semibold`。`font-semibold` 只给页面、分区和分组标题，以及消息正文里的 Markdown 标题和加粗。`font-medium` 用于行标题、卡片标题和未读会话的标题，不用加粗表示选中。
 
 ### 4.3 尺寸与间距
 

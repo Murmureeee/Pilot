@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Streamdown 的 Markdown 样式是写在包内的工具类，不在源码扫描范围里，要单独登记。 */
+@source "../../../../node_modules/streamdown/dist/*.js";
+
 @custom-variant dark (&:is(.dark *));
 
 /* Trace 的运行态标题引用 shimmer，但组件带进来时没有附带样式定义，这里补上：
